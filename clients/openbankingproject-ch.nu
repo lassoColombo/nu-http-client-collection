@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -130,9 +154,9 @@ def accept-completer-2 [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-account-list" "read-account-details" "get-balances" "get-transaction-list" "get-transaction-details" "create-consent" "delete-consent" "get-consent-information" "get-consent-authorisation" "start-consent-authorisation" "get-consent-sca-status" "update-consents-psu-data" "get-consent-status" "check-availability-of-funds" "create-signing-basket" "delete-signing-basket" "get-signing-basket" "get-signing-basket-authorisation" "start-signing-basket-authorisation" "get-signing-basket-sca-status" "update-signing-basket-psu-data" "get-signing-basket-status" "initiate-payment" "cancel-payment" "get-payment-information" "get-payment-initiation-authorisation" "start-payment-authorisation" "get-payment-initiation-sca-status" "update-payment-psu-data" "get-payment-initiation-cancellation-authorisation-information" "start-payment-initiation-cancellation-authorisation" "get-payment-cancellation-sca-status" "update-payment-cancellation-psu-data" "get-payment-initiation-status" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -180,7 +204,7 @@ export def "get-account-list" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<accounts: table<_links: record, balances: list, bban: string, bic: string, cashAccountType: string, currency: string, details: string, displayName: string, iban: string, linkedAccounts: string, msisdn: string, name: string, ownerName: string, product: string, resourceId: string, status: string, usage: string>> {
+]: nothing -> oneof<record<accounts: table<_links: record, balances: list, bban: string, bic: string, cashAccountType: string, currency: string, details: string, displayName: string, iban: string, linkedAccounts: string, msisdn: string, name: string, ownerName: string, product: string, resourceId: string, status: string, usage: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($x_request_id == null) { error make --unspanned { msg: "required header parameter 'X-Request-ID' missing: pass --x-request-id" } }
@@ -236,7 +260,7 @@ export def "read-account-details" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<account: record<_links: record<balances: record, transactions: record>, balances: list<record>, bban: string, bic: string, cashAccountType: string, currency: string, details: string, displayName: string, iban: string, linkedAccounts: string, msisdn: string, name: string, ownerName: string, product: string, resourceId: string, status: string, usage: string>> {
+]: nothing -> oneof<record<account: record<_links: record<balances: record, transactions: record>, balances: list<record>, bban: string, bic: string, cashAccountType: string, currency: string, details: string, displayName: string, iban: string, linkedAccounts: string, msisdn: string, name: string, ownerName: string, product: string, resourceId: string, status: string, usage: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
@@ -292,7 +316,7 @@ export def "get-balances" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<account: record<cashAccountType: string, currency: string, iban: string, otherAccountIdentification: string>, balances: table<balanceAmount: record, balanceType: string, creditLimitIncluded: bool, lastChangeDateTime: string, lastCommittedTransaction: string, referenceDate: string>> {
+]: nothing -> oneof<record<account: record<cashAccountType: string, currency: string, iban: string, otherAccountIdentification: string>, balances: table<balanceAmount: record, balanceType: string, creditLimitIncluded: bool, lastChangeDateTime: string, lastCommittedTransaction: string, referenceDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
@@ -354,7 +378,7 @@ export def "get-transaction-list" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<_links: record<download: record<href: string>>, account: record<cashAccountType: string, currency: string, iban: string, otherAccountIdentification: string>, balances: table<balanceAmount: record, balanceType: string, creditLimitIncluded: bool, lastChangeDateTime: string, lastCommittedTransaction: string, referenceDate: string>, transactions: record<_links: record<account: record, first: record, last: record, next: record, previous: record>, booked: list<record>, information: list<record>, pending: list<record>>> {
+]: nothing -> oneof<record<_links: record<download: record<href: string>>, account: record<cashAccountType: string, currency: string, iban: string, otherAccountIdentification: string>, balances: table<balanceAmount: record, balanceType: string, creditLimitIncluded: bool, lastChangeDateTime: string, lastCommittedTransaction: string, referenceDate: string>, transactions: record<_links: record<account: record, first: record, last: record, next: record, previous: record>, booked: list<record>, information: list<record>, pending: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
@@ -412,7 +436,7 @@ export def "get-transaction-details" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<transactionsDetails: record<transactionDetails: record<_links: record, additionalInformation: string, additionalInformationStructured: record, balanceAfterTransaction: record, bankTransactionCode: string, batchIndicator: bool, batchNumberOfTransactions: int, bookingDate: string, checkId: string, creditorAccount: record, creditorAgent: string, creditorId: string, creditorName: string, currencyExchange: list, debtorAccount: record, debtorAgent: string, debtorName: string, endToEndId: string, entryDetails: list, entryReference: string, mandateId: string, proprietaryBankTransactionCode: string, purposeCode: string, remittanceInformationStructured: string, remittanceInformationStructuredArray: list, remittanceInformationUnstructured: string, remittanceInformationUnstructuredArray: list, transactionAmount: record, transactionId: string, ultimateCreditor: string, ultimateDebtor: string, valueDate: string>>> {
+]: nothing -> oneof<record<transactionsDetails: record<transactionDetails: record<_links: record, additionalInformation: string, additionalInformationStructured: record, balanceAfterTransaction: record, bankTransactionCode: string, batchIndicator: bool, batchNumberOfTransactions: int, bookingDate: string, checkId: string, creditorAccount: record, creditorAgent: string, creditorId: string, creditorName: string, currencyExchange: list, debtorAccount: record, debtorAgent: string, debtorName: string, endToEndId: string, entryDetails: list, entryReference: string, mandateId: string, proprietaryBankTransactionCode: string, purposeCode: string, remittanceInformationStructured: string, remittanceInformationStructuredArray: list, remittanceInformationUnstructured: string, remittanceInformationUnstructuredArray: list, transactionAmount: record, transactionId: string, ultimateCreditor: string, ultimateDebtor: string, valueDate: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
@@ -442,7 +466,6 @@ export def "get-transaction-details" [
 #
 # POST /v1/consents
 # operationId: createConsent
-# --access shape: {accounts?: list, additionalInformation?: record, allPsd2?: "allAccounts"|"allAccountsWithOwnerName", availableAccounts?: "allAccounts"|"allAccountsWithOwnerName", availableAccountsWithBalance?: "allAccounts"|"allAccountsWithOwnerName", balances?: list, restrictedTo?: list<string>, transactions?: list}
 export def "create-consent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,7 +506,7 @@ export def "create-consent" [
   frequency_per_day: int # This field indicates the requested maximum frequency for an access without PSU involvement per day. For a one-off access, this attribute is set to "1". The frequency needs to be greater equal to one. If not otherwise agreed bilaterally between TPP and ASPSP, the frequency is less equal to 4. (e.g. 4)
   --recurring-indicator: oneof<nothing, bool> # "true", if the consent is for recurring access to the account data. "false", if the consent is for one access to the account data. (e.g. false)
   valid_until: string # This parameter is defining a valid until date (including the mentioned date) for the requested consent. The content is the local ASPSP date in ISO-Date format, e.g. 2017-10-30. Future dates might get adjusted by ASPSP. If a maximal available date is requested, a date in far future is to be used: "9999-12-31". In both cases the consent object to be retrieved by the get consent request will contain the adjusted date. (format: date, e.g. 2020-12-31)
-]: any -> record<_links: record<confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, self: record<href: string>, startAuthorisation: record<href: string>, startAuthorisationWithAuthenticationMethodSelection: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, startAuthorisationWithPsuIdentification: record<href: string>, startAuthorisationWithTransactionAuthorisation: record<href: string>, status: record<href: string>>, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, consentId: string, consentStatus: string, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>> {
+]: any -> oneof<record<_links: record<confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, self: record<href: string>, startAuthorisation: record<href: string>, startAuthorisationWithAuthenticationMethodSelection: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, startAuthorisationWithPsuIdentification: record<href: string>, startAuthorisationWithTransactionAuthorisation: record<href: string>, status: record<href: string>>, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, consentId: string, consentStatus: string, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -594,7 +617,7 @@ export def "get-consent-information" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<_links: record<account: record<href: string>, card_account: record<href: string>>, access: record<accounts: list<record>, additionalInformation: record<ownerName: list, trustedBeneficiaries: list>, allPsd2: string, availableAccounts: string, availableAccountsWithBalance: string, balances: list<record>, restrictedTo: list<string>, transactions: list<record>>, consentStatus: string, frequencyPerDay: int, lastActionDate: string, recurringIndicator: bool, validUntil: string> {
+]: nothing -> oneof<record<_links: record<account: record<href: string>, card_account: record<href: string>>, access: record<accounts: list<record>, additionalInformation: record<ownerName: list, trustedBeneficiaries: list>, allPsd2: string, availableAccounts: string, availableAccountsWithBalance: string, balances: list<record>, restrictedTo: list<string>, transactions: list<record>>, consentStatus: string, frequencyPerDay: int, lastActionDate: string, recurringIndicator: bool, validUntil: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
@@ -647,7 +670,7 @@ export def "get-consent-authorisation" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<authorisationIds: list<string>> {
+]: nothing -> oneof<record<authorisationIds: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
@@ -675,7 +698,6 @@ export def "get-consent-authorisation" [
 #
 # POST /v1/consents/{consentId}/authorisations
 # operationId: startConsentAuthorisation
-# --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
 export def "start-consent-authorisation" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -713,7 +735,7 @@ export def "start-consent-authorisation" [
   --psu-data: record # PSU Data for Update PSU authentication. — shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
   --authentication-method-id: string # An identification provided by the ASPSP for the later identification of the authentication method selection. (e.g. myAuthenticationID)
   --sca-authentication-data: string # SCA authentication data, depending on the chosen authentication method. If the data is binary, then it is base64 encoded.
-]: any -> record<_links: record<authoriseTransaction: record<href: string>, confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, selectAuthenticationMethod: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, updatePsuIdentification: record<href: string>>, authorisationId: string, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, scaStatus: string> {
+]: any -> oneof<record<_links: record<authoriseTransaction: record<href: string>, confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, selectAuthenticationMethod: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, updatePsuIdentification: record<href: string>>, authorisationId: string, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, scaStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -770,7 +792,7 @@ export def "get-consent-sca-status" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<psuMessage: string, scaStatus: string, trustedBeneficiaryFlag: bool> {
+]: nothing -> oneof<record<psuMessage: string, scaStatus: string, trustedBeneficiaryFlag: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
@@ -799,7 +821,6 @@ export def "get-consent-sca-status" [
 #
 # PUT /v1/consents/{consentId}/authorisations/{authorisationId}
 # operationId: updateConsentsPsuData
-# --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
 export def "update-consents-psu-data" [
   consent_id: string
   authorisation_id: string
@@ -891,7 +912,7 @@ export def "get-consent-status" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<consentStatus: string, psuMessage: string> {
+]: nothing -> oneof<record<consentStatus: string, psuMessage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
@@ -919,8 +940,6 @@ export def "get-consent-status" [
 #
 # POST /v1/funds-confirmations
 # operationId: checkAvailabilityOfFunds
-# --account shape: {cashAccountType?: string, currency?: string, iban?: string, otherAccountIdentification?: string}
-# --instructedAmount shape: {amount: string, currency: string}
 export def "check-availability-of-funds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -940,7 +959,7 @@ export def "check-availability-of-funds" [
   --card-number: string # Card Number of the card issued by the PIISP. Should be delivered if available.
   instructed_amount: record # e.g. {amount: 123, currency: EUR} — shape: {amount: string, currency: string}
   --payee: string # Name payee.
-]: any -> record<fundsAvailable: bool> {
+]: any -> oneof<record<fundsAvailable: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -1007,7 +1026,7 @@ export def "create-signing-basket" [
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
   --consent-ids: list<string> # A list of consentIds.
   --payment-ids: list<string> # A list of paymentIds.
-]: any -> record<_links: record<scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, self: record<href: string>, startAuthorisation: record<href: string>, startAuthorisationWithAuthenticationMethodSelection: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, startAuthorisationWithPsuIdentification: record<href: string>, startAuthorisationWithTransactionAuthorisation: record<href: string>, status: record<href: string>>, basketId: string, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, tppMessages: table<category: string, code: string, path: string, text: string>, transactionStatus: string> {
+]: any -> oneof<record<_links: record<scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, self: record<href: string>, startAuthorisation: record<href: string>, startAuthorisationWithAuthenticationMethodSelection: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, startAuthorisationWithPsuIdentification: record<href: string>, startAuthorisationWithTransactionAuthorisation: record<href: string>, status: record<href: string>>, basketId: string, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, tppMessages: table<category: string, code: string, path: string, text: string>, transactionStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -1116,7 +1135,7 @@ export def "get-signing-basket" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<_links: record<scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, self: record<href: string>, startAuthorisation: record<href: string>, startAuthorisationWithAuthenticationMethodSelection: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, startAuthorisationWithPsuIdentification: record<href: string>, startAuthorisationWithTransactionAuthorisation: record<href: string>, status: record<href: string>>, consents: list<string>, payments: list<string>, transactionStatus: string> {
+]: nothing -> oneof<record<_links: record<scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, self: record<href: string>, startAuthorisation: record<href: string>, startAuthorisationWithAuthenticationMethodSelection: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, startAuthorisationWithPsuIdentification: record<href: string>, startAuthorisationWithTransactionAuthorisation: record<href: string>, status: record<href: string>>, consents: list<string>, payments: list<string>, transactionStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
@@ -1169,7 +1188,7 @@ export def "get-signing-basket-authorisation" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<authorisationIds: list<string>> {
+]: nothing -> oneof<record<authorisationIds: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
@@ -1197,7 +1216,6 @@ export def "get-signing-basket-authorisation" [
 #
 # POST /v1/signing-baskets/{basketId}/authorisations
 # operationId: startSigningBasketAuthorisation
-# --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
 export def "start-signing-basket-authorisation" [
   basket_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1235,7 +1253,7 @@ export def "start-signing-basket-authorisation" [
   --psu-data: record # PSU Data for Update PSU authentication. — shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
   --authentication-method-id: string # An identification provided by the ASPSP for the later identification of the authentication method selection. (e.g. myAuthenticationID)
   --sca-authentication-data: string # SCA authentication data, depending on the chosen authentication method. If the data is binary, then it is base64 encoded.
-]: any -> record<_links: record<authoriseTransaction: record<href: string>, confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, selectAuthenticationMethod: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, updatePsuIdentification: record<href: string>>, authorisationId: string, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, scaStatus: string> {
+]: any -> oneof<record<_links: record<authoriseTransaction: record<href: string>, confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, selectAuthenticationMethod: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, updatePsuIdentification: record<href: string>>, authorisationId: string, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, scaStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -1292,7 +1310,7 @@ export def "get-signing-basket-sca-status" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<psuMessage: string, scaStatus: string, trustedBeneficiaryFlag: bool> {
+]: nothing -> oneof<record<psuMessage: string, scaStatus: string, trustedBeneficiaryFlag: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
@@ -1321,7 +1339,6 @@ export def "get-signing-basket-sca-status" [
 #
 # PUT /v1/signing-baskets/{basketId}/authorisations/{authorisationId}
 # operationId: updateSigningBasketPsuData
-# --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
 export def "update-signing-basket-psu-data" [
   basket_id: string
   authorisation_id: string
@@ -1417,7 +1434,7 @@ export def "get-signing-basket-status" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<transactionStatus: string> {
+]: nothing -> oneof<record<transactionStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
@@ -1445,16 +1462,6 @@ export def "get-signing-basket-status" [
 #
 # POST /v1/{payment-service}/{payment-product}
 # operationId: initiatePayment
-# --creditorAccount shape: {cashAccountType?: string, currency?: string, iban?: string, otherAccountIdentification?: string}
-# --creditorAddress shape: {buildingNumber?: string, country: string, postCode?: string, streetName?: string, townName?: string}
-# --creditorAgent shape: {address?: record, bic?: string, iid?: record, name?: string}
-# --debtorAccount shape: {cashAccountType?: string, currency?: string, iban?: string, otherAccountIdentification?: string}
-# --debtorAgent shape: {bic?: string, iid?: record}
-# --equivalentAmount shape: {amount: string, currency: string}
-# --exchangeRateInformation shape: {contractIdentification?: string, exchangeRate?: string, rateType?: "SPOT"|"SALE"|"AGRD"}
-# --instructedAmount shape: {amount: string, currency: string}
-# --remittanceInformationStructured shape: {SCORorQRRorIPI?: "SCOR"|"QRR"|"IPI", additionalRemittanceInformation?: string, reference: string, referenceIssuer?: string, referenceType?: string}
-# --payments item shape: {chargeBearer?: "DEBT"|"CRED"|"SHAR"|"SLEV", creditorAccount: record, creditorAddress?: record, creditorAgent?: record, creditorAgentName?: string, creditorId?: string, creditorName: string, creditorNameAndAddress?: string, debtorId?: string, debtorName: string, endToEndIdentification: string, equivalentAmount?: record, exchangeRateInformation?: record, instructedAmount?: record, intermediaryAgent?: string, purposeCode?: "SALA"|"PENS", remittanceInformationStructured?: record, ... (5 more fields)}
 export def "initiate-payment" [
   payment_service: string@payment-service-completer
   payment_product: string@payment-product-completer
@@ -1502,7 +1509,7 @@ export def "initiate-payment" [
   --creditor-id: string # Identification of Creditors, e.g. a SEPA Creditor ID. (e.g. Creditor Id 5678)
   --creditor-name: string # Creditor name. (e.g. Creditor Name)
   --creditor-name-and-address: string # Creditor Name and Address in a free text field. (e.g. Max Masters, Main Street 1, 12345 City, Example Country)
-  --debtor-account: record # Reference to an account by either * IBAN, of a payment accounts, or * otherAccountIdentification, for payment accounts if there is no IBAN adapted from ISO pain.001.001.03.ch.02 CashAccount16-CH_IdTpCcy — shape: {cashAccountType?: string, currency?: string, iban?: string, otherAccountIdentification?: string}
+  debtor_account: record # Reference to an account by either * IBAN, of a payment accounts, or * otherAccountIdentification, for payment accounts if there is no IBAN adapted from ISO pain.001.001.03.ch.02 CashAccount16-CH_IdTpCcy — shape: {cashAccountType?: string, currency?: string, iban?: string, otherAccountIdentification?: string}
   --debtor-agent: record # Reference to an debtorAgent by either * BIC, of the debtor bank, or * IID, of the debtor bank adapted from ISO pain.001.001.03.ch.02 FinancialInstitutionIdentification7-CH_BicOrClrId — shape: {bic?: string, iid?: record}
   --debtor-id: string # Debtor Id. (e.g. Debtor Id 1234)
   --debtor-name: string # Debtor name. (e.g. Debtor Name)
@@ -1527,7 +1534,7 @@ export def "initiate-payment" [
   --batch-booking-preferred: oneof<nothing, bool> # If this element equals 'true', the PSU prefers only one booking entry. If this element equals 'false', the PSU prefers individual booking of all contained individual transactions. The ASPSP will follow this preference according to contracts agreed on with the PSU. (e.g. false)
   --payments: list # A list of generic JSON bodies payment initations for bulk payments via JSON. Note: Some fields from single payments do not occcur in a bulk payment element — item shape: {chargeBearer?: "DEBT"|"CRED"|"SHAR"|"SLEV", creditorAccount: record, creditorAddress?: record, creditorAgent?: record, creditorAgentName?: string, creditorId?: string, creditorName: string, creditorNameAndAddress?: string, debtorId?: string, debtorName: string, endToEndIdentification: string, equivalentAmount?: record, exchangeRateInformation?: record, instructedAmount?: record, intermediaryAgent?: string, purposeCode?: "SALA"|"PENS", remittanceInformationStructured?: record, ... (5 more fields)}
   --requested-execution-time: string # format: date-time
-]: any -> record<_links: record<confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, self: record<href: string>, startAuthorisation: record<href: string>, startAuthorisationWithAuthenticationMethodSelection: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, startAuthorisationWithPsuIdentification: record<href: string>, startAuthorisationWithTransactionAuthorisation: record<href: string>, status: record<href: string>>, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, currencyConversionFee: record<amount: string, currency: string>, estimatedInterbankSettlementAmount: record<amount: string, currency: string>, estimatedTotalAmount: record<amount: string, currency: string>, paymentId: string, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, tppMessages: table<category: string, code: string, path: string, text: string>, transactionFeeIndicator: bool, transactionFees: record<amount: string, currency: string>, transactionStatus: string> {
+]: any -> oneof<record<_links: record<confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, self: record<href: string>, startAuthorisation: record<href: string>, startAuthorisationWithAuthenticationMethodSelection: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, startAuthorisationWithPsuIdentification: record<href: string>, startAuthorisationWithTransactionAuthorisation: record<href: string>, status: record<href: string>>, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, currencyConversionFee: record<amount: string, currency: string>, estimatedInterbankSettlementAmount: record<amount: string, currency: string>, estimatedTotalAmount: record<amount: string, currency: string>, paymentId: string, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, tppMessages: table<category: string, code: string, path: string, text: string>, transactionFeeIndicator: bool, transactionFees: record<amount: string, currency: string>, transactionStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -1591,7 +1598,7 @@ export def "cancel-payment" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<_links: record<startAuthorisation: record<href: string>, startAuthorisationWithAuthenticationMethodSelection: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, startAuthorisationWithPsuIdentification: record<href: string>>, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, transactionStatus: string> {
+]: nothing -> oneof<record<_links: record<startAuthorisation: record<href: string>, startAuthorisationWithAuthenticationMethodSelection: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, startAuthorisationWithPsuIdentification: record<href: string>>, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, transactionStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
@@ -1706,7 +1713,7 @@ export def "get-payment-initiation-authorisation" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<authorisationIds: list<string>> {
+]: nothing -> oneof<record<authorisationIds: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
@@ -1736,7 +1743,6 @@ export def "get-payment-initiation-authorisation" [
 #
 # POST /v1/{payment-service}/{payment-product}/{paymentId}/authorisations
 # operationId: startPaymentAuthorisation
-# --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
 export def "start-payment-authorisation" [
   payment_service: string@payment-service-completer
   payment_product: string@payment-product-completer
@@ -1776,7 +1782,7 @@ export def "start-payment-authorisation" [
   --psu-data: record # PSU Data for Update PSU authentication. — shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
   --authentication-method-id: string # An identification provided by the ASPSP for the later identification of the authentication method selection. (e.g. myAuthenticationID)
   --sca-authentication-data: string # SCA authentication data, depending on the chosen authentication method. If the data is binary, then it is base64 encoded.
-]: any -> record<_links: record<authoriseTransaction: record<href: string>, confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, selectAuthenticationMethod: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, updatePsuIdentification: record<href: string>>, authorisationId: string, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, scaStatus: string> {
+]: any -> oneof<record<_links: record<authoriseTransaction: record<href: string>, confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, selectAuthenticationMethod: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, updatePsuIdentification: record<href: string>>, authorisationId: string, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, scaStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -1837,7 +1843,7 @@ export def "get-payment-initiation-sca-status" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<psuMessage: string, scaStatus: string, trustedBeneficiaryFlag: bool> {
+]: nothing -> oneof<record<psuMessage: string, scaStatus: string, trustedBeneficiaryFlag: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
@@ -1868,7 +1874,6 @@ export def "get-payment-initiation-sca-status" [
 #
 # PUT /v1/{payment-service}/{payment-product}/{paymentId}/authorisations/{authorisationId}
 # operationId: updatePaymentPsuData
-# --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
 export def "update-payment-psu-data" [
   payment_service: string@payment-service-completer
   payment_product: string@payment-product-completer
@@ -1966,7 +1971,7 @@ export def "get-payment-initiation-cancellation-authorisation-information" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<authorisationIds: list<string>> {
+]: nothing -> oneof<record<authorisationIds: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
@@ -1996,7 +2001,6 @@ export def "get-payment-initiation-cancellation-authorisation-information" [
 #
 # POST /v1/{payment-service}/{payment-product}/{paymentId}/cancellation-authorisations
 # operationId: startPaymentInitiationCancellationAuthorisation
-# --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
 export def "start-payment-initiation-cancellation-authorisation" [
   payment_service: string@payment-service-completer
   payment_product: string@payment-product-completer
@@ -2036,7 +2040,7 @@ export def "start-payment-initiation-cancellation-authorisation" [
   --psu-data: record # PSU Data for Update PSU authentication. — shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
   --authentication-method-id: string # An identification provided by the ASPSP for the later identification of the authentication method selection. (e.g. myAuthenticationID)
   --sca-authentication-data: string # SCA authentication data, depending on the chosen authentication method. If the data is binary, then it is base64 encoded.
-]: any -> record<_links: record<authoriseTransaction: record<href: string>, confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, selectAuthenticationMethod: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, updatePsuIdentification: record<href: string>>, authorisationId: string, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, scaStatus: string> {
+]: any -> oneof<record<_links: record<authoriseTransaction: record<href: string>, confirmation: record<href: string>, scaOAuth: record<href: string>, scaRedirect: record<href: string>, scaStatus: record<href: string>, selectAuthenticationMethod: record<href: string>, startAuthorisationWithEncryptedPsuAuthentication: record<href: string>, startAuthorisationWithPsuAuthentication: record<href: string>, updatePsuIdentification: record<href: string>>, authorisationId: string, challengeData: record<additionalInformation: string, data: list<string>, image: string, imageLink: string, otpFormat: string, otpMaxLength: int>, chosenScaMethod: record<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, psuMessage: string, scaMethods: table<authenticationMethodId: string, authenticationType: string, authenticationVersion: string, explanation: string, name: string>, scaStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -2097,7 +2101,7 @@ export def "get-payment-cancellation-sca-status" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<psuMessage: string, scaStatus: string, trustedBeneficiaryFlag: bool> {
+]: nothing -> oneof<record<psuMessage: string, scaStatus: string, trustedBeneficiaryFlag: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
@@ -2128,7 +2132,6 @@ export def "get-payment-cancellation-sca-status" [
 #
 # PUT /v1/{payment-service}/{payment-product}/{paymentId}/cancellation-authorisations/{authorisationId}
 # operationId: updatePaymentCancellationPsuData
-# --psuData shape: {additionalEncryptedPassword?: string, additionalPassword?: string, encryptedPassword?: string, password?: string}
 export def "update-payment-cancellation-psu-data" [
   payment_service: string@payment-service-completer
   payment_product: string@payment-product-completer
@@ -2227,7 +2230,7 @@ export def "get-payment-initiation-status" [
   --psu-http-method: string@psu-http-method-completer # HTTP method used at the PSU ? TPP interface, if available. Valid values are: * GET * POST * PUT * PATCH * DELETE
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
-]: nothing -> record<fundsAvailable: bool, psuMessage: string, transactionStatus: string> {
+]: nothing -> oneof<record<fundsAvailable: bool, psuMessage: string, transactionStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }

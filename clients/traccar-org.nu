@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -120,9 +144,9 @@ def accept-completer-1 [] { ["application/json" "application/vnd.openxmlformats-
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-attributes-computed" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-attributes-computed" "post-attributes-computed" "delete-attributes-computed-id" "put-attributes-computed-id" "get-calendars" "post-calendars" "delete-calendars-id" "put-calendars-id" "get-commands" "post-commands" "get-commands-send" "post-commands-send" "get-commands-types" "delete-commands-id" "put-commands-id" "get-devices" "post-devices" "delete-devices-id" "put-devices-id" "put-devices-id-accumulators" "get-drivers" "post-drivers" "delete-drivers-id" "put-drivers-id" "get-events-id" "get-geofences" "post-geofences" "delete-geofences-id" "put-geofences-id" "get-groups" "post-groups" "delete-groups-id" "put-groups-id" "get-maintenance" "post-maintenance" "delete-maintenance-id" "put-maintenance-id" "get-notifications" "post-notifications" "post-notifications-test" "get-notifications-types" "delete-notifications-id" "put-notifications-id" "delete-permissions" "post-permissions" "get-positions" "get-reports-events" "get-reports-route" "get-reports-stops" "get-reports-summary" "get-reports-trips" "get-server" "put-server" "delete-session" "get-session" "post-session" "get-statistics" "get-users" "post-users" "delete-users-id" "put-users-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -158,7 +182,7 @@ export def "get-attributes-computed" [
   --device-id: int # Standard users can use this only with _deviceId_s, they have access to
   --group-id: int # Standard users can use this only with _groupId_s, they have access to
   --refresh: oneof<nothing, bool>
-]: nothing -> table<attribute: string, description: string, expression: string, id: int, type: string> {
+]: nothing -> oneof<table<attribute: string, description: string, expression: string, id: int, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
@@ -197,7 +221,7 @@ export def "post-attributes-computed" [
   --expression: string
   --id: int
   --type: string # String|Number|Boolean
-]: any -> record<attribute: string, description: string, expression: string, id: int, type: string> {
+]: any -> oneof<record<attribute: string, description: string, expression: string, id: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -274,7 +298,7 @@ export def "put-attributes-computed-id" [
   --expression: string
   --body-id: int
   --type: string # String|Number|Boolean
-]: any -> record<attribute: string, description: string, expression: string, id: int, type: string> {
+]: any -> oneof<record<attribute: string, description: string, expression: string, id: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -313,7 +337,7 @@ export def "get-calendars" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # Can only be used by admins or managers to fetch all entities
   --user-id: int # Standard users can use this only with their own _userId_
-]: nothing -> table<attributes: record, data: string, id: int, name: string> {
+]: nothing -> oneof<table<attributes: record, data: string, id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
@@ -351,7 +375,7 @@ export def "post-calendars" [
   --data: string # base64 encoded in iCalendar format
   --id: int
   --name: string
-]: any -> record<attributes: record, data: string, id: int, name: string> {
+]: any -> oneof<record<attributes: record, data: string, id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -427,7 +451,7 @@ export def "put-calendars-id" [
   --data: string # base64 encoded in iCalendar format
   --body-id: int
   --name: string
-]: any -> record<attributes: record, data: string, id: int, name: string> {
+]: any -> oneof<record<attributes: record, data: string, id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -469,7 +493,7 @@ export def "get-commands" [
   --device-id: int # Standard users can use this only with _deviceId_s, they have access to
   --group-id: int # Standard users can use this only with _groupId_s, they have access to
   --refresh: oneof<nothing, bool>
-]: nothing -> table<attributes: record, description: string, deviceId: int, id: int, type: string> {
+]: nothing -> oneof<table<attributes: record, description: string, deviceId: int, id: int, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
@@ -508,7 +532,7 @@ export def "post-commands" [
   --device-id: int
   --id: int
   --type: string
-]: any -> record<attributes: record, description: string, deviceId: int, id: int, type: string> {
+]: any -> oneof<record<attributes: record, description: string, deviceId: int, id: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -545,7 +569,7 @@ export def "get-commands-send" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --device-id: int # Standard users can use this only with _deviceId_s, they have access to
-]: nothing -> table<attributes: record, description: string, deviceId: int, id: int, type: string> {
+]: nothing -> oneof<table<attributes: record, description: string, deviceId: int, id: int, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deviceId" $device_id "scalar")] | flatten | str join "&"
@@ -584,7 +608,7 @@ export def "post-commands-send" [
   --device-id: int
   --id: int
   --type: string
-]: any -> record<attributes: record, description: string, deviceId: int, id: int, type: string> {
+]: any -> oneof<record<attributes: record, description: string, deviceId: int, id: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -623,7 +647,7 @@ export def "get-commands-types" [
   --device-id: int # Internal device identifier. Only works if device has already reported some locations
   --protocol: string # Protocol name. Can be used instead of device id
   --text-channel: oneof<nothing, bool> # When `true` return SMS commands. If not specified or `false` return data commands
-]: nothing -> table<type: string> {
+]: nothing -> oneof<table<type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deviceId" $device_id "scalar") (serialize-qp "protocol" $protocol "scalar") (serialize-qp "textChannel" $text_channel "scalar")] | flatten | str join "&"
@@ -698,7 +722,7 @@ export def "put-commands-id" [
   --device-id: int
   --body-id: int
   --type: string
-]: any -> record<attributes: record, description: string, deviceId: int, id: int, type: string> {
+]: any -> oneof<record<attributes: record, description: string, deviceId: int, id: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -739,7 +763,7 @@ export def "get-devices" [
   --user-id: int # Standard users can use this only with their own _userId_
   --id: int # To fetch one or more devices. Multiple params can be passed like `id=31&id=42`
   --unique-id: string # To fetch one or more devices. Multiple params can be passed like `uniqueId=333331&uniqieId=44442`
-]: nothing -> table<attributes: record, category: string, contact: string, disabled: bool, geofenceIds: list<int>, groupId: int, id: int, lastUpdate: string, model: string, name: string, phone: string, positionId: int, status: string, uniqueId: string> {
+]: nothing -> oneof<table<attributes: record, category: string, contact: string, disabled: bool, geofenceIds: list<int>, groupId: int, id: int, lastUpdate: string, model: string, name: string, phone: string, positionId: int, status: string, uniqueId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "uniqueId" $unique_id "scalar")] | flatten | str join "&"
@@ -787,7 +811,7 @@ export def "post-devices" [
   --position-id: int
   --status: string
   --unique-id: string
-]: any -> record<attributes: record, category: string, contact: string, disabled: bool, geofenceIds: list<int>, groupId: int, id: int, lastUpdate: string, model: string, name: string, phone: string, positionId: int, status: string, uniqueId: string> {
+]: any -> oneof<record<attributes: record, category: string, contact: string, disabled: bool, geofenceIds: list<int>, groupId: int, id: int, lastUpdate: string, model: string, name: string, phone: string, positionId: int, status: string, uniqueId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -873,7 +897,7 @@ export def "put-devices-id" [
   --position-id: int
   --status: string
   --unique-id: string
-]: any -> record<attributes: record, category: string, contact: string, disabled: bool, geofenceIds: list<int>, groupId: int, id: int, lastUpdate: string, model: string, name: string, phone: string, positionId: int, status: string, uniqueId: string> {
+]: any -> oneof<record<attributes: record, category: string, contact: string, disabled: bool, geofenceIds: list<int>, groupId: int, id: int, lastUpdate: string, model: string, name: string, phone: string, positionId: int, status: string, uniqueId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -956,7 +980,7 @@ export def "get-drivers" [
   --device-id: int # Standard users can use this only with _deviceId_s, they have access to
   --group-id: int # Standard users can use this only with _groupId_s, they have access to
   --refresh: oneof<nothing, bool>
-]: nothing -> table<attributes: record, id: int, name: string, uniqueId: string> {
+]: nothing -> oneof<table<attributes: record, id: int, name: string, uniqueId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
@@ -994,7 +1018,7 @@ export def "post-drivers" [
   --id: int
   --name: string
   --unique-id: string
-]: any -> record<attributes: record, id: int, name: string, uniqueId: string> {
+]: any -> oneof<record<attributes: record, id: int, name: string, uniqueId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1070,7 +1094,7 @@ export def "put-drivers-id" [
   --body-id: int
   --name: string
   --unique-id: string
-]: any -> record<attributes: record, id: int, name: string, uniqueId: string> {
+]: any -> oneof<record<attributes: record, id: int, name: string, uniqueId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1106,7 +1130,7 @@ export def "get-events-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attributes: record, deviceId: int, eventTime: string, geofenceId: int, id: int, maintenanceId: int, positionId: int, type: string> {
+]: nothing -> oneof<record<attributes: record, deviceId: int, eventTime: string, geofenceId: int, id: int, maintenanceId: int, positionId: int, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1145,7 +1169,7 @@ export def "get-geofences" [
   --device-id: int # Standard users can use this only with _deviceId_s, they have access to
   --group-id: int # Standard users can use this only with _groupId_s, they have access to
   --refresh: oneof<nothing, bool>
-]: nothing -> table<area: string, attributes: record, calendarId: int, description: string, id: int, name: string> {
+]: nothing -> oneof<table<area: string, attributes: record, calendarId: int, description: string, id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
@@ -1185,7 +1209,7 @@ export def "post-geofences" [
   --description: string
   --id: int
   --name: string
-]: any -> record<area: string, attributes: record, calendarId: int, description: string, id: int, name: string> {
+]: any -> oneof<record<area: string, attributes: record, calendarId: int, description: string, id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1263,7 +1287,7 @@ export def "put-geofences-id" [
   --description: string
   --body-id: int
   --name: string
-]: any -> record<area: string, attributes: record, calendarId: int, description: string, id: int, name: string> {
+]: any -> oneof<record<area: string, attributes: record, calendarId: int, description: string, id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1302,7 +1326,7 @@ export def "get-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --all: oneof<nothing, bool> # Can only be used by admins or managers to fetch all entities
   --user-id: int # Standard users can use this only with their own _userId_
-]: nothing -> table<attributes: record, groupId: int, id: int, name: string> {
+]: nothing -> oneof<table<attributes: record, groupId: int, id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
@@ -1340,7 +1364,7 @@ export def "post-groups" [
   --group-id: int
   --id: int
   --name: string
-]: any -> record<attributes: record, groupId: int, id: int, name: string> {
+]: any -> oneof<record<attributes: record, groupId: int, id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1416,7 +1440,7 @@ export def "put-groups-id" [
   --group-id: int
   --body-id: int
   --name: string
-]: any -> record<attributes: record, groupId: int, id: int, name: string> {
+]: any -> oneof<record<attributes: record, groupId: int, id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1458,7 +1482,7 @@ export def "get-maintenance" [
   --device-id: int # Standard users can use this only with _deviceId_s, they have access to
   --group-id: int # Standard users can use this only with _groupId_s, they have access to
   --refresh: oneof<nothing, bool>
-]: nothing -> table<attributes: record, id: int, name: string, period: float, start: float, type: string> {
+]: nothing -> oneof<table<attributes: record, id: int, name: string, period: float, start: float, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
@@ -1498,7 +1522,7 @@ export def "post-maintenance" [
   --period: float
   --start: float
   --type: string
-]: any -> record<attributes: record, id: int, name: string, period: float, start: float, type: string> {
+]: any -> oneof<record<attributes: record, id: int, name: string, period: float, start: float, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1576,7 +1600,7 @@ export def "put-maintenance-id" [
   --period: float
   --start: float
   --type: string
-]: any -> record<attributes: record, id: int, name: string, period: float, start: float, type: string> {
+]: any -> oneof<record<attributes: record, id: int, name: string, period: float, start: float, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1618,7 +1642,7 @@ export def "get-notifications" [
   --device-id: int # Standard users can use this only with _deviceId_s, they have access to
   --group-id: int # Standard users can use this only with _groupId_s, they have access to
   --refresh: oneof<nothing, bool>
-]: nothing -> table<always: bool, attributes: record, calendarId: int, id: int, mail: bool, sms: bool, type: string, web: bool> {
+]: nothing -> oneof<table<always: bool, attributes: record, calendarId: int, id: int, mail: bool, sms: bool, type: string, web: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "all" $all "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "deviceId" $device_id "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "refresh" $refresh "scalar")] | flatten | str join "&"
@@ -1660,7 +1684,7 @@ export def "post-notifications" [
   --sms: oneof<nothing, bool>
   --type: string
   --web: oneof<nothing, bool>
-]: any -> record<always: bool, attributes: record, calendarId: int, id: int, mail: bool, sms: bool, type: string, web: bool> {
+]: any -> oneof<record<always: bool, attributes: record, calendarId: int, id: int, mail: bool, sms: bool, type: string, web: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1729,7 +1753,7 @@ export def "get-notifications-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<type: string> {
+]: nothing -> oneof<table<type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notifications/types" $auth.query)
@@ -1806,7 +1830,7 @@ export def "put-notifications-id" [
   --sms: oneof<nothing, bool>
   --type: string
   --web: oneof<nothing, bool>
-]: any -> record<always: bool, attributes: record, calendarId: int, id: int, mail: bool, sms: bool, type: string, web: bool> {
+]: any -> oneof<record<always: bool, attributes: record, calendarId: int, id: int, mail: bool, sms: bool, type: string, web: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1897,7 +1921,7 @@ export def "post-permissions" [
   --managed-user-id: int # User Id, can be second parameter only and only in combination with userId
   --notification-id: int # Notification Id, can be second parameter only
   --user-id: int # User Id, can be only first parameter
-]: any -> record<attributeId: int, calendarId: int, deviceId: int, driverId: int, geofenceId: int, groupId: int, managedUserId: int, notificationId: int, userId: int> {
+]: any -> oneof<record<attributeId: int, calendarId: int, deviceId: int, driverId: int, geofenceId: int, groupId: int, managedUserId: int, notificationId: int, userId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1938,7 +1962,7 @@ export def "get-positions" [
   --from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
   --to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (format: date-time)
   --id: int # To fetch one or more positions. Multiple params can be passed like `id=31&id=42`
-]: nothing -> table<accuracy: float, address: string, altitude: float, attributes: record, course: float, deviceId: int, deviceTime: string, fixTime: string, id: int, latitude: float, longitude: float, network: record, outdated: bool, protocol: string, serverTime: string, speed: float, valid: bool> {
+]: nothing -> oneof<table<accuracy: float, address: string, altitude: float, attributes: record, course: float, deviceId: int, deviceTime: string, fixTime: string, id: int, latitude: float, longitude: float, network: record, outdated: bool, protocol: string, serverTime: string, speed: float, valid: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deviceId" $device_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -1978,7 +2002,7 @@ export def "get-reports-events" [
   --type: list<string> # % can be used to return events of all types
   --from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
   --to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
-]: nothing -> table<attributes: record, deviceId: int, eventTime: string, geofenceId: int, id: int, maintenanceId: int, positionId: int, type: string> {
+]: nothing -> oneof<table<attributes: record, deviceId: int, eventTime: string, geofenceId: int, id: int, maintenanceId: int, positionId: int, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -2019,7 +2043,7 @@ export def "get-reports-route" [
   --group-id: list<int>
   --from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
   --to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
-]: nothing -> table<accuracy: float, address: string, altitude: float, attributes: record, course: float, deviceId: int, deviceTime: string, fixTime: string, id: int, latitude: float, longitude: float, network: record, outdated: bool, protocol: string, serverTime: string, speed: float, valid: bool> {
+]: nothing -> oneof<table<accuracy: float, address: string, altitude: float, attributes: record, course: float, deviceId: int, deviceTime: string, fixTime: string, id: int, latitude: float, longitude: float, network: record, outdated: bool, protocol: string, serverTime: string, speed: float, valid: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -2060,7 +2084,7 @@ export def "get-reports-stops" [
   --group-id: list<int>
   --from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
   --to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
-]: nothing -> table<address: string, deviceId: int, deviceName: string, duration: int, endTime: string, engineHours: int, lat: float, lon: float, spentFuel: float, startTime: string> {
+]: nothing -> oneof<table<address: string, deviceId: int, deviceName: string, duration: int, endTime: string, engineHours: int, lat: float, lon: float, spentFuel: float, startTime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -2101,7 +2125,7 @@ export def "get-reports-summary" [
   --group-id: list<int>
   --from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
   --to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
-]: nothing -> table<averageSpeed: float, deviceId: int, deviceName: string, distance: float, engineHours: int, maxSpeed: float, spentFuel: float> {
+]: nothing -> oneof<table<averageSpeed: float, deviceId: int, deviceName: string, distance: float, engineHours: int, maxSpeed: float, spentFuel: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -2142,7 +2166,7 @@ export def "get-reports-trips" [
   --group-id: list<int>
   --from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
   --to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
-]: nothing -> table<averageSpeed: float, deviceId: int, deviceName: string, distance: float, driverName: string, driverUniqueId: int, duration: int, endAddress: string, endLat: float, endLon: float, endTime: string, maxSpeed: float, spentFuel: float, startAddress: string, startLat: float, startLon: float, startTime: string> {
+]: nothing -> oneof<table<averageSpeed: float, deviceId: int, deviceName: string, distance: float, driverName: string, driverUniqueId: int, duration: int, endAddress: string, endLat: float, endLon: float, endTime: string, maxSpeed: float, spentFuel: float, startAddress: string, startLat: float, startLon: float, startTime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -2178,7 +2202,7 @@ export def "get-server" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attributes: record, bingKey: string, coordinateFormat: string, deviceReadonly: bool, forceSettings: bool, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, mapUrl: string, poiLayer: string, readonly: bool, registration: bool, twelveHourFormat: bool, version: string, zoom: int> {
+]: nothing -> oneof<record<attributes: record, bingKey: string, coordinateFormat: string, deviceReadonly: bool, forceSettings: bool, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, mapUrl: string, poiLayer: string, readonly: bool, registration: bool, twelveHourFormat: bool, version: string, zoom: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/server" $auth.query)
@@ -2228,7 +2252,7 @@ export def "put-server" [
   --twelve-hour-format: oneof<nothing, bool>
   --version: string
   --zoom: int
-]: any -> record<attributes: record, bingKey: string, coordinateFormat: string, deviceReadonly: bool, forceSettings: bool, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, mapUrl: string, poiLayer: string, readonly: bool, registration: bool, twelveHourFormat: bool, version: string, zoom: int> {
+]: any -> oneof<record<attributes: record, bingKey: string, coordinateFormat: string, deviceReadonly: bool, forceSettings: bool, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, mapUrl: string, poiLayer: string, readonly: bool, registration: bool, twelveHourFormat: bool, version: string, zoom: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2298,7 +2322,7 @@ export def "get-session" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string
-]: nothing -> record<administrator: bool, attributes: record, coordinateFormat: string, deviceLimit: int, deviceReadonly: bool, disabled: bool, email: string, expirationTime: string, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, name: string, password: string, phone: string, poiLayer: string, readonly: bool, twelveHourFormat: bool, userLimit: int, zoom: int> {
+]: nothing -> oneof<record<administrator: bool, attributes: record, coordinateFormat: string, deviceLimit: int, deviceReadonly: bool, disabled: bool, email: string, expirationTime: string, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, name: string, password: string, phone: string, poiLayer: string, readonly: bool, twelveHourFormat: bool, userLimit: int, zoom: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
@@ -2334,7 +2358,7 @@ export def "post-session" [
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string
   password: string # format: password
-]: any -> record<administrator: bool, attributes: record, coordinateFormat: string, deviceLimit: int, deviceReadonly: bool, disabled: bool, email: string, expirationTime: string, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, name: string, password: string, phone: string, poiLayer: string, readonly: bool, twelveHourFormat: bool, userLimit: int, zoom: int> {
+]: any -> oneof<record<administrator: bool, attributes: record, coordinateFormat: string, deviceLimit: int, deviceReadonly: bool, disabled: bool, email: string, expirationTime: string, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, name: string, password: string, phone: string, poiLayer: string, readonly: bool, twelveHourFormat: bool, userLimit: int, zoom: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2343,7 +2367,7 @@ export def "post-session" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2373,7 +2397,7 @@ export def "get-statistics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --from: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
   --to: string # in IS0 8601 format. eg. `1963-11-22T18:30:00Z` (required, format: date-time)
-]: nothing -> table<activeDevices: int, activeUsers: int, captureTime: string, messagesReceived: int, messagesStored: int, requests: int> {
+]: nothing -> oneof<table<activeDevices: int, activeUsers: int, captureTime: string, messagesReceived: int, messagesStored: int, requests: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($from == null) { error make --unspanned { msg: "required query parameter 'from' missing: pass --from" } }
@@ -2410,7 +2434,7 @@ export def "get-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # Can only be used by admin or manager users
-]: nothing -> table<administrator: bool, attributes: record, coordinateFormat: string, deviceLimit: int, deviceReadonly: bool, disabled: bool, email: string, expirationTime: string, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, name: string, password: string, phone: string, poiLayer: string, readonly: bool, twelveHourFormat: bool, userLimit: int, zoom: int> {
+]: nothing -> oneof<table<administrator: bool, attributes: record, coordinateFormat: string, deviceLimit: int, deviceReadonly: bool, disabled: bool, email: string, expirationTime: string, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, name: string, password: string, phone: string, poiLayer: string, readonly: bool, twelveHourFormat: bool, userLimit: int, zoom: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
@@ -2465,7 +2489,7 @@ export def "post-users" [
   --twelve-hour-format: oneof<nothing, bool>
   --user-limit: int
   --zoom: int
-]: any -> record<administrator: bool, attributes: record, coordinateFormat: string, deviceLimit: int, deviceReadonly: bool, disabled: bool, email: string, expirationTime: string, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, name: string, password: string, phone: string, poiLayer: string, readonly: bool, twelveHourFormat: bool, userLimit: int, zoom: int> {
+]: any -> oneof<record<administrator: bool, attributes: record, coordinateFormat: string, deviceLimit: int, deviceReadonly: bool, disabled: bool, email: string, expirationTime: string, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, name: string, password: string, phone: string, poiLayer: string, readonly: bool, twelveHourFormat: bool, userLimit: int, zoom: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2558,7 +2582,7 @@ export def "put-users-id" [
   --twelve-hour-format: oneof<nothing, bool>
   --user-limit: int
   --zoom: int
-]: any -> record<administrator: bool, attributes: record, coordinateFormat: string, deviceLimit: int, deviceReadonly: bool, disabled: bool, email: string, expirationTime: string, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, name: string, password: string, phone: string, poiLayer: string, readonly: bool, twelveHourFormat: bool, userLimit: int, zoom: int> {
+]: any -> oneof<record<administrator: bool, attributes: record, coordinateFormat: string, deviceLimit: int, deviceReadonly: bool, disabled: bool, email: string, expirationTime: string, id: int, latitude: float, limitCommands: bool, longitude: float, map: string, name: string, password: string, phone: string, poiLayer: string, readonly: bool, twelveHourFormat: bool, userLimit: int, zoom: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def filter-completer [] { ["manufacturing_basic" "market"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-alliances" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-alliances" "get-alliances-alliance-id" "get-alliances-alliance-id-contacts" "get-alliances-alliance-id-contacts-labels" "get-alliances-alliance-id-corporations" "get-alliances-alliance-id-icons" "post-characters-affiliation" "get-characters-character-id" "get-characters-character-id-agents-research" "get-characters-character-id-assets" "post-characters-character-id-assets-locations" "post-characters-character-id-assets-names" "get-characters-character-id-attributes" "get-characters-character-id-blueprints" "get-characters-character-id-bookmarks" "get-characters-character-id-bookmarks-folders" "get-characters-character-id-calendar" "get-characters-character-id-calendar-event-id" "put-characters-character-id-calendar-event-id" "get-characters-character-id-calendar-event-id-attendees" "get-characters-character-id-clones" "delete-characters-character-id-contacts" "get-characters-character-id-contacts" "post-characters-character-id-contacts" "put-characters-character-id-contacts" "get-characters-character-id-contacts-labels" "get-characters-character-id-contracts" "get-characters-character-id-contracts-contract-id-bids" "get-characters-character-id-contracts-contract-id-items" "get-characters-character-id-corporationhistory" "post-characters-character-id-cspa" "get-characters-character-id-fatigue" "get-characters-character-id-fittings" "post-characters-character-id-fittings" "delete-characters-character-id-fittings-fitting-id" "get-characters-character-id-fleet" "get-characters-character-id-fw-stats" "get-characters-character-id-implants" "get-characters-character-id-industry-jobs" "get-characters-character-id-killmails-recent" "get-characters-character-id-location" "get-characters-character-id-loyalty-points" "get-characters-character-id-mail" "post-characters-character-id-mail" "get-characters-character-id-mail-labels" "post-characters-character-id-mail-labels" "delete-characters-character-id-mail-labels-label-id" "get-characters-character-id-mail-lists" "delete-characters-character-id-mail-mail-id" "get-characters-character-id-mail-mail-id" "put-characters-character-id-mail-mail-id" "get-characters-character-id-medals" "get-characters-character-id-mining" "get-characters-character-id-notifications" "get-characters-character-id-notifications-contacts" "get-characters-character-id-online" "get-characters-character-id-opportunities" "get-characters-character-id-orders" "get-characters-character-id-orders-history" "get-characters-character-id-planets" "get-characters-character-id-planets-planet-id" "get-characters-character-id-portrait" "get-characters-character-id-roles" "get-characters-character-id-search" "get-characters-character-id-ship" "get-characters-character-id-skillqueue" "get-characters-character-id-skills" "get-characters-character-id-standings" "get-characters-character-id-stats" "get-characters-character-id-titles" "get-characters-character-id-wallet" "get-characters-character-id-wallet-journal" "get-characters-character-id-wallet-transactions" "get-contracts-public-bids-contract-id" "get-contracts-public-items-contract-id" "get-contracts-public-region-id" "get-corporation-corporation-id-mining-extractions" "get-corporation-corporation-id-mining-observers" "get-corporation-corporation-id-mining-observers-observer-id" "get-corporations-npccorps" "get-corporations-corporation-id" "get-corporations-corporation-id-alliancehistory" "get-corporations-corporation-id-assets" "post-corporations-corporation-id-assets-locations" "post-corporations-corporation-id-assets-names" "get-corporations-corporation-id-blueprints" "get-corporations-corporation-id-bookmarks" "get-corporations-corporation-id-bookmarks-folders" "get-corporations-corporation-id-contacts" "get-corporations-corporation-id-contacts-labels" "get-corporations-corporation-id-containers-logs" "get-corporations-corporation-id-contracts" "get-corporations-corporation-id-contracts-contract-id-bids" "get-corporations-corporation-id-contracts-contract-id-items" "get-corporations-corporation-id-customs-offices" "get-corporations-corporation-id-divisions" "get-corporations-corporation-id-facilities" "get-corporations-corporation-id-fw-stats" "get-corporations-corporation-id-icons" "get-corporations-corporation-id-industry-jobs" "get-corporations-corporation-id-killmails-recent" "get-corporations-corporation-id-medals" "get-corporations-corporation-id-medals-issued" "get-corporations-corporation-id-members" "get-corporations-corporation-id-members-limit" "get-corporations-corporation-id-members-titles" "get-corporations-corporation-id-membertracking" "get-corporations-corporation-id-orders" "get-corporations-corporation-id-orders-history" "get-corporations-corporation-id-roles" "get-corporations-corporation-id-roles-history" "get-corporations-corporation-id-shareholders" "get-corporations-corporation-id-standings" "get-corporations-corporation-id-starbases" "get-corporations-corporation-id-starbases-starbase-id" "get-corporations-corporation-id-structures" "get-corporations-corporation-id-titles" "get-corporations-corporation-id-wallets" "get-corporations-corporation-id-wallets-division-journal" "get-corporations-corporation-id-wallets-division-transactions" "get-dogma-attributes" "get-dogma-attributes-attribute-id" "get-dogma-dynamic-items-type-id-item-id" "get-dogma-effects" "get-dogma-effects-effect-id" "get-fleets-fleet-id" "put-fleets-fleet-id" "get-fleets-fleet-id-members" "post-fleets-fleet-id-members" "delete-fleets-fleet-id-members-member-id" "put-fleets-fleet-id-members-member-id" "delete-fleets-fleet-id-squads-squad-id" "put-fleets-fleet-id-squads-squad-id" "get-fleets-fleet-id-wings" "post-fleets-fleet-id-wings" "delete-fleets-fleet-id-wings-wing-id" "put-fleets-fleet-id-wings-wing-id" "post-fleets-fleet-id-wings-wing-id-squads" "get-fw-leaderboards" "get-fw-leaderboards-characters" "get-fw-leaderboards-corporations" "get-fw-stats" "get-fw-systems" "get-fw-wars" "get-incursions" "get-industry-facilities" "get-industry-systems" "get-insurance-prices" "get-killmails-killmail-id-killmail-hash" "get-loyalty-stores-corporation-id-offers" "get-markets-groups" "get-markets-groups-market-group-id" "get-markets-prices" "get-markets-structures-structure-id" "get-markets-region-id-history" "get-markets-region-id-orders" "get-markets-region-id-types" "get-opportunities-groups" "get-opportunities-groups-group-id" "get-opportunities-tasks" "get-opportunities-tasks-task-id" "get-route-origin-destination" "get-search" "get-sovereignty-campaigns" "get-sovereignty-map" "get-sovereignty-structures" "get-status" "post-ui-autopilot-waypoint" "post-ui-openwindow-contract" "post-ui-openwindow-information" "post-ui-openwindow-marketdetails" "post-ui-openwindow-newmail" "get-universe-ancestries" "get-universe-asteroid-belts-asteroid-belt-id" "get-universe-bloodlines" "get-universe-categories" "get-universe-categories-category-id" "get-universe-constellations" "get-universe-constellations-constellation-id" "get-universe-factions" "get-universe-graphics" "get-universe-graphics-graphic-id" "get-universe-groups" "get-universe-groups-group-id" "post-universe-ids" "get-universe-moons-moon-id" "post-universe-names" "get-universe-planets-planet-id" "get-universe-races" "get-universe-regions" "get-universe-regions-region-id" "get-universe-schematics-schematic-id" "get-universe-stargates-stargate-id" "get-universe-stars-star-id" "get-universe-stations-station-id" "get-universe-structures" "get-universe-structures-structure-id" "get-universe-system-jumps" "get-universe-system-kills" "get-universe-systems" "get-universe-systems-system-id" "get-universe-types" "get-universe-types-type-id" "get-wars" "get-wars-war-id" "get-wars-war-id-killmails" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -162,7 +186,7 @@ export def "get-alliances" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -202,7 +226,7 @@ export def "get-alliances-alliance-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<creator_corporation_id: int, creator_id: int, date_founded: string, executor_corporation_id: int, faction_id: int, name: string, ticker: string> {
+]: nothing -> oneof<record<creator_corporation_id: int, creator_id: int, date_founded: string, executor_corporation_id: int, faction_id: int, name: string, ticker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($alliance_id | is-empty) { error make --unspanned { msg: "path parameter 'alliance_id' must be non-empty" } }
@@ -245,7 +269,7 @@ export def "get-alliances-alliance-id-contacts" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<contact_id: int, contact_type: string, label_ids: list<int>, standing: float> {
+]: nothing -> oneof<table<contact_id: int, contact_type: string, label_ids: list<int>, standing: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($alliance_id | is-empty) { error make --unspanned { msg: "path parameter 'alliance_id' must be non-empty" } }
@@ -287,7 +311,7 @@ export def "get-alliances-alliance-id-contacts-labels" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<label_id: int, label_name: string> {
+]: nothing -> oneof<table<label_id: int, label_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($alliance_id | is-empty) { error make --unspanned { msg: "path parameter 'alliance_id' must be non-empty" } }
@@ -328,7 +352,7 @@ export def "get-alliances-alliance-id-corporations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($alliance_id | is-empty) { error make --unspanned { msg: "path parameter 'alliance_id' must be non-empty" } }
@@ -369,7 +393,7 @@ export def "get-alliances-alliance-id-icons" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<px128x128: string, px64x64: string> {
+]: nothing -> oneof<record<px128x128: string, px64x64: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($alliance_id | is-empty) { error make --unspanned { msg: "path parameter 'alliance_id' must be non-empty" } }
@@ -409,7 +433,7 @@ export def "post-characters-affiliation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --body: list
-]: any -> table<alliance_id: int, character_id: int, corporation_id: int, faction_id: int> {
+]: any -> oneof<table<alliance_id: int, character_id: int, corporation_id: int, faction_id: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -450,7 +474,7 @@ export def "get-characters-character-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<alliance_id: int, ancestry_id: int, birthday: string, bloodline_id: int, corporation_id: int, description: string, faction_id: int, gender: string, name: string, race_id: int, security_status: float> {
+]: nothing -> oneof<record<alliance_id: int, ancestry_id: int, birthday: string, bloodline_id: int, corporation_id: int, description: string, faction_id: int, gender: string, name: string, race_id: int, security_status: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -492,7 +516,7 @@ export def "get-characters-character-id-agents-research" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<agent_id: int, points_per_day: float, remainder_points: float, skill_type_id: int, started_at: string> {
+]: nothing -> oneof<table<agent_id: int, points_per_day: float, remainder_points: float, skill_type_id: int, started_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -535,7 +559,7 @@ export def "get-characters-character-id-assets" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<is_blueprint_copy: bool, is_singleton: bool, item_id: int, location_flag: string, location_id: int, location_type: string, quantity: int, type_id: int> {
+]: nothing -> oneof<table<is_blueprint_copy: bool, is_singleton: bool, item_id: int, location_flag: string, location_id: int, location_type: string, quantity: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -577,7 +601,7 @@ export def "post-characters-character-id-assets-locations" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --body: list
-]: any -> table<item_id: int, position: record<x: float, y: float, z: float>> {
+]: any -> oneof<table<item_id: int, position: record<x: float, y: float, z: float>>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -620,7 +644,7 @@ export def "post-characters-character-id-assets-names" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --body: list
-]: any -> table<item_id: int, name: string> {
+]: any -> oneof<table<item_id: int, name: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -663,7 +687,7 @@ export def "get-characters-character-id-attributes" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<accrued_remap_cooldown_date: string, bonus_remaps: int, charisma: int, intelligence: int, last_remap_date: string, memory: int, perception: int, willpower: int> {
+]: nothing -> oneof<record<accrued_remap_cooldown_date: string, bonus_remaps: int, charisma: int, intelligence: int, last_remap_date: string, memory: int, perception: int, willpower: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -706,7 +730,7 @@ export def "get-characters-character-id-blueprints" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<item_id: int, location_flag: string, location_id: int, material_efficiency: int, quantity: int, runs: int, time_efficiency: int, type_id: int> {
+]: nothing -> oneof<table<item_id: int, location_flag: string, location_id: int, material_efficiency: int, quantity: int, runs: int, time_efficiency: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -749,7 +773,7 @@ export def "get-characters-character-id-bookmarks" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<bookmark_id: int, coordinates: record<x: float, y: float, z: float>, created: string, creator_id: int, folder_id: int, item: record<item_id: int, type_id: int>, label: string, location_id: int, notes: string> {
+]: nothing -> oneof<table<bookmark_id: int, coordinates: record<x: float, y: float, z: float>, created: string, creator_id: int, folder_id: int, item: record<item_id: int, type_id: int>, label: string, location_id: int, notes: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -792,7 +816,7 @@ export def "get-characters-character-id-bookmarks-folders" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<folder_id: int, name: string> {
+]: nothing -> oneof<table<folder_id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -835,7 +859,7 @@ export def "get-characters-character-id-calendar" [
   --from-event: int # The event ID to retrieve events from (format: int32)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<event_date: string, event_id: int, event_response: string, importance: int, title: string> {
+]: nothing -> oneof<table<event_date: string, event_id: int, event_response: string, importance: int, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -878,7 +902,7 @@ export def "get-characters-character-id-calendar-event-id" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<date: string, duration: int, event_id: int, importance: int, owner_id: int, owner_name: string, owner_type: string, response: string, text: string, title: string> {
+]: nothing -> oneof<record<date: string, duration: int, event_id: int, importance: int, owner_id: int, owner_name: string, owner_type: string, response: string, text: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -967,7 +991,7 @@ export def "get-characters-character-id-calendar-event-id-attendees" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<character_id: int, event_response: string> {
+]: nothing -> oneof<table<character_id: int, event_response: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1010,7 +1034,7 @@ export def "get-characters-character-id-clones" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<home_location: record<location_id: int, location_type: string>, jump_clones: table<implants: list, jump_clone_id: int, location_id: int, location_type: string, name: string>, last_clone_jump_date: string, last_station_change_date: string> {
+]: nothing -> oneof<record<home_location: record<location_id: int, location_type: string>, jump_clones: table<implants: list, jump_clone_id: int, location_id: int, location_type: string, name: string>, last_clone_jump_date: string, last_station_change_date: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1094,7 +1118,7 @@ export def "get-characters-character-id-contacts" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<contact_id: int, contact_type: string, is_blocked: bool, is_watched: bool, label_ids: list<int>, standing: float> {
+]: nothing -> oneof<table<contact_id: int, contact_type: string, is_blocked: bool, is_watched: bool, label_ids: list<int>, standing: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1139,7 +1163,7 @@ export def "post-characters-character-id-contacts" [
   --qp-token: string # Access token to use if unable to set a header
   --watched: oneof<nothing, bool> # Whether the contact should be watched, note this is only effective on characters (default: false)
   --body: list
-]: any -> list<int> {
+]: any -> oneof<list<int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1230,7 +1254,7 @@ export def "get-characters-character-id-contacts-labels" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<label_id: int, label_name: string> {
+]: nothing -> oneof<table<label_id: int, label_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1273,7 +1297,7 @@ export def "get-characters-character-id-contracts" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<acceptor_id: int, assignee_id: int, availability: string, buyout: float, collateral: float, contract_id: int, date_accepted: string, date_completed: string, date_expired: string, date_issued: string, days_to_complete: int, end_location_id: int, for_corporation: bool, issuer_corporation_id: int, issuer_id: int, price: float, reward: float, start_location_id: int, status: string, title: string, type: string, volume: float> {
+]: nothing -> oneof<table<acceptor_id: int, assignee_id: int, availability: string, buyout: float, collateral: float, contract_id: int, date_accepted: string, date_completed: string, date_expired: string, date_issued: string, days_to_complete: int, end_location_id: int, for_corporation: bool, issuer_corporation_id: int, issuer_id: int, price: float, reward: float, start_location_id: int, status: string, title: string, type: string, volume: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1316,7 +1340,7 @@ export def "get-characters-character-id-contracts-contract-id-bids" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<amount: float, bid_id: int, bidder_id: int, date_bid: string> {
+]: nothing -> oneof<table<amount: float, bid_id: int, bidder_id: int, date_bid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1360,7 +1384,7 @@ export def "get-characters-character-id-contracts-contract-id-items" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<is_included: bool, is_singleton: bool, quantity: int, raw_quantity: int, record_id: int, type_id: int> {
+]: nothing -> oneof<table<is_included: bool, is_singleton: bool, quantity: int, raw_quantity: int, record_id: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1402,7 +1426,7 @@ export def "get-characters-character-id-corporationhistory" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<corporation_id: int, is_deleted: bool, record_id: int, start_date: string> {
+]: nothing -> oneof<table<corporation_id: int, is_deleted: bool, record_id: int, start_date: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1487,7 +1511,7 @@ export def "get-characters-character-id-fatigue" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<jump_fatigue_expire_date: string, last_jump_date: string, last_update_date: string> {
+]: nothing -> oneof<record<jump_fatigue_expire_date: string, last_jump_date: string, last_update_date: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1529,7 +1553,7 @@ export def "get-characters-character-id-fittings" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<description: string, fitting_id: int, items: list<record>, name: string, ship_type_id: int> {
+]: nothing -> oneof<table<description: string, fitting_id: int, items: list<record>, name: string, ship_type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1557,7 +1581,6 @@ export def "get-characters-character-id-fittings" [
 #
 # POST /characters/{character_id}/fittings/
 # operationId: post_characters_character_id_fittings
-# --items item shape: {flag: int, quantity: int, type_id: int}
 export def "post-characters-character-id-fittings" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1575,7 +1598,7 @@ export def "post-characters-character-id-fittings" [
   items: list # items array — item shape: {flag: int, quantity: int, type_id: int}
   name: string # name string
   ship_type_id: int # ship_type_id integer (format: int32)
-]: any -> record<fitting_id: int> {
+]: any -> oneof<record<fitting_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1659,7 +1682,7 @@ export def "get-characters-character-id-fleet" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<fleet_id: int, role: string, squad_id: int, wing_id: int> {
+]: nothing -> oneof<record<fleet_id: int, role: string, squad_id: int, wing_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1701,7 +1724,7 @@ export def "get-characters-character-id-fw-stats" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<current_rank: int, enlisted_on: string, faction_id: int, highest_rank: int, kills: record<last_week: int, total: int, yesterday: int>, victory_points: record<last_week: int, total: int, yesterday: int>> {
+]: nothing -> oneof<record<current_rank: int, enlisted_on: string, faction_id: int, highest_rank: int, kills: record<last_week: int, total: int, yesterday: int>, victory_points: record<last_week: int, total: int, yesterday: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1743,7 +1766,7 @@ export def "get-characters-character-id-implants" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1786,7 +1809,7 @@ export def "get-characters-character-id-industry-jobs" [
   --include-completed: oneof<nothing, bool> # Whether to retrieve completed character industry jobs. Only includes jobs from the past 90 days
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<activity_id: int, blueprint_id: int, blueprint_location_id: int, blueprint_type_id: int, completed_character_id: int, completed_date: string, cost: float, duration: int, end_date: string, facility_id: int, installer_id: int, job_id: int, licensed_runs: int, output_location_id: int, pause_date: string, probability: float, product_type_id: int, runs: int, start_date: string, station_id: int, status: string, successful_runs: int> {
+]: nothing -> oneof<table<activity_id: int, blueprint_id: int, blueprint_location_id: int, blueprint_type_id: int, completed_character_id: int, completed_date: string, cost: float, duration: int, end_date: string, facility_id: int, installer_id: int, job_id: int, licensed_runs: int, output_location_id: int, pause_date: string, probability: float, product_type_id: int, runs: int, start_date: string, station_id: int, status: string, successful_runs: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1829,7 +1852,7 @@ export def "get-characters-character-id-killmails-recent" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<killmail_hash: string, killmail_id: int> {
+]: nothing -> oneof<table<killmail_hash: string, killmail_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1871,7 +1894,7 @@ export def "get-characters-character-id-location" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<solar_system_id: int, station_id: int, structure_id: int> {
+]: nothing -> oneof<record<solar_system_id: int, station_id: int, structure_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1913,7 +1936,7 @@ export def "get-characters-character-id-loyalty-points" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<corporation_id: int, loyalty_points: int> {
+]: nothing -> oneof<table<corporation_id: int, loyalty_points: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1957,7 +1980,7 @@ export def "get-characters-character-id-mail" [
   --last-mail-id: int # List only mail with an ID lower than the given ID, if present (format: int32)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<from: int, is_read: bool, labels: list<int>, mail_id: int, recipients: list<record>, subject: string, timestamp: string> {
+]: nothing -> oneof<table<from: int, is_read: bool, labels: list<int>, mail_id: int, recipients: list<record>, subject: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -1985,7 +2008,6 @@ export def "get-characters-character-id-mail" [
 #
 # POST /characters/{character_id}/mail/
 # operationId: post_characters_character_id_mail
-# --recipients item shape: {recipient_id: int, recipient_type: "alliance"|"character"|"corporation"|"mailing_list"}
 export def "post-characters-character-id-mail" [
   character_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2046,7 +2068,7 @@ export def "get-characters-character-id-mail-labels" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<labels: table<color: string, label_id: int, name: string, unread_count: int>, total_unread_count: int> {
+]: nothing -> oneof<record<labels: table<color: string, label_id: int, name: string, unread_count: int>, total_unread_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2173,7 +2195,7 @@ export def "get-characters-character-id-mail-lists" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<mailing_list_id: int, name: string> {
+]: nothing -> oneof<table<mailing_list_id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2257,7 +2279,7 @@ export def "get-characters-character-id-mail-mail-id" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<body: string, from: int, labels: list<int>, read: bool, recipients: table<recipient_id: int, recipient_type: string>, subject: string, timestamp: string> {
+]: nothing -> oneof<record<body: string, from: int, labels: list<int>, read: bool, recipients: table<recipient_id: int, recipient_type: string>, subject: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2346,7 +2368,7 @@ export def "get-characters-character-id-medals" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<corporation_id: int, date: string, description: string, graphics: list<record>, issuer_id: int, medal_id: int, reason: string, status: string, title: string> {
+]: nothing -> oneof<table<corporation_id: int, date: string, description: string, graphics: list<record>, issuer_id: int, medal_id: int, reason: string, status: string, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2389,7 +2411,7 @@ export def "get-characters-character-id-mining" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<date: string, quantity: int, solar_system_id: int, type_id: int> {
+]: nothing -> oneof<table<date: string, quantity: int, solar_system_id: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2431,7 +2453,7 @@ export def "get-characters-character-id-notifications" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<is_read: bool, notification_id: int, sender_id: int, sender_type: string, text: string, timestamp: string, type: string> {
+]: nothing -> oneof<table<is_read: bool, notification_id: int, sender_id: int, sender_type: string, text: string, timestamp: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2473,7 +2495,7 @@ export def "get-characters-character-id-notifications-contacts" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<message: string, notification_id: int, send_date: string, sender_character_id: int, standing_level: float> {
+]: nothing -> oneof<table<message: string, notification_id: int, send_date: string, sender_character_id: int, standing_level: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2515,7 +2537,7 @@ export def "get-characters-character-id-online" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<last_login: string, last_logout: string, logins: int, online: bool> {
+]: nothing -> oneof<record<last_login: string, last_logout: string, logins: int, online: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2557,7 +2579,7 @@ export def "get-characters-character-id-opportunities" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<completed_at: string, task_id: int> {
+]: nothing -> oneof<table<completed_at: string, task_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2599,7 +2621,7 @@ export def "get-characters-character-id-orders" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<duration: int, escrow: float, is_buy_order: bool, is_corporation: bool, issued: string, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, type_id: int, volume_remain: int, volume_total: int> {
+]: nothing -> oneof<table<duration: int, escrow: float, is_buy_order: bool, is_corporation: bool, issued: string, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, type_id: int, volume_remain: int, volume_total: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2642,7 +2664,7 @@ export def "get-characters-character-id-orders-history" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<duration: int, escrow: float, is_buy_order: bool, is_corporation: bool, issued: string, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, state: string, type_id: int, volume_remain: int, volume_total: int> {
+]: nothing -> oneof<table<duration: int, escrow: float, is_buy_order: bool, is_corporation: bool, issued: string, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, state: string, type_id: int, volume_remain: int, volume_total: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2684,7 +2706,7 @@ export def "get-characters-character-id-planets" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<last_update: string, num_pins: int, owner_id: int, planet_id: int, planet_type: string, solar_system_id: int, upgrade_level: int> {
+]: nothing -> oneof<table<last_update: string, num_pins: int, owner_id: int, planet_id: int, planet_type: string, solar_system_id: int, upgrade_level: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2727,7 +2749,7 @@ export def "get-characters-character-id-planets-planet-id" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<links: table<destination_pin_id: int, link_level: int, source_pin_id: int>, pins: table<contents: list, expiry_time: string, extractor_details: record, factory_details: record, install_time: string, last_cycle_start: string, latitude: float, longitude: float, pin_id: int, schematic_id: int, type_id: int>, routes: table<content_type_id: int, destination_pin_id: int, quantity: float, route_id: int, source_pin_id: int, waypoints: list>> {
+]: nothing -> oneof<record<links: table<destination_pin_id: int, link_level: int, source_pin_id: int>, pins: table<contents: list, expiry_time: string, extractor_details: record, factory_details: record, install_time: string, last_cycle_start: string, latitude: float, longitude: float, pin_id: int, schematic_id: int, type_id: int>, routes: table<content_type_id: int, destination_pin_id: int, quantity: float, route_id: int, source_pin_id: int, waypoints: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2769,7 +2791,7 @@ export def "get-characters-character-id-portrait" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<px128x128: string, px256x256: string, px512x512: string, px64x64: string> {
+]: nothing -> oneof<record<px128x128: string, px256x256: string, px512x512: string, px64x64: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2811,7 +2833,7 @@ export def "get-characters-character-id-roles" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<roles: list<string>, roles_at_base: list<string>, roles_at_hq: list<string>, roles_at_other: list<string>> {
+]: nothing -> oneof<record<roles: list<string>, roles_at_base: list<string>, roles_at_hq: list<string>, roles_at_other: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2858,7 +2880,7 @@ export def "get-characters-character-id-search" [
   --qp-token: string # Access token to use if unable to set a header
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<agent: list<int>, alliance: list<int>, character: list<int>, constellation: list<int>, corporation: list<int>, faction: list<int>, inventory_type: list<int>, region: list<int>, solar_system: list<int>, station: list<int>, structure: list<int>> {
+]: nothing -> oneof<record<agent: list<int>, alliance: list<int>, character: list<int>, constellation: list<int>, corporation: list<int>, faction: list<int>, inventory_type: list<int>, region: list<int>, solar_system: list<int>, station: list<int>, structure: list<int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2902,7 +2924,7 @@ export def "get-characters-character-id-ship" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<ship_item_id: int, ship_name: string, ship_type_id: int> {
+]: nothing -> oneof<record<ship_item_id: int, ship_name: string, ship_type_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2944,7 +2966,7 @@ export def "get-characters-character-id-skillqueue" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<finish_date: string, finished_level: int, level_end_sp: int, level_start_sp: int, queue_position: int, skill_id: int, start_date: string, training_start_sp: int> {
+]: nothing -> oneof<table<finish_date: string, finished_level: int, level_end_sp: int, level_start_sp: int, queue_position: int, skill_id: int, start_date: string, training_start_sp: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -2986,7 +3008,7 @@ export def "get-characters-character-id-skills" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<skills: table<active_skill_level: int, skill_id: int, skillpoints_in_skill: int, trained_skill_level: int>, total_sp: int, unallocated_sp: int> {
+]: nothing -> oneof<record<skills: table<active_skill_level: int, skill_id: int, skillpoints_in_skill: int, trained_skill_level: int>, total_sp: int, unallocated_sp: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -3028,7 +3050,7 @@ export def "get-characters-character-id-standings" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<from_id: int, from_type: string, standing: float> {
+]: nothing -> oneof<table<from_id: int, from_type: string, standing: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -3070,7 +3092,7 @@ export def "get-characters-character-id-stats" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<character: record<days_of_activity: int, minutes: int, sessions_started: int>, combat: record<cap_drainedby_npc: int, cap_drainedby_pc: int, cap_draining_pc: int, criminal_flag_set: int, damage_from_np_cs_amount: int, damage_from_np_cs_num_shots: int, damage_from_players_bomb_amount: int, damage_from_players_bomb_num_shots: int, damage_from_players_combat_drone_amount: int, damage_from_players_combat_drone_num_shots: int, damage_from_players_energy_amount: int, damage_from_players_energy_num_shots: int, damage_from_players_fighter_bomber_amount: int, damage_from_players_fighter_bomber_num_shots: int, damage_from_players_fighter_drone_amount: int, damage_from_players_fighter_drone_num_shots: int, damage_from_players_hybrid_amount: int, damage_from_players_hybrid_num_shots: int, damage_from_players_missile_amount: int, damage_from_players_missile_num_shots: int, damage_from_players_projectile_amount: int, damage_from_players_projectile_num_shots: int, damage_from_players_smart_bomb_amount: int, damage_from_players_smart_bomb_num_shots: int, damage_from_players_super_amount: int, damage_from_players_super_num_shots: int, damage_from_structures_total_amount: int, damage_from_structures_total_num_shots: int, damage_to_players_bomb_amount: int, damage_to_players_bomb_num_shots: int, damage_to_players_combat_drone_amount: int, damage_to_players_combat_drone_num_shots: int, damage_to_players_energy_amount: int, damage_to_players_energy_num_shots: int, damage_to_players_fighter_bomber_amount: int, damage_to_players_fighter_bomber_num_shots: int, damage_to_players_fighter_drone_amount: int, damage_to_players_fighter_drone_num_shots: int, damage_to_players_hybrid_amount: int, damage_to_players_hybrid_num_shots: int, damage_to_players_missile_amount: int, damage_to_players_missile_num_shots: int, damage_to_players_projectile_amount: int, damage_to_players_projectile_num_shots: int, damage_to_players_smart_bomb_amount: int, damage_to_players_smart_bomb_num_shots: int, damage_to_players_super_amount: int, damage_to_players_super_num_shots: int, damage_to_structures_total_amount: int, damage_to_structures_total_num_shots: int, deaths_high_sec: int, deaths_low_sec: int, deaths_null_sec: int, deaths_pod_high_sec: int, deaths_pod_low_sec: int, deaths_pod_null_sec: int, deaths_pod_wormhole: int, deaths_wormhole: int, drone_engage: int, dscans: int, duel_requested: int, engagement_register: int, kills_assists: int, kills_high_sec: int, kills_low_sec: int, kills_null_sec: int, kills_pod_high_sec: int, kills_pod_low_sec: int, kills_pod_null_sec: int, kills_pod_wormhole: int, kills_wormhole: int, npc_flag_set: int, probe_scans: int, pvp_flag_set: int, repair_armor_by_remote_amount: int, repair_armor_remote_amount: int, repair_armor_self_amount: int, repair_capacitor_by_remote_amount: int, repair_capacitor_remote_amount: int, repair_capacitor_self_amount: int, repair_hull_by_remote_amount: int, repair_hull_remote_amount: int, repair_hull_self_amount: int, repair_shield_by_remote_amount: int, repair_shield_remote_amount: int, repair_shield_self_amount: int, self_destructs: int, warp_scramble_pc: int, warp_scrambledby_npc: int, warp_scrambledby_pc: int, weapon_flag_set: int, webifiedby_npc: int, webifiedby_pc: int, webifying_pc: int>, industry: record<hacking_successes: int, jobs_cancelled: int, jobs_completed_copy_blueprint: int, jobs_completed_invention: int, jobs_completed_manufacture: int, jobs_completed_manufacture_asteroid: int, jobs_completed_manufacture_asteroid_quantity: int, jobs_completed_manufacture_charge: int, jobs_completed_manufacture_charge_quantity: int, jobs_completed_manufacture_commodity: int, jobs_completed_manufacture_commodity_quantity: int, jobs_completed_manufacture_deployable: int, jobs_completed_manufacture_deployable_quantity: int, jobs_completed_manufacture_drone: int, jobs_completed_manufacture_drone_quantity: int, jobs_completed_manufacture_implant: int, jobs_completed_manufacture_implant_quantity: int, jobs_completed_manufacture_module: int, jobs_completed_manufacture_module_quantity: int, jobs_completed_manufacture_other: int, jobs_completed_manufacture_other_quantity: int, jobs_completed_manufacture_ship: int, jobs_completed_manufacture_ship_quantity: int, jobs_completed_manufacture_structure: int, jobs_completed_manufacture_structure_quantity: int, jobs_completed_manufacture_subsystem: int, jobs_completed_manufacture_subsystem_quantity: int, jobs_completed_material_productivity: int, jobs_completed_time_productivity: int, jobs_started_copy_blueprint: int, jobs_started_invention: int, jobs_started_manufacture: int, jobs_started_material_productivity: int, jobs_started_time_productivity: int, reprocess_item: int, reprocess_item_quantity: int>, inventory: record<abandon_loot_quantity: int, trash_item_quantity: int>, isk: record<in: int, out: int>, market: record<accept_contracts_courier: int, accept_contracts_item_exchange: int, buy_orders_placed: int, cancel_market_order: int, create_contracts_auction: int, create_contracts_courier: int, create_contracts_item_exchange: int, deliver_courier_contract: int, isk_gained: int, isk_spent: int, modify_market_order: int, search_contracts: int, sell_orders_placed: int>, mining: record<drone_mine: int, ore_arkonor: int, ore_bistot: int, ore_crokite: int, ore_dark_ochre: int, ore_gneiss: int, ore_harvestable_cloud: int, ore_hedbergite: int, ore_hemorphite: int, ore_ice: int, ore_jaspet: int, ore_kernite: int, ore_mercoxit: int, ore_omber: int, ore_plagioclase: int, ore_pyroxeres: int, ore_scordite: int, ore_spodumain: int, ore_veldspar: int>, module: record<activations_armor_hardener: int, activations_armor_repair_unit: int, activations_armor_resistance_shift_hardener: int, activations_automated_targeting_system: int, activations_bastion: int, activations_bomb_launcher: int, activations_capacitor_booster: int, activations_cargo_scanner: int, activations_cloaking_device: int, activations_clone_vat_bay: int, activations_cynosural_field: int, activations_damage_control: int, activations_data_miners: int, activations_drone_control_unit: int, activations_drone_tracking_modules: int, activations_eccm: int, activations_ecm: int, activations_ecm_burst: int, activations_energy_destabilizer: int, activations_energy_vampire: int, activations_energy_weapon: int, activations_festival_launcher: int, activations_frequency_mining_laser: int, activations_fueled_armor_repairer: int, activations_fueled_shield_booster: int, activations_gang_coordinator: int, activations_gas_cloud_harvester: int, activations_hull_repair_unit: int, activations_hybrid_weapon: int, activations_industrial_core: int, activations_interdiction_sphere_launcher: int, activations_micro_jump_drive: int, activations_mining_laser: int, activations_missile_launcher: int, activations_passive_targeting_system: int, activations_probe_launcher: int, activations_projected_eccm: int, activations_projectile_weapon: int, activations_propulsion_module: int, activations_remote_armor_repairer: int, activations_remote_capacitor_transmitter: int, activations_remote_ecm_burst: int, activations_remote_hull_repairer: int, activations_remote_sensor_booster: int, activations_remote_sensor_damper: int, activations_remote_shield_booster: int, activations_remote_tracking_computer: int, activations_salvager: int, activations_sensor_booster: int, activations_shield_booster: int, activations_shield_hardener: int, activations_ship_scanner: int, activations_siege: int, activations_smart_bomb: int, activations_stasis_web: int, activations_strip_miner: int, activations_super_weapon: int, activations_survey_scanner: int, activations_target_breaker: int, activations_target_painter: int, activations_tracking_computer: int, activations_tracking_disruptor: int, activations_tractor_beam: int, activations_triage: int, activations_warp_disrupt_field_generator: int, activations_warp_scrambler: int, link_weapons: int, overload: int, repairs: int>, orbital: record<strike_characters_killed: int, strike_damage_to_players_armor_amount: int, strike_damage_to_players_shield_amount: int>, pve: record<dungeons_completed_agent: int, dungeons_completed_distribution: int, missions_succeeded: int, missions_succeeded_epic_arc: int>, social: record<add_contact_bad: int, add_contact_good: int, add_contact_high: int, add_contact_horrible: int, add_contact_neutral: int, add_note: int, added_as_contact_bad: int, added_as_contact_good: int, added_as_contact_high: int, added_as_contact_horrible: int, added_as_contact_neutral: int, calendar_event_created: int, chat_messages_alliance: int, chat_messages_constellation: int, chat_messages_corporation: int, chat_messages_fleet: int, chat_messages_region: int, chat_messages_solarsystem: int, chat_messages_warfaction: int, chat_total_message_length: int, direct_trades: int, fleet_broadcasts: int, fleet_joins: int, mails_received: int, mails_sent: int>, travel: record<acceleration_gate_activations: int, align_to: int, distance_warped_high_sec: int, distance_warped_low_sec: int, distance_warped_null_sec: int, distance_warped_wormhole: int, docks_high_sec: int, docks_low_sec: int, docks_null_sec: int, jumps_stargate_high_sec: int, jumps_stargate_low_sec: int, jumps_stargate_null_sec: int, jumps_wormhole: int, warps_high_sec: int, warps_low_sec: int, warps_null_sec: int, warps_to_bookmark: int, warps_to_celestial: int, warps_to_fleet_member: int, warps_to_scan_result: int, warps_wormhole: int>, year: int> {
+]: nothing -> oneof<table<character: record<days_of_activity: int, minutes: int, sessions_started: int>, combat: record<cap_drainedby_npc: int, cap_drainedby_pc: int, cap_draining_pc: int, criminal_flag_set: int, damage_from_np_cs_amount: int, damage_from_np_cs_num_shots: int, damage_from_players_bomb_amount: int, damage_from_players_bomb_num_shots: int, damage_from_players_combat_drone_amount: int, damage_from_players_combat_drone_num_shots: int, damage_from_players_energy_amount: int, damage_from_players_energy_num_shots: int, damage_from_players_fighter_bomber_amount: int, damage_from_players_fighter_bomber_num_shots: int, damage_from_players_fighter_drone_amount: int, damage_from_players_fighter_drone_num_shots: int, damage_from_players_hybrid_amount: int, damage_from_players_hybrid_num_shots: int, damage_from_players_missile_amount: int, damage_from_players_missile_num_shots: int, damage_from_players_projectile_amount: int, damage_from_players_projectile_num_shots: int, damage_from_players_smart_bomb_amount: int, damage_from_players_smart_bomb_num_shots: int, damage_from_players_super_amount: int, damage_from_players_super_num_shots: int, damage_from_structures_total_amount: int, damage_from_structures_total_num_shots: int, damage_to_players_bomb_amount: int, damage_to_players_bomb_num_shots: int, damage_to_players_combat_drone_amount: int, damage_to_players_combat_drone_num_shots: int, damage_to_players_energy_amount: int, damage_to_players_energy_num_shots: int, damage_to_players_fighter_bomber_amount: int, damage_to_players_fighter_bomber_num_shots: int, damage_to_players_fighter_drone_amount: int, damage_to_players_fighter_drone_num_shots: int, damage_to_players_hybrid_amount: int, damage_to_players_hybrid_num_shots: int, damage_to_players_missile_amount: int, damage_to_players_missile_num_shots: int, damage_to_players_projectile_amount: int, damage_to_players_projectile_num_shots: int, damage_to_players_smart_bomb_amount: int, damage_to_players_smart_bomb_num_shots: int, damage_to_players_super_amount: int, damage_to_players_super_num_shots: int, damage_to_structures_total_amount: int, damage_to_structures_total_num_shots: int, deaths_high_sec: int, deaths_low_sec: int, deaths_null_sec: int, deaths_pod_high_sec: int, deaths_pod_low_sec: int, deaths_pod_null_sec: int, deaths_pod_wormhole: int, deaths_wormhole: int, drone_engage: int, dscans: int, duel_requested: int, engagement_register: int, kills_assists: int, kills_high_sec: int, kills_low_sec: int, kills_null_sec: int, kills_pod_high_sec: int, kills_pod_low_sec: int, kills_pod_null_sec: int, kills_pod_wormhole: int, kills_wormhole: int, npc_flag_set: int, probe_scans: int, pvp_flag_set: int, repair_armor_by_remote_amount: int, repair_armor_remote_amount: int, repair_armor_self_amount: int, repair_capacitor_by_remote_amount: int, repair_capacitor_remote_amount: int, repair_capacitor_self_amount: int, repair_hull_by_remote_amount: int, repair_hull_remote_amount: int, repair_hull_self_amount: int, repair_shield_by_remote_amount: int, repair_shield_remote_amount: int, repair_shield_self_amount: int, self_destructs: int, warp_scramble_pc: int, warp_scrambledby_npc: int, warp_scrambledby_pc: int, weapon_flag_set: int, webifiedby_npc: int, webifiedby_pc: int, webifying_pc: int>, industry: record<hacking_successes: int, jobs_cancelled: int, jobs_completed_copy_blueprint: int, jobs_completed_invention: int, jobs_completed_manufacture: int, jobs_completed_manufacture_asteroid: int, jobs_completed_manufacture_asteroid_quantity: int, jobs_completed_manufacture_charge: int, jobs_completed_manufacture_charge_quantity: int, jobs_completed_manufacture_commodity: int, jobs_completed_manufacture_commodity_quantity: int, jobs_completed_manufacture_deployable: int, jobs_completed_manufacture_deployable_quantity: int, jobs_completed_manufacture_drone: int, jobs_completed_manufacture_drone_quantity: int, jobs_completed_manufacture_implant: int, jobs_completed_manufacture_implant_quantity: int, jobs_completed_manufacture_module: int, jobs_completed_manufacture_module_quantity: int, jobs_completed_manufacture_other: int, jobs_completed_manufacture_other_quantity: int, jobs_completed_manufacture_ship: int, jobs_completed_manufacture_ship_quantity: int, jobs_completed_manufacture_structure: int, jobs_completed_manufacture_structure_quantity: int, jobs_completed_manufacture_subsystem: int, jobs_completed_manufacture_subsystem_quantity: int, jobs_completed_material_productivity: int, jobs_completed_time_productivity: int, jobs_started_copy_blueprint: int, jobs_started_invention: int, jobs_started_manufacture: int, jobs_started_material_productivity: int, jobs_started_time_productivity: int, reprocess_item: int, reprocess_item_quantity: int>, inventory: record<abandon_loot_quantity: int, trash_item_quantity: int>, isk: record<in: int, out: int>, market: record<accept_contracts_courier: int, accept_contracts_item_exchange: int, buy_orders_placed: int, cancel_market_order: int, create_contracts_auction: int, create_contracts_courier: int, create_contracts_item_exchange: int, deliver_courier_contract: int, isk_gained: int, isk_spent: int, modify_market_order: int, search_contracts: int, sell_orders_placed: int>, mining: record<drone_mine: int, ore_arkonor: int, ore_bistot: int, ore_crokite: int, ore_dark_ochre: int, ore_gneiss: int, ore_harvestable_cloud: int, ore_hedbergite: int, ore_hemorphite: int, ore_ice: int, ore_jaspet: int, ore_kernite: int, ore_mercoxit: int, ore_omber: int, ore_plagioclase: int, ore_pyroxeres: int, ore_scordite: int, ore_spodumain: int, ore_veldspar: int>, module: record<activations_armor_hardener: int, activations_armor_repair_unit: int, activations_armor_resistance_shift_hardener: int, activations_automated_targeting_system: int, activations_bastion: int, activations_bomb_launcher: int, activations_capacitor_booster: int, activations_cargo_scanner: int, activations_cloaking_device: int, activations_clone_vat_bay: int, activations_cynosural_field: int, activations_damage_control: int, activations_data_miners: int, activations_drone_control_unit: int, activations_drone_tracking_modules: int, activations_eccm: int, activations_ecm: int, activations_ecm_burst: int, activations_energy_destabilizer: int, activations_energy_vampire: int, activations_energy_weapon: int, activations_festival_launcher: int, activations_frequency_mining_laser: int, activations_fueled_armor_repairer: int, activations_fueled_shield_booster: int, activations_gang_coordinator: int, activations_gas_cloud_harvester: int, activations_hull_repair_unit: int, activations_hybrid_weapon: int, activations_industrial_core: int, activations_interdiction_sphere_launcher: int, activations_micro_jump_drive: int, activations_mining_laser: int, activations_missile_launcher: int, activations_passive_targeting_system: int, activations_probe_launcher: int, activations_projected_eccm: int, activations_projectile_weapon: int, activations_propulsion_module: int, activations_remote_armor_repairer: int, activations_remote_capacitor_transmitter: int, activations_remote_ecm_burst: int, activations_remote_hull_repairer: int, activations_remote_sensor_booster: int, activations_remote_sensor_damper: int, activations_remote_shield_booster: int, activations_remote_tracking_computer: int, activations_salvager: int, activations_sensor_booster: int, activations_shield_booster: int, activations_shield_hardener: int, activations_ship_scanner: int, activations_siege: int, activations_smart_bomb: int, activations_stasis_web: int, activations_strip_miner: int, activations_super_weapon: int, activations_survey_scanner: int, activations_target_breaker: int, activations_target_painter: int, activations_tracking_computer: int, activations_tracking_disruptor: int, activations_tractor_beam: int, activations_triage: int, activations_warp_disrupt_field_generator: int, activations_warp_scrambler: int, link_weapons: int, overload: int, repairs: int>, orbital: record<strike_characters_killed: int, strike_damage_to_players_armor_amount: int, strike_damage_to_players_shield_amount: int>, pve: record<dungeons_completed_agent: int, dungeons_completed_distribution: int, missions_succeeded: int, missions_succeeded_epic_arc: int>, social: record<add_contact_bad: int, add_contact_good: int, add_contact_high: int, add_contact_horrible: int, add_contact_neutral: int, add_note: int, added_as_contact_bad: int, added_as_contact_good: int, added_as_contact_high: int, added_as_contact_horrible: int, added_as_contact_neutral: int, calendar_event_created: int, chat_messages_alliance: int, chat_messages_constellation: int, chat_messages_corporation: int, chat_messages_fleet: int, chat_messages_region: int, chat_messages_solarsystem: int, chat_messages_warfaction: int, chat_total_message_length: int, direct_trades: int, fleet_broadcasts: int, fleet_joins: int, mails_received: int, mails_sent: int>, travel: record<acceleration_gate_activations: int, align_to: int, distance_warped_high_sec: int, distance_warped_low_sec: int, distance_warped_null_sec: int, distance_warped_wormhole: int, docks_high_sec: int, docks_low_sec: int, docks_null_sec: int, jumps_stargate_high_sec: int, jumps_stargate_low_sec: int, jumps_stargate_null_sec: int, jumps_wormhole: int, warps_high_sec: int, warps_low_sec: int, warps_null_sec: int, warps_to_bookmark: int, warps_to_celestial: int, warps_to_fleet_member: int, warps_to_scan_result: int, warps_wormhole: int>, year: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -3112,7 +3134,7 @@ export def "get-characters-character-id-titles" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<name: string, title_id: int> {
+]: nothing -> oneof<table<name: string, title_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -3197,7 +3219,7 @@ export def "get-characters-character-id-wallet-journal" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<amount: float, balance: float, context_id: int, context_id_type: string, date: string, description: string, first_party_id: int, id: int, reason: string, ref_type: string, second_party_id: int, tax: float, tax_receiver_id: int> {
+]: nothing -> oneof<table<amount: float, balance: float, context_id: int, context_id_type: string, date: string, description: string, first_party_id: int, id: int, reason: string, ref_type: string, second_party_id: int, tax: float, tax_receiver_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -3240,7 +3262,7 @@ export def "get-characters-character-id-wallet-transactions" [
   --from-id: int # Only show transactions happened before the one referenced by this id (format: int64)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<client_id: int, date: string, is_buy: bool, is_personal: bool, journal_ref_id: int, location_id: int, quantity: int, transaction_id: int, type_id: int, unit_price: float> {
+]: nothing -> oneof<table<client_id: int, date: string, is_buy: bool, is_personal: bool, journal_ref_id: int, location_id: int, quantity: int, transaction_id: int, type_id: int, unit_price: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -3282,7 +3304,7 @@ export def "get-contracts-public-bids-contract-id" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<amount: float, bid_id: int, date_bid: string> {
+]: nothing -> oneof<table<amount: float, bid_id: int, date_bid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contract_id | is-empty) { error make --unspanned { msg: "path parameter 'contract_id' must be non-empty" } }
@@ -3324,7 +3346,7 @@ export def "get-contracts-public-items-contract-id" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<is_blueprint_copy: bool, is_included: bool, item_id: int, material_efficiency: int, quantity: int, record_id: int, runs: int, time_efficiency: int, type_id: int> {
+]: nothing -> oneof<table<is_blueprint_copy: bool, is_included: bool, item_id: int, material_efficiency: int, quantity: int, record_id: int, runs: int, time_efficiency: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contract_id | is-empty) { error make --unspanned { msg: "path parameter 'contract_id' must be non-empty" } }
@@ -3366,7 +3388,7 @@ export def "get-contracts-public-region-id" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<buyout: float, collateral: float, contract_id: int, date_expired: string, date_issued: string, days_to_complete: int, end_location_id: int, for_corporation: bool, issuer_corporation_id: int, issuer_id: int, price: float, reward: float, start_location_id: int, title: string, type: string, volume: float> {
+]: nothing -> oneof<table<buyout: float, collateral: float, contract_id: int, date_expired: string, date_issued: string, days_to_complete: int, end_location_id: int, for_corporation: bool, issuer_corporation_id: int, issuer_id: int, price: float, reward: float, start_location_id: int, title: string, type: string, volume: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'region_id' must be non-empty" } }
@@ -3409,7 +3431,7 @@ export def "get-corporation-corporation-id-mining-extractions" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<chunk_arrival_time: string, extraction_start_time: string, moon_id: int, natural_decay_time: string, structure_id: int> {
+]: nothing -> oneof<table<chunk_arrival_time: string, extraction_start_time: string, moon_id: int, natural_decay_time: string, structure_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -3452,7 +3474,7 @@ export def "get-corporation-corporation-id-mining-observers" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<last_updated: string, observer_id: int, observer_type: string> {
+]: nothing -> oneof<table<last_updated: string, observer_id: int, observer_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -3496,7 +3518,7 @@ export def "get-corporation-corporation-id-mining-observers-observer-id" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<character_id: int, last_updated: string, quantity: int, recorded_corporation_id: int, type_id: int> {
+]: nothing -> oneof<table<character_id: int, last_updated: string, quantity: int, recorded_corporation_id: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -3537,7 +3559,7 @@ export def "get-corporations-npccorps" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -3577,7 +3599,7 @@ export def "get-corporations-corporation-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<alliance_id: int, ceo_id: int, creator_id: int, date_founded: string, description: string, faction_id: int, home_station_id: int, member_count: int, name: string, shares: int, tax_rate: float, ticker: string, url: string, war_eligible: bool> {
+]: nothing -> oneof<record<alliance_id: int, ceo_id: int, creator_id: int, date_founded: string, description: string, faction_id: int, home_station_id: int, member_count: int, name: string, shares: int, tax_rate: float, ticker: string, url: string, war_eligible: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -3618,7 +3640,7 @@ export def "get-corporations-corporation-id-alliancehistory" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<alliance_id: int, is_deleted: bool, record_id: int, start_date: string> {
+]: nothing -> oneof<table<alliance_id: int, is_deleted: bool, record_id: int, start_date: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -3661,7 +3683,7 @@ export def "get-corporations-corporation-id-assets" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<is_blueprint_copy: bool, is_singleton: bool, item_id: int, location_flag: string, location_id: int, location_type: string, quantity: int, type_id: int> {
+]: nothing -> oneof<table<is_blueprint_copy: bool, is_singleton: bool, item_id: int, location_flag: string, location_id: int, location_type: string, quantity: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -3703,7 +3725,7 @@ export def "post-corporations-corporation-id-assets-locations" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --body: list
-]: any -> table<item_id: int, position: record<x: float, y: float, z: float>> {
+]: any -> oneof<table<item_id: int, position: record<x: float, y: float, z: float>>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3746,7 +3768,7 @@ export def "post-corporations-corporation-id-assets-names" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --body: list
-]: any -> table<item_id: int, name: string> {
+]: any -> oneof<table<item_id: int, name: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3790,7 +3812,7 @@ export def "get-corporations-corporation-id-blueprints" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<item_id: int, location_flag: string, location_id: int, material_efficiency: int, quantity: int, runs: int, time_efficiency: int, type_id: int> {
+]: nothing -> oneof<table<item_id: int, location_flag: string, location_id: int, material_efficiency: int, quantity: int, runs: int, time_efficiency: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -3833,7 +3855,7 @@ export def "get-corporations-corporation-id-bookmarks" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<bookmark_id: int, coordinates: record<x: float, y: float, z: float>, created: string, creator_id: int, folder_id: int, item: record<item_id: int, type_id: int>, label: string, location_id: int, notes: string> {
+]: nothing -> oneof<table<bookmark_id: int, coordinates: record<x: float, y: float, z: float>, created: string, creator_id: int, folder_id: int, item: record<item_id: int, type_id: int>, label: string, location_id: int, notes: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -3876,7 +3898,7 @@ export def "get-corporations-corporation-id-bookmarks-folders" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<creator_id: int, folder_id: int, name: string> {
+]: nothing -> oneof<table<creator_id: int, folder_id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -3919,7 +3941,7 @@ export def "get-corporations-corporation-id-contacts" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<contact_id: int, contact_type: string, is_watched: bool, label_ids: list<int>, standing: float> {
+]: nothing -> oneof<table<contact_id: int, contact_type: string, is_watched: bool, label_ids: list<int>, standing: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -3961,7 +3983,7 @@ export def "get-corporations-corporation-id-contacts-labels" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<label_id: int, label_name: string> {
+]: nothing -> oneof<table<label_id: int, label_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4004,7 +4026,7 @@ export def "get-corporations-corporation-id-containers-logs" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<action: string, character_id: int, container_id: int, container_type_id: int, location_flag: string, location_id: int, logged_at: string, new_config_bitmask: int, old_config_bitmask: int, password_type: string, quantity: int, type_id: int> {
+]: nothing -> oneof<table<action: string, character_id: int, container_id: int, container_type_id: int, location_flag: string, location_id: int, logged_at: string, new_config_bitmask: int, old_config_bitmask: int, password_type: string, quantity: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4047,7 +4069,7 @@ export def "get-corporations-corporation-id-contracts" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<acceptor_id: int, assignee_id: int, availability: string, buyout: float, collateral: float, contract_id: int, date_accepted: string, date_completed: string, date_expired: string, date_issued: string, days_to_complete: int, end_location_id: int, for_corporation: bool, issuer_corporation_id: int, issuer_id: int, price: float, reward: float, start_location_id: int, status: string, title: string, type: string, volume: float> {
+]: nothing -> oneof<table<acceptor_id: int, assignee_id: int, availability: string, buyout: float, collateral: float, contract_id: int, date_accepted: string, date_completed: string, date_expired: string, date_issued: string, days_to_complete: int, end_location_id: int, for_corporation: bool, issuer_corporation_id: int, issuer_id: int, price: float, reward: float, start_location_id: int, status: string, title: string, type: string, volume: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4091,7 +4113,7 @@ export def "get-corporations-corporation-id-contracts-contract-id-bids" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<amount: float, bid_id: int, bidder_id: int, date_bid: string> {
+]: nothing -> oneof<table<amount: float, bid_id: int, bidder_id: int, date_bid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4135,7 +4157,7 @@ export def "get-corporations-corporation-id-contracts-contract-id-items" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<is_included: bool, is_singleton: bool, quantity: int, raw_quantity: int, record_id: int, type_id: int> {
+]: nothing -> oneof<table<is_included: bool, is_singleton: bool, quantity: int, raw_quantity: int, record_id: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4179,7 +4201,7 @@ export def "get-corporations-corporation-id-customs-offices" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<alliance_tax_rate: float, allow_access_with_standings: bool, allow_alliance_access: bool, bad_standing_tax_rate: float, corporation_tax_rate: float, excellent_standing_tax_rate: float, good_standing_tax_rate: float, neutral_standing_tax_rate: float, office_id: int, reinforce_exit_end: int, reinforce_exit_start: int, standing_level: string, system_id: int, terrible_standing_tax_rate: float> {
+]: nothing -> oneof<table<alliance_tax_rate: float, allow_access_with_standings: bool, allow_alliance_access: bool, bad_standing_tax_rate: float, corporation_tax_rate: float, excellent_standing_tax_rate: float, good_standing_tax_rate: float, neutral_standing_tax_rate: float, office_id: int, reinforce_exit_end: int, reinforce_exit_start: int, standing_level: string, system_id: int, terrible_standing_tax_rate: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4221,7 +4243,7 @@ export def "get-corporations-corporation-id-divisions" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<hangar: table<division: int, name: string>, wallet: table<division: int, name: string>> {
+]: nothing -> oneof<record<hangar: table<division: int, name: string>, wallet: table<division: int, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4263,7 +4285,7 @@ export def "get-corporations-corporation-id-facilities" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<facility_id: int, system_id: int, type_id: int> {
+]: nothing -> oneof<table<facility_id: int, system_id: int, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4305,7 +4327,7 @@ export def "get-corporations-corporation-id-fw-stats" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<enlisted_on: string, faction_id: int, kills: record<last_week: int, total: int, yesterday: int>, pilots: int, victory_points: record<last_week: int, total: int, yesterday: int>> {
+]: nothing -> oneof<record<enlisted_on: string, faction_id: int, kills: record<last_week: int, total: int, yesterday: int>, pilots: int, victory_points: record<last_week: int, total: int, yesterday: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4346,7 +4368,7 @@ export def "get-corporations-corporation-id-icons" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<px128x128: string, px256x256: string, px64x64: string> {
+]: nothing -> oneof<record<px128x128: string, px256x256: string, px64x64: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4390,7 +4412,7 @@ export def "get-corporations-corporation-id-industry-jobs" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<activity_id: int, blueprint_id: int, blueprint_location_id: int, blueprint_type_id: int, completed_character_id: int, completed_date: string, cost: float, duration: int, end_date: string, facility_id: int, installer_id: int, job_id: int, licensed_runs: int, location_id: int, output_location_id: int, pause_date: string, probability: float, product_type_id: int, runs: int, start_date: string, status: string, successful_runs: int> {
+]: nothing -> oneof<table<activity_id: int, blueprint_id: int, blueprint_location_id: int, blueprint_type_id: int, completed_character_id: int, completed_date: string, cost: float, duration: int, end_date: string, facility_id: int, installer_id: int, job_id: int, licensed_runs: int, location_id: int, output_location_id: int, pause_date: string, probability: float, product_type_id: int, runs: int, start_date: string, status: string, successful_runs: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4433,7 +4455,7 @@ export def "get-corporations-corporation-id-killmails-recent" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<killmail_hash: string, killmail_id: int> {
+]: nothing -> oneof<table<killmail_hash: string, killmail_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4476,7 +4498,7 @@ export def "get-corporations-corporation-id-medals" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<created_at: string, creator_id: int, description: string, medal_id: int, title: string> {
+]: nothing -> oneof<table<created_at: string, creator_id: int, description: string, medal_id: int, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4519,7 +4541,7 @@ export def "get-corporations-corporation-id-medals-issued" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<character_id: int, issued_at: string, issuer_id: int, medal_id: int, reason: string, status: string> {
+]: nothing -> oneof<table<character_id: int, issued_at: string, issuer_id: int, medal_id: int, reason: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4561,7 +4583,7 @@ export def "get-corporations-corporation-id-members" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4645,7 +4667,7 @@ export def "get-corporations-corporation-id-members-titles" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<character_id: int, titles: list<int>> {
+]: nothing -> oneof<table<character_id: int, titles: list<int>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4687,7 +4709,7 @@ export def "get-corporations-corporation-id-membertracking" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<base_id: int, character_id: int, location_id: int, logoff_date: string, logon_date: string, ship_type_id: int, start_date: string> {
+]: nothing -> oneof<table<base_id: int, character_id: int, location_id: int, logoff_date: string, logon_date: string, ship_type_id: int, start_date: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4730,7 +4752,7 @@ export def "get-corporations-corporation-id-orders" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<duration: int, escrow: float, is_buy_order: bool, issued: string, issued_by: int, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, type_id: int, volume_remain: int, volume_total: int, wallet_division: int> {
+]: nothing -> oneof<table<duration: int, escrow: float, is_buy_order: bool, issued: string, issued_by: int, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, type_id: int, volume_remain: int, volume_total: int, wallet_division: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4773,7 +4795,7 @@ export def "get-corporations-corporation-id-orders-history" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<duration: int, escrow: float, is_buy_order: bool, issued: string, issued_by: int, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, state: string, type_id: int, volume_remain: int, volume_total: int, wallet_division: int> {
+]: nothing -> oneof<table<duration: int, escrow: float, is_buy_order: bool, issued: string, issued_by: int, location_id: int, min_volume: int, order_id: int, price: float, range: string, region_id: int, state: string, type_id: int, volume_remain: int, volume_total: int, wallet_division: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4815,7 +4837,7 @@ export def "get-corporations-corporation-id-roles" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<character_id: int, grantable_roles: list<string>, grantable_roles_at_base: list<string>, grantable_roles_at_hq: list<string>, grantable_roles_at_other: list<string>, roles: list<string>, roles_at_base: list<string>, roles_at_hq: list<string>, roles_at_other: list<string>> {
+]: nothing -> oneof<table<character_id: int, grantable_roles: list<string>, grantable_roles_at_base: list<string>, grantable_roles_at_hq: list<string>, grantable_roles_at_other: list<string>, roles: list<string>, roles_at_base: list<string>, roles_at_hq: list<string>, roles_at_other: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4858,7 +4880,7 @@ export def "get-corporations-corporation-id-roles-history" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<changed_at: string, character_id: int, issuer_id: int, new_roles: list<string>, old_roles: list<string>, role_type: string> {
+]: nothing -> oneof<table<changed_at: string, character_id: int, issuer_id: int, new_roles: list<string>, old_roles: list<string>, role_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4901,7 +4923,7 @@ export def "get-corporations-corporation-id-shareholders" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<share_count: int, shareholder_id: int, shareholder_type: string> {
+]: nothing -> oneof<table<share_count: int, shareholder_id: int, shareholder_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4944,7 +4966,7 @@ export def "get-corporations-corporation-id-standings" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<from_id: int, from_type: string, standing: float> {
+]: nothing -> oneof<table<from_id: int, from_type: string, standing: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -4987,7 +5009,7 @@ export def "get-corporations-corporation-id-starbases" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<moon_id: int, onlined_since: string, reinforced_until: string, starbase_id: int, state: string, system_id: int, type_id: int, unanchor_at: string> {
+]: nothing -> oneof<table<moon_id: int, onlined_since: string, reinforced_until: string, starbase_id: int, state: string, system_id: int, type_id: int, unanchor_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -5031,7 +5053,7 @@ export def "get-corporations-corporation-id-starbases-starbase-id" [
   --system-id: int # The solar system this starbase (POS) is located in, (required, format: int32)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<allow_alliance_members: bool, allow_corporation_members: bool, anchor: string, attack_if_at_war: bool, attack_if_other_security_status_dropping: bool, attack_security_status_threshold: float, attack_standing_threshold: float, fuel_bay_take: string, fuel_bay_view: string, fuels: table<quantity: int, type_id: int>, offline: string, online: string, unanchor: string, use_alliance_standings: bool> {
+]: nothing -> oneof<record<allow_alliance_members: bool, allow_corporation_members: bool, anchor: string, attack_if_at_war: bool, attack_if_other_security_status_dropping: bool, attack_security_status_threshold: float, attack_standing_threshold: float, fuel_bay_take: string, fuel_bay_view: string, fuels: table<quantity: int, type_id: int>, offline: string, online: string, unanchor: string, use_alliance_standings: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -5078,7 +5100,7 @@ export def "get-corporations-corporation-id-structures" [
   --qp-token: string # Access token to use if unable to set a header
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<corporation_id: int, fuel_expires: string, next_reinforce_apply: string, next_reinforce_hour: int, next_reinforce_weekday: int, profile_id: int, reinforce_hour: int, reinforce_weekday: int, services: list<record>, state: string, state_timer_end: string, state_timer_start: string, structure_id: int, system_id: int, type_id: int, unanchors_at: string> {
+]: nothing -> oneof<table<corporation_id: int, fuel_expires: string, next_reinforce_apply: string, next_reinforce_hour: int, next_reinforce_weekday: int, profile_id: int, reinforce_hour: int, reinforce_weekday: int, services: list<record>, state: string, state_timer_end: string, state_timer_start: string, structure_id: int, system_id: int, type_id: int, unanchors_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -5120,7 +5142,7 @@ export def "get-corporations-corporation-id-titles" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<grantable_roles: list<string>, grantable_roles_at_base: list<string>, grantable_roles_at_hq: list<string>, grantable_roles_at_other: list<string>, name: string, roles: list<string>, roles_at_base: list<string>, roles_at_hq: list<string>, roles_at_other: list<string>, title_id: int> {
+]: nothing -> oneof<table<grantable_roles: list<string>, grantable_roles_at_base: list<string>, grantable_roles_at_hq: list<string>, grantable_roles_at_other: list<string>, name: string, roles: list<string>, roles_at_base: list<string>, roles_at_hq: list<string>, roles_at_other: list<string>, title_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -5162,7 +5184,7 @@ export def "get-corporations-corporation-id-wallets" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<balance: float, division: int> {
+]: nothing -> oneof<table<balance: float, division: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -5206,7 +5228,7 @@ export def "get-corporations-corporation-id-wallets-division-journal" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<amount: float, balance: float, context_id: int, context_id_type: string, date: string, description: string, first_party_id: int, id: int, reason: string, ref_type: string, second_party_id: int, tax: float, tax_receiver_id: int> {
+]: nothing -> oneof<table<amount: float, balance: float, context_id: int, context_id_type: string, date: string, description: string, first_party_id: int, id: int, reason: string, ref_type: string, second_party_id: int, tax: float, tax_receiver_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -5251,7 +5273,7 @@ export def "get-corporations-corporation-id-wallets-division-transactions" [
   --from-id: int # Only show journal entries happened before the transaction referenced by this id (format: int64)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<client_id: int, date: string, is_buy: bool, journal_ref_id: int, location_id: int, quantity: int, transaction_id: int, type_id: int, unit_price: float> {
+]: nothing -> oneof<table<client_id: int, date: string, is_buy: bool, journal_ref_id: int, location_id: int, quantity: int, transaction_id: int, type_id: int, unit_price: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -5292,7 +5314,7 @@ export def "get-dogma-attributes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -5332,7 +5354,7 @@ export def "get-dogma-attributes-attribute-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<attribute_id: int, default_value: float, description: string, display_name: string, high_is_good: bool, icon_id: int, name: string, published: bool, stackable: bool, unit_id: int> {
+]: nothing -> oneof<record<attribute_id: int, default_value: float, description: string, display_name: string, high_is_good: bool, icon_id: int, name: string, published: bool, stackable: bool, unit_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attribute_id | is-empty) { error make --unspanned { msg: "path parameter 'attribute_id' must be non-empty" } }
@@ -5374,7 +5396,7 @@ export def "get-dogma-dynamic-items-type-id-item-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<created_by: int, dogma_attributes: table<attribute_id: int, value: float>, dogma_effects: table<effect_id: int, is_default: bool>, mutator_type_id: int, source_type_id: int> {
+]: nothing -> oneof<record<created_by: int, dogma_attributes: table<attribute_id: int, value: float>, dogma_effects: table<effect_id: int, is_default: bool>, mutator_type_id: int, source_type_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -5415,7 +5437,7 @@ export def "get-dogma-effects" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -5455,7 +5477,7 @@ export def "get-dogma-effects-effect-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<description: string, disallow_auto_repeat: bool, discharge_attribute_id: int, display_name: string, duration_attribute_id: int, effect_category: int, effect_id: int, electronic_chance: bool, falloff_attribute_id: int, icon_id: int, is_assistance: bool, is_offensive: bool, is_warp_safe: bool, modifiers: table<domain: string, effect_id: int, func: string, modified_attribute_id: int, modifying_attribute_id: int, operator: int>, name: string, post_expression: int, pre_expression: int, published: bool, range_attribute_id: int, range_chance: bool, tracking_speed_attribute_id: int> {
+]: nothing -> oneof<record<description: string, disallow_auto_repeat: bool, discharge_attribute_id: int, display_name: string, duration_attribute_id: int, effect_category: int, effect_id: int, electronic_chance: bool, falloff_attribute_id: int, icon_id: int, is_assistance: bool, is_offensive: bool, is_warp_safe: bool, modifiers: table<domain: string, effect_id: int, func: string, modified_attribute_id: int, modifying_attribute_id: int, operator: int>, name: string, post_expression: int, pre_expression: int, published: bool, range_attribute_id: int, range_chance: bool, tracking_speed_attribute_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($effect_id | is-empty) { error make --unspanned { msg: "path parameter 'effect_id' must be non-empty" } }
@@ -5497,7 +5519,7 @@ export def "get-fleets-fleet-id" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<is_free_move: bool, is_registered: bool, is_voice_enabled: bool, motd: string> {
+]: nothing -> oneof<record<is_free_move: bool, is_registered: bool, is_voice_enabled: bool, motd: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
@@ -5585,7 +5607,7 @@ export def "get-fleets-fleet-id-members" [
   --qp-token: string # Access token to use if unable to set a header
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<character_id: int, join_time: string, role: string, role_name: string, ship_type_id: int, solar_system_id: int, squad_id: int, station_id: int, takes_fleet_warp: bool, wing_id: int> {
+]: nothing -> oneof<table<character_id: int, join_time: string, role: string, role_name: string, ship_type_id: int, solar_system_id: int, squad_id: int, station_id: int, takes_fleet_warp: bool, wing_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
@@ -5849,7 +5871,7 @@ export def "get-fleets-fleet-id-wings" [
   --qp-token: string # Access token to use if unable to set a header
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<id: int, name: string, squads: list<record>> {
+]: nothing -> oneof<table<id: int, name: string, squads: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
@@ -5890,7 +5912,7 @@ export def "post-fleets-fleet-id-wings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-]: nothing -> record<wing_id: int> {
+]: nothing -> oneof<record<wing_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
@@ -6016,7 +6038,7 @@ export def "post-fleets-fleet-id-wings-wing-id-squads" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
-]: nothing -> record<squad_id: int> {
+]: nothing -> oneof<record<squad_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fleet_id | is-empty) { error make --unspanned { msg: "path parameter 'fleet_id' must be non-empty" } }
@@ -6055,7 +6077,7 @@ export def "get-fw-leaderboards" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<kills: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>, victory_points: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>> {
+]: nothing -> oneof<record<kills: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>, victory_points: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -6094,7 +6116,7 @@ export def "get-fw-leaderboards-characters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<kills: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>, victory_points: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>> {
+]: nothing -> oneof<record<kills: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>, victory_points: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -6133,7 +6155,7 @@ export def "get-fw-leaderboards-corporations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<kills: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>, victory_points: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>> {
+]: nothing -> oneof<record<kills: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>, victory_points: record<active_total: list<record>, last_week: list<record>, yesterday: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -6172,7 +6194,7 @@ export def "get-fw-stats" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<faction_id: int, kills: record<last_week: int, total: int, yesterday: int>, pilots: int, systems_controlled: int, victory_points: record<last_week: int, total: int, yesterday: int>> {
+]: nothing -> oneof<table<faction_id: int, kills: record<last_week: int, total: int, yesterday: int>, pilots: int, systems_controlled: int, victory_points: record<last_week: int, total: int, yesterday: int>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -6211,7 +6233,7 @@ export def "get-fw-systems" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<contested: string, occupier_faction_id: int, owner_faction_id: int, solar_system_id: int, victory_points: int, victory_points_threshold: int> {
+]: nothing -> oneof<table<contested: string, occupier_faction_id: int, owner_faction_id: int, solar_system_id: int, victory_points: int, victory_points_threshold: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -6250,7 +6272,7 @@ export def "get-fw-wars" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<against_id: int, faction_id: int> {
+]: nothing -> oneof<table<against_id: int, faction_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -6289,7 +6311,7 @@ export def "get-incursions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<constellation_id: int, faction_id: int, has_boss: bool, infested_solar_systems: list<int>, influence: float, staging_solar_system_id: int, state: string, type: string> {
+]: nothing -> oneof<table<constellation_id: int, faction_id: int, has_boss: bool, infested_solar_systems: list<int>, influence: float, staging_solar_system_id: int, state: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -6328,7 +6350,7 @@ export def "get-industry-facilities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<facility_id: int, owner_id: int, region_id: int, solar_system_id: int, tax: float, type_id: int> {
+]: nothing -> oneof<table<facility_id: int, owner_id: int, region_id: int, solar_system_id: int, tax: float, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -6367,7 +6389,7 @@ export def "get-industry-systems" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<cost_indices: list<record>, solar_system_id: int> {
+]: nothing -> oneof<table<cost_indices: list<record>, solar_system_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -6408,7 +6430,7 @@ export def "get-insurance-prices" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<levels: list<record>, type_id: int> {
+]: nothing -> oneof<table<levels: list<record>, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
@@ -6449,7 +6471,7 @@ export def "get-killmails-killmail-id-killmail-hash" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<attackers: table<alliance_id: int, character_id: int, corporation_id: int, damage_done: int, faction_id: int, final_blow: bool, security_status: float, ship_type_id: int, weapon_type_id: int>, killmail_id: int, killmail_time: string, moon_id: int, solar_system_id: int, victim: record<alliance_id: int, character_id: int, corporation_id: int, damage_taken: int, faction_id: int, items: list<record>, position: record<x: float, y: float, z: float>, ship_type_id: int>, war_id: int> {
+]: nothing -> oneof<record<attackers: table<alliance_id: int, character_id: int, corporation_id: int, damage_done: int, faction_id: int, final_blow: bool, security_status: float, ship_type_id: int, weapon_type_id: int>, killmail_id: int, killmail_time: string, moon_id: int, solar_system_id: int, victim: record<alliance_id: int, character_id: int, corporation_id: int, damage_taken: int, faction_id: int, items: list<record>, position: record<x: float, y: float, z: float>, ship_type_id: int>, war_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($killmail_id | is-empty) { error make --unspanned { msg: "path parameter 'killmail_id' must be non-empty" } }
@@ -6491,7 +6513,7 @@ export def "get-loyalty-stores-corporation-id-offers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<ak_cost: int, isk_cost: int, lp_cost: int, offer_id: int, quantity: int, required_items: list<record>, type_id: int> {
+]: nothing -> oneof<table<ak_cost: int, isk_cost: int, lp_cost: int, offer_id: int, quantity: int, required_items: list<record>, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }
@@ -6531,7 +6553,7 @@ export def "get-markets-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -6573,7 +6595,7 @@ export def "get-markets-groups-market-group-id" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<description: string, market_group_id: int, name: string, parent_group_id: int, types: list<int>> {
+]: nothing -> oneof<record<description: string, market_group_id: int, name: string, parent_group_id: int, types: list<int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($market_group_id | is-empty) { error make --unspanned { msg: "path parameter 'market_group_id' must be non-empty" } }
@@ -6613,7 +6635,7 @@ export def "get-markets-prices" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<adjusted_price: float, average_price: float, type_id: int> {
+]: nothing -> oneof<table<adjusted_price: float, average_price: float, type_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -6655,7 +6677,7 @@ export def "get-markets-structures-structure-id" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<duration: int, is_buy_order: bool, issued: string, location_id: int, min_volume: int, order_id: int, price: float, range: string, type_id: int, volume_remain: int, volume_total: int> {
+]: nothing -> oneof<table<duration: int, is_buy_order: bool, issued: string, location_id: int, min_volume: int, order_id: int, price: float, range: string, type_id: int, volume_remain: int, volume_total: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($structure_id | is-empty) { error make --unspanned { msg: "path parameter 'structure_id' must be non-empty" } }
@@ -6697,7 +6719,7 @@ export def "get-markets-region-id-history" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --type-id: int # Return statistics for this type (required, format: int32)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<average: float, date: string, highest: float, lowest: float, order_count: int, volume: int> {
+]: nothing -> oneof<table<average: float, date: string, highest: float, lowest: float, order_count: int, volume: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'region_id' must be non-empty" } }
@@ -6742,7 +6764,7 @@ export def "get-markets-region-id-orders" [
   --page: int # Which page of results to return (format: int32, default: 1)
   --type-id: int # Return orders only for this type (format: int32)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<duration: int, is_buy_order: bool, issued: string, location_id: int, min_volume: int, order_id: int, price: float, range: string, system_id: int, type_id: int, volume_remain: int, volume_total: int> {
+]: nothing -> oneof<table<duration: int, is_buy_order: bool, issued: string, location_id: int, min_volume: int, order_id: int, price: float, range: string, system_id: int, type_id: int, volume_remain: int, volume_total: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'region_id' must be non-empty" } }
@@ -6785,7 +6807,7 @@ export def "get-markets-region-id-types" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'region_id' must be non-empty" } }
@@ -6825,7 +6847,7 @@ export def "get-opportunities-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -6867,7 +6889,7 @@ export def "get-opportunities-groups-group-id" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<connected_groups: list<int>, description: string, group_id: int, name: string, notification: string, required_tasks: list<int>> {
+]: nothing -> oneof<record<connected_groups: list<int>, description: string, group_id: int, name: string, notification: string, required_tasks: list<int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -6907,7 +6929,7 @@ export def "get-opportunities-tasks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -6947,7 +6969,7 @@ export def "get-opportunities-tasks-task-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<description: string, name: string, notification: string, task_id: int> {
+]: nothing -> oneof<record<description: string, name: string, notification: string, task_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
@@ -6992,7 +7014,7 @@ export def "get-route-origin-destination" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --flag: string@flag-completer # route security preference (default: shortest)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($origin | is-empty) { error make --unspanned { msg: "path parameter 'origin' must be non-empty" } }
@@ -7038,7 +7060,7 @@ export def "get-search" [
   --strict: oneof<nothing, bool> # Whether the search should be a strict match (default: false)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<agent: list<int>, alliance: list<int>, character: list<int>, constellation: list<int>, corporation: list<int>, faction: list<int>, inventory_type: list<int>, region: list<int>, solar_system: list<int>, station: list<int>> {
+]: nothing -> oneof<record<agent: list<int>, alliance: list<int>, character: list<int>, constellation: list<int>, corporation: list<int>, faction: list<int>, inventory_type: list<int>, region: list<int>, solar_system: list<int>, station: list<int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($categories == null) { error make --unspanned { msg: "required query parameter 'categories' missing: pass --categories" } }
@@ -7079,7 +7101,7 @@ export def "get-sovereignty-campaigns" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<attackers_score: float, campaign_id: int, constellation_id: int, defender_id: int, defender_score: float, event_type: string, participants: list<record>, solar_system_id: int, start_time: string, structure_id: int> {
+]: nothing -> oneof<table<attackers_score: float, campaign_id: int, constellation_id: int, defender_id: int, defender_score: float, event_type: string, participants: list<record>, solar_system_id: int, start_time: string, structure_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -7118,7 +7140,7 @@ export def "get-sovereignty-map" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<alliance_id: int, corporation_id: int, faction_id: int, system_id: int> {
+]: nothing -> oneof<table<alliance_id: int, corporation_id: int, faction_id: int, system_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -7157,7 +7179,7 @@ export def "get-sovereignty-structures" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<alliance_id: int, solar_system_id: int, structure_id: int, structure_type_id: int, vulnerability_occupancy_level: float, vulnerable_end_time: string, vulnerable_start_time: string> {
+]: nothing -> oneof<table<alliance_id: int, solar_system_id: int, structure_id: int, structure_type_id: int, vulnerability_occupancy_level: float, vulnerable_end_time: string, vulnerable_start_time: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -7196,7 +7218,7 @@ export def "get-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<players: int, server_version: string, start_time: string, vip: bool> {
+]: nothing -> oneof<record<players: int, server_version: string, start_time: string, vip: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -7442,7 +7464,7 @@ export def "get-universe-ancestries" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<bloodline_id: int, description: string, icon_id: int, id: int, name: string, short_description: string> {
+]: nothing -> oneof<table<bloodline_id: int, description: string, icon_id: int, id: int, name: string, short_description: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
@@ -7482,7 +7504,7 @@ export def "get-universe-asteroid-belts-asteroid-belt-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<name: string, position: record<x: float, y: float, z: float>, system_id: int> {
+]: nothing -> oneof<record<name: string, position: record<x: float, y: float, z: float>, system_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asteroid_belt_id | is-empty) { error make --unspanned { msg: "path parameter 'asteroid_belt_id' must be non-empty" } }
@@ -7524,7 +7546,7 @@ export def "get-universe-bloodlines" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<bloodline_id: int, charisma: int, corporation_id: int, description: string, intelligence: int, memory: int, name: string, perception: int, race_id: int, ship_type_id: int, willpower: int> {
+]: nothing -> oneof<table<bloodline_id: int, charisma: int, corporation_id: int, description: string, intelligence: int, memory: int, name: string, perception: int, race_id: int, ship_type_id: int, willpower: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
@@ -7563,7 +7585,7 @@ export def "get-universe-categories" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -7605,7 +7627,7 @@ export def "get-universe-categories-category-id" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<category_id: int, groups: list<int>, name: string, published: bool> {
+]: nothing -> oneof<record<category_id: int, groups: list<int>, name: string, published: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'category_id' must be non-empty" } }
@@ -7645,7 +7667,7 @@ export def "get-universe-constellations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -7687,7 +7709,7 @@ export def "get-universe-constellations-constellation-id" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<constellation_id: int, name: string, position: record<x: float, y: float, z: float>, region_id: int, systems: list<int>> {
+]: nothing -> oneof<record<constellation_id: int, name: string, position: record<x: float, y: float, z: float>, region_id: int, systems: list<int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($constellation_id | is-empty) { error make --unspanned { msg: "path parameter 'constellation_id' must be non-empty" } }
@@ -7729,7 +7751,7 @@ export def "get-universe-factions" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<corporation_id: int, description: string, faction_id: int, is_unique: bool, militia_corporation_id: int, name: string, size_factor: float, solar_system_id: int, station_count: int, station_system_count: int> {
+]: nothing -> oneof<table<corporation_id: int, description: string, faction_id: int, is_unique: bool, militia_corporation_id: int, name: string, size_factor: float, solar_system_id: int, station_count: int, station_system_count: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
@@ -7768,7 +7790,7 @@ export def "get-universe-graphics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -7808,7 +7830,7 @@ export def "get-universe-graphics-graphic-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<collision_file: string, graphic_file: string, graphic_id: int, icon_folder: string, sof_dna: string, sof_fation_name: string, sof_hull_name: string, sof_race_name: string> {
+]: nothing -> oneof<record<collision_file: string, graphic_file: string, graphic_id: int, icon_folder: string, sof_dna: string, sof_fation_name: string, sof_hull_name: string, sof_race_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($graphic_id | is-empty) { error make --unspanned { msg: "path parameter 'graphic_id' must be non-empty" } }
@@ -7849,7 +7871,7 @@ export def "get-universe-groups" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
@@ -7891,7 +7913,7 @@ export def "get-universe-groups-group-id" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<category_id: int, group_id: int, name: string, published: bool, types: list<int>> {
+]: nothing -> oneof<record<category_id: int, group_id: int, name: string, published: bool, types: list<int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -7933,7 +7955,7 @@ export def "post-universe-ids" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --body: list
-]: any -> record<agents: table<id: int, name: string>, alliances: table<id: int, name: string>, characters: table<id: int, name: string>, constellations: table<id: int, name: string>, corporations: table<id: int, name: string>, factions: table<id: int, name: string>, inventory_types: table<id: int, name: string>, regions: table<id: int, name: string>, stations: table<id: int, name: string>, systems: table<id: int, name: string>> {
+]: any -> oneof<record<agents: table<id: int, name: string>, alliances: table<id: int, name: string>, characters: table<id: int, name: string>, constellations: table<id: int, name: string>, corporations: table<id: int, name: string>, factions: table<id: int, name: string>, inventory_types: table<id: int, name: string>, regions: table<id: int, name: string>, stations: table<id: int, name: string>, systems: table<id: int, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7976,7 +7998,7 @@ export def "get-universe-moons-moon-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<moon_id: int, name: string, position: record<x: float, y: float, z: float>, system_id: int> {
+]: nothing -> oneof<record<moon_id: int, name: string, position: record<x: float, y: float, z: float>, system_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($moon_id | is-empty) { error make --unspanned { msg: "path parameter 'moon_id' must be non-empty" } }
@@ -8016,7 +8038,7 @@ export def "post-universe-names" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --body: list
-]: any -> table<category: string, id: int, name: string> {
+]: any -> oneof<table<category: string, id: int, name: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8057,7 +8079,7 @@ export def "get-universe-planets-planet-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<name: string, planet_id: int, position: record<x: float, y: float, z: float>, system_id: int, type_id: int> {
+]: nothing -> oneof<record<name: string, planet_id: int, position: record<x: float, y: float, z: float>, system_id: int, type_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($planet_id | is-empty) { error make --unspanned { msg: "path parameter 'planet_id' must be non-empty" } }
@@ -8099,7 +8121,7 @@ export def "get-universe-races" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<alliance_id: int, description: string, name: string, race_id: int> {
+]: nothing -> oneof<table<alliance_id: int, description: string, name: string, race_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
@@ -8138,7 +8160,7 @@ export def "get-universe-regions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -8180,7 +8202,7 @@ export def "get-universe-regions-region-id" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<constellations: list<int>, description: string, name: string, region_id: int> {
+]: nothing -> oneof<record<constellations: list<int>, description: string, name: string, region_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'region_id' must be non-empty" } }
@@ -8221,7 +8243,7 @@ export def "get-universe-schematics-schematic-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<cycle_time: int, schematic_name: string> {
+]: nothing -> oneof<record<cycle_time: int, schematic_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($schematic_id | is-empty) { error make --unspanned { msg: "path parameter 'schematic_id' must be non-empty" } }
@@ -8262,7 +8284,7 @@ export def "get-universe-stargates-stargate-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<destination: record<stargate_id: int, system_id: int>, name: string, position: record<x: float, y: float, z: float>, stargate_id: int, system_id: int, type_id: int> {
+]: nothing -> oneof<record<destination: record<stargate_id: int, system_id: int>, name: string, position: record<x: float, y: float, z: float>, stargate_id: int, system_id: int, type_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($stargate_id | is-empty) { error make --unspanned { msg: "path parameter 'stargate_id' must be non-empty" } }
@@ -8303,7 +8325,7 @@ export def "get-universe-stars-star-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<age: int, luminosity: float, name: string, radius: int, solar_system_id: int, spectral_class: string, temperature: int, type_id: int> {
+]: nothing -> oneof<record<age: int, luminosity: float, name: string, radius: int, solar_system_id: int, spectral_class: string, temperature: int, type_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($star_id | is-empty) { error make --unspanned { msg: "path parameter 'star_id' must be non-empty" } }
@@ -8344,7 +8366,7 @@ export def "get-universe-stations-station-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<max_dockable_ship_volume: float, name: string, office_rental_cost: float, owner: int, position: record<x: float, y: float, z: float>, race_id: int, reprocessing_efficiency: float, reprocessing_stations_take: float, services: list<string>, station_id: int, system_id: int, type_id: int> {
+]: nothing -> oneof<record<max_dockable_ship_volume: float, name: string, office_rental_cost: float, owner: int, position: record<x: float, y: float, z: float>, race_id: int, reprocessing_efficiency: float, reprocessing_stations_take: float, services: list<string>, station_id: int, system_id: int, type_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($station_id | is-empty) { error make --unspanned { msg: "path parameter 'station_id' must be non-empty" } }
@@ -8385,7 +8407,7 @@ export def "get-universe-structures" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --filter: string@filter-completer # Only list public structures that have this service online
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
@@ -8426,7 +8448,7 @@ export def "get-universe-structures-structure-id" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<name: string, owner_id: int, position: record<x: float, y: float, z: float>, solar_system_id: int, type_id: int> {
+]: nothing -> oneof<record<name: string, owner_id: int, position: record<x: float, y: float, z: float>, solar_system_id: int, type_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($structure_id | is-empty) { error make --unspanned { msg: "path parameter 'structure_id' must be non-empty" } }
@@ -8466,7 +8488,7 @@ export def "get-universe-system-jumps" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<ship_jumps: int, system_id: int> {
+]: nothing -> oneof<table<ship_jumps: int, system_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -8505,7 +8527,7 @@ export def "get-universe-system-kills" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<npc_kills: int, pod_kills: int, ship_kills: int, system_id: int> {
+]: nothing -> oneof<table<npc_kills: int, pod_kills: int, ship_kills: int, system_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -8544,7 +8566,7 @@ export def "get-universe-systems" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar")] | flatten | str join "&"
@@ -8586,7 +8608,7 @@ export def "get-universe-systems-system-id" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<constellation_id: int, name: string, planets: table<asteroid_belts: list, moons: list, planet_id: int>, position: record<x: float, y: float, z: float>, security_class: string, security_status: float, star_id: int, stargates: list<int>, stations: list<int>, system_id: int> {
+]: nothing -> oneof<record<constellation_id: int, name: string, planets: table<asteroid_belts: list, moons: list, planet_id: int>, position: record<x: float, y: float, z: float>, security_class: string, security_status: float, star_id: int, stargates: list<int>, stations: list<int>, system_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($system_id | is-empty) { error make --unspanned { msg: "path parameter 'system_id' must be non-empty" } }
@@ -8627,7 +8649,7 @@ export def "get-universe-types" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
@@ -8669,7 +8691,7 @@ export def "get-universe-types-type-id" [
   --language: string@language-completer # Language to use in the response, takes precedence over Accept-Language (default: en-us)
   --accept-language: string@accept-language-completer # Language to use in the response (default: en-us)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<capacity: float, description: string, dogma_attributes: table<attribute_id: int, value: float>, dogma_effects: table<effect_id: int, is_default: bool>, graphic_id: int, group_id: int, icon_id: int, market_group_id: int, mass: float, name: string, packaged_volume: float, portion_size: int, published: bool, radius: float, type_id: int, volume: float> {
+]: nothing -> oneof<record<capacity: float, description: string, dogma_attributes: table<attribute_id: int, value: float>, dogma_effects: table<effect_id: int, is_default: bool>, graphic_id: int, group_id: int, icon_id: int, market_group_id: int, mass: float, name: string, packaged_volume: float, portion_size: int, published: bool, radius: float, type_id: int, volume: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -8710,7 +8732,7 @@ export def "get-wars" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --max-war-id: int # Only return wars with ID smaller than this (format: int32)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "datasource" $datasource "scalar") (serialize-qp "max_war_id" $max_war_id "scalar")] | flatten | str join "&"
@@ -8750,7 +8772,7 @@ export def "get-wars-war-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> record<aggressor: record<alliance_id: int, corporation_id: int, isk_destroyed: float, ships_killed: int>, allies: table<alliance_id: int, corporation_id: int>, declared: string, defender: record<alliance_id: int, corporation_id: int, isk_destroyed: float, ships_killed: int>, finished: string, id: int, mutual: bool, open_for_allies: bool, retracted: string, started: string> {
+]: nothing -> oneof<record<aggressor: record<alliance_id: int, corporation_id: int, isk_destroyed: float, ships_killed: int>, allies: table<alliance_id: int, corporation_id: int>, declared: string, defender: record<alliance_id: int, corporation_id: int, isk_destroyed: float, ships_killed: int>, finished: string, id: int, mutual: bool, open_for_allies: bool, retracted: string, started: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($war_id | is-empty) { error make --unspanned { msg: "path parameter 'war_id' must be non-empty" } }
@@ -8792,7 +8814,7 @@ export def "get-wars-war-id-killmails" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --page: int # Which page of results to return (format: int32, default: 1)
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> table<killmail_hash: string, killmail_id: int> {
+]: nothing -> oneof<table<killmail_hash: string, killmail_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($war_id | is-empty) { error make --unspanned { msg: "path parameter 'war_id' must be non-empty" } }

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -128,9 +152,9 @@ def mode-completer-1 [] { ["CreateNew"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "face-detect-with-url" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["face-detect-with-url" "face-list-list" "face-list-delete" "face-list-get" "face-list-update" "face-list-create" "face-list-add-face-from-url" "face-list-delete-face" "face-find-similar" "face-group" "face-identify" "large-face-list-list" "large-face-list-delete" "large-face-list-get" "large-face-list-update" "large-face-list-create" "large-face-list-list-faces" "large-face-list-add-face-from-url" "large-face-list-delete-face" "large-face-list-get-face" "large-face-list-update-face" "large-face-list-train" "large-face-list-get-training-status" "large-person-group-list" "large-person-group-delete" "large-person-group-get" "large-person-group-update" "large-person-group-create" "large-person-group-person-list" "large-person-group-person-create" "large-person-group-person-delete" "large-person-group-person-get" "large-person-group-person-update" "large-person-group-person-add-face-from-url" "large-person-group-person-delete-face" "large-person-group-person-get-face" "large-person-group-person-update-face" "large-person-group-train" "large-person-group-get-training-status" "snapshot-get-operation-status" "person-group-list" "person-group-delete" "person-group-get" "person-group-update" "person-group-create" "person-group-person-list" "person-group-person-create" "person-group-person-delete" "person-group-person-get" "person-group-person-update" "person-group-person-add-face-from-url" "person-group-person-delete-face" "person-group-person-get-face" "person-group-person-update-face" "person-group-train" "person-group-get-training-status" "snapshot-list" "snapshot-take" "snapshot-delete" "snapshot-get" "snapshot-update" "snapshot-apply" "face-verify-face-to-face" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -169,7 +193,7 @@ export def "face-detect-with-url" [
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
   --detection-model: string@detection-model-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
   url: string # Publicly reachable URL of an image
-]: any -> table<faceAttributes: record<accessories: list, age: float, blur: record, emotion: record, exposure: record, facialHair: record, gender: string, glasses: string, hair: record, headPose: record, makeup: record, noise: record, occlusion: record, smile: float>, faceId: string, faceLandmarks: record<eyeLeftBottom: record, eyeLeftInner: record, eyeLeftOuter: record, eyeLeftTop: record, eyeRightBottom: record, eyeRightInner: record, eyeRightOuter: record, eyeRightTop: record, eyebrowLeftInner: record, eyebrowLeftOuter: record, eyebrowRightInner: record, eyebrowRightOuter: record, mouthLeft: record, mouthRight: record, noseLeftAlarOutTip: record, noseLeftAlarTop: record, noseRightAlarOutTip: record, noseRightAlarTop: record, noseRootLeft: record, noseRootRight: record, noseTip: record, pupilLeft: record, pupilRight: record, underLipBottom: record, underLipTop: record, upperLipBottom: record, upperLipTop: record>, faceRectangle: record<height: int, left: int, top: int, width: int>, recognitionModel: string> {
+]: any -> oneof<table<faceAttributes: record<accessories: list, age: float, blur: record, emotion: record, exposure: record, facialHair: record, gender: string, glasses: string, hair: record, headPose: record, makeup: record, noise: record, occlusion: record, smile: float>, faceId: string, faceLandmarks: record<eyeLeftBottom: record, eyeLeftInner: record, eyeLeftOuter: record, eyeLeftTop: record, eyeRightBottom: record, eyeRightInner: record, eyeRightOuter: record, eyeRightTop: record, eyebrowLeftInner: record, eyebrowLeftOuter: record, eyebrowRightInner: record, eyebrowRightOuter: record, mouthLeft: record, mouthRight: record, noseLeftAlarOutTip: record, noseLeftAlarTop: record, noseRightAlarOutTip: record, noseRightAlarTop: record, noseRootLeft: record, noseRootRight: record, noseTip: record, pupilLeft: record, pupilRight: record, underLipBottom: record, underLipTop: record, upperLipBottom: record, upperLipTop: record>, faceRectangle: record<height: int, left: int, top: int, width: int>, recognitionModel: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -208,7 +232,7 @@ export def "face-list-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> table<faceListId: string, persistedFaces: list<record>, recognitionModel: string, name: string, userData: string> {
+]: nothing -> oneof<table<faceListId: string, persistedFaces: list<record>, recognitionModel: string, name: string, userData: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
@@ -281,7 +305,7 @@ export def "face-list-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> record<faceListId: string, persistedFaces: table<persistedFaceId: string, userData: string>, recognitionModel: string, name: string, userData: string> {
+]: nothing -> oneof<record<faceListId: string, persistedFaces: table<persistedFaceId: string, userData: string>, recognitionModel: string, name: string, userData: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($face_list_id | is-empty) { error make --unspanned { msg: "path parameter 'faceListId' must be non-empty" } }
@@ -405,7 +429,7 @@ export def "face-list-add-face-from-url" [
   --target-face: list<int> # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
   --detection-model: string@detection-model-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
   url: string # Publicly reachable URL of an image
-]: any -> record<persistedFaceId: string, userData: string> {
+]: any -> oneof<record<persistedFaceId: string, userData: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -488,7 +512,7 @@ export def "face-find-similar" [
   --large-face-list-id: string # An existing user-specified unique candidate large face list, created in LargeFaceList - Create. Large face list contains a set of persistedFaceIds which are persisted and will never expire. Parameter faceListId, largeFaceListId and faceIds should not be provided at the same time.
   --max-num-of-candidates-returned: int # The number of top similar faces returned. The valid range is [1, 1000]. (default: 20)
   --mode: string@mode-completer # Similar face searching mode. It can be "matchPerson" or "matchFace". (default: matchPerson)
-]: any -> table<confidence: float, faceId: string, persistedFaceId: string> {
+]: any -> oneof<table<confidence: float, faceId: string, persistedFaceId: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -526,7 +550,7 @@ export def "face-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   face_ids: list<string> # Array of candidate faceId created by Face - Detect. The maximum is 1000 faces
-]: any -> record<groups: list<list<string>>, messyGroup: list<string>> {
+]: any -> oneof<record<groups: list<list<string>>, messyGroup: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -568,7 +592,7 @@ export def "face-identify" [
   --large-person-group-id: string # LargePersonGroupId of the target large person group, created by LargePersonGroup - Create. Parameter personGroupId and largePersonGroupId should not be provided at the same time.
   --max-num-of-candidates-returned: int # The range of maxNumOfCandidatesReturned is between 1 and 5 (default is 1). (default: 1)
   --person-group-id: string # PersonGroupId of the target person group, created by PersonGroup - Create. Parameter personGroupId and largePersonGroupId should not be provided at the same time.
-]: any -> table<candidates: list<record>, faceId: string> {
+]: any -> oneof<table<candidates: list<record>, faceId: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -606,7 +630,7 @@ export def "large-face-list-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> table<largeFaceListId: string, recognitionModel: string, name: string, userData: string> {
+]: nothing -> oneof<table<largeFaceListId: string, recognitionModel: string, name: string, userData: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
@@ -679,7 +703,7 @@ export def "large-face-list-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> record<largeFaceListId: string, recognitionModel: string, name: string, userData: string> {
+]: nothing -> oneof<record<largeFaceListId: string, recognitionModel: string, name: string, userData: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_face_list_id | is-empty) { error make --unspanned { msg: "path parameter 'largeFaceListId' must be non-empty" } }
@@ -801,7 +825,7 @@ export def "large-face-list-list-faces" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Starting face id to return (used to list a range of faces).
   --top: int # Number of faces to return starting with the face id indicated by the 'start' parameter.
-]: nothing -> table<persistedFaceId: string, userData: string> {
+]: nothing -> oneof<table<persistedFaceId: string, userData: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_face_list_id | is-empty) { error make --unspanned { msg: "path parameter 'largeFaceListId' must be non-empty" } }
@@ -842,7 +866,7 @@ export def "large-face-list-add-face-from-url" [
   --target-face: list<int> # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
   --detection-model: string@detection-model-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
   url: string # Publicly reachable URL of an image
-]: any -> record<persistedFaceId: string, userData: string> {
+]: any -> oneof<record<persistedFaceId: string, userData: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -921,7 +945,7 @@ export def "large-face-list-get-face" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<persistedFaceId: string, userData: string> {
+]: nothing -> oneof<record<persistedFaceId: string, userData: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_face_list_id | is-empty) { error make --unspanned { msg: "path parameter 'largeFaceListId' must be non-empty" } }
@@ -1036,7 +1060,7 @@ export def "large-face-list-get-training-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdDateTime: string, lastActionDateTime: string, lastSuccessfulTrainingDateTime: string, message: string, status: string> {
+]: nothing -> oneof<record<createdDateTime: string, lastActionDateTime: string, lastSuccessfulTrainingDateTime: string, message: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_face_list_id | is-empty) { error make --unspanned { msg: "path parameter 'largeFaceListId' must be non-empty" } }
@@ -1074,7 +1098,7 @@ export def "large-person-group-list" [
   --start: string # List large person groups from the least largePersonGroupId greater than the "start".
   --top: int # The number of large person groups to list. (default: 1000)
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> table<largePersonGroupId: string, recognitionModel: string, name: string, userData: string> {
+]: nothing -> oneof<table<largePersonGroupId: string, recognitionModel: string, name: string, userData: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
@@ -1147,7 +1171,7 @@ export def "large-person-group-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> record<largePersonGroupId: string, recognitionModel: string, name: string, userData: string> {
+]: nothing -> oneof<record<largePersonGroupId: string, recognitionModel: string, name: string, userData: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'largePersonGroupId' must be non-empty" } }
@@ -1269,7 +1293,7 @@ export def "large-person-group-person-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Starting person id to return (used to list a range of persons).
   --top: int # Number of persons to return starting with the person id indicated by the 'start' parameter.
-]: nothing -> table<persistedFaceIds: list<string>, personId: string, name: string, userData: string> {
+]: nothing -> oneof<table<persistedFaceIds: list<string>, personId: string, name: string, userData: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'largePersonGroupId' must be non-empty" } }
@@ -1308,7 +1332,7 @@ export def "large-person-group-person-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
   --user-data: string # User specified data. Length should not exceed 16KB.
-]: any -> record<persistedFaceIds: list<string>, personId: string, name: string, userData: string> {
+]: any -> oneof<record<persistedFaceIds: list<string>, personId: string, name: string, userData: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1386,7 +1410,7 @@ export def "large-person-group-person-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<persistedFaceIds: list<string>, personId: string, name: string, userData: string> {
+]: nothing -> oneof<record<persistedFaceIds: list<string>, personId: string, name: string, userData: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'largePersonGroupId' must be non-empty" } }
@@ -1471,7 +1495,7 @@ export def "large-person-group-person-add-face-from-url" [
   --target-face: list<int> # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
   --detection-model: string@detection-model-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
   url: string # Publicly reachable URL of an image
-]: any -> record<persistedFaceId: string, userData: string> {
+]: any -> oneof<record<persistedFaceId: string, userData: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1554,7 +1578,7 @@ export def "large-person-group-person-get-face" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<persistedFaceId: string, userData: string> {
+]: nothing -> oneof<record<persistedFaceId: string, userData: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'largePersonGroupId' must be non-empty" } }
@@ -1672,7 +1696,7 @@ export def "large-person-group-get-training-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdDateTime: string, lastActionDateTime: string, lastSuccessfulTrainingDateTime: string, message: string, status: string> {
+]: nothing -> oneof<record<createdDateTime: string, lastActionDateTime: string, lastSuccessfulTrainingDateTime: string, message: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($large_person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'largePersonGroupId' must be non-empty" } }
@@ -1708,7 +1732,7 @@ export def "snapshot-get-operation-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdTime: string, lastActionTime: string, message: string, resourceLocation: string, status: string> {
+]: nothing -> oneof<record<createdTime: string, lastActionTime: string, message: string, resourceLocation: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operationId' must be non-empty" } }
@@ -1746,7 +1770,7 @@ export def "person-group-list" [
   --start: string # List person groups from the least personGroupId greater than the "start".
   --top: int # The number of person groups to list. (default: 1000)
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> table<personGroupId: string, recognitionModel: string, name: string, userData: string> {
+]: nothing -> oneof<table<personGroupId: string, recognitionModel: string, name: string, userData: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "returnRecognitionModel" $return_recognition_model "scalar")] | flatten | str join "&"
@@ -1819,7 +1843,7 @@ export def "person-group-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --return-recognition-model: oneof<nothing, bool> # A value indicating whether the operation should return 'recognitionModel' in response. (default: false)
-]: nothing -> record<personGroupId: string, recognitionModel: string, name: string, userData: string> {
+]: nothing -> oneof<record<personGroupId: string, recognitionModel: string, name: string, userData: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'personGroupId' must be non-empty" } }
@@ -1941,7 +1965,7 @@ export def "person-group-person-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # Starting person id to return (used to list a range of persons).
   --top: int # Number of persons to return starting with the person id indicated by the 'start' parameter.
-]: nothing -> table<persistedFaceIds: list<string>, personId: string, name: string, userData: string> {
+]: nothing -> oneof<table<persistedFaceIds: list<string>, personId: string, name: string, userData: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'personGroupId' must be non-empty" } }
@@ -1980,7 +2004,7 @@ export def "person-group-person-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # User defined name, maximum length is 128.
   --user-data: string # User specified data. Length should not exceed 16KB.
-]: any -> record<persistedFaceIds: list<string>, personId: string, name: string, userData: string> {
+]: any -> oneof<record<persistedFaceIds: list<string>, personId: string, name: string, userData: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2058,7 +2082,7 @@ export def "person-group-person-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<persistedFaceIds: list<string>, personId: string, name: string, userData: string> {
+]: nothing -> oneof<record<persistedFaceIds: list<string>, personId: string, name: string, userData: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'personGroupId' must be non-empty" } }
@@ -2143,7 +2167,7 @@ export def "person-group-person-add-face-from-url" [
   --target-face: list<int> # A face rectangle to specify the target face to be added to a person in the format of "targetFace=left,top,width,height". E.g. "targetFace=10,10,100,100". If there is more than one face in the image, targetFace is required to specify which face to add. No targetFace means there is only one face detected in the entire image.
   --detection-model: string@detection-model-completer # Name of detection model. Detection model is used to detect faces in the submitted image. A detection model name can be provided when performing Face - Detect or (Large)FaceList - Add Face or (Large)PersonGroup - Add Face. The default value is 'detection_01', if another model is needed, please explicitly specify it. (default: detection_01)
   url: string # Publicly reachable URL of an image
-]: any -> record<persistedFaceId: string, userData: string> {
+]: any -> oneof<record<persistedFaceId: string, userData: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2226,7 +2250,7 @@ export def "person-group-person-get-face" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<persistedFaceId: string, userData: string> {
+]: nothing -> oneof<record<persistedFaceId: string, userData: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'personGroupId' must be non-empty" } }
@@ -2344,7 +2368,7 @@ export def "person-group-get-training-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdDateTime: string, lastActionDateTime: string, lastSuccessfulTrainingDateTime: string, message: string, status: string> {
+]: nothing -> oneof<record<createdDateTime: string, lastActionDateTime: string, lastSuccessfulTrainingDateTime: string, message: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($person_group_id | is-empty) { error make --unspanned { msg: "path parameter 'personGroupId' must be non-empty" } }
@@ -2381,7 +2405,7 @@ export def "snapshot-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # User specified object type as a search filter.
   --apply-scope: list<string> # User specified snapshot apply scopes as a search filter. ApplyScope is an array of the target Azure subscription ids for the snapshot, specified by the user who created the snapshot by Snapshot - Take.
-]: nothing -> table<account: string, applyScope: list<string>, createdTime: string, id: string, lastUpdateTime: string, type: string, userData: string> {
+]: nothing -> oneof<table<account: string, applyScope: list<string>, createdTime: string, id: string, lastUpdateTime: string, type: string, userData: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "applyScope" $apply_scope "csv")] | flatten | str join "&"
@@ -2494,7 +2518,7 @@ export def "snapshot-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account: string, applyScope: list<string>, createdTime: string, id: string, lastUpdateTime: string, type: string, userData: string> {
+]: nothing -> oneof<record<account: string, applyScope: list<string>, createdTime: string, id: string, lastUpdateTime: string, type: string, userData: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
@@ -2613,7 +2637,7 @@ export def "face-verify-face-to-face" [
   --dry-run(-n) # Return the request that would be sent without executing it
   face_id1: string # FaceId of the first face, comes from Face - Detect (format: uuid)
   face_id2: string # FaceId of the second face, comes from Face - Detect (format: uuid)
-]: any -> record<confidence: float, isIdentical: bool> {
+]: any -> oneof<record<confidence: float, isIdentical: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)

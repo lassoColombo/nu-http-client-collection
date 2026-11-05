@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -120,9 +144,9 @@ def plan-name-completer [] { ["plus" "premium" "pro"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-categories-json" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-categories-json" "post-categories-json" "get-categories-count-json" "delete-categories-id-json" "get-categories-id-json" "put-categories-id-json" "get-checkout-custom-fields-json" "post-checkout-custom-fields-json" "delete-checkout-custom-fields-id-json" "get-checkout-custom-fields-id-json" "put-checkout-custom-fields-id-json" "get-countries-json" "get-countries-country-code-json" "get-countries-country-code-regions-json" "get-countries-country-code-regions-region-code-json" "get-custom-fields-json" "post-custom-fields-json" "delete-custom-fields-id-json" "get-custom-fields-id-json" "put-custom-fields-id-json" "get-custom-fields-id-select-options-json" "post-custom-fields-id-select-options-json" "delete-custom-fields-id-select-options-custom-field-select-option-id-json" "get-custom-fields-id-select-options-custom-field-select-option-id-json" "put-custom-fields-id-select-options-custom-field-select-option-id-json" "get-customer-categories-json" "post-customer-categories-json" "delete-customer-categories-id-json" "get-customer-categories-id-json" "put-customer-categories-id-json" "delete-customer-categories-id-customers-json" "get-customer-categories-id-customers-json" "post-customer-categories-id-customers-json" "get-customers-json" "post-customers-json" "get-customers-count-json" "get-customers-email-email-json" "delete-customers-id-json" "get-customers-id-json" "put-customers-id-json" "get-customers-id-fields" "post-customers-id-fields" "delete-customers-id-fields-field-id" "get-customers-id-fields-field-id" "put-customers-id-fields-field-id" "get-fulfillments-json" "get-fulfillments-count-json" "get-fulfillments-id-json" "get-hooks-json" "post-hooks-json" "delete-hooks-id-json" "get-hooks-id-json" "put-hooks-id-json" "get-jsapps-json" "post-jsapps-json" "delete-jsapps-code-json" "get-jsapps-code-json" "get-order-id-fulfillments-json" "get-orders-json" "post-orders-json" "get-orders-after-id-json" "get-orders-count-json" "get-orders-status-status-json" "get-orders-id-json" "put-orders-id-json" "get-orders-id-history-json" "post-orders-id-history-json" "get-pages-json" "post-pages-json" "get-pages-count-json" "delete-pages-id-json" "get-pages-id-json" "put-pages-id-json" "get-partners-stores-json" "get-payment-methods-json" "get-payment-methods-id-json" "get-products-json" "post-products-json" "get-products-after-id-json" "get-products-category-category-id-json" "get-products-category-category-id-count-json" "get-products-count-json" "get-products-search-json" "get-products-status-status-json" "get-products-status-status-count-json" "delete-products-id-json" "get-products-id-json" "put-products-id-json" "get-products-id-attachments-json" "post-products-id-attachments-json" "get-products-id-attachments-count-json" "delete-products-id-attachments-attachment-id-json" "get-products-id-attachments-attachment-id-json" "get-products-id-digital-products-json" "post-products-id-digital-products-json" "get-products-id-digital-products-count-json" "delete-products-id-digital-products-digital-product-id-json" "get-products-id-digital-products-digital-product-id-json" "get-products-id-fields-json" "post-products-id-fields-json" "get-products-id-fields-count-json" "get-products-id-images-json" "post-products-id-images-json" "get-products-id-images-count-json" "delete-products-id-images-image-id-json" "get-products-id-images-image-id-json" "get-products-id-options-json" "post-products-id-options-json" "get-products-id-options-count-json" "delete-products-id-options-option-id-json" "get-products-id-options-option-id-json" "put-products-id-options-option-id-json" "get-products-id-options-option-id-values-json" "post-products-id-options-option-id-values-json" "get-products-id-options-option-id-values-count-json" "delete-products-id-options-option-id-values-value-id-json" "get-products-id-options-option-id-values-value-id-json" "put-products-id-options-option-id-values-value-id-json" "get-products-id-variants-json" "post-products-id-variants-json" "get-products-id-variants-count-json" "get-products-id-variants-variant-id-json" "put-products-id-variants-variant-id-json" "delete-products-product-id-fields-field-id-json" "put-products-product-id-fields-field-id-json" "get-promotions-json" "post-promotions-json" "delete-promotions-id-json" "get-promotions-id-json" "put-promotions-id-json" "get-shipping-methods-json" "post-shipping-methods-json" "delete-shipping-methods-id-json" "get-shipping-methods-id-json" "put-shipping-methods-id-json" "get-store-check-status-json" "post-store-create-json" "get-store-info-json" "get-store-languages-json" "get-taxes-json" "post-taxes-json" "get-taxes-id-json" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -155,7 +179,7 @@ export def "get-categories-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<category: record<id: int, name: string, parent_id: int, permalink: string>> {
+]: nothing -> oneof<record<category: record<id: int, name: string, parent_id: int, permalink: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -181,7 +205,6 @@ export def "get-categories-json" [
 # Create a new Category.
 #
 # POST /categories.json
-# --category shape: {name?: string, parent_id?: int}
 export def "post-categories-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +218,7 @@ export def "post-categories-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --category: record # shape: {name?: string, parent_id?: int}
-]: any -> record<category: record<id: int, name: string, parent_id: int, permalink: string>> {
+]: any -> oneof<record<category: record<id: int, name: string, parent_id: int, permalink: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -236,7 +259,7 @@ export def "get-categories-count-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -315,7 +338,7 @@ export def "get-categories-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<category: record<id: int, name: string, parent_id: int, permalink: string>> {
+]: nothing -> oneof<record<category: record<id: int, name: string, parent_id: int, permalink: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -342,7 +365,6 @@ export def "get-categories-id-json" [
 # Modify an existing Category.
 #
 # PUT /categories/{id}.json
-# --category shape: {name?: string, parent_id?: int}
 export def "put-categories-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -357,7 +379,7 @@ export def "put-categories-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --category: record # shape: {name?: string, parent_id?: int}
-]: any -> record<category: record<id: int, name: string, parent_id: int, permalink: string>> {
+]: any -> oneof<record<category: record<id: int, name: string, parent_id: int, permalink: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -401,7 +423,7 @@ export def "get-checkout-custom-fields-json" [
   --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
-]: nothing -> table<checkout_custom_field: record<area: string, custom_field_select_options: list, deletable: bool, id: int, label: string, position: int, required: bool, type: string>> {
+]: nothing -> oneof<table<checkout_custom_field: record<area: string, custom_field_select_options: list, deletable: bool, id: int, label: string, position: int, required: bool, type: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -427,7 +449,6 @@ export def "get-checkout-custom-fields-json" [
 # Create a new CheckoutCustomField.
 #
 # POST /checkout_custom_fields.json
-# --checkout_custom_field shape: {area?: "contact"|"billing_shipping"|"other", custom_field_select_options?: list<string>, deletable?: bool, label?: string, position?: int, required?: bool, type?: "text"|"select"|"input"|"checkbox"|"date"}
 export def "post-checkout-custom-fields-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -441,7 +462,7 @@ export def "post-checkout-custom-fields-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --checkout-custom-field: record # shape: {area?: "contact"|"billing_shipping"|"other", custom_field_select_options?: list<string>, deletable?: bool, label?: string, position?: int, required?: bool, type?: "text"|"select"|"input"|"checkbox"|"date"}
-]: any -> record<checkout_custom_field: record<area: string, custom_field_select_options: list<string>, deletable: bool, id: int, label: string, position: int, required: bool, type: string>> {
+]: any -> oneof<record<checkout_custom_field: record<area: string, custom_field_select_options: list<string>, deletable: bool, id: int, label: string, position: int, required: bool, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -523,7 +544,7 @@ export def "get-checkout-custom-fields-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<checkout_custom_field: record<area: string, custom_field_select_options: list<string>, deletable: bool, id: int, label: string, position: int, required: bool, type: string>> {
+]: nothing -> oneof<record<checkout_custom_field: record<area: string, custom_field_select_options: list<string>, deletable: bool, id: int, label: string, position: int, required: bool, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -550,7 +571,6 @@ export def "get-checkout-custom-fields-id-json" [
 # Update a CheckoutCustomField.
 #
 # PUT /checkout_custom_fields/{id}.json
-# --checkout_custom_field shape: {area?: "contact"|"billing_shipping"|"other", custom_field_select_options?: list<string>, deletable?: bool, label?: string, position?: int, required?: bool, type?: "text"|"select"|"input"|"checkbox"|"date"}
 export def "put-checkout-custom-fields-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -565,7 +585,7 @@ export def "put-checkout-custom-fields-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --checkout-custom-field: record # shape: {area?: "contact"|"billing_shipping"|"other", custom_field_select_options?: list<string>, deletable?: bool, label?: string, position?: int, required?: bool, type?: "text"|"select"|"input"|"checkbox"|"date"}
-]: any -> record<checkout_custom_field: record<area: string, custom_field_select_options: list<string>, deletable: bool, id: int, label: string, position: int, required: bool, type: string>> {
+]: any -> oneof<record<checkout_custom_field: record<area: string, custom_field_select_options: list<string>, deletable: bool, id: int, label: string, position: int, required: bool, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -607,7 +627,7 @@ export def "get-countries-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<code: string, name: string> {
+]: nothing -> oneof<table<code: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -646,7 +666,7 @@ export def "get-countries-country-code-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<code: string, name: string> {
+]: nothing -> oneof<record<code: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'country_code' must be non-empty" } }
@@ -686,7 +706,7 @@ export def "get-countries-country-code-regions-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<code: string, name: string> {
+]: nothing -> oneof<table<code: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'country_code' must be non-empty" } }
@@ -727,7 +747,7 @@ export def "get-countries-country-code-regions-region-code-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<code: string, name: string> {
+]: nothing -> oneof<record<code: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'country_code' must be non-empty" } }
@@ -767,7 +787,7 @@ export def "get-custom-fields-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<custom_field: record<id: int, label: string, type: string, values: list>> {
+]: nothing -> oneof<table<custom_field: record<id: int, label: string, type: string, values: list>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -793,7 +813,6 @@ export def "get-custom-fields-json" [
 # Create a new Custom Field.
 #
 # POST /custom_fields.json
-# --custom_field shape: {label?: string, type?: "text"|"selection"|"input", values?: list<string>}
 export def "post-custom-fields-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -807,7 +826,7 @@ export def "post-custom-fields-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --custom-field: record # shape: {label?: string, type?: "text"|"selection"|"input", values?: list<string>}
-]: any -> record<custom_field: record<id: int, label: string, type: string, values: list<string>>> {
+]: any -> oneof<record<custom_field: record<id: int, label: string, type: string, values: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -889,7 +908,7 @@ export def "get-custom-fields-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<custom_field: record<id: int, label: string, type: string, values: list<string>>> {
+]: nothing -> oneof<record<custom_field: record<id: int, label: string, type: string, values: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -916,7 +935,6 @@ export def "get-custom-fields-id-json" [
 # Update a CustomField.
 #
 # PUT /custom_fields/{id}.json
-# --custom_field shape: {label?: string, type?: "text"|"selection"|"input", values?: list<string>}
 export def "put-custom-fields-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -931,7 +949,7 @@ export def "put-custom-fields-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --custom-field: record # shape: {label?: string, type?: "text"|"selection"|"input", values?: list<string>}
-]: any -> record<custom_field: record<id: int, label: string, type: string, values: list<string>>> {
+]: any -> oneof<record<custom_field: record<id: int, label: string, type: string, values: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -974,7 +992,7 @@ export def "get-custom-fields-id-select-options-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<custom_field_select_option: record<id: int, value: string>> {
+]: nothing -> oneof<table<custom_field_select_option: record<id: int, value: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1001,7 +1019,6 @@ export def "get-custom-fields-id-select-options-json" [
 # Create a new Custom Field Select Option.
 #
 # POST /custom_fields/{id}/select_options.json
-# --custom_field_select_option shape: {value?: string}
 export def "post-custom-fields-id-select-options-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1016,7 +1033,7 @@ export def "post-custom-fields-id-select-options-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --custom-field-select-option: record # shape: {value?: string}
-]: any -> record<custom_field_select_option: record<id: int, value: string>> {
+]: any -> oneof<record<custom_field_select_option: record<id: int, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1102,7 +1119,7 @@ export def "get-custom-fields-id-select-options-custom-field-select-option-id-js
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<custom_field_select_option: record<id: int, value: string>> {
+]: nothing -> oneof<record<custom_field_select_option: record<id: int, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1130,7 +1147,6 @@ export def "get-custom-fields-id-select-options-custom-field-select-option-id-js
 # Update a SelectOption from a CustomField.
 #
 # PUT /custom_fields/{id}/select_options/{custom_field_select_option_id}.json
-# --custom_field_select_option shape: {value?: string}
 export def "put-custom-fields-id-select-options-custom-field-select-option-id-json" [
   id: int
   custom_field_select_option_id: int
@@ -1146,7 +1162,7 @@ export def "put-custom-fields-id-select-options-custom-field-select-option-id-js
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --custom-field-select-option: record # shape: {value?: string}
-]: any -> record<custom_field_select_option: record<id: int, value: string>> {
+]: any -> oneof<record<custom_field_select_option: record<id: int, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1191,7 +1207,7 @@ export def "get-customer-categories-json" [
   --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
-]: nothing -> table<category: record<code: string, id: int, name: string>> {
+]: nothing -> oneof<table<category: record<code: string, id: int, name: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -1217,7 +1233,6 @@ export def "get-customer-categories-json" [
 # Create a new CustomerCategory.
 #
 # POST /customer_categories.json
-# --category shape: {name?: string}
 export def "post-customer-categories-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1231,7 +1246,7 @@ export def "post-customer-categories-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --category: record # shape: {name?: string}
-]: any -> record<category: record<code: string, id: int, name: string>> {
+]: any -> oneof<record<category: record<code: string, id: int, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1313,7 +1328,7 @@ export def "get-customer-categories-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<category: record<code: string, id: int, name: string>> {
+]: nothing -> oneof<record<category: record<code: string, id: int, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1340,7 +1355,6 @@ export def "get-customer-categories-id-json" [
 # Update a CustomerCategory.
 #
 # PUT /customer_categories/{id}.json
-# --category shape: {name?: string}
 export def "put-customer-categories-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1355,7 +1369,7 @@ export def "put-customer-categories-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --category: record # shape: {name?: string}
-]: any -> record<category: record<code: string, id: int, name: string>> {
+]: any -> oneof<record<category: record<code: string, id: int, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1385,7 +1399,6 @@ export def "put-customer-categories-id-json" [
 # Delete Customers from an existing CustomerCategory.
 #
 # DELETE /customer_categories/{id}/customers.json
-# --customers item shape: {email?: string, id?: int}
 export def "delete-customer-categories-id-customers-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1443,7 +1456,7 @@ export def "get-customer-categories-id-customers-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<customer: record<billing_address: record, customer_additional_fields: list, customer_categories: list, email: string, id: int, name: string, phone: string, shipping_address: record, status: string, surname: string>> {
+]: nothing -> oneof<table<customer: record<billing_address: record, customer_additional_fields: list, customer_categories: list, email: string, id: int, name: string, phone: string, shipping_address: record, status: string, surname: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1470,7 +1483,6 @@ export def "get-customer-categories-id-customers-json" [
 # Adds Customers to a CustomerCategory.
 #
 # POST /customer_categories/{id}/customers.json
-# --customers item shape: {email?: string, id?: int}
 export def "post-customer-categories-id-customers-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1485,7 +1497,7 @@ export def "post-customer-categories-id-customers-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --customers: list # item shape: {email?: string, id?: int}
-]: any -> table<customer: record<billing_address: record, customer_additional_fields: list, customer_categories: list, email: string, id: int, name: string, phone: string, shipping_address: record, status: string, surname: string>> {
+]: any -> oneof<table<customer: record<billing_address: record, customer_additional_fields: list, customer_categories: list, email: string, id: int, name: string, phone: string, shipping_address: record, status: string, surname: string>>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1529,7 +1541,7 @@ export def "get-customers-json" [
   --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
-]: nothing -> table<customer: record<billing_address: record, customer_additional_fields: list, customer_categories: list, email: string, id: int, name: string, phone: string, shipping_address: record, status: string, surname: string>> {
+]: nothing -> oneof<table<customer: record<billing_address: record, customer_additional_fields: list, customer_categories: list, email: string, id: int, name: string, phone: string, shipping_address: record, status: string, surname: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -1555,7 +1567,6 @@ export def "get-customers-json" [
 # Create a new Customer.
 #
 # POST /customers.json
-# --customer shape: {billing_address?: any, customer_category?: list<int>, email?: string, password?: string, phone?: string, shipping_address?: any, status?: "approved"|"pending"|"disabled"}
 export def "post-customers-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1569,7 +1580,7 @@ export def "post-customers-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --customer: record # shape: {billing_address?: any, customer_category?: list<int>, email?: string, password?: string, phone?: string, shipping_address?: any, status?: "approved"|"pending"|"disabled"}
-]: any -> record<customer: record<billing_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string, taxid: string>, customer_additional_fields: list<record>, customer_categories: list<record>, email: string, id: int, name: string, phone: string, shipping_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string>, status: string, surname: string>> {
+]: any -> oneof<record<customer: record<billing_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string, taxid: string>, customer_additional_fields: list<record>, customer_categories: list<record>, email: string, id: int, name: string, phone: string, shipping_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string>, status: string, surname: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1610,7 +1621,7 @@ export def "get-customers-count-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -1649,7 +1660,7 @@ export def "get-customers-email-email-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<customer: record<billing_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string, taxid: string>, customer_additional_fields: list<record>, customer_categories: list<record>, email: string, id: int, name: string, phone: string, shipping_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string>, status: string, surname: string>> {
+]: nothing -> oneof<record<customer: record<billing_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string, taxid: string>, customer_additional_fields: list<record>, customer_categories: list<record>, email: string, id: int, name: string, phone: string, shipping_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string>, status: string, surname: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($email | is-empty) { error make --unspanned { msg: "path parameter 'email' must be non-empty" } }
@@ -1729,7 +1740,7 @@ export def "get-customers-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<customer: record<billing_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string, taxid: string>, customer_additional_fields: list<record>, customer_categories: list<record>, email: string, id: int, name: string, phone: string, shipping_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string>, status: string, surname: string>> {
+]: nothing -> oneof<record<customer: record<billing_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string, taxid: string>, customer_additional_fields: list<record>, customer_categories: list<record>, email: string, id: int, name: string, phone: string, shipping_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string>, status: string, surname: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1756,7 +1767,6 @@ export def "get-customers-id-json" [
 # Update a new Customer.
 #
 # PUT /customers/{id}.json
-# --customer shape: {billing_address?: any, customer_category?: list<int>, email?: string, password?: string, phone?: string, shipping_address?: any, status?: "approved"|"pending"|"disabled"}
 export def "put-customers-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1771,7 +1781,7 @@ export def "put-customers-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --customer: record # shape: {billing_address?: any, customer_category?: list<int>, email?: string, password?: string, phone?: string, shipping_address?: any, status?: "approved"|"pending"|"disabled"}
-]: any -> record<customer: record<billing_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string, taxid: string>, customer_additional_fields: list<record>, customer_categories: list<record>, email: string, id: int, name: string, phone: string, shipping_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string>, status: string, surname: string>> {
+]: any -> oneof<record<customer: record<billing_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string, taxid: string>, customer_additional_fields: list<record>, customer_categories: list<record>, email: string, id: int, name: string, phone: string, shipping_address: record<address: string, city: string, country: string, municipality: string, name: string, postal: string, region: string, surname: string>, status: string, surname: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1814,7 +1824,7 @@ export def "get-customers-id-fields" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<customer_additional_field: record<area: string, checkout_custom_field_id: int, customer_id: int, id: int, label: string, value: string>> {
+]: nothing -> oneof<table<customer_additional_field: record<area: string, checkout_custom_field_id: int, customer_id: int, id: int, label: string, value: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1841,7 +1851,6 @@ export def "get-customers-id-fields" [
 # Adds Customer Additional Fields to a Customer.
 #
 # POST /customers/{id}/fields
-# --customer_additional_field shape: {checkout_custom_field_id?: int, value?: string}
 export def "post-customers-id-fields" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1856,7 +1865,7 @@ export def "post-customers-id-fields" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --customer-additional-field: record # shape: {checkout_custom_field_id?: int, value?: string}
-]: any -> record<customer_additional_field: record<area: string, checkout_custom_field_id: int, customer_id: int, id: int, label: string, value: string>> {
+]: any -> oneof<record<customer_additional_field: record<area: string, checkout_custom_field_id: int, customer_id: int, id: int, label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1942,7 +1951,7 @@ export def "get-customers-id-fields-field-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<customer_additional_field: record<area: string, checkout_custom_field_id: int, customer_id: int, id: int, label: string, value: string>> {
+]: nothing -> oneof<record<customer_additional_field: record<area: string, checkout_custom_field_id: int, customer_id: int, id: int, label: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1970,7 +1979,6 @@ export def "get-customers-id-fields-field-id" [
 # Update a Customer Additional Field.
 #
 # PUT /customers/{id}/fields/{field_id}
-# --customer_additional_field shape: {checkout_custom_field_id?: int, value?: string}
 export def "put-customers-id-fields-field-id" [
   id: int
   field_id: int
@@ -1986,7 +1994,7 @@ export def "put-customers-id-fields-field-id" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --customer-additional-field: record # shape: {checkout_custom_field_id?: int, value?: string}
-]: any -> record<customer_additional_field: record<area: string, checkout_custom_field_id: int, customer_id: int, id: int, label: string, value: string>> {
+]: any -> oneof<record<customer_additional_field: record<area: string, checkout_custom_field_id: int, customer_id: int, id: int, label: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2031,7 +2039,7 @@ export def "get-fulfillments-json" [
   --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
-]: nothing -> table<category: record<external_id: string, id: int, order_id: string, service_type: string, shipment_status: string, tracking_company: string, tracking_number: string, type: string>> {
+]: nothing -> oneof<table<category: record<external_id: string, id: int, order_id: string, service_type: string, shipment_status: string, tracking_company: string, tracking_number: string, type: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -2069,7 +2077,7 @@ export def "get-fulfillments-count-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -2108,7 +2116,7 @@ export def "get-fulfillments-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<category: record<external_id: string, id: int, order_id: string, service_type: string, shipment_status: string, tracking_company: string, tracking_number: string, type: string>> {
+]: nothing -> oneof<record<category: record<external_id: string, id: int, order_id: string, service_type: string, shipment_status: string, tracking_company: string, tracking_number: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2149,7 +2157,7 @@ export def "get-hooks-json" [
   --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
-]: nothing -> table<hook: record<created_at: string, event: string, id: int, name: string, url: string>> {
+]: nothing -> oneof<table<hook: record<created_at: string, event: string, id: int, name: string, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -2175,7 +2183,6 @@ export def "get-hooks-json" [
 # Create a new Hook.
 #
 # POST /hooks.json
-# --hook shape: {event: "order_updated"|"order_pending_payment"|"order_paid"|"order_shipped"|"order_canceled"|"order_abandoned"|"product_created"|"product_updated"|"product_deleted"|"customer_created"|"customer_updated"|"customer_deleted", url: string}
 export def "post-hooks-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2189,7 +2196,7 @@ export def "post-hooks-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --hook: record # shape: {event: "order_updated"|"order_pending_payment"|"order_paid"|"order_shipped"|"order_canceled"|"order_abandoned"|"product_created"|"product_updated"|"product_deleted"|"customer_created"|"customer_updated"|"customer_deleted", url: string}
-]: any -> record<hook: record<created_at: string, event: string, id: int, name: string, url: string>> {
+]: any -> oneof<record<hook: record<created_at: string, event: string, id: int, name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2271,7 +2278,7 @@ export def "get-hooks-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<hook: record<created_at: string, event: string, id: int, name: string, url: string>> {
+]: nothing -> oneof<record<hook: record<created_at: string, event: string, id: int, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2298,7 +2305,6 @@ export def "get-hooks-id-json" [
 # Update a Hook.
 #
 # PUT /hooks/{id}.json
-# --hook shape: {event: "order_updated"|"order_pending_payment"|"order_paid"|"order_shipped"|"order_canceled"|"order_abandoned"|"product_created"|"product_updated"|"product_deleted"|"customer_created"|"customer_updated"|"customer_deleted", url: string}
 export def "put-hooks-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2313,7 +2319,7 @@ export def "put-hooks-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --hook: record # shape: {event: "order_updated"|"order_pending_payment"|"order_paid"|"order_shipped"|"order_canceled"|"order_abandoned"|"product_created"|"product_updated"|"product_deleted"|"customer_created"|"customer_updated"|"customer_deleted", url: string}
-]: any -> record<hook: record<created_at: string, event: string, id: int, name: string, url: string>> {
+]: any -> oneof<record<hook: record<created_at: string, event: string, id: int, name: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2355,7 +2361,7 @@ export def "get-jsapps-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<apps: table<author: string, code: string, description: string, js: bool, name: string, page: string>> {
+]: nothing -> oneof<record<apps: table<author: string, code: string, description: string, js: bool, name: string, page: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -2381,7 +2387,6 @@ export def "get-jsapps-json" [
 # Create a Store JSApp.
 #
 # POST /jsapps.json
-# --app shape: {element?: string, template?: string, url?: string}
 export def "post-jsapps-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2395,7 +2400,7 @@ export def "post-jsapps-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --app: record # shape: {element?: string, template?: string, url?: string}
-]: any -> record<element: string, template: string, url: string> {
+]: any -> oneof<record<element: string, template: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2477,7 +2482,7 @@ export def "get-jsapps-code-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<element: string, template: string, url: string> {
+]: nothing -> oneof<record<element: string, template: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -2517,7 +2522,7 @@ export def "get-order-id-fulfillments-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<category: record<external_id: string, id: int, order_id: string, service_type: string, shipment_status: string, tracking_company: string, tracking_number: string, type: string>> {
+]: nothing -> oneof<table<category: record<external_id: string, id: int, order_id: string, service_type: string, shipment_status: string, tracking_company: string, tracking_number: string, type: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2558,7 +2563,7 @@ export def "get-orders-json" [
   --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
-]: nothing -> table<order: record<additional_fields: list, additional_information: string, billing_address: record, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list, source: record, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>> {
+]: nothing -> oneof<table<order: record<additional_fields: list, additional_information: string, billing_address: record, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list, source: record, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -2584,7 +2589,6 @@ export def "get-orders-json" [
 # Create a new Order.
 #
 # POST /orders.json
-# --order shape: {customer?: record, products?: list, shipping_method_id?: int, shipping_method_name?: string, shipping_price?: float, status?: "Abandoned"|"Canceled"|"Pending Payment"|"Paid"}
 export def "post-orders-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2598,7 +2602,7 @@ export def "post-orders-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --order: any # shape: {customer?: record, products?: list, shipping_method_id?: int, shipping_method_name?: string, shipping_price?: float, status?: "Abandoned"|"Canceled"|"Pending Payment"|"Paid"}
-]: any -> record<order: record<additional_fields: list<record>, additional_information: string, billing_address: record<address: string, city: string, country: string, country_name: string, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record<customer: record>, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list<record>, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record<address: string, city: string, country: string, country_name: string, latitude: float, longitude: float, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list<record>, source: record<campaign: string, first_page_visited: string, first_page_visited_at: string, medium: string, referral_code: string, referral_source: string, referral_url: string, source_name: string, user_agent: string>, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>> {
+]: any -> oneof<record<order: record<additional_fields: list<record>, additional_information: string, billing_address: record<address: string, city: string, country: string, country_name: string, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record<customer: record>, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list<record>, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record<address: string, city: string, country: string, country_name: string, latitude: float, longitude: float, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list<record>, source: record<campaign: string, first_page_visited: string, first_page_visited_at: string, medium: string, referral_code: string, referral_source: string, referral_url: string, source_name: string, user_agent: string>, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2640,7 +2644,7 @@ export def "get-orders-after-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<order: record<additional_fields: list<record>, additional_information: string, billing_address: record<address: string, city: string, country: string, country_name: string, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record<customer: record>, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list<record>, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record<address: string, city: string, country: string, country_name: string, latitude: float, longitude: float, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list<record>, source: record<campaign: string, first_page_visited: string, first_page_visited_at: string, medium: string, referral_code: string, referral_source: string, referral_url: string, source_name: string, user_agent: string>, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>> {
+]: nothing -> oneof<record<order: record<additional_fields: list<record>, additional_information: string, billing_address: record<address: string, city: string, country: string, country_name: string, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record<customer: record>, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list<record>, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record<address: string, city: string, country: string, country_name: string, latitude: float, longitude: float, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list<record>, source: record<campaign: string, first_page_visited: string, first_page_visited_at: string, medium: string, referral_code: string, referral_source: string, referral_url: string, source_name: string, user_agent: string>, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2679,7 +2683,7 @@ export def "get-orders-count-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -2718,7 +2722,7 @@ export def "get-orders-status-status-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<order: record<additional_fields: list, additional_information: string, billing_address: record, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list, source: record, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>> {
+]: nothing -> oneof<table<order: record<additional_fields: list, additional_information: string, billing_address: record, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list, source: record, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($status | is-empty) { error make --unspanned { msg: "path parameter 'status' must be non-empty" } }
@@ -2758,7 +2762,7 @@ export def "get-orders-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<order: record<additional_fields: list<record>, additional_information: string, billing_address: record<address: string, city: string, country: string, country_name: string, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record<customer: record>, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list<record>, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record<address: string, city: string, country: string, country_name: string, latitude: float, longitude: float, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list<record>, source: record<campaign: string, first_page_visited: string, first_page_visited_at: string, medium: string, referral_code: string, referral_source: string, referral_url: string, source_name: string, user_agent: string>, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>> {
+]: nothing -> oneof<record<order: record<additional_fields: list<record>, additional_information: string, billing_address: record<address: string, city: string, country: string, country_name: string, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record<customer: record>, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list<record>, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record<address: string, city: string, country: string, country_name: string, latitude: float, longitude: float, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list<record>, source: record<campaign: string, first_page_visited: string, first_page_visited_at: string, medium: string, referral_code: string, referral_source: string, referral_url: string, source_name: string, user_agent: string>, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2785,7 +2789,6 @@ export def "get-orders-id-json" [
 # Modify an existing Order.
 #
 # PUT /orders/{id}.json
-# --order shape: {additional_fields?: list, additional_information?: string, shipment_status?: "requested"|"in_transit"|"delivered"|"failed"|"pickup_available", status?: "Abandoned"|"Canceled"|"Pending Payment"|"Paid", tracking_company?: string, tracking_number?: string, tracking_url?: string}
 export def "put-orders-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2800,7 +2803,7 @@ export def "put-orders-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --order: any # shape: {additional_fields?: list, additional_information?: string, shipment_status?: "requested"|"in_transit"|"delivered"|"failed"|"pickup_available", status?: "Abandoned"|"Canceled"|"Pending Payment"|"Paid", tracking_company?: string, tracking_number?: string, tracking_url?: string}
-]: any -> record<order: record<additional_fields: list<record>, additional_information: string, billing_address: record<address: string, city: string, country: string, country_name: string, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record<customer: record>, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list<record>, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record<address: string, city: string, country: string, country_name: string, latitude: float, longitude: float, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list<record>, source: record<campaign: string, first_page_visited: string, first_page_visited_at: string, medium: string, referral_code: string, referral_source: string, referral_url: string, source_name: string, user_agent: string>, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>> {
+]: any -> oneof<record<order: record<additional_fields: list<record>, additional_information: string, billing_address: record<address: string, city: string, country: string, country_name: string, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, checkout_url: string, coupons: string, created_at: string, currency: string, customer: record<customer: record>, discount: float, duplicate_url: string, external_shipping_rate_id: string, id: int, payment_information: string, payment_method_name: string, payment_method_type: string, products: list<record>, recovery_url: string, shipment_status: string, shipping: float, shipping_address: record<address: string, city: string, country: string, country_name: string, latitude: float, longitude: float, municipality: string, name: string, postal: string, region: string, street_number: float, surname: string>, shipping_discount: float, shipping_method_id: int, shipping_method_name: string, shipping_option: string, shipping_required: bool, shipping_tax: float, shipping_taxes: list<record>, source: record<campaign: string, first_page_visited: string, first_page_visited_at: string, medium: string, referral_code: string, referral_source: string, referral_url: string, source_name: string, user_agent: string>, status: string, subtotal: float, tax: float, total: float, tracking_company: string, tracking_number: string, tracking_url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2843,7 +2846,7 @@ export def "get-orders-id-history-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<order_history: record<created_at: string, id: int, message: string>> {
+]: nothing -> oneof<table<order_history: record<created_at: string, id: int, message: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2870,7 +2873,6 @@ export def "get-orders-id-history-json" [
 # Create a new Order History Entry.
 #
 # POST /orders/{id}/history.json
-# --order_history shape: {message?: string}
 export def "post-orders-id-history-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2885,7 +2887,7 @@ export def "post-orders-id-history-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --order-history: record # shape: {message?: string}
-]: any -> record<order_history: record<created_at: string, id: int, message: string>> {
+]: any -> oneof<record<order_history: record<created_at: string, id: int, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2929,7 +2931,7 @@ export def "get-pages-json" [
   --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
-]: nothing -> table<page: record<body: string, categories: list, id: int, image: record, legal: bool, meta_description: string, page_title: string, permalink: string, status: string, template: record, title: string>> {
+]: nothing -> oneof<table<page: record<body: string, categories: list, id: int, image: record, legal: bool, meta_description: string, page_title: string, permalink: string, status: string, template: record, title: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -2955,7 +2957,6 @@ export def "get-pages-json" [
 # Create a new Page.
 #
 # POST /pages.json
-# --page shape: {body?: string, categories?: list, image?: record, meta_description?: string, page_title?: string, permalink?: string, status?: "public"|"draft"|"hidden", template?: int, title?: string}
 export def "post-pages-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2969,7 +2970,7 @@ export def "post-pages-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --page: record # shape: {body?: string, categories?: list, image?: record, meta_description?: string, page_title?: string, permalink?: string, status?: "public"|"draft"|"hidden", template?: int, title?: string}
-]: any -> record<page: record<body: string, categories: list<record>, id: int, image: record<id: int, url: string>, legal: bool, meta_description: string, page_title: string, permalink: string, status: string, template: record<id: int, name: string>, title: string>> {
+]: any -> oneof<record<page: record<body: string, categories: list<record>, id: int, image: record<id: int, url: string>, legal: bool, meta_description: string, page_title: string, permalink: string, status: string, template: record<id: int, name: string>, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3010,7 +3011,7 @@ export def "get-pages-count-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -3089,7 +3090,7 @@ export def "get-pages-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<page: record<body: string, categories: list<record>, id: int, image: record<id: int, url: string>, legal: bool, meta_description: string, page_title: string, permalink: string, status: string, template: record<id: int, name: string>, title: string>> {
+]: nothing -> oneof<record<page: record<body: string, categories: list<record>, id: int, image: record<id: int, url: string>, legal: bool, meta_description: string, page_title: string, permalink: string, status: string, template: record<id: int, name: string>, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3116,7 +3117,6 @@ export def "get-pages-id-json" [
 # Update a Page.
 #
 # PUT /pages/{id}.json
-# --page shape: {body?: string, categories?: list, image?: record, meta_description?: string, page_title?: string, permalink?: string, status?: "public"|"draft"|"hidden", template?: int, title?: string}
 export def "put-pages-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3131,7 +3131,7 @@ export def "put-pages-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --page: record # shape: {body?: string, categories?: list, image?: record, meta_description?: string, page_title?: string, permalink?: string, status?: "public"|"draft"|"hidden", template?: int, title?: string}
-]: any -> record<page: record<body: string, categories: list<record>, id: int, image: record<id: int, url: string>, legal: bool, meta_description: string, page_title: string, permalink: string, status: string, template: record<id: int, name: string>, title: string>> {
+]: any -> oneof<record<page: record<body: string, categories: list<record>, id: int, image: record<id: int, url: string>, legal: bool, meta_description: string, page_title: string, permalink: string, status: string, template: record<id: int, name: string>, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3176,7 +3176,7 @@ export def "get-partners-stores-json" [
   --page: int # List page (format: integer, default: 1)
   --from: string # Statistics start date. Should be in format 'Y-m-d'. (required, format: string)
   --to: string # Statistics end date. Should be in format 'Y-m-d'. (required, format: sting)
-]: nothing -> table<code: string, stats: record<best_sold: list, conversions: record, currency: string, daily_visits: list, from: string, new_vs_returning_customers: record, new_vs_returning_orders: record, orders: record, payment_methods: list, referrers: list, region_orders: record, search_frequencies_all: list, search_frequencies_without_results: list, shipping_methods: list, to: string, traffic_type: list, visits: int>> {
+]: nothing -> oneof<table<code: string, stats: record<best_sold: list, conversions: record, currency: string, daily_visits: list, from: string, new_vs_returning_customers: record, new_vs_returning_orders: record, orders: record, payment_methods: list, referrers: list, region_orders: record, search_frequencies_all: list, search_frequencies_without_results: list, shipping_methods: list, to: string, traffic_type: list, visits: int>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($partner_code == null) { error make --unspanned { msg: "required query parameter 'partner_code' missing: pass --partner-code" } }
@@ -3216,7 +3216,7 @@ export def "get-payment-methods-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<payment_method: record<id: int, name: string, type: string>> {
+]: nothing -> oneof<table<payment_method: record<id: int, name: string, type: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -3255,7 +3255,7 @@ export def "get-payment-methods-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<payment_method: record<id: int, name: string, type: string>> {
+]: nothing -> oneof<record<payment_method: record<id: int, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3297,7 +3297,7 @@ export def "get-products-json" [
   --limit: int # List restriction (format: integer, default: 50)
   --page: int # List page (format: integer, default: 1)
   --locale: string # Locale code of the translation (format: string)
-]: nothing -> table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>> {
+]: nothing -> oneof<table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -3323,7 +3323,6 @@ export def "get-products-json" [
 # Create a new Product.
 #
 # POST /products.json
-# --product shape: {barcode?: string, categories?: list, description?: string, diameter?: float, featured?: bool, google_product_category?: string, height?: float, length?: float, meta_description?: string, name: string, package_format?: "box"|"cylinder", page_title?: string, permalink?: string, price: float, shipping_required?: bool, sku?: string, status?: "available"|"not-available"|"disabled", stock?: int, stock_unlimited?: bool, weight?: float, width?: float}
 export def "post-products-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3338,7 +3337,7 @@ export def "post-products-json" [
   --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
   --product: record # shape: {barcode?: string, categories?: list, description?: string, diameter?: float, featured?: bool, google_product_category?: string, height?: float, length?: float, meta_description?: string, name: string, package_format?: "box"|"cylinder", page_title?: string, permalink?: string, price: float, shipping_required?: bool, sku?: string, status?: "available"|"not-available"|"disabled", stock?: int, stock_unlimited?: bool, weight?: float, width?: float}
-]: any -> record<product: record<barcode: string, categories: list<record>, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list<record>, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list<record>, weight: float, width: float>> {
+]: any -> oneof<record<product: record<barcode: string, categories: list<record>, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list<record>, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list<record>, weight: float, width: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3381,7 +3380,7 @@ export def "get-products-after-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
-]: nothing -> table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>> {
+]: nothing -> oneof<table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3422,7 +3421,7 @@ export def "get-products-category-category-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
-]: nothing -> table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>> {
+]: nothing -> oneof<table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'category_id' must be non-empty" } }
@@ -3463,7 +3462,7 @@ export def "get-products-category-category-id-count-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'category_id' must be non-empty" } }
@@ -3502,7 +3501,7 @@ export def "get-products-count-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -3543,7 +3542,7 @@ export def "get-products-search-json" [
   --locale: string # Locale code of the translation (format: string)
   --query: string # Text to query for the Product (required, format: string)
   --fields: string@fields-completer # Comma separated values of the fields to query for the Product (format: string)
-]: nothing -> table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>> {
+]: nothing -> oneof<table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -3584,7 +3583,7 @@ export def "get-products-status-status-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
-]: nothing -> table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>> {
+]: nothing -> oneof<table<product: record<barcode: string, categories: list, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list, weight: float, width: float>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($status | is-empty) { error make --unspanned { msg: "path parameter 'status' must be non-empty" } }
@@ -3625,7 +3624,7 @@ export def "get-products-status-status-count-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($status | is-empty) { error make --unspanned { msg: "path parameter 'status' must be non-empty" } }
@@ -3706,7 +3705,7 @@ export def "get-products-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
-]: nothing -> record<product: record<barcode: string, categories: list<record>, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list<record>, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list<record>, weight: float, width: float>> {
+]: nothing -> oneof<record<product: record<barcode: string, categories: list<record>, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list<record>, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list<record>, weight: float, width: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3733,7 +3732,6 @@ export def "get-products-id-json" [
 # Modify an existing Product.
 #
 # PUT /products/{id}.json
-# --product shape: {barcode?: string, categories?: list, description?: string, diameter?: float, featured?: bool, google_product_category?: string, height?: float, length?: float, meta_description?: string, name: string, package_format?: "box"|"cylinder", page_title?: string, permalink?: string, price: float, shipping_required?: bool, sku?: string, status?: "available"|"not-available"|"disabled", stock?: int, stock_unlimited?: bool, weight?: float, width?: float}
 export def "put-products-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3749,7 +3747,7 @@ export def "put-products-id-json" [
   --authtoken: string # API OAuth token. (required, format: string)
   --locale: string # Locale code of the translation (format: string)
   --product: record # shape: {barcode?: string, categories?: list, description?: string, diameter?: float, featured?: bool, google_product_category?: string, height?: float, length?: float, meta_description?: string, name: string, package_format?: "box"|"cylinder", page_title?: string, permalink?: string, price: float, shipping_required?: bool, sku?: string, status?: "available"|"not-available"|"disabled", stock?: int, stock_unlimited?: bool, weight?: float, width?: float}
-]: any -> record<product: record<barcode: string, categories: list<record>, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list<record>, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list<record>, weight: float, width: float>> {
+]: any -> oneof<record<product: record<barcode: string, categories: list<record>, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list<record>, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list<record>, weight: float, width: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3792,7 +3790,7 @@ export def "get-products-id-attachments-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<attachment: record<id: int, url: string>> {
+]: nothing -> oneof<table<attachment: record<id: int, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3819,7 +3817,6 @@ export def "get-products-id-attachments-json" [
 # Create a new Product Attachment.
 #
 # POST /products/{id}/attachments.json
-# --attachment shape: {filename?: string, url?: string}
 export def "post-products-id-attachments-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3834,7 +3831,7 @@ export def "post-products-id-attachments-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --attachment: record # shape: {filename?: string, url?: string}
-]: any -> record<attachment: record<id: int, url: string>> {
+]: any -> oneof<record<attachment: record<id: int, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3877,7 +3874,7 @@ export def "get-products-id-attachments-count-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3960,7 +3957,7 @@ export def "get-products-id-attachments-attachment-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<attachment: record<id: int, url: string>> {
+]: nothing -> oneof<record<attachment: record<id: int, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4001,7 +3998,7 @@ export def "get-products-id-digital-products-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<digital_product: record<expiration_seconds: int, id: int, url: string>> {
+]: nothing -> oneof<table<digital_product: record<expiration_seconds: int, id: int, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4028,7 +4025,6 @@ export def "get-products-id-digital-products-json" [
 # Create a new Product DigitalProduct.
 #
 # POST /products/{id}/digital_products.json
-# --digital_product shape: {filename?: string, url?: string}
 export def "post-products-id-digital-products-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4043,7 +4039,7 @@ export def "post-products-id-digital-products-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --digital-product: record # shape: {filename?: string, url?: string}
-]: any -> record<digital_product: record<expiration_seconds: int, id: int, url: string>> {
+]: any -> oneof<record<digital_product: record<expiration_seconds: int, id: int, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4086,7 +4082,7 @@ export def "get-products-id-digital-products-count-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4169,7 +4165,7 @@ export def "get-products-id-digital-products-digital-product-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<digital_product: record<expiration_seconds: int, id: int, url: string>> {
+]: nothing -> oneof<record<digital_product: record<expiration_seconds: int, id: int, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4210,7 +4206,7 @@ export def "get-products-id-fields-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<field: record<custom_field_id: int, id: int, label: string, type: string, value: string, value_id: string>> {
+]: nothing -> oneof<table<field: record<custom_field_id: int, id: int, label: string, type: string, value: string, value_id: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4237,7 +4233,6 @@ export def "get-products-id-fields-json" [
 # Add an existing Custom Field to a Product.
 #
 # POST /products/{id}/fields.json
-# --field shape: {id?: int, value?: string}
 export def "post-products-id-fields-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4252,7 +4247,7 @@ export def "post-products-id-fields-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --field: record # shape: {id?: int, value?: string}
-]: any -> record<product: record<barcode: string, categories: list<record>, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list<record>, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list<record>, weight: float, width: float>> {
+]: any -> oneof<record<product: record<barcode: string, categories: list<record>, created_at: string, description: string, diameter: float, discount: float, featured: bool, google_product_category: string, height: float, id: int, images: list<record>, length: float, name: string, package_format: string, permalink: string, price: float, sku: string, status: string, stock: int, stock_unlimited: bool, variants: list<record>, weight: float, width: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4295,7 +4290,7 @@ export def "get-products-id-fields-count-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4335,7 +4330,7 @@ export def "get-products-id-images-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<image: record<id: int, position: int, url: string>> {
+]: nothing -> oneof<table<image: record<id: int, position: int, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4362,7 +4357,6 @@ export def "get-products-id-images-json" [
 # Create a new Product Image.
 #
 # POST /products/{id}/images.json
-# --image shape: {url?: string}
 export def "post-products-id-images-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4377,7 +4371,7 @@ export def "post-products-id-images-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --image: record # shape: {url?: string}
-]: any -> record<image: record<id: int, position: int, url: string>> {
+]: any -> oneof<record<image: record<id: int, position: int, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4420,7 +4414,7 @@ export def "get-products-id-images-count-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4503,7 +4497,7 @@ export def "get-products-id-images-image-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<image: record<id: int, position: int, url: string>> {
+]: nothing -> oneof<record<image: record<id: int, position: int, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4544,7 +4538,7 @@ export def "get-products-id-options-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<option: record<id: int, name: string, option_type: string, position: int, values: list>> {
+]: nothing -> oneof<table<option: record<id: int, name: string, option_type: string, position: int, values: list>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4571,7 +4565,6 @@ export def "get-products-id-options-json" [
 # Create a new Product Option.
 #
 # POST /products/{id}/options.json
-# --option shape: {name?: string, option_type?: "option"|"input"|"text"|"file", position?: int}
 export def "post-products-id-options-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4586,7 +4579,7 @@ export def "post-products-id-options-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --option: record # shape: {name?: string, option_type?: "option"|"input"|"text"|"file", position?: int}
-]: any -> record<option: record<id: int, name: string, option_type: string, position: int, values: list<record>>> {
+]: any -> oneof<record<option: record<id: int, name: string, option_type: string, position: int, values: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4629,7 +4622,7 @@ export def "get-products-id-options-count-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4712,7 +4705,7 @@ export def "get-products-id-options-option-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<option: record<id: int, name: string, option_type: string, position: int, values: list<record>>> {
+]: nothing -> oneof<record<option: record<id: int, name: string, option_type: string, position: int, values: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4740,7 +4733,6 @@ export def "get-products-id-options-option-id-json" [
 # Modify an existing Product Option.
 #
 # PUT /products/{id}/options/{option_id}.json
-# --option shape: {name?: string, option_type?: "option"|"input"|"text"|"file", position?: int}
 export def "put-products-id-options-option-id-json" [
   id: int
   option_id: int
@@ -4756,7 +4748,7 @@ export def "put-products-id-options-option-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --option: record # shape: {name?: string, option_type?: "option"|"input"|"text"|"file", position?: int}
-]: any -> record<option: record<id: int, name: string, option_type: string, position: int, values: list<record>>> {
+]: any -> oneof<record<option: record<id: int, name: string, option_type: string, position: int, values: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4801,7 +4793,7 @@ export def "get-products-id-options-option-id-values-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<value: record<id: int, name: string, position: int, product_option: record, variants: list>> {
+]: nothing -> oneof<table<value: record<id: int, name: string, position: int, product_option: record, variants: list>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4829,7 +4821,6 @@ export def "get-products-id-options-option-id-values-json" [
 # Create a new Product Option Value.
 #
 # POST /products/{id}/options/{option_id}/values.json
-# --value shape: {name?: string, position?: int}
 export def "post-products-id-options-option-id-values-json" [
   id: int
   option_id: int
@@ -4845,7 +4836,7 @@ export def "post-products-id-options-option-id-values-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --value: record # shape: {name?: string, position?: int}
-]: any -> record<value: record<id: int, name: string, position: int, product_option: record<option: record>, variants: list<record>>> {
+]: any -> oneof<record<value: record<id: int, name: string, position: int, product_option: record<option: record>, variants: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4890,7 +4881,7 @@ export def "get-products-id-options-option-id-values-count-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4977,7 +4968,7 @@ export def "get-products-id-options-option-id-values-value-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<value: record<id: int, name: string, position: int, product_option: record<option: record>, variants: list<record>>> {
+]: nothing -> oneof<record<value: record<id: int, name: string, position: int, product_option: record<option: record>, variants: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5006,7 +4997,6 @@ export def "get-products-id-options-option-id-values-value-id-json" [
 # Modify an existing Product Option Value.
 #
 # PUT /products/{id}/options/{option_id}/values/{value_id}.json
-# --value shape: {name?: string, position?: int}
 export def "put-products-id-options-option-id-values-value-id-json" [
   id: int
   option_id: int
@@ -5023,7 +5013,7 @@ export def "put-products-id-options-option-id-values-value-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --value: record # shape: {name?: string, position?: int}
-]: any -> record<value: record<id: int, name: string, position: int, product_option: record<option: record>, variants: list<record>>> {
+]: any -> oneof<record<value: record<id: int, name: string, position: int, product_option: record<option: record>, variants: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5068,7 +5058,7 @@ export def "get-products-id-variants-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<variant: record<id: int, image: record, options: list, price: float, sku: string, stock: int, stock_unlimited: bool>> {
+]: nothing -> oneof<table<variant: record<id: int, image: record, options: list, price: float, sku: string, stock: int, stock_unlimited: bool>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5095,7 +5085,6 @@ export def "get-products-id-variants-json" [
 # Create a new Product Variant.
 #
 # POST /products/{id}/variants.json
-# --variant shape: {image_id?: int, options?: list, price?: float, sku?: string, stock?: int, stock_unlimited?: bool}
 export def "post-products-id-variants-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5110,7 +5099,7 @@ export def "post-products-id-variants-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --variant: record # shape: {image_id?: int, options?: list, price?: float, sku?: string, stock?: int, stock_unlimited?: bool}
-]: any -> record<variant: record<id: int, image: record<id: int, position: int, url: string>, options: list<record>, price: float, sku: string, stock: int, stock_unlimited: bool>> {
+]: any -> oneof<record<variant: record<id: int, image: record<id: int, position: int, url: string>, options: list<record>, price: float, sku: string, stock: int, stock_unlimited: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5153,7 +5142,7 @@ export def "get-products-id-variants-count-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<count: int> {
+]: nothing -> oneof<record<count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5194,7 +5183,7 @@ export def "get-products-id-variants-variant-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<variant: record<id: int, image: record<id: int, position: int, url: string>, options: list<record>, price: float, sku: string, stock: int, stock_unlimited: bool>> {
+]: nothing -> oneof<record<variant: record<id: int, image: record<id: int, position: int, url: string>, options: list<record>, price: float, sku: string, stock: int, stock_unlimited: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5222,7 +5211,6 @@ export def "get-products-id-variants-variant-id-json" [
 # Modify an existing Product Variant.
 #
 # PUT /products/{id}/variants/{variant_id}.json
-# --variant shape: {image_id?: int, options?: list, price?: float, sku?: string, stock?: int, stock_unlimited?: bool}
 export def "put-products-id-variants-variant-id-json" [
   id: int
   variant_id: int
@@ -5238,7 +5226,7 @@ export def "put-products-id-variants-variant-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --variant: record # shape: {image_id?: int, options?: list, price?: float, sku?: string, stock?: int, stock_unlimited?: bool}
-]: any -> record<variant: record<id: int, image: record<id: int, position: int, url: string>, options: list<record>, price: float, sku: string, stock: int, stock_unlimited: bool>> {
+]: any -> oneof<record<variant: record<id: int, image: record<id: int, position: int, url: string>, options: list<record>, price: float, sku: string, stock: int, stock_unlimited: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5283,7 +5271,7 @@ export def "delete-products-product-id-fields-field-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
@@ -5325,7 +5313,7 @@ export def "put-products-product-id-fields-field-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<field: record<custom_field_id: int, id: int, label: string, type: string, value: string, value_id: string>> {
+]: nothing -> oneof<record<field: record<custom_field_id: int, id: int, label: string, type: string, value: string, value_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
@@ -5367,7 +5355,7 @@ export def "get-promotions-json" [
   --authtoken: string # API OAuth token. (required, format: string)
   --limit: int # Promotions' list restriction (default: 50 | max: 200). (format: integer)
   --page: int # Promotions' list page (default: 1). (format: integer)
-]: nothing -> table<promotion: record<begins_at: string, categories: list, code: string, condition_price: float, condition_qty: int, cumulative: bool, customer_categories: list, discount_amount_fix: float, discount_amount_percent: float, discount_target: string, enabled: bool, expires_at: string, id: int, lasts: string, max_times_used: int, name: string, products: list, products_x: list, quantity_x: int, status: string, times_used: int>> {
+]: nothing -> oneof<table<promotion: record<begins_at: string, categories: list, code: string, condition_price: float, condition_qty: int, cumulative: bool, customer_categories: list, discount_amount_fix: float, discount_amount_percent: float, discount_target: string, enabled: bool, expires_at: string, id: int, lasts: string, max_times_used: int, name: string, products: list, products_x: list, quantity_x: int, status: string, times_used: int>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -5393,7 +5381,6 @@ export def "get-promotions-json" [
 # Create a new Promotion.
 #
 # POST /promotions.json
-# --promotion shape: {begins_at?: string, buys_at_least?: string, categories?: list, code?: string, condition_price?: float, condition_qty?: int, cumulative?: bool, customer_categories?: list, customers?: string, discount_amount_fix?: float, discount_amount_percent?: float, discount_target?: string, enabled?: bool, expires_at?: string, lasts?: string, max_times_used?: int, name?: string, products?: list, products_x?: list, quantity_x?: int, type?: string}
 export def "post-promotions-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5407,7 +5394,7 @@ export def "post-promotions-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --promotion: record # shape: {begins_at?: string, buys_at_least?: string, categories?: list, code?: string, condition_price?: float, condition_qty?: int, cumulative?: bool, customer_categories?: list, customers?: string, discount_amount_fix?: float, discount_amount_percent?: float, discount_target?: string, enabled?: bool, expires_at?: string, lasts?: string, max_times_used?: int, name?: string, products?: list, products_x?: list, quantity_x?: int, type?: string}
-]: any -> record<promotion: record<begins_at: string, categories: list<record>, code: string, condition_price: float, condition_qty: int, cumulative: bool, customer_categories: list<record>, discount_amount_fix: float, discount_amount_percent: float, discount_target: string, enabled: bool, expires_at: string, id: int, lasts: string, max_times_used: int, name: string, products: list<record>, products_x: list<record>, quantity_x: int, status: string, times_used: int>> {
+]: any -> oneof<record<promotion: record<begins_at: string, categories: list<record>, code: string, condition_price: float, condition_qty: int, cumulative: bool, customer_categories: list<record>, discount_amount_fix: float, discount_amount_percent: float, discount_target: string, enabled: bool, expires_at: string, id: int, lasts: string, max_times_used: int, name: string, products: list<record>, products_x: list<record>, quantity_x: int, status: string, times_used: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5489,7 +5476,7 @@ export def "get-promotions-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<promotion: record<begins_at: string, categories: list<record>, code: string, condition_price: float, condition_qty: int, cumulative: bool, customer_categories: list<record>, discount_amount_fix: float, discount_amount_percent: float, discount_target: string, enabled: bool, expires_at: string, id: int, lasts: string, max_times_used: int, name: string, products: list<record>, products_x: list<record>, quantity_x: int, status: string, times_used: int>> {
+]: nothing -> oneof<record<promotion: record<begins_at: string, categories: list<record>, code: string, condition_price: float, condition_qty: int, cumulative: bool, customer_categories: list<record>, discount_amount_fix: float, discount_amount_percent: float, discount_target: string, enabled: bool, expires_at: string, id: int, lasts: string, max_times_used: int, name: string, products: list<record>, products_x: list<record>, quantity_x: int, status: string, times_used: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5516,7 +5503,6 @@ export def "get-promotions-id-json" [
 # Update a Promotion.
 #
 # PUT /promotions/{id}.json
-# --promotion shape: {begins_at?: string, buys_at_least?: string, categories?: list, code?: string, condition_price?: float, condition_qty?: int, cumulative?: bool, customer_categories?: list, customers?: string, discount_amount_fix?: float, discount_amount_percent?: float, discount_target?: string, enabled?: bool, expires_at?: string, lasts?: string, max_times_used?: int, name?: string, products?: list, products_x?: list, quantity_x?: int, type?: string}
 export def "put-promotions-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5531,7 +5517,7 @@ export def "put-promotions-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --promotion: record # shape: {begins_at?: string, buys_at_least?: string, categories?: list, code?: string, condition_price?: float, condition_qty?: int, cumulative?: bool, customer_categories?: list, customers?: string, discount_amount_fix?: float, discount_amount_percent?: float, discount_target?: string, enabled?: bool, expires_at?: string, lasts?: string, max_times_used?: int, name?: string, products?: list, products_x?: list, quantity_x?: int, type?: string}
-]: any -> record<promotion: record<begins_at: string, categories: list<record>, code: string, condition_price: float, condition_qty: int, cumulative: bool, customer_categories: list<record>, discount_amount_fix: float, discount_amount_percent: float, discount_target: string, enabled: bool, expires_at: string, id: int, lasts: string, max_times_used: int, name: string, products: list<record>, products_x: list<record>, quantity_x: int, status: string, times_used: int>> {
+]: any -> oneof<record<promotion: record<begins_at: string, categories: list<record>, code: string, condition_price: float, condition_qty: int, cumulative: bool, customer_categories: list<record>, discount_amount_fix: float, discount_amount_percent: float, discount_target: string, enabled: bool, expires_at: string, id: int, lasts: string, max_times_used: int, name: string, products: list<record>, products_x: list<record>, quantity_x: int, status: string, times_used: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5573,7 +5559,7 @@ export def "get-shipping-methods-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<shipping_method: record<callback_url: string, city: string, fetch_services_url: string, id: int, name: string, postal: string, services: list, state: string, type: string>> {
+]: nothing -> oneof<table<shipping_method: record<callback_url: string, city: string, fetch_services_url: string, id: int, name: string, postal: string, services: list, state: string, type: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -5599,7 +5585,6 @@ export def "get-shipping-methods-json" [
 # Creates a Shipping Method.
 #
 # POST /shipping_methods.json
-# --shipping_method shape: {callback_url?: string, city?: string, fetch_services_url?: string, name?: string, postal?: string, state?: string, token?: string}
 export def "post-shipping-methods-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5613,7 +5598,7 @@ export def "post-shipping-methods-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --shipping-method: record # shape: {callback_url?: string, city?: string, fetch_services_url?: string, name?: string, postal?: string, state?: string, token?: string}
-]: any -> record<shipping_method: record<callback_url: string, city: string, fetch_services_url: string, id: int, name: string, postal: string, services: list<record>, state: string, type: string>> {
+]: any -> oneof<record<shipping_method: record<callback_url: string, city: string, fetch_services_url: string, id: int, name: string, postal: string, services: list<record>, state: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5695,7 +5680,7 @@ export def "get-shipping-methods-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<shipping_method: record<callback_url: string, city: string, fetch_services_url: string, id: int, name: string, postal: string, services: list<record>, state: string, type: string>> {
+]: nothing -> oneof<record<shipping_method: record<callback_url: string, city: string, fetch_services_url: string, id: int, name: string, postal: string, services: list<record>, state: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5722,7 +5707,6 @@ export def "get-shipping-methods-id-json" [
 # Update a Shipping Method.
 #
 # PUT /shipping_methods/{id}.json
-# --shipping_method shape: {callback_url?: string, city?: string, fetch_services_url?: string, name?: string, postal?: string, state?: string, token?: string}
 export def "put-shipping-methods-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5737,7 +5721,7 @@ export def "put-shipping-methods-id-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --shipping-method: record # shape: {callback_url?: string, city?: string, fetch_services_url?: string, name?: string, postal?: string, state?: string, token?: string}
-]: any -> record<shipping_method: record<callback_url: string, city: string, fetch_services_url: string, id: int, name: string, postal: string, services: list<record>, state: string, type: string>> {
+]: any -> oneof<record<shipping_method: record<callback_url: string, city: string, fetch_services_url: string, id: int, name: string, postal: string, services: list<record>, state: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5827,7 +5811,7 @@ export def "post-store-create-json" [
   --plan-name: string@plan-name-completer # New Store plan name. (default: pro)
   --reject-duplicates: oneof<nothing, bool> # Indicates whether the request should fail if the Store name provided is already in use. (default: false)
   --store-name: string # New Store name.
-]: any -> record<store: record<code: string>> {
+]: any -> oneof<record<store: record<code: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5868,7 +5852,7 @@ export def "get-store-info-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<address: record<address: string, city: string, country: string, country_code: string, postal: string, region: string, region_code: string>, code: string, country: string, currency: string, email: string, hooks_token: string, logo: string, name: string, timezone: string, url: string, weight_unit: string> {
+]: nothing -> oneof<record<address: record<address: string, city: string, country: string, country_code: string, postal: string, region: string, region_code: string>, code: string, country: string, currency: string, email: string, hooks_token: string, logo: string, name: string, timezone: string, url: string, weight_unit: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -5906,7 +5890,7 @@ export def "get-store-languages-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<code: string, name: string> {
+]: nothing -> oneof<table<code: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -5944,7 +5928,7 @@ export def "get-taxes-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> table<tax: record<category_id: int, country: string, fixed: bool, id: int, name: string, region: string, shipping: bool, tax_amount: float>> {
+]: nothing -> oneof<table<tax: record<category_id: int, country: string, fixed: bool, id: int, name: string, region: string, shipping: bool, tax_amount: float>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($login == null) { error make --unspanned { msg: "required query parameter 'login' missing: pass --login" } }
@@ -5970,7 +5954,6 @@ export def "get-taxes-json" [
 # Create a new Tax.
 #
 # POST /taxes.json
-# --tax shape: {category_id?: int, country?: string, fixed?: bool, name?: string, region?: string, shipping?: bool, tax?: float}
 export def "post-taxes-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5984,7 +5967,7 @@ export def "post-taxes-json" [
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
   --tax: record # shape: {category_id?: int, country?: string, fixed?: bool, name?: string, region?: string, shipping?: bool, tax?: float}
-]: any -> record<tax: record<category_id: int, country: string, fixed: bool, id: int, name: string, region: string, shipping: bool, tax_amount: float>> {
+]: any -> oneof<record<tax: record<category_id: int, country: string, fixed: bool, id: int, name: string, region: string, shipping: bool, tax_amount: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6026,7 +6009,7 @@ export def "get-taxes-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (required, format: string)
   --authtoken: string # API OAuth token. (required, format: string)
-]: nothing -> record<tax: record<category_id: int, country: string, fixed: bool, id: int, name: string, region: string, shipping: bool, tax_amount: float>> {
+]: nothing -> oneof<record<tax: record<category_id: int, country: string, fixed: bool, id: int, name: string, region: string, shipping: bool, tax_amount: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

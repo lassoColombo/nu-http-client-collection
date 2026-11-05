@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -119,9 +142,9 @@ def x-amz-target-completer-18 [] { ["OpsWorksCM_V2016_11_01.UpdateServerEngineAt
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-node" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-node" "create-backup" "create-server" "delete-backup" "delete-server" "describe-account-attributes" "describe-backups" "describe-events" "describe-node-association-status" "describe-servers" "disassociate-node" "export-server-engine-attribute" "list-tags-for-resource" "restore-server" "start-maintenance" "tag-resource" "untag-resource" "update-server" "update-server-engine-attributes" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -143,7 +166,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateNode
-# --EngineAttributes item shape: {Name?: string, Value?: string}
 export def "associate-node" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -165,7 +187,7 @@ export def "associate-node" [
   server_name: string # The name of the server with which to associate the node.
   node_name: string # The node name that is used by chef-client or puppet-agentfor a new node. We recommend to use a unique FQDN as hostname. For more information, see the Chef (https://docs.aws.amazon.com/https:/docs.chef.io/nodes.html#about-node-names) or Puppet (https://docs.aws.amazon.com/https:/docs.puppet.com/puppet/4.10/man/agent.html) documentation.
   engine_attributes: list # Engine attributes used for associating the node. Attributes accepted in a AssociateNode request for Chef CHEF_ORGANIZATION: The Chef organization with which the node is associated. By default only one organization named default can exist. CHEF_NODE_PUBLIC_KEY: A PEM-formatted public key. This key is required for the chef-client agent to access the Chef API. Attributes accepted in a AssociateNode request for Puppet PUPPET_NODE_CSR: A PEM-formatted certificate-signing request (CSR) that is created by the node. — item shape: {Name?: string, Value?: string}
-]: any -> record<NodeAssociationStatusToken: string> {
+]: any -> oneof<record<NodeAssociationStatusToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -195,7 +217,6 @@ export def "associate-node" [
 #
 # POST /
 # operationId: CreateBackup
-# --Tags item shape: {Key: string, Value: string}
 export def "create-backup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,7 +238,7 @@ export def "create-backup" [
   server_name: string # The name of the server that you want to back up.
   --description: string # A user-defined description of the backup.
   --tags: list # A map that contains tag keys and tag values to attach to an AWS OpsWorks-CM server backup. The key cannot be empty. The key can be a maximum of 127 characters, and can contain only Unicode letters, numbers, or separators, or the following special characters: + - = . _ : / The value can be a maximum 255 characters, and contain only Unicode letters, numbers, or separators, or the following special characters: + - = . _ : / Leading and trailing white spaces are trimmed from both the key and value. A maximum of 50 user-applied tags is allowed for tag-supported AWS OpsWorks-CM resources. — item shape: {Key: string, Value: string}
-]: any -> record<Backup: record<BackupArn: string, BackupId: string, BackupType: string, CreatedAt: string, Description: string, Engine: string, EngineModel: string, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, S3DataSize: int, S3DataUrl: string, S3LogUrl: string, SecurityGroupIds: list<string>, ServerName: string, ServiceRoleArn: string, Status: string, StatusDescription: string, SubnetIds: list<string>, ToolsVersion: string, UserArn: string>> {
+]: any -> oneof<record<Backup: record<BackupArn: string, BackupId: string, BackupType: string, CreatedAt: string, Description: string, Engine: string, EngineModel: string, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, S3DataSize: int, S3DataUrl: string, S3LogUrl: string, SecurityGroupIds: list<string>, ServerName: string, ServiceRoleArn: string, Status: string, StatusDescription: string, SubnetIds: list<string>, ToolsVersion: string, UserArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -247,8 +268,6 @@ export def "create-backup" [
 #
 # POST /
 # operationId: CreateServer
-# --EngineAttributes item shape: {Name?: string, Value?: string}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,7 +307,7 @@ export def "create-server" [
   --subnet-ids: list<string> # The IDs of subnets in which to launch the server EC2 instance. Amazon EC2-Classic customers: This field is required. All servers must run within a VPC. The VPC must have "Auto Assign Public IP" enabled. EC2-VPC customers: This field is optional. If you do not specify subnet IDs, your EC2 instances are created in a default subnet that is selected by Amazon EC2. If you specify subnet IDs, the VPC must have "Auto Assign Public IP" enabled. For more information about supported Amazon EC2 platforms, see Supported Platforms (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-supported-platforms.html).
   --tags: list # A map that contains tag keys and tag values to attach to an AWS OpsWorks for Chef Automate or AWS OpsWorks for Puppet Enterprise server. The key cannot be empty. The key can be a maximum of 127 characters, and can contain only Unicode letters, numbers, or separators, or the following special characters: + - = . _ : / @ The value can be a maximum 255 characters, and contain only Unicode letters, numbers, or separators, or the following special characters: + - = . _ : / @ Leading and trailing white spaces are trimmed from both the key and value. A maximum of 50 user-applied tags is allowed for any AWS OpsWorks-CM server. — item shape: {Key: string, Value: string}
   --backup-id: string # If you specify this field, AWS OpsWorks CM creates the server by using the backup represented by BackupId.
-]: any -> record<Server: record<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list<record>, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list<string>, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list<string>, ServerArn: string>> {
+]: any -> oneof<record<Server: record<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list<record>, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list<string>, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list<string>, ServerArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -337,7 +356,7 @@ export def "delete-backup" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   backup_id: string # The ID of the backup to delete. Run the DescribeBackups command to get a list of backup IDs. Backup IDs are in the format ServerName-yyyyMMddHHmmssSSS.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -386,7 +405,7 @@ export def "delete-server" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   server_name: string # The ID of the server to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -435,7 +454,7 @@ export def "describe-account-attributes" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   --body: record
-]: any -> record<Attributes: table<Name: string, Maximum: int, Used: int>> {
+]: any -> oneof<record<Attributes: table<Name: string, Maximum: int, Used: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -489,7 +508,7 @@ export def "describe-backups" [
   --server-name: string # Returns backups for the server with the specified ServerName.
   --next-token-body: string # This is not currently implemented for DescribeBackups requests. (body field)
   --max-results-body: int # This is not currently implemented for DescribeBackups requests. (body field)
-]: any -> record<Backups: table<BackupArn: string, BackupId: string, BackupType: string, CreatedAt: string, Description: string, Engine: string, EngineModel: string, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, S3DataSize: int, S3DataUrl: string, S3LogUrl: string, SecurityGroupIds: list, ServerName: string, ServiceRoleArn: string, Status: string, StatusDescription: string, SubnetIds: list, ToolsVersion: string, UserArn: string>, NextToken: string> {
+]: any -> oneof<record<Backups: table<BackupArn: string, BackupId: string, BackupType: string, CreatedAt: string, Description: string, Engine: string, EngineModel: string, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, S3DataSize: int, S3DataUrl: string, S3LogUrl: string, SecurityGroupIds: list, ServerName: string, ServiceRoleArn: string, Status: string, StatusDescription: string, SubnetIds: list, ToolsVersion: string, UserArn: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -543,7 +562,7 @@ export def "describe-events" [
   server_name: string # The name of the server for which you want to view events.
   --next-token-body: string # NextToken is a string that is returned in some command responses. It indicates that not all entries have been returned, and that you must run at least one more request to get remaining items. To get remaining results, call DescribeEvents again, and assign the token from the previous results as the value of the nextToken parameter. If there are no more results, the response object's nextToken parameter value is null. Setting a nextToken value that was not returned in your previous results causes an InvalidNextTokenException to occur. (body field)
   --max-results-body: int # To receive a paginated response, use this parameter to specify the maximum number of results to be returned with a single call. If the number of available results exceeds this maximum, the response includes a NextToken value that you can assign to the NextToken request parameter to get the next set of results. (body field)
-]: any -> record<ServerEvents: table<CreatedAt: string, ServerName: string, Message: string, LogUrl: string>, NextToken: string> {
+]: any -> oneof<record<ServerEvents: table<CreatedAt: string, ServerName: string, Message: string, LogUrl: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -594,7 +613,7 @@ export def "describe-node-association-status" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   node_association_status_token: string # The token returned in either the AssociateNodeResponse or the DisassociateNodeResponse.
   server_name: string # The name of the server from which to disassociate the node.
-]: any -> record<NodeAssociationStatus: string, EngineAttributes: table<Name: string, Value: string>> {
+]: any -> oneof<record<NodeAssociationStatus: string, EngineAttributes: table<Name: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -647,7 +666,7 @@ export def "describe-servers" [
   --server-name: string # Describes the server with the specified ServerName.
   --next-token-body: string # This is not currently implemented for DescribeServers requests. (body field)
   --max-results-body: int # This is not currently implemented for DescribeServers requests. (body field)
-]: any -> record<Servers: table<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list, ServerArn: string>, NextToken: string> {
+]: any -> oneof<record<Servers: table<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list, ServerArn: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -678,7 +697,6 @@ export def "describe-servers" [
 #
 # POST /
 # operationId: DisassociateNode
-# --EngineAttributes item shape: {Name?: string, Value?: string}
 export def "disassociate-node" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -700,7 +718,7 @@ export def "disassociate-node" [
   server_name: string # The name of the server from which to disassociate the node.
   node_name: string # The node name that is used by chef-client or puppet-agentfor a new node. We recommend to use a unique FQDN as hostname. For more information, see the Chef (https://docs.aws.amazon.com/https:/docs.chef.io/nodes.html#about-node-names) or Puppet (https://docs.aws.amazon.com/https:/docs.puppet.com/puppet/4.10/man/agent.html) documentation.
   --engine-attributes: list # Engine attributes that are used for disassociating the node. No attributes are required for Puppet. Attributes required in a DisassociateNode request for Chef CHEF_ORGANIZATION: The Chef organization with which the node was associated. By default only one organization named default can exist. — item shape: {Name?: string, Value?: string}
-]: any -> record<NodeAssociationStatusToken: string> {
+]: any -> oneof<record<NodeAssociationStatusToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -730,7 +748,6 @@ export def "disassociate-node" [
 #
 # POST /
 # operationId: ExportServerEngineAttribute
-# --InputAttributes item shape: {Name?: string, Value?: string}
 export def "export-server-engine-attribute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -752,7 +769,7 @@ export def "export-server-engine-attribute" [
   export_attribute_name: string # The name of the export attribute. Currently, the supported export attribute is Userdata. This exports a user data script that includes parameters and values provided in the InputAttributes list.
   server_name: string # The name of the server from which you are exporting the attribute.
   --input-attributes: list # The list of engine attributes. The list type is EngineAttribute. An EngineAttribute list item is a pair that includes an attribute name and its value. For the Userdata ExportAttributeName, the following are supported engine attribute names. RunList In Chef, a list of roles or recipes that are run in the specified order. In Puppet, this parameter is ignored. OrganizationName In Chef, an organization name. AWS OpsWorks for Chef Automate always creates the organization default. In Puppet, this parameter is ignored. NodeEnvironment In Chef, a node environment (for example, development, staging, or one-box). In Puppet, this parameter is ignored. NodeClientVersion In Chef, the version of the Chef engine (three numbers separated by dots, such as 13.8.5). If this attribute is empty, OpsWorks for Chef Automate uses the most current version. In Puppet, this parameter is ignored. — item shape: {Name?: string, Value?: string}
-]: any -> record<EngineAttribute: record<Name: string, Value: string>, ServerName: string> {
+]: any -> oneof<record<EngineAttribute: record<Name: string, Value: string>, ServerName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -805,7 +822,7 @@ export def "list-tags-for-resource" [
   resource_arn: string # The Amazon Resource Number (ARN) of an AWS OpsWorks for Chef Automate or AWS OpsWorks for Puppet Enterprise server for which you want to show applied tags. For example, arn:aws:opsworks-cm:us-west-2:123456789012:server/test-owcm-server/EXAMPLE-66b0-4196-8274-d1a2bEXAMPLE.
   --next-token-body: string # NextToken is a string that is returned in some command responses. It indicates that not all entries have been returned, and that you must run at least one more request to get remaining items. To get remaining results, call ListTagsForResource again, and assign the token from the previous results as the value of the nextToken parameter. If there are no more results, the response object's nextToken parameter value is null. Setting a nextToken value that was not returned in your previous results causes an InvalidNextTokenException to occur. (body field)
   --max-results-body: int # To receive a paginated response, use this parameter to specify the maximum number of results to be returned with a single call. If the number of available results exceeds this maximum, the response includes a NextToken value that you can assign to the NextToken request parameter to get the next set of results. (body field)
-]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -858,7 +875,7 @@ export def "restore-server" [
   server_name: string # The name of the server that you want to restore.
   --instance-type: string # The type of instance to restore. Valid values must be specified in the following format: ^([cm][34]|t2).* For example, m5.large. Valid values are m5.large, r5.xlarge, and r5.2xlarge. If you do not specify this parameter, RestoreServer uses the instance type from the specified backup.
   --key-pair: string # The name of the key pair to set on the new EC2 instance. This can be helpful if the administrator no longer has the SSH key.
-]: any -> record<Server: record<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list<record>, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list<string>, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list<string>, ServerArn: string>> {
+]: any -> oneof<record<Server: record<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list<record>, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list<string>, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list<string>, ServerArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -888,7 +905,6 @@ export def "restore-server" [
 #
 # POST /
 # operationId: StartMaintenance
-# --EngineAttributes item shape: {Name?: string, Value?: string}
 export def "start-maintenance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -909,7 +925,7 @@ export def "start-maintenance" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   server_name: string # The name of the server on which to run maintenance.
   --engine-attributes: list # Engine attributes that are specific to the server on which you want to run maintenance. Attributes accepted in a StartMaintenance request for Chef CHEF_MAJOR_UPGRADE: If a Chef Automate server is eligible for upgrade to Chef Automate 2, add this engine attribute to a StartMaintenance request and set the value to true to upgrade the server to Chef Automate 2. For more information, see Upgrade an AWS OpsWorks for Chef Automate Server to Chef Automate 2 (https://docs.aws.amazon.com/opsworks/latest/userguide/opscm-a2upgrade.html). — item shape: {Name?: string, Value?: string}
-]: any -> record<Server: record<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list<record>, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list<string>, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list<string>, ServerArn: string>> {
+]: any -> oneof<record<Server: record<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list<record>, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list<string>, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list<string>, ServerArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -939,7 +955,6 @@ export def "start-maintenance" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -960,7 +975,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-15 # required
   resource_arn: string # The Amazon Resource Number (ARN) of a resource to which you want to apply tags. For example, arn:aws:opsworks-cm:us-west-2:123456789012:server/test-owcm-server/EXAMPLE-66b0-4196-8274-d1a2bEXAMPLE.
   tags: list # A map that contains tag keys and tag values to attach to AWS OpsWorks-CM servers or backups. The key cannot be empty. The key can be a maximum of 127 characters, and can contain only Unicode letters, numbers, or separators, or the following special characters: + - = . _ : / The value can be a maximum 255 characters, and contain only Unicode letters, numbers, or separators, or the following special characters: + - = . _ : / Leading and trailing white spaces are trimmed from both the key and value. A maximum of 50 user-applied tags is allowed for any AWS OpsWorks-CM server or backup. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1010,7 +1025,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-16 # required
   resource_arn: string # The Amazon Resource Number (ARN) of a resource from which you want to remove tags. For example, arn:aws:opsworks-cm:us-west-2:123456789012:server/test-owcm-server/EXAMPLE-66b0-4196-8274-d1a2bEXAMPLE.
   tag_keys: list<string> # The keys of tags that you want to remove.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1063,7 +1078,7 @@ export def "update-server" [
   server_name: string # The name of the server to update.
   --preferred-maintenance-window: string # DDD:HH:MM (weekly start time) or HH:MM (daily start time). Time windows always use coordinated universal time (UTC). Valid strings for day of week (DDD) are: Mon, Tue, Wed, Thr, Fri, Sat, or Sun.
   --preferred-backup-window: string # DDD:HH:MM (weekly start time) or HH:MM (daily start time). Time windows always use coordinated universal time (UTC). Valid strings for day of week (DDD) are: Mon, Tue, Wed, Thr, Fri, Sat, or Sun.
-]: any -> record<Server: record<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list<record>, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list<string>, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list<string>, ServerArn: string>> {
+]: any -> oneof<record<Server: record<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list<record>, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list<string>, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list<string>, ServerArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1114,7 +1129,7 @@ export def "update-server-engine-attributes" [
   server_name: string # The name of the server to update.
   attribute_name: string # The name of the engine attribute to update.
   --attribute-value: string # The value to set for the attribute.
-]: any -> record<Server: record<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list<record>, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list<string>, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list<string>, ServerArn: string>> {
+]: any -> oneof<record<Server: record<AssociatePublicIpAddress: bool, BackupRetentionCount: int, ServerName: string, CreatedAt: string, CloudFormationStackArn: string, CustomDomain: string, DisableAutomatedBackup: bool, Endpoint: string, Engine: string, EngineModel: string, EngineAttributes: list<record>, EngineVersion: string, InstanceProfileArn: string, InstanceType: string, KeyPair: string, MaintenanceStatus: string, PreferredMaintenanceWindow: string, PreferredBackupWindow: string, SecurityGroupIds: list<string>, ServiceRoleArn: string, Status: string, StatusReason: string, SubnetIds: list<string>, ServerArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

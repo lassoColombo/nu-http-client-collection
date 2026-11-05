@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def type-completer [] { ["CREATE_S3_DATA_ACCESS_FROM_S3_BUCKET" "EXPORT_ASSETS_T
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-job" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["cancel-job" "get-job" "start-job" "create-data-set" "list-data-sets" "create-event-action" "list-event-actions" "create-job" "list-jobs" "create-revision" "list-data-set-revisions" "delete-asset" "get-asset" "update-asset" "delete-data-set" "get-data-set" "update-data-set" "delete-event-action" "get-event-action" "update-event-action" "delete-revision" "get-revision" "update-revision" "list-revision-assets" "list-tags-for-resource" "tag-resource" "revoke-revision" "send-api-asset" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -206,7 +230,7 @@ export def "get-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, CreatedAt: string, Details: record<ExportAssetToSignedUrl: record<AssetId: string, DataSetId: string, RevisionId: string, SignedUrl: string, SignedUrlExpiresAt: string>, ExportAssetsToS3: record<AssetDestinations: list, DataSetId: string, Encryption: record, RevisionId: string>, ExportRevisionsToS3: record<DataSetId: string, Encryption: record, RevisionDestinations: list, EventActionArn: string>, ImportAssetFromSignedUrl: record<AssetName: string, DataSetId: string, Md5Hash: string, RevisionId: string, SignedUrl: string, SignedUrlExpiresAt: string>, ImportAssetsFromS3: record<AssetSources: list, DataSetId: string, RevisionId: string>, ImportAssetsFromRedshiftDataShares: record<AssetSources: list, DataSetId: string, RevisionId: string>, ImportAssetFromApiGatewayApi: record<ApiDescription: string, ApiId: string, ApiKey: string, ApiName: string, ApiSpecificationMd5Hash: string, ApiSpecificationUploadUrl: string, ApiSpecificationUploadUrlExpiresAt: string, DataSetId: string, ProtocolType: string, RevisionId: string, Stage: string>, CreateS3DataAccessFromS3Bucket: record<AssetSource: record, DataSetId: string, RevisionId: string>, ImportAssetsFromLakeFormationTagPolicy: record<CatalogId: string, Database: record, Table: record, RoleArn: string, DataSetId: string, RevisionId: string>>, Errors: table<Code: string, Details: record, LimitName: string, LimitValue: float, Message: string, ResourceId: string, ResourceType: string>, Id: string, State: string, Type: string, UpdatedAt: string> {
+]: nothing -> oneof<record<Arn: string, CreatedAt: string, Details: record<ExportAssetToSignedUrl: record<AssetId: string, DataSetId: string, RevisionId: string, SignedUrl: string, SignedUrlExpiresAt: string>, ExportAssetsToS3: record<AssetDestinations: list, DataSetId: string, Encryption: record, RevisionId: string>, ExportRevisionsToS3: record<DataSetId: string, Encryption: record, RevisionDestinations: list, EventActionArn: string>, ImportAssetFromSignedUrl: record<AssetName: string, DataSetId: string, Md5Hash: string, RevisionId: string, SignedUrl: string, SignedUrlExpiresAt: string>, ImportAssetsFromS3: record<AssetSources: list, DataSetId: string, RevisionId: string>, ImportAssetsFromRedshiftDataShares: record<AssetSources: list, DataSetId: string, RevisionId: string>, ImportAssetFromApiGatewayApi: record<ApiDescription: string, ApiId: string, ApiKey: string, ApiName: string, ApiSpecificationMd5Hash: string, ApiSpecificationUploadUrl: string, ApiSpecificationUploadUrlExpiresAt: string, DataSetId: string, ProtocolType: string, RevisionId: string, Stage: string>, CreateS3DataAccessFromS3Bucket: record<AssetSource: record, DataSetId: string, RevisionId: string>, ImportAssetsFromLakeFormationTagPolicy: record<CatalogId: string, Database: record, Table: record, RoleArn: string, DataSetId: string, RevisionId: string>>, Errors: table<Code: string, Details: record, LimitName: string, LimitValue: float, Message: string, ResourceId: string, ResourceType: string>, Id: string, State: string, Type: string, UpdatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'JobId' must be non-empty" } }
@@ -251,7 +275,7 @@ export def "start-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'JobId' must be non-empty" } }
@@ -299,7 +323,7 @@ export def "create-data-set" [
   description: string # A description for the data set. This value can be up to 16,348 characters long.
   name: string # The name of the data set.
   --tags: record # A data set tag is an optional label that you can assign to a data set when you create it. Each tag consists of a key and an optional value, both of which you define. When you use tagging, you can also use tag-based access control in IAM policies to control access to these data sets and revisions.
-]: any -> record<Arn: string, AssetType: string, CreatedAt: string, Description: string, Id: string, Name: string, Origin: string, OriginDetails: record<ProductId: string>, SourceId: string, Tags: record, UpdatedAt: string> {
+]: any -> oneof<record<Arn: string, AssetType: string, CreatedAt: string, Description: string, Id: string, Name: string, Origin: string, OriginDetails: record<ProductId: string>, SourceId: string, Tags: record, UpdatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -350,7 +374,7 @@ export def "list-data-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DataSets: table<Arn: string, AssetType: string, CreatedAt: string, Description: string, Id: string, Name: string, Origin: string, OriginDetails: record, SourceId: string, UpdatedAt: string>, NextToken: string> {
+]: nothing -> oneof<record<DataSets: table<Arn: string, AssetType: string, CreatedAt: string, Description: string, Id: string, Name: string, Origin: string, OriginDetails: record, SourceId: string, UpdatedAt: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -377,8 +401,6 @@ export def "list-data-sets" [
 #
 # POST /v1/event-actions
 # operationId: CreateEventAction
-# --Action shape: {ExportRevisionToS3?: record}
-# --Event shape: {RevisionPublished?: record}
 export def "create-event-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -398,7 +420,7 @@ export def "create-event-action" [
   --x-amz-signed-headers: string
   action: record # What occurs after a certain event. — shape: {ExportRevisionToS3?: record}
   event: record # What occurs to start an action. — shape: {RevisionPublished?: record}
-]: any -> record<Action: record<ExportRevisionToS3: record<Encryption: record, RevisionDestination: record>>, Arn: string, CreatedAt: string, Event: record<RevisionPublished: record<DataSetId: string>>, Id: string, UpdatedAt: string> {
+]: any -> oneof<record<Action: record<ExportRevisionToS3: record<Encryption: record, RevisionDestination: record>>, Arn: string, CreatedAt: string, Event: record<RevisionPublished: record<DataSetId: string>>, Id: string, UpdatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -449,7 +471,7 @@ export def "list-event-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventActions: table<Action: record, Arn: string, CreatedAt: string, Event: record, Id: string, UpdatedAt: string>, NextToken: string> {
+]: nothing -> oneof<record<EventActions: table<Action: record, Arn: string, CreatedAt: string, Event: record, Id: string, UpdatedAt: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "eventSourceId" $event_source_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -476,7 +498,6 @@ export def "list-event-actions" [
 #
 # POST /v1/jobs
 # operationId: CreateJob
-# --Details shape: {ExportAssetToSignedUrl?: record, ExportAssetsToS3?: record, ExportRevisionsToS3?: record, ImportAssetFromSignedUrl?: record, ImportAssetsFromS3?: record, ImportAssetsFromRedshiftDataShares?: record, ImportAssetFromApiGatewayApi?: record, CreateS3DataAccessFromS3Bucket?: record, ImportAssetsFromLakeFormationTagPolicy?: record}
 export def "create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,7 +517,7 @@ export def "create-job" [
   --x-amz-signed-headers: string
   details: record # The details for the request. — shape: {ExportAssetToSignedUrl?: record, ExportAssetsToS3?: record, ExportRevisionsToS3?: record, ImportAssetFromSignedUrl?: record, ImportAssetsFromS3?: record, ImportAssetsFromRedshiftDataShares?: record, ImportAssetFromApiGatewayApi?: record, CreateS3DataAccessFromS3Bucket?: record, ImportAssetsFromLakeFormationTagPolicy?: record}
   type: string@type-completer # The type of job to be created.
-]: any -> record<Arn: string, CreatedAt: string, Details: record<ExportAssetToSignedUrl: record<AssetId: string, DataSetId: string, RevisionId: string, SignedUrl: string, SignedUrlExpiresAt: string>, ExportAssetsToS3: record<AssetDestinations: list, DataSetId: string, Encryption: record, RevisionId: string>, ExportRevisionsToS3: record<DataSetId: string, Encryption: record, RevisionDestinations: list, EventActionArn: string>, ImportAssetFromSignedUrl: record<AssetName: string, DataSetId: string, Md5Hash: string, RevisionId: string, SignedUrl: string, SignedUrlExpiresAt: string>, ImportAssetsFromS3: record<AssetSources: list, DataSetId: string, RevisionId: string>, ImportAssetsFromRedshiftDataShares: record<AssetSources: list, DataSetId: string, RevisionId: string>, ImportAssetFromApiGatewayApi: record<ApiDescription: string, ApiId: string, ApiKey: string, ApiName: string, ApiSpecificationMd5Hash: string, ApiSpecificationUploadUrl: string, ApiSpecificationUploadUrlExpiresAt: string, DataSetId: string, ProtocolType: string, RevisionId: string, Stage: string>, CreateS3DataAccessFromS3Bucket: record<AssetSource: record, DataSetId: string, RevisionId: string>, ImportAssetsFromLakeFormationTagPolicy: record<CatalogId: string, Database: record, Table: record, RoleArn: string, DataSetId: string, RevisionId: string>>, Errors: table<Code: string, Details: record, LimitName: string, LimitValue: float, Message: string, ResourceId: string, ResourceType: string>, Id: string, State: string, Type: string, UpdatedAt: string> {
+]: any -> oneof<record<Arn: string, CreatedAt: string, Details: record<ExportAssetToSignedUrl: record<AssetId: string, DataSetId: string, RevisionId: string, SignedUrl: string, SignedUrlExpiresAt: string>, ExportAssetsToS3: record<AssetDestinations: list, DataSetId: string, Encryption: record, RevisionId: string>, ExportRevisionsToS3: record<DataSetId: string, Encryption: record, RevisionDestinations: list, EventActionArn: string>, ImportAssetFromSignedUrl: record<AssetName: string, DataSetId: string, Md5Hash: string, RevisionId: string, SignedUrl: string, SignedUrlExpiresAt: string>, ImportAssetsFromS3: record<AssetSources: list, DataSetId: string, RevisionId: string>, ImportAssetsFromRedshiftDataShares: record<AssetSources: list, DataSetId: string, RevisionId: string>, ImportAssetFromApiGatewayApi: record<ApiDescription: string, ApiId: string, ApiKey: string, ApiName: string, ApiSpecificationMd5Hash: string, ApiSpecificationUploadUrl: string, ApiSpecificationUploadUrlExpiresAt: string, DataSetId: string, ProtocolType: string, RevisionId: string, Stage: string>, CreateS3DataAccessFromS3Bucket: record<AssetSource: record, DataSetId: string, RevisionId: string>, ImportAssetsFromLakeFormationTagPolicy: record<CatalogId: string, Database: record, Table: record, RoleArn: string, DataSetId: string, RevisionId: string>>, Errors: table<Code: string, Details: record, LimitName: string, LimitValue: float, Message: string, ResourceId: string, ResourceType: string>, Id: string, State: string, Type: string, UpdatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -548,7 +569,7 @@ export def "list-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Jobs: table<Arn: string, CreatedAt: string, Details: record, Errors: list, Id: string, State: string, Type: string, UpdatedAt: string>, NextToken: string> {
+]: nothing -> oneof<record<Jobs: table<Arn: string, CreatedAt: string, Details: record, Errors: list, Id: string, State: string, Type: string, UpdatedAt: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dataSetId" $data_set_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "revisionId" $revision_id "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -595,7 +616,7 @@ export def "create-revision" [
   --x-amz-signed-headers: string
   --comment: string # An optional comment about the revision.
   --tags: record # A revision tag is an optional label that you can assign to a revision when you create it. Each tag consists of a key and an optional value, both of which you define. When you use tagging, you can also use tag-based access control in IAM policies to control access to these data sets and revisions.
-]: any -> record<Arn: string, Comment: string, CreatedAt: string, DataSetId: string, Finalized: bool, Id: string, SourceId: string, Tags: record, UpdatedAt: string, RevocationComment: string, Revoked: bool, RevokedAt: string> {
+]: any -> oneof<record<Arn: string, Comment: string, CreatedAt: string, DataSetId: string, Finalized: bool, Id: string, SourceId: string, Tags: record, UpdatedAt: string, RevocationComment: string, Revoked: bool, RevokedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -647,7 +668,7 @@ export def "list-data-set-revisions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Revisions: table<Arn: string, Comment: string, CreatedAt: string, DataSetId: string, Finalized: bool, Id: string, SourceId: string, UpdatedAt: string, RevocationComment: string, Revoked: bool, RevokedAt: string>> {
+]: nothing -> oneof<record<NextToken: string, Revisions: table<Arn: string, Comment: string, CreatedAt: string, DataSetId: string, Finalized: bool, Id: string, SourceId: string, UpdatedAt: string, RevocationComment: string, Revoked: bool, RevokedAt: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
@@ -744,7 +765,7 @@ export def "get-asset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, AssetDetails: record<S3SnapshotAsset: record<Size: float>, RedshiftDataShareAsset: record<Arn: string>, ApiGatewayApiAsset: record<ApiDescription: string, ApiEndpoint: string, ApiId: string, ApiKey: string, ApiName: string, ApiSpecificationDownloadUrl: string, ApiSpecificationDownloadUrlExpiresAt: string, ProtocolType: string, Stage: string>, S3DataAccessAsset: record<Bucket: string, KeyPrefixes: list, Keys: list, S3AccessPointAlias: string, S3AccessPointArn: string, KmsKeysToGrant: list>, LakeFormationDataPermissionAsset: record<LakeFormationDataPermissionDetails: record, LakeFormationDataPermissionType: string, Permissions: list, RoleArn: string>>, AssetType: string, CreatedAt: string, DataSetId: string, Id: string, Name: string, RevisionId: string, SourceId: string, UpdatedAt: string> {
+]: nothing -> oneof<record<Arn: string, AssetDetails: record<S3SnapshotAsset: record<Size: float>, RedshiftDataShareAsset: record<Arn: string>, ApiGatewayApiAsset: record<ApiDescription: string, ApiEndpoint: string, ApiId: string, ApiKey: string, ApiName: string, ApiSpecificationDownloadUrl: string, ApiSpecificationDownloadUrlExpiresAt: string, ProtocolType: string, Stage: string>, S3DataAccessAsset: record<Bucket: string, KeyPrefixes: list, Keys: list, S3AccessPointAlias: string, S3AccessPointArn: string, KmsKeysToGrant: list>, LakeFormationDataPermissionAsset: record<LakeFormationDataPermissionDetails: record, LakeFormationDataPermissionType: string, Permissions: list, RoleArn: string>>, AssetType: string, CreatedAt: string, DataSetId: string, Id: string, Name: string, RevisionId: string, SourceId: string, UpdatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
@@ -794,7 +815,7 @@ export def "update-asset" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   name: string # The name of the asset. When importing from Amazon S3, the Amazon S3 object key is used as the asset name. When exporting to Amazon S3, the asset name is used as default target Amazon S3 object key. When importing from Amazon API Gateway API, the API name is used as the asset name. When importing from Amazon Redshift, the datashare name is used as the asset name. When importing from AWS Lake Formation, the static values of "Database(s) included in the LF-tag policy" or "Table(s) included in LF-tag policy" are used as the name.
-]: any -> record<Arn: string, AssetDetails: record<S3SnapshotAsset: record<Size: float>, RedshiftDataShareAsset: record<Arn: string>, ApiGatewayApiAsset: record<ApiDescription: string, ApiEndpoint: string, ApiId: string, ApiKey: string, ApiName: string, ApiSpecificationDownloadUrl: string, ApiSpecificationDownloadUrlExpiresAt: string, ProtocolType: string, Stage: string>, S3DataAccessAsset: record<Bucket: string, KeyPrefixes: list, Keys: list, S3AccessPointAlias: string, S3AccessPointArn: string, KmsKeysToGrant: list>, LakeFormationDataPermissionAsset: record<LakeFormationDataPermissionDetails: record, LakeFormationDataPermissionType: string, Permissions: list, RoleArn: string>>, AssetType: string, CreatedAt: string, DataSetId: string, Id: string, Name: string, RevisionId: string, SourceId: string, UpdatedAt: string> {
+]: any -> oneof<record<Arn: string, AssetDetails: record<S3SnapshotAsset: record<Size: float>, RedshiftDataShareAsset: record<Arn: string>, ApiGatewayApiAsset: record<ApiDescription: string, ApiEndpoint: string, ApiId: string, ApiKey: string, ApiName: string, ApiSpecificationDownloadUrl: string, ApiSpecificationDownloadUrlExpiresAt: string, ProtocolType: string, Stage: string>, S3DataAccessAsset: record<Bucket: string, KeyPrefixes: list, Keys: list, S3AccessPointAlias: string, S3AccessPointArn: string, KmsKeysToGrant: list>, LakeFormationDataPermissionAsset: record<LakeFormationDataPermissionDetails: record, LakeFormationDataPermissionType: string, Permissions: list, RoleArn: string>>, AssetType: string, CreatedAt: string, DataSetId: string, Id: string, Name: string, RevisionId: string, SourceId: string, UpdatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -889,7 +910,7 @@ export def "get-data-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, AssetType: string, CreatedAt: string, Description: string, Id: string, Name: string, Origin: string, OriginDetails: record<ProductId: string>, SourceId: string, Tags: record, UpdatedAt: string> {
+]: nothing -> oneof<record<Arn: string, AssetType: string, CreatedAt: string, Description: string, Id: string, Name: string, Origin: string, OriginDetails: record<ProductId: string>, SourceId: string, Tags: record, UpdatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
@@ -936,7 +957,7 @@ export def "update-data-set" [
   --x-amz-signed-headers: string
   --description: string # The description for the data set.
   --name: string # The name of the data set.
-]: any -> record<Arn: string, AssetType: string, CreatedAt: string, Description: string, Id: string, Name: string, Origin: string, OriginDetails: record<ProductId: string>, SourceId: string, UpdatedAt: string> {
+]: any -> oneof<record<Arn: string, AssetType: string, CreatedAt: string, Description: string, Id: string, Name: string, Origin: string, OriginDetails: record<ProductId: string>, SourceId: string, UpdatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1029,7 +1050,7 @@ export def "get-event-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Action: record<ExportRevisionToS3: record<Encryption: record, RevisionDestination: record>>, Arn: string, CreatedAt: string, Event: record<RevisionPublished: record<DataSetId: string>>, Id: string, UpdatedAt: string> {
+]: nothing -> oneof<record<Action: record<ExportRevisionToS3: record<Encryption: record, RevisionDestination: record>>, Arn: string, CreatedAt: string, Event: record<RevisionPublished: record<DataSetId: string>>, Id: string, UpdatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_action_id | is-empty) { error make --unspanned { msg: "path parameter 'EventActionId' must be non-empty" } }
@@ -1056,7 +1077,6 @@ export def "get-event-action" [
 #
 # PATCH /v1/event-actions/{EventActionId}
 # operationId: UpdateEventAction
-# --Action shape: {ExportRevisionToS3?: record}
 export def "update-event-action" [
   event_action_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1076,7 +1096,7 @@ export def "update-event-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --action: record # What occurs after a certain event. — shape: {ExportRevisionToS3?: record}
-]: any -> record<Action: record<ExportRevisionToS3: record<Encryption: record, RevisionDestination: record>>, Arn: string, CreatedAt: string, Event: record<RevisionPublished: record<DataSetId: string>>, Id: string, UpdatedAt: string> {
+]: any -> oneof<record<Action: record<ExportRevisionToS3: record<Encryption: record, RevisionDestination: record>>, Arn: string, CreatedAt: string, Event: record<RevisionPublished: record<DataSetId: string>>, Id: string, UpdatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1172,7 +1192,7 @@ export def "get-revision" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, Comment: string, CreatedAt: string, DataSetId: string, Finalized: bool, Id: string, SourceId: string, Tags: record, UpdatedAt: string, RevocationComment: string, Revoked: bool, RevokedAt: string> {
+]: nothing -> oneof<record<Arn: string, Comment: string, CreatedAt: string, DataSetId: string, Finalized: bool, Id: string, SourceId: string, Tags: record, UpdatedAt: string, RevocationComment: string, Revoked: bool, RevokedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
@@ -1221,7 +1241,7 @@ export def "update-revision" [
   --x-amz-signed-headers: string
   --comment: string # An optional comment about the revision.
   --finalized: oneof<nothing, bool> # Finalizing a revision tells AWS Data Exchange that your changes to the assets in the revision are complete. After it's in this read-only state, you can publish the revision to your products.
-]: any -> record<Arn: string, Comment: string, CreatedAt: string, DataSetId: string, Finalized: bool, Id: string, SourceId: string, UpdatedAt: string, RevocationComment: string, Revoked: bool, RevokedAt: string> {
+]: any -> oneof<record<Arn: string, Comment: string, CreatedAt: string, DataSetId: string, Finalized: bool, Id: string, SourceId: string, UpdatedAt: string, RevocationComment: string, Revoked: bool, RevokedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1275,7 +1295,7 @@ export def "list-revision-assets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Assets: table<Arn: string, AssetDetails: record, AssetType: string, CreatedAt: string, DataSetId: string, Id: string, Name: string, RevisionId: string, SourceId: string, UpdatedAt: string>, NextToken: string> {
+]: nothing -> oneof<record<Assets: table<Arn: string, AssetDetails: record, AssetType: string, CreatedAt: string, DataSetId: string, Id: string, Name: string, RevisionId: string, SourceId: string, UpdatedAt: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($data_set_id | is-empty) { error make --unspanned { msg: "path parameter 'DataSetId' must be non-empty" } }
@@ -1322,7 +1342,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'ResourceArn' must be non-empty" } }
@@ -1418,7 +1438,7 @@ export def "revoke-revision" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   revocation_comment: string # A required comment to inform subscribers of the reason their access to the revision was revoked.
-]: any -> record<Arn: string, Comment: string, CreatedAt: string, DataSetId: string, Finalized: bool, Id: string, SourceId: string, UpdatedAt: string, RevocationComment: string, Revoked: bool, RevokedAt: string> {
+]: any -> oneof<record<Arn: string, Comment: string, CreatedAt: string, DataSetId: string, Finalized: bool, Id: string, SourceId: string, UpdatedAt: string, RevocationComment: string, Revoked: bool, RevokedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1474,7 +1494,7 @@ export def "send-api-asset" [
   --x-amzn-dataexchange-revision-id: string # Revision ID value for the API request. (required)
   --body: string # The request body.
   --x-amzn-dataexchange-header: record # Any header value prefixed with x-amzn-dataexchange-header- will have that stripped before sending the Asset API request. Use this when you want to override a header that AWS Data Exchange uses. Alternatively, you can use the header without a prefix to the HTTP request.
-]: any -> record<Body: string, ResponseHeaders: record> {
+]: any -> oneof<record<Body: string, ResponseHeaders: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

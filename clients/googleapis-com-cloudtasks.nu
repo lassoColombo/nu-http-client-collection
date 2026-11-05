@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def type-completer [] { ["PULL" "PUSH" "TYPE_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudtasks-projects-locations-queues-tasks-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["cloudtasks-projects-locations-queues-tasks-delete" "cloudtasks-projects-locations-queues-tasks-get" "cloudtasks-projects-locations-queues-patch" "cloudtasks-projects-locations-list" "cloudtasks-projects-locations-queues-pause" "cloudtasks-projects-locations-queues-purge" "cloudtasks-projects-locations-queues-resume" "cloudtasks-projects-locations-queues-tasks-run" "cloudtasks-projects-locations-queues-list" "cloudtasks-projects-locations-queues-create" "cloudtasks-projects-locations-queues-tasks-list" "cloudtasks-projects-locations-queues-tasks-create" "cloudtasks-projects-locations-queues-tasks-buffer" "cloudtasks-projects-locations-queues-get-iam-policy" "cloudtasks-projects-locations-queues-set-iam-policy" "cloudtasks-projects-locations-queues-test-iam-permissions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -168,7 +192,7 @@ export def "cloudtasks-projects-locations-queues-tasks-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -217,7 +241,7 @@ export def "cloudtasks-projects-locations-queues-tasks-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --response-view: string@response-view-completer # The response_view specifies which subset of the Task will be returned. By default response_view is BASIC; not all information is retrieved by default because some data, such as payloads, might be desirable to return only when needed because of its large size or because of the sensitivity of data that it contains. Authorization for FULL requires `cloudtasks.tasks.fullView` [Google IAM](https://cloud.google.com/iam/) permission on the Task resource.
-]: nothing -> record<appEngineHttpRequest: record<appEngineRouting: record<host: string, instance: string, service: string, version: string>, body: string, headers: record, httpMethod: string, relativeUri: string>, createTime: string, dispatchCount: int, dispatchDeadline: string, firstAttempt: record<dispatchTime: string, responseStatus: record<code: int, details: list, message: string>, responseTime: string, scheduleTime: string>, httpRequest: record<body: string, headers: record, httpMethod: string, oauthToken: record<scope: string, serviceAccountEmail: string>, oidcToken: record<audience: string, serviceAccountEmail: string>, url: string>, lastAttempt: record<dispatchTime: string, responseStatus: record<code: int, details: list, message: string>, responseTime: string, scheduleTime: string>, name: string, pullMessage: record<payload: string, tag: string>, responseCount: int, scheduleTime: string, view: string> {
+]: nothing -> oneof<record<appEngineHttpRequest: record<appEngineRouting: record<host: string, instance: string, service: string, version: string>, body: string, headers: record, httpMethod: string, relativeUri: string>, createTime: string, dispatchCount: int, dispatchDeadline: string, firstAttempt: record<dispatchTime: string, responseStatus: record<code: int, details: list, message: string>, responseTime: string, scheduleTime: string>, httpRequest: record<body: string, headers: record, httpMethod: string, oauthToken: record<scope: string, serviceAccountEmail: string>, oidcToken: record<audience: string, serviceAccountEmail: string>, url: string>, lastAttempt: record<dispatchTime: string, responseStatus: record<code: int, details: list, message: string>, responseTime: string, scheduleTime: string>, name: string, pullMessage: record<payload: string, tag: string>, responseCount: int, scheduleTime: string, view: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -243,11 +267,6 @@ export def "cloudtasks-projects-locations-queues-tasks-get" [
 #
 # PATCH /v2beta3/{name}
 # operationId: cloudtasks.projects.locations.queues.patch
-# --appEngineHttpQueue shape: {appEngineRoutingOverride?: record}
-# --httpTarget shape: {headerOverrides?: list, httpMethod?: "HTTP_METHOD_UNSPECIFIED"|"POST"|"GET"|"HEAD"|"PUT"|"DELETE"|"PATCH"|"OPTIONS", uriOverride?: record}
-# --rateLimits shape: {maxBurstSize?: int, maxConcurrentDispatches?: int, maxDispatchesPerSecond?: float}
-# --retryConfig shape: {maxAttempts?: int, maxBackoff?: string, maxDoublings?: int, maxRetryDuration?: string, minBackoff?: string}
-# --stackdriverLoggingConfig shape: {samplingRatio?: float}
 export def "cloudtasks-projects-locations-queues-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -283,7 +302,7 @@ export def "cloudtasks-projects-locations-queues-patch" [
   --task-ttl: string # The maximum amount of time that a task will be retained in this queue. Queues created by Cloud Tasks have a default `task_ttl` of 31 days. After a task has lived for `task_ttl`, the task will be deleted regardless of whether it was dispatched or not. The `task_ttl` for queues created via queue.yaml/xml is equal to the maximum duration because there is a [storage quota](https://cloud.google.com/appengine/quotas#Task_Queue) for these queues. To view the maximum valid duration, see the documentation for Duration. (format: google-duration)
   --tombstone-ttl: string # The task tombstone time to live (TTL). After a task is deleted or executed, the task's tombstone is retained for the length of time specified by `tombstone_ttl`. The tombstone is used by task de-duplication; another task with the same name can't be created until the tombstone has expired. For more information about task de-duplication, see the documentation for CreateTaskRequest. Queues created by Cloud Tasks have a default `tombstone_ttl` of 1 hour. (format: google-duration)
   --type: string@type-completer # Immutable. The type of a queue (push or pull). `Queue.type` is an immutable property of the queue that is set at the queue creation time. When left unspecified, the default value of `PUSH` is selected.
-]: any -> record<appEngineHttpQueue: record<appEngineRoutingOverride: record<host: string, instance: string, service: string, version: string>>, httpTarget: record<headerOverrides: list<record>, httpMethod: string, uriOverride: record<host: string, pathOverride: record, port: string, queryOverride: record, scheme: string, uriOverrideEnforceMode: string>>, name: string, purgeTime: string, rateLimits: record<maxBurstSize: int, maxConcurrentDispatches: int, maxDispatchesPerSecond: float>, retryConfig: record<maxAttempts: int, maxBackoff: string, maxDoublings: int, maxRetryDuration: string, minBackoff: string>, stackdriverLoggingConfig: record<samplingRatio: float>, state: string, stats: record<concurrentDispatchesCount: string, effectiveExecutionRate: float, executedLastMinuteCount: string, oldestEstimatedArrivalTime: string, tasksCount: string>, taskTtl: string, tombstoneTtl: string, type: string> {
+]: any -> oneof<record<appEngineHttpQueue: record<appEngineRoutingOverride: record<host: string, instance: string, service: string, version: string>>, httpTarget: record<headerOverrides: list<record>, httpMethod: string, uriOverride: record<host: string, pathOverride: record, port: string, queryOverride: record, scheme: string, uriOverrideEnforceMode: string>>, name: string, purgeTime: string, rateLimits: record<maxBurstSize: int, maxConcurrentDispatches: int, maxDispatchesPerSecond: float>, retryConfig: record<maxAttempts: int, maxBackoff: string, maxDoublings: int, maxRetryDuration: string, minBackoff: string>, stackdriverLoggingConfig: record<samplingRatio: float>, state: string, stats: record<concurrentDispatchesCount: string, effectiveExecutionRate: float, executedLastMinuteCount: string, oldestEstimatedArrivalTime: string, tasksCount: string>, taskTtl: string, tombstoneTtl: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -337,7 +356,7 @@ export def "cloudtasks-projects-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like `"displayName=tokyo"`, and is documented in more detail in [AIP-160](https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the `next_page_token` field in the response. Send that page token to receive the subsequent page.
-]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -386,7 +405,7 @@ export def "cloudtasks-projects-locations-queues-pause" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<appEngineHttpQueue: record<appEngineRoutingOverride: record<host: string, instance: string, service: string, version: string>>, httpTarget: record<headerOverrides: list<record>, httpMethod: string, uriOverride: record<host: string, pathOverride: record, port: string, queryOverride: record, scheme: string, uriOverrideEnforceMode: string>>, name: string, purgeTime: string, rateLimits: record<maxBurstSize: int, maxConcurrentDispatches: int, maxDispatchesPerSecond: float>, retryConfig: record<maxAttempts: int, maxBackoff: string, maxDoublings: int, maxRetryDuration: string, minBackoff: string>, stackdriverLoggingConfig: record<samplingRatio: float>, state: string, stats: record<concurrentDispatchesCount: string, effectiveExecutionRate: float, executedLastMinuteCount: string, oldestEstimatedArrivalTime: string, tasksCount: string>, taskTtl: string, tombstoneTtl: string, type: string> {
+]: any -> oneof<record<appEngineHttpQueue: record<appEngineRoutingOverride: record<host: string, instance: string, service: string, version: string>>, httpTarget: record<headerOverrides: list<record>, httpMethod: string, uriOverride: record<host: string, pathOverride: record, port: string, queryOverride: record, scheme: string, uriOverrideEnforceMode: string>>, name: string, purgeTime: string, rateLimits: record<maxBurstSize: int, maxConcurrentDispatches: int, maxDispatchesPerSecond: float>, retryConfig: record<maxAttempts: int, maxBackoff: string, maxDoublings: int, maxRetryDuration: string, minBackoff: string>, stackdriverLoggingConfig: record<samplingRatio: float>, state: string, stats: record<concurrentDispatchesCount: string, effectiveExecutionRate: float, executedLastMinuteCount: string, oldestEstimatedArrivalTime: string, tasksCount: string>, taskTtl: string, tombstoneTtl: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -438,7 +457,7 @@ export def "cloudtasks-projects-locations-queues-purge" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<appEngineHttpQueue: record<appEngineRoutingOverride: record<host: string, instance: string, service: string, version: string>>, httpTarget: record<headerOverrides: list<record>, httpMethod: string, uriOverride: record<host: string, pathOverride: record, port: string, queryOverride: record, scheme: string, uriOverrideEnforceMode: string>>, name: string, purgeTime: string, rateLimits: record<maxBurstSize: int, maxConcurrentDispatches: int, maxDispatchesPerSecond: float>, retryConfig: record<maxAttempts: int, maxBackoff: string, maxDoublings: int, maxRetryDuration: string, minBackoff: string>, stackdriverLoggingConfig: record<samplingRatio: float>, state: string, stats: record<concurrentDispatchesCount: string, effectiveExecutionRate: float, executedLastMinuteCount: string, oldestEstimatedArrivalTime: string, tasksCount: string>, taskTtl: string, tombstoneTtl: string, type: string> {
+]: any -> oneof<record<appEngineHttpQueue: record<appEngineRoutingOverride: record<host: string, instance: string, service: string, version: string>>, httpTarget: record<headerOverrides: list<record>, httpMethod: string, uriOverride: record<host: string, pathOverride: record, port: string, queryOverride: record, scheme: string, uriOverrideEnforceMode: string>>, name: string, purgeTime: string, rateLimits: record<maxBurstSize: int, maxConcurrentDispatches: int, maxDispatchesPerSecond: float>, retryConfig: record<maxAttempts: int, maxBackoff: string, maxDoublings: int, maxRetryDuration: string, minBackoff: string>, stackdriverLoggingConfig: record<samplingRatio: float>, state: string, stats: record<concurrentDispatchesCount: string, effectiveExecutionRate: float, executedLastMinuteCount: string, oldestEstimatedArrivalTime: string, tasksCount: string>, taskTtl: string, tombstoneTtl: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -490,7 +509,7 @@ export def "cloudtasks-projects-locations-queues-resume" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<appEngineHttpQueue: record<appEngineRoutingOverride: record<host: string, instance: string, service: string, version: string>>, httpTarget: record<headerOverrides: list<record>, httpMethod: string, uriOverride: record<host: string, pathOverride: record, port: string, queryOverride: record, scheme: string, uriOverrideEnforceMode: string>>, name: string, purgeTime: string, rateLimits: record<maxBurstSize: int, maxConcurrentDispatches: int, maxDispatchesPerSecond: float>, retryConfig: record<maxAttempts: int, maxBackoff: string, maxDoublings: int, maxRetryDuration: string, minBackoff: string>, stackdriverLoggingConfig: record<samplingRatio: float>, state: string, stats: record<concurrentDispatchesCount: string, effectiveExecutionRate: float, executedLastMinuteCount: string, oldestEstimatedArrivalTime: string, tasksCount: string>, taskTtl: string, tombstoneTtl: string, type: string> {
+]: any -> oneof<record<appEngineHttpQueue: record<appEngineRoutingOverride: record<host: string, instance: string, service: string, version: string>>, httpTarget: record<headerOverrides: list<record>, httpMethod: string, uriOverride: record<host: string, pathOverride: record, port: string, queryOverride: record, scheme: string, uriOverrideEnforceMode: string>>, name: string, purgeTime: string, rateLimits: record<maxBurstSize: int, maxConcurrentDispatches: int, maxDispatchesPerSecond: float>, retryConfig: record<maxAttempts: int, maxBackoff: string, maxDoublings: int, maxRetryDuration: string, minBackoff: string>, stackdriverLoggingConfig: record<samplingRatio: float>, state: string, stats: record<concurrentDispatchesCount: string, effectiveExecutionRate: float, executedLastMinuteCount: string, oldestEstimatedArrivalTime: string, tasksCount: string>, taskTtl: string, tombstoneTtl: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -542,7 +561,7 @@ export def "cloudtasks-projects-locations-queues-tasks-run" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --response-view: string@response-view-completer # The response_view specifies which subset of the Task will be returned. By default response_view is BASIC; not all information is retrieved by default because some data, such as payloads, might be desirable to return only when needed because of its large size or because of the sensitivity of data that it contains. Authorization for FULL requires `cloudtasks.tasks.fullView` [Google IAM](https://cloud.google.com/iam/) permission on the Task resource.
-]: any -> record<appEngineHttpRequest: record<appEngineRouting: record<host: string, instance: string, service: string, version: string>, body: string, headers: record, httpMethod: string, relativeUri: string>, createTime: string, dispatchCount: int, dispatchDeadline: string, firstAttempt: record<dispatchTime: string, responseStatus: record<code: int, details: list, message: string>, responseTime: string, scheduleTime: string>, httpRequest: record<body: string, headers: record, httpMethod: string, oauthToken: record<scope: string, serviceAccountEmail: string>, oidcToken: record<audience: string, serviceAccountEmail: string>, url: string>, lastAttempt: record<dispatchTime: string, responseStatus: record<code: int, details: list, message: string>, responseTime: string, scheduleTime: string>, name: string, pullMessage: record<payload: string, tag: string>, responseCount: int, scheduleTime: string, view: string> {
+]: any -> oneof<record<appEngineHttpRequest: record<appEngineRouting: record<host: string, instance: string, service: string, version: string>, body: string, headers: record, httpMethod: string, relativeUri: string>, createTime: string, dispatchCount: int, dispatchDeadline: string, firstAttempt: record<dispatchTime: string, responseStatus: record<code: int, details: list, message: string>, responseTime: string, scheduleTime: string>, httpRequest: record<body: string, headers: record, httpMethod: string, oauthToken: record<scope: string, serviceAccountEmail: string>, oidcToken: record<audience: string, serviceAccountEmail: string>, url: string>, lastAttempt: record<dispatchTime: string, responseStatus: record<code: int, details: list, message: string>, responseTime: string, scheduleTime: string>, name: string, pullMessage: record<payload: string, tag: string>, responseCount: int, scheduleTime: string, view: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -597,7 +616,7 @@ export def "cloudtasks-projects-locations-queues-list" [
   --page-size: int # Requested page size. The maximum page size is 9800. If unspecified, the page size will be the maximum. Fewer queues than requested might be returned, even if more queues exist; use the next_page_token in the response to determine if more queues exist.
   --page-token: string # A token identifying the page of results to return. To request the first page results, page_token must be empty. To request the next page of results, page_token must be the value of next_page_token returned from the previous call to ListQueues method. It is an error to switch the value of the filter while iterating through pages.
   --read-mask: string # Optional. Read mask is used for a more granular control over what the API returns. If the mask is not present all fields will be returned except [Queue.stats]. [Queue.stats] will be returned only if it was explicitly specified in the mask.
-]: nothing -> record<nextPageToken: string, queues: table<appEngineHttpQueue: record, httpTarget: record, name: string, purgeTime: string, rateLimits: record, retryConfig: record, stackdriverLoggingConfig: record, state: string, stats: record, taskTtl: string, tombstoneTtl: string, type: string>> {
+]: nothing -> oneof<record<nextPageToken: string, queues: table<appEngineHttpQueue: record, httpTarget: record, name: string, purgeTime: string, rateLimits: record, retryConfig: record, stackdriverLoggingConfig: record, state: string, stats: record, taskTtl: string, tombstoneTtl: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -623,11 +642,6 @@ export def "cloudtasks-projects-locations-queues-list" [
 #
 # POST /v2beta3/{parent}/queues
 # operationId: cloudtasks.projects.locations.queues.create
-# --appEngineHttpQueue shape: {appEngineRoutingOverride?: record}
-# --httpTarget shape: {headerOverrides?: list, httpMethod?: "HTTP_METHOD_UNSPECIFIED"|"POST"|"GET"|"HEAD"|"PUT"|"DELETE"|"PATCH"|"OPTIONS", uriOverride?: record}
-# --rateLimits shape: {maxBurstSize?: int, maxConcurrentDispatches?: int, maxDispatchesPerSecond?: float}
-# --retryConfig shape: {maxAttempts?: int, maxBackoff?: string, maxDoublings?: int, maxRetryDuration?: string, minBackoff?: string}
-# --stackdriverLoggingConfig shape: {samplingRatio?: float}
 export def "cloudtasks-projects-locations-queues-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -662,7 +676,7 @@ export def "cloudtasks-projects-locations-queues-create" [
   --task-ttl: string # The maximum amount of time that a task will be retained in this queue. Queues created by Cloud Tasks have a default `task_ttl` of 31 days. After a task has lived for `task_ttl`, the task will be deleted regardless of whether it was dispatched or not. The `task_ttl` for queues created via queue.yaml/xml is equal to the maximum duration because there is a [storage quota](https://cloud.google.com/appengine/quotas#Task_Queue) for these queues. To view the maximum valid duration, see the documentation for Duration. (format: google-duration)
   --tombstone-ttl: string # The task tombstone time to live (TTL). After a task is deleted or executed, the task's tombstone is retained for the length of time specified by `tombstone_ttl`. The tombstone is used by task de-duplication; another task with the same name can't be created until the tombstone has expired. For more information about task de-duplication, see the documentation for CreateTaskRequest. Queues created by Cloud Tasks have a default `tombstone_ttl` of 1 hour. (format: google-duration)
   --type: string@type-completer # Immutable. The type of a queue (push or pull). `Queue.type` is an immutable property of the queue that is set at the queue creation time. When left unspecified, the default value of `PUSH` is selected.
-]: any -> record<appEngineHttpQueue: record<appEngineRoutingOverride: record<host: string, instance: string, service: string, version: string>>, httpTarget: record<headerOverrides: list<record>, httpMethod: string, uriOverride: record<host: string, pathOverride: record, port: string, queryOverride: record, scheme: string, uriOverrideEnforceMode: string>>, name: string, purgeTime: string, rateLimits: record<maxBurstSize: int, maxConcurrentDispatches: int, maxDispatchesPerSecond: float>, retryConfig: record<maxAttempts: int, maxBackoff: string, maxDoublings: int, maxRetryDuration: string, minBackoff: string>, stackdriverLoggingConfig: record<samplingRatio: float>, state: string, stats: record<concurrentDispatchesCount: string, effectiveExecutionRate: float, executedLastMinuteCount: string, oldestEstimatedArrivalTime: string, tasksCount: string>, taskTtl: string, tombstoneTtl: string, type: string> {
+]: any -> oneof<record<appEngineHttpQueue: record<appEngineRoutingOverride: record<host: string, instance: string, service: string, version: string>>, httpTarget: record<headerOverrides: list<record>, httpMethod: string, uriOverride: record<host: string, pathOverride: record, port: string, queryOverride: record, scheme: string, uriOverrideEnforceMode: string>>, name: string, purgeTime: string, rateLimits: record<maxBurstSize: int, maxConcurrentDispatches: int, maxDispatchesPerSecond: float>, retryConfig: record<maxAttempts: int, maxBackoff: string, maxDoublings: int, maxRetryDuration: string, minBackoff: string>, stackdriverLoggingConfig: record<samplingRatio: float>, state: string, stats: record<concurrentDispatchesCount: string, effectiveExecutionRate: float, executedLastMinuteCount: string, oldestEstimatedArrivalTime: string, tasksCount: string>, taskTtl: string, tombstoneTtl: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -716,7 +730,7 @@ export def "cloudtasks-projects-locations-queues-tasks-list" [
   --page-size: int # Maximum page size. Fewer tasks than requested might be returned, even if more tasks exist; use next_page_token in the response to determine if more tasks exist. The maximum page size is 1000. If unspecified, the page size will be the maximum.
   --page-token: string # A token identifying the page of results to return. To request the first page results, page_token must be empty. To request the next page of results, page_token must be the value of next_page_token returned from the previous call to ListTasks method. The page token is valid for only 2 hours.
   --response-view: string@response-view-completer # The response_view specifies which subset of the Task will be returned. By default response_view is BASIC; not all information is retrieved by default because some data, such as payloads, might be desirable to return only when needed because of its large size or because of the sensitivity of data that it contains. Authorization for FULL requires `cloudtasks.tasks.fullView` [Google IAM](https://cloud.google.com/iam/) permission on the Task resource.
-]: nothing -> record<nextPageToken: string, tasks: table<appEngineHttpRequest: record, createTime: string, dispatchCount: int, dispatchDeadline: string, firstAttempt: record, httpRequest: record, lastAttempt: record, name: string, pullMessage: record, responseCount: int, scheduleTime: string, view: string>> {
+]: nothing -> oneof<record<nextPageToken: string, tasks: table<appEngineHttpRequest: record, createTime: string, dispatchCount: int, dispatchDeadline: string, firstAttempt: record, httpRequest: record, lastAttempt: record, name: string, pullMessage: record, responseCount: int, scheduleTime: string, view: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -742,7 +756,6 @@ export def "cloudtasks-projects-locations-queues-tasks-list" [
 #
 # POST /v2beta3/{parent}/tasks
 # operationId: cloudtasks.projects.locations.queues.tasks.create
-# --task shape: {appEngineHttpRequest?: record, createTime?: string, dispatchCount?: int, dispatchDeadline?: string, firstAttempt?: record, httpRequest?: record, lastAttempt?: record, name?: string, pullMessage?: record, responseCount?: int, scheduleTime?: string, view?: "VIEW_UNSPECIFIED"|"BASIC"|"FULL"}
 export def "cloudtasks-projects-locations-queues-tasks-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -767,7 +780,7 @@ export def "cloudtasks-projects-locations-queues-tasks-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --response-view: string@response-view-completer # The response_view specifies which subset of the Task will be returned. By default response_view is BASIC; not all information is retrieved by default because some data, such as payloads, might be desirable to return only when needed because of its large size or because of the sensitivity of data that it contains. Authorization for FULL requires `cloudtasks.tasks.fullView` [Google IAM](https://cloud.google.com/iam/) permission on the Task resource.
   --task: record # A unit of scheduled work. — shape: {appEngineHttpRequest?: record, createTime?: string, dispatchCount?: int, dispatchDeadline?: string, firstAttempt?: record, httpRequest?: record, lastAttempt?: record, name?: string, pullMessage?: record, responseCount?: int, scheduleTime?: string, view?: "VIEW_UNSPECIFIED"|"BASIC"|"FULL"}
-]: any -> record<appEngineHttpRequest: record<appEngineRouting: record<host: string, instance: string, service: string, version: string>, body: string, headers: record, httpMethod: string, relativeUri: string>, createTime: string, dispatchCount: int, dispatchDeadline: string, firstAttempt: record<dispatchTime: string, responseStatus: record<code: int, details: list, message: string>, responseTime: string, scheduleTime: string>, httpRequest: record<body: string, headers: record, httpMethod: string, oauthToken: record<scope: string, serviceAccountEmail: string>, oidcToken: record<audience: string, serviceAccountEmail: string>, url: string>, lastAttempt: record<dispatchTime: string, responseStatus: record<code: int, details: list, message: string>, responseTime: string, scheduleTime: string>, name: string, pullMessage: record<payload: string, tag: string>, responseCount: int, scheduleTime: string, view: string> {
+]: any -> oneof<record<appEngineHttpRequest: record<appEngineRouting: record<host: string, instance: string, service: string, version: string>, body: string, headers: record, httpMethod: string, relativeUri: string>, createTime: string, dispatchCount: int, dispatchDeadline: string, firstAttempt: record<dispatchTime: string, responseStatus: record<code: int, details: list, message: string>, responseTime: string, scheduleTime: string>, httpRequest: record<body: string, headers: record, httpMethod: string, oauthToken: record<scope: string, serviceAccountEmail: string>, oidcToken: record<audience: string, serviceAccountEmail: string>, url: string>, lastAttempt: record<dispatchTime: string, responseStatus: record<code: int, details: list, message: string>, responseTime: string, scheduleTime: string>, name: string, pullMessage: record<payload: string, tag: string>, responseCount: int, scheduleTime: string, view: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -796,7 +809,6 @@ export def "cloudtasks-projects-locations-queues-tasks-create" [
 #
 # POST /v2beta3/{queue}/tasks/{taskId}:buffer
 # operationId: cloudtasks.projects.locations.queues.tasks.buffer
-# --body shape: {contentType?: string, data?: string, extensions?: list}
 export def "cloudtasks-projects-locations-queues-tasks-buffer" [
   queue: string
   task_id: string
@@ -821,7 +833,7 @@ export def "cloudtasks-projects-locations-queues-tasks-buffer" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record # Message that represents an arbitrary HTTP body. It should only be used for payload formats that can't be represented as JSON, such as raw binary or an HTML page. This message can be used both in streaming and non-streaming API methods in the request as well as the response. It can be used as a top-level request field, which is convenient if one wants to extract parameters from either the URL or HTTP template into the request fields and also want access to the raw HTTP body. Example: message GetResourceRequest { // A unique request id. string request_id = 1; // The raw HTTP body is bound to this field. google.api.HttpBody http_body = 2; } service ResourceService { rpc GetResource(GetResourceRequest) returns (google.api.HttpBody); rpc UpdateResource(google.api.HttpBody) returns (google.protobuf.Empty); } Example with streaming methods: service CaldavService { rpc GetCalendar(stream google.api.HttpBody) returns (stream google.api.HttpBody); rpc UpdateCalendar(stream google.api.HttpBody) returns (stream google.api.HttpBody); } Use of this type only changes how the request and response bodies are handled, all other features will continue to work unchanged. — shape: {contentType?: string, data?: string, extensions?: list}
-]: any -> record<task: record<appEngineHttpRequest: record<appEngineRouting: record, body: string, headers: record, httpMethod: string, relativeUri: string>, createTime: string, dispatchCount: int, dispatchDeadline: string, firstAttempt: record<dispatchTime: string, responseStatus: record, responseTime: string, scheduleTime: string>, httpRequest: record<body: string, headers: record, httpMethod: string, oauthToken: record, oidcToken: record, url: string>, lastAttempt: record<dispatchTime: string, responseStatus: record, responseTime: string, scheduleTime: string>, name: string, pullMessage: record<payload: string, tag: string>, responseCount: int, scheduleTime: string, view: string>> {
+]: any -> oneof<record<task: record<appEngineHttpRequest: record<appEngineRouting: record, body: string, headers: record, httpMethod: string, relativeUri: string>, createTime: string, dispatchCount: int, dispatchDeadline: string, firstAttempt: record<dispatchTime: string, responseStatus: record, responseTime: string, scheduleTime: string>, httpRequest: record<body: string, headers: record, httpMethod: string, oauthToken: record, oidcToken: record, url: string>, lastAttempt: record<dispatchTime: string, responseStatus: record, responseTime: string, scheduleTime: string>, name: string, pullMessage: record<payload: string, tag: string>, responseCount: int, scheduleTime: string, view: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -851,7 +863,6 @@ export def "cloudtasks-projects-locations-queues-tasks-buffer" [
 #
 # POST /v2beta3/{resource}:getIamPolicy
 # operationId: cloudtasks.projects.locations.queues.getIamPolicy
-# --options shape: {requestedPolicyVersion?: int}
 export def "cloudtasks-projects-locations-queues-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -875,7 +886,7 @@ export def "cloudtasks-projects-locations-queues-get-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options: record # Encapsulates settings provided to GetIamPolicy. — shape: {requestedPolicyVersion?: int}
-]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -904,7 +915,6 @@ export def "cloudtasks-projects-locations-queues-get-iam-policy" [
 #
 # POST /v2beta3/{resource}:setIamPolicy
 # operationId: cloudtasks.projects.locations.queues.setIamPolicy
-# --policy shape: {bindings?: list, etag?: string, version?: int}
 export def "cloudtasks-projects-locations-queues-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -928,7 +938,7 @@ export def "cloudtasks-projects-locations-queues-set-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {bindings?: list, etag?: string, version?: int}
-]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -980,7 +990,7 @@ export def "cloudtasks-projects-locations-queues-test-iam-permissions" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -134,9 +157,9 @@ def x-amz-target-completer-27 [] { ["AmazonML_20141212.UpdateMLModel"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-tags" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-tags" "create-batch-prediction" "create-data-source-from-rds" "create-data-source-from-redshift" "create-data-source-from-s3" "create-evaluation" "create-ml-model" "create-realtime-endpoint" "delete-batch-prediction" "delete-data-source" "delete-evaluation" "delete-ml-model" "delete-realtime-endpoint" "delete-tags" "describe-batch-predictions" "describe-data-sources" "describe-evaluations" "describe-ml-models" "describe-tags" "get-batch-prediction" "get-data-source" "get-evaluation" "get-ml-model" "predict" "update-batch-prediction" "update-data-source" "update-evaluation" "update-ml-model" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -158,7 +181,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddTags
-# --Tags item shape: {Key?: string, Value?: string}
 export def "add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -180,7 +202,7 @@ export def "add-tags" [
   tags: list # The key-value pairs to use to create tags. If you specify a key without specifying a value, Amazon ML creates a tag with the specified key and a value of null. — item shape: {Key?: string, Value?: string}
   resource_id: string # The ID of the ML object to tag. For example, exampleModelId.
   resource_type: string@resource-type-completer # The type of the ML object to tag.
-]: any -> record<ResourceId: string, ResourceType: string> {
+]: any -> oneof<record<ResourceId: string, ResourceType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -233,7 +255,7 @@ export def "create-batch-prediction" [
   ml_model_id: string # The ID of the MLModel that will generate predictions for the group of observations.
   batch_prediction_data_source_id: string # The ID of the DataSource that points to the group of observations to predict.
   output_uri: string # A reference to a file or bucket on Amazon Simple Storage Service (Amazon S3).
-]: any -> record<BatchPredictionId: string> {
+]: any -> oneof<record<BatchPredictionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -263,7 +285,6 @@ export def "create-batch-prediction" [
 #
 # POST /
 # operationId: CreateDataSourceFromRDS
-# --RDSData shape: {DatabaseInformation: record, SelectSqlQuery: string, DatabaseCredentials: record, S3StagingLocation: string, DataRearrangement?: string, DataSchema?: string, DataSchemaUri?: string, ResourceRole: string, ServiceRole: string, SubnetId: string, SecurityGroupIds: list<string>}
 export def "create-data-source-from-rds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +308,7 @@ export def "create-data-source-from-rds" [
   rds_data: record # The data specification of an Amazon Relational Database Service (Amazon RDS) DataSource. — shape: {DatabaseInformation: record, SelectSqlQuery: string, DatabaseCredentials: record, S3StagingLocation: string, DataRearrangement?: string, DataSchema?: string, DataSchemaUri?: string, ResourceRole: string, ServiceRole: string, SubnetId: string, SecurityGroupIds: list<string>}
   role_arn: string # The Amazon Resource Name (ARN) of an AWS IAM Role (https://docs.aws.amazon.com/IAM/latest/UserGuide/roles-toplevel.html#roles-about-termsandconcepts), such as the following: arn:aws:iam::account:role/rolename.
   --compute-statistics: oneof<nothing, bool> # The compute statistics for a DataSource. The statistics are generated from the observation data referenced by a DataSource. Amazon ML uses the statistics internally during MLModel training. This parameter must be set to true if the DataSource needs to be used for MLModel training.
-]: any -> record<DataSourceId: string> {
+]: any -> oneof<record<DataSourceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -317,7 +338,6 @@ export def "create-data-source-from-rds" [
 #
 # POST /
 # operationId: CreateDataSourceFromRedshift
-# --DataSpec shape: {DatabaseInformation: record, SelectSqlQuery: string, DatabaseCredentials: record, S3StagingLocation: string, DataRearrangement?: string, DataSchema?: string, DataSchemaUri?: string}
 export def "create-data-source-from-redshift" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -341,7 +361,7 @@ export def "create-data-source-from-redshift" [
   data_spec: record # Describes the data specification of an Amazon Redshift DataSource. — shape: {DatabaseInformation: record, SelectSqlQuery: string, DatabaseCredentials: record, S3StagingLocation: string, DataRearrangement?: string, DataSchema?: string, DataSchemaUri?: string}
   role_arn: string # The Amazon Resource Name (ARN) of an AWS IAM Role (https://docs.aws.amazon.com/IAM/latest/UserGuide/roles-toplevel.html#roles-about-termsandconcepts), such as the following: arn:aws:iam::account:role/rolename.
   --compute-statistics: oneof<nothing, bool> # The compute statistics for a DataSource. The statistics are generated from the observation data referenced by a DataSource. Amazon ML uses the statistics internally during MLModel training. This parameter must be set to true if the DataSource needs to be used for MLModel training.
-]: any -> record<DataSourceId: string> {
+]: any -> oneof<record<DataSourceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -371,7 +391,6 @@ export def "create-data-source-from-redshift" [
 #
 # POST /
 # operationId: CreateDataSourceFromS3
-# --DataSpec shape: {DataLocationS3: string, DataRearrangement?: string, DataSchema?: string, DataSchemaLocationS3?: string}
 export def "create-data-source-from-s3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -394,7 +413,7 @@ export def "create-data-source-from-s3" [
   --data-source-name: string # A user-supplied name or description of the Amazon ML resource.
   data_spec: record # Describes the data specification of a DataSource. — shape: {DataLocationS3: string, DataRearrangement?: string, DataSchema?: string, DataSchemaLocationS3?: string}
   --compute-statistics: oneof<nothing, bool> # The compute statistics for a DataSource. The statistics are generated from the observation data referenced by a DataSource. Amazon ML uses the statistics internally during MLModel training. This parameter must be set to true if the DataSource needs to be used for MLModel training.
-]: any -> record<DataSourceId: string> {
+]: any -> oneof<record<DataSourceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -446,7 +465,7 @@ export def "create-evaluation" [
   --evaluation-name: string # A user-supplied name or description of the Amazon ML resource.
   ml_model_id: string # The ID of the MLModel to evaluate. The schema used in creating the MLModel must match the schema of the DataSource used in the Evaluation.
   evaluation_data_source_id: string # The ID of the DataSource for the evaluation. The schema of the DataSource must match the schema used to create the MLModel.
-]: any -> record<EvaluationId: string> {
+]: any -> oneof<record<EvaluationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -501,7 +520,7 @@ export def "create-ml-model" [
   training_data_source_id: string # The DataSource that points to the training data.
   --recipe: string # The data recipe for creating the MLModel. You must specify either the recipe or its URI. If you don't specify a recipe or its URI, Amazon ML creates a default.
   --recipe-uri: string # A reference to a file or bucket on Amazon Simple Storage Service (Amazon S3).
-]: any -> record<MLModelId: string> {
+]: any -> oneof<record<MLModelId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -550,7 +569,7 @@ export def "create-realtime-endpoint" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-7 # required
   ml_model_id: string # The ID assigned to the MLModel during creation.
-]: any -> record<MLModelId: string, RealtimeEndpointInfo: record<PeakRequestsPerSecond: int, CreatedAt: string, EndpointUrl: string, EndpointStatus: string>> {
+]: any -> oneof<record<MLModelId: string, RealtimeEndpointInfo: record<PeakRequestsPerSecond: int, CreatedAt: string, EndpointUrl: string, EndpointStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -599,7 +618,7 @@ export def "delete-batch-prediction" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   batch_prediction_id: string # A user-supplied ID that uniquely identifies the BatchPrediction.
-]: any -> record<BatchPredictionId: string> {
+]: any -> oneof<record<BatchPredictionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -648,7 +667,7 @@ export def "delete-data-source" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   data_source_id: string # A user-supplied ID that uniquely identifies the DataSource.
-]: any -> record<DataSourceId: string> {
+]: any -> oneof<record<DataSourceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -697,7 +716,7 @@ export def "delete-evaluation" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   evaluation_id: string # A user-supplied ID that uniquely identifies the Evaluation to delete.
-]: any -> record<EvaluationId: string> {
+]: any -> oneof<record<EvaluationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -746,7 +765,7 @@ export def "delete-ml-model" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   ml_model_id: string # A user-supplied ID that uniquely identifies the MLModel.
-]: any -> record<MLModelId: string> {
+]: any -> oneof<record<MLModelId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -795,7 +814,7 @@ export def "delete-realtime-endpoint" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   ml_model_id: string # The ID assigned to the MLModel during creation.
-]: any -> record<MLModelId: string, RealtimeEndpointInfo: record<PeakRequestsPerSecond: int, CreatedAt: string, EndpointUrl: string, EndpointStatus: string>> {
+]: any -> oneof<record<MLModelId: string, RealtimeEndpointInfo: record<PeakRequestsPerSecond: int, CreatedAt: string, EndpointUrl: string, EndpointStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -846,7 +865,7 @@ export def "delete-tags" [
   tag_keys: list<string> # One or more tags to delete.
   resource_id: string # The ID of the tagged ML object. For example, exampleModelId.
   resource_type: string@resource-type-completer # The type of the tagged ML object.
-]: any -> record<ResourceId: string, ResourceType: string> {
+]: any -> oneof<record<ResourceId: string, ResourceType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -907,7 +926,7 @@ export def "describe-batch-predictions" [
   --sort-order: string@sort-order-completer # The sort order specified in a listing condition. Possible values include the following: asc - Present the information in ascending order (from A-Z). dsc - Present the information in descending order (from Z-A).
   --next-token-body: string # String type. (body field)
   --limit-body: int # The number of pages of information to include in the result. The range of acceptable values is 1 through 100. The default value is 100. (body field)
-]: any -> record<Results: table<BatchPredictionId: string, MLModelId: string, BatchPredictionDataSourceId: string, InputDataLocationS3: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, OutputUri: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string, TotalRecordCount: int, InvalidRecordCount: int>, NextToken: string> {
+]: any -> oneof<record<Results: table<BatchPredictionId: string, MLModelId: string, BatchPredictionDataSourceId: string, InputDataLocationS3: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, OutputUri: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string, TotalRecordCount: int, InvalidRecordCount: int>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -969,7 +988,7 @@ export def "describe-data-sources" [
   --sort-order: string@sort-order-completer # The sort order specified in a listing condition. Possible values include the following: asc - Present the information in ascending order (from A-Z). dsc - Present the information in descending order (from Z-A).
   --next-token-body: string # String type. (body field)
   --limit-body: int # The maximum number of DataSource to include in the result. (body field)
-]: any -> record<Results: table<DataSourceId: string, DataLocationS3: string, DataRearrangement: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, DataSizeInBytes: int, NumberOfFiles: int, Name: string, Status: string, Message: string, RedshiftMetadata: record, RDSMetadata: record, RoleARN: string, ComputeStatistics: bool, ComputeTime: int, FinishedAt: string, StartedAt: string>, NextToken: string> {
+]: any -> oneof<record<Results: table<DataSourceId: string, DataLocationS3: string, DataRearrangement: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, DataSizeInBytes: int, NumberOfFiles: int, Name: string, Status: string, Message: string, RedshiftMetadata: record, RDSMetadata: record, RoleARN: string, ComputeStatistics: bool, ComputeTime: int, FinishedAt: string, StartedAt: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1031,7 +1050,7 @@ export def "describe-evaluations" [
   --sort-order: string@sort-order-completer # The sort order specified in a listing condition. Possible values include the following: asc - Present the information in ascending order (from A-Z). dsc - Present the information in descending order (from Z-A).
   --next-token-body: string # String type. (body field)
   --limit-body: int # The maximum number of Evaluation to include in the result. (body field)
-]: any -> record<Results: table<EvaluationId: string, MLModelId: string, EvaluationDataSourceId: string, InputDataLocationS3: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, PerformanceMetrics: record, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string>, NextToken: string> {
+]: any -> oneof<record<Results: table<EvaluationId: string, MLModelId: string, EvaluationDataSourceId: string, InputDataLocationS3: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, PerformanceMetrics: record, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1093,7 +1112,7 @@ export def "describe-ml-models" [
   --sort-order: string@sort-order-completer # The sort order specified in a listing condition. Possible values include the following: asc - Present the information in ascending order (from A-Z). dsc - Present the information in descending order (from Z-A).
   --next-token-body: string # String type. (body field)
   --limit-body: int # The number of pages of information to include in the result. The range of acceptable values is 1 through 100. The default value is 100. (body field)
-]: any -> record<Results: table<MLModelId: string, TrainingDataSourceId: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, SizeInBytes: int, EndpointInfo: record, TrainingParameters: record, InputDataLocationS3: string, Algorithm: string, MLModelType: string, ScoreThreshold: float, ScoreThresholdLastUpdatedAt: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string>, NextToken: string> {
+]: any -> oneof<record<Results: table<MLModelId: string, TrainingDataSourceId: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, SizeInBytes: int, EndpointInfo: record, TrainingParameters: record, InputDataLocationS3: string, Algorithm: string, MLModelType: string, ScoreThreshold: float, ScoreThresholdLastUpdatedAt: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1144,7 +1163,7 @@ export def "describe-tags" [
   --x-amz-target: string@x-amz-target-completer-18 # required
   resource_id: string # The ID of the ML object. For example, exampleModelId.
   resource_type: string@resource-type-completer # The type of the ML object.
-]: any -> record<ResourceId: string, ResourceType: string, Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<ResourceId: string, ResourceType: string, Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1193,7 +1212,7 @@ export def "get-batch-prediction" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   batch_prediction_id: string # An ID assigned to the BatchPrediction at creation.
-]: any -> record<BatchPredictionId: string, MLModelId: string, BatchPredictionDataSourceId: string, InputDataLocationS3: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, OutputUri: string, LogUri: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string, TotalRecordCount: int, InvalidRecordCount: int> {
+]: any -> oneof<record<BatchPredictionId: string, MLModelId: string, BatchPredictionDataSourceId: string, InputDataLocationS3: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, OutputUri: string, LogUri: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string, TotalRecordCount: int, InvalidRecordCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1243,7 +1262,7 @@ export def "get-data-source" [
   --x-amz-target: string@x-amz-target-completer-20 # required
   data_source_id: string # The ID assigned to the DataSource at creation.
   --verbose: oneof<nothing, bool> # Specifies whether a describe operation should return exhaustive or abbreviated information.
-]: any -> record<DataSourceId: string, DataLocationS3: string, DataRearrangement: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, DataSizeInBytes: int, NumberOfFiles: int, Name: string, Status: string, LogUri: string, Message: string, RedshiftMetadata: record<RedshiftDatabase: record<DatabaseName: string, ClusterIdentifier: string>, DatabaseUserName: string, SelectSqlQuery: string>, RDSMetadata: record<Database: record<InstanceIdentifier: string, DatabaseName: string>, DatabaseUserName: string, SelectSqlQuery: string, ResourceRole: string, ServiceRole: string, DataPipelineId: string>, RoleARN: string, ComputeStatistics: bool, ComputeTime: int, FinishedAt: string, StartedAt: string, DataSourceSchema: string> {
+]: any -> oneof<record<DataSourceId: string, DataLocationS3: string, DataRearrangement: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, DataSizeInBytes: int, NumberOfFiles: int, Name: string, Status: string, LogUri: string, Message: string, RedshiftMetadata: record<RedshiftDatabase: record<DatabaseName: string, ClusterIdentifier: string>, DatabaseUserName: string, SelectSqlQuery: string>, RDSMetadata: record<Database: record<InstanceIdentifier: string, DatabaseName: string>, DatabaseUserName: string, SelectSqlQuery: string, ResourceRole: string, ServiceRole: string, DataPipelineId: string>, RoleARN: string, ComputeStatistics: bool, ComputeTime: int, FinishedAt: string, StartedAt: string, DataSourceSchema: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1292,7 +1311,7 @@ export def "get-evaluation" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   evaluation_id: string # The ID of the Evaluation to retrieve. The evaluation of each MLModel is recorded and cataloged. The ID provides the means to access the information.
-]: any -> record<EvaluationId: string, MLModelId: string, EvaluationDataSourceId: string, InputDataLocationS3: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, PerformanceMetrics: record<Properties: record>, LogUri: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string> {
+]: any -> oneof<record<EvaluationId: string, MLModelId: string, EvaluationDataSourceId: string, InputDataLocationS3: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, PerformanceMetrics: record<Properties: record>, LogUri: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1342,7 +1361,7 @@ export def "get-ml-model" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   ml_model_id: string # The ID assigned to the MLModel at creation.
   --verbose: oneof<nothing, bool> # Specifies whether a describe operation should return exhaustive or abbreviated information.
-]: any -> record<MLModelId: string, TrainingDataSourceId: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, SizeInBytes: int, EndpointInfo: record<PeakRequestsPerSecond: int, CreatedAt: string, EndpointUrl: string, EndpointStatus: string>, TrainingParameters: record, InputDataLocationS3: string, MLModelType: string, ScoreThreshold: float, ScoreThresholdLastUpdatedAt: string, LogUri: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string, Recipe: string, Schema: string> {
+]: any -> oneof<record<MLModelId: string, TrainingDataSourceId: string, CreatedByIamUser: string, CreatedAt: string, LastUpdatedAt: string, Name: string, Status: string, SizeInBytes: int, EndpointInfo: record<PeakRequestsPerSecond: int, CreatedAt: string, EndpointUrl: string, EndpointStatus: string>, TrainingParameters: record, InputDataLocationS3: string, MLModelType: string, ScoreThreshold: float, ScoreThresholdLastUpdatedAt: string, LogUri: string, Message: string, ComputeTime: int, FinishedAt: string, StartedAt: string, Recipe: string, Schema: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1393,7 +1412,7 @@ export def "predict" [
   ml_model_id: string # A unique identifier of the MLModel.
   record: record # A map of variable name-value pairs that represent an observation.
   predict_endpoint: string
-]: any -> record<Prediction: record<predictedLabel: string, predictedValue: float, predictedScores: record, details: record>> {
+]: any -> oneof<record<Prediction: record<predictedLabel: string, predictedValue: float, predictedScores: record, details: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1443,7 +1462,7 @@ export def "update-batch-prediction" [
   --x-amz-target: string@x-amz-target-completer-24 # required
   batch_prediction_id: string # The ID assigned to the BatchPrediction during creation.
   batch_prediction_name: string # A user-supplied name or description of the Amazon ML resource.
-]: any -> record<BatchPredictionId: string> {
+]: any -> oneof<record<BatchPredictionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1493,7 +1512,7 @@ export def "update-data-source" [
   --x-amz-target: string@x-amz-target-completer-25 # required
   data_source_id: string # The ID assigned to the DataSource during creation.
   data_source_name: string # A user-supplied name or description of the Amazon ML resource.
-]: any -> record<DataSourceId: string> {
+]: any -> oneof<record<DataSourceId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1543,7 +1562,7 @@ export def "update-evaluation" [
   --x-amz-target: string@x-amz-target-completer-26 # required
   evaluation_id: string # The ID assigned to the Evaluation during creation.
   evaluation_name: string # A user-supplied name or description of the Amazon ML resource.
-]: any -> record<EvaluationId: string> {
+]: any -> oneof<record<EvaluationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1594,7 +1613,7 @@ export def "update-ml-model" [
   ml_model_id: string # The ID assigned to the MLModel during creation.
   --ml-model-name: string # A user-supplied name or description of the Amazon ML resource.
   --score-threshold: float # The ScoreThreshold used in binary classification MLModel that marks the boundary between a positive prediction and a negative prediction. Output values greater than or equal to the ScoreThreshold receive a positive result from the MLModel, such as true. Output values less than the ScoreThreshold receive a negative response from the MLModel, such as false. (format: float)
-]: any -> record<MLModelId: string> {
+]: any -> oneof<record<MLModelId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

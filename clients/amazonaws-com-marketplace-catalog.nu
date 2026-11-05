@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -118,9 +142,9 @@ def ownership-type-completer [] { ["SELF" "SHARED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-change-set" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["cancel-change-set" "delete-resource-policy" "describe-change-set" "describe-entity" "get-resource-policy" "list-change-sets" "list-entities" "list-tags-for-resource" "put-resource-policy" "start-change-set" "tag-resource" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +185,7 @@ export def "cancel-change-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ChangeSetId: string, ChangeSetArn: string> {
+]: nothing -> oneof<record<ChangeSetId: string, ChangeSetArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($catalog == null) { error make --unspanned { msg: "required query parameter 'catalog' missing: pass --catalog" } }
@@ -208,7 +232,7 @@ export def "delete-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
@@ -255,7 +279,7 @@ export def "describe-change-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ChangeSetId: string, ChangeSetArn: string, ChangeSetName: string, StartTime: string, EndTime: string, Status: string, FailureCode: string, FailureDescription: string, ChangeSet: table<ChangeType: string, Entity: record, Details: string, ErrorDetailList: list, ChangeName: string>> {
+]: nothing -> oneof<record<ChangeSetId: string, ChangeSetArn: string, ChangeSetName: string, StartTime: string, EndTime: string, Status: string, FailureCode: string, FailureDescription: string, ChangeSet: table<ChangeType: string, Entity: record, Details: string, ErrorDetailList: list, ChangeName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($catalog == null) { error make --unspanned { msg: "required query parameter 'catalog' missing: pass --catalog" } }
@@ -303,7 +327,7 @@ export def "describe-entity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EntityType: string, EntityIdentifier: string, EntityArn: string, LastModifiedDate: string, Details: string> {
+]: nothing -> oneof<record<EntityType: string, EntityIdentifier: string, EntityArn: string, LastModifiedDate: string, Details: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($catalog == null) { error make --unspanned { msg: "required query parameter 'catalog' missing: pass --catalog" } }
@@ -350,7 +374,7 @@ export def "get-resource-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Policy: string> {
+]: nothing -> oneof<record<Policy: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
@@ -378,8 +402,6 @@ export def "get-resource-policy" [
 #
 # POST /ListChangeSets
 # operationId: ListChangeSets
-# --FilterList item shape: {Name?: string, ValueList?: list<string>}
-# --Sort shape: {SortBy?: string, SortOrder?: "ASCENDING"|"DESCENDING"}
 export def "list-change-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,7 +426,7 @@ export def "list-change-sets" [
   --sort: record # An object that contains two attributes, SortBy and SortOrder. — shape: {SortBy?: string, SortOrder?: "ASCENDING"|"DESCENDING"}
   --max-results-body: int # The maximum number of results returned by a single call. This value must be provided in the next call to retrieve the next set of results. By default, this value is 20. (body field)
   --next-token-body: string # The token value retrieved from a previous call to access the next page of results. (body field)
-]: any -> record<ChangeSetSummaryList: table<ChangeSetId: string, ChangeSetArn: string, ChangeSetName: string, StartTime: string, EndTime: string, Status: string, EntityIdList: list, FailureCode: string>, NextToken: string> {
+]: any -> oneof<record<ChangeSetSummaryList: table<ChangeSetId: string, ChangeSetArn: string, ChangeSetName: string, StartTime: string, EndTime: string, Status: string, EntityIdList: list, FailureCode: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -434,8 +456,6 @@ export def "list-change-sets" [
 #
 # POST /ListEntities
 # operationId: ListEntities
-# --FilterList item shape: {Name?: string, ValueList?: list<string>}
-# --Sort shape: {SortBy?: string, SortOrder?: "ASCENDING"|"DESCENDING"}
 export def "list-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +482,7 @@ export def "list-entities" [
   --next-token-body: string # The value of the next token, if it exists. Null if there are no more results. (body field)
   --max-results-body: int # Specifies the upper limit of the elements on a single page. If a value isn't provided, the default value is 20. (body field)
   --ownership-type: string@ownership-type-completer
-]: any -> record<EntitySummaryList: table<Name: string, EntityType: string, EntityId: string, EntityArn: string, LastModifiedDate: string, Visibility: string>, NextToken: string> {
+]: any -> oneof<record<EntitySummaryList: table<Name: string, EntityType: string, EntityId: string, EntityArn: string, LastModifiedDate: string, Visibility: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -510,7 +530,7 @@ export def "list-tags-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   resource_arn: string # Required. The Amazon Resource Name (ARN) associated with the resource you want to list tags on.
-]: any -> record<ResourceArn: string, Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<ResourceArn: string, Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -558,7 +578,7 @@ export def "put-resource-policy" [
   --x-amz-signed-headers: string
   resource_arn: string # The Amazon Resource Name (ARN) of the Entity resource you want to associate with a resource policy.
   policy: string # The policy document to set; formatted in JSON.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -587,8 +607,6 @@ export def "put-resource-policy" [
 #
 # POST /StartChangeSet
 # operationId: StartChangeSet
-# --ChangeSet item shape: {ChangeType: string, Entity: record, EntityTags?: list, Details: string, ChangeName?: string}
-# --ChangeSetTags item shape: {Key: string, Value: string}
 export def "start-change-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -611,7 +629,7 @@ export def "start-change-set" [
   --change-set-name: string # Optional case sensitive string of up to 100 ASCII characters. The change set name can be used to filter the list of change sets.
   --client-request-token: string # A unique token to identify the request to ensure idempotency.
   --change-set-tags: list # A list of objects specifying each key name and value for the ChangeSetTags property. — item shape: {Key: string, Value: string}
-]: any -> record<ChangeSetId: string, ChangeSetArn: string> {
+]: any -> oneof<record<ChangeSetId: string, ChangeSetArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -640,7 +658,6 @@ export def "start-change-set" [
 #
 # POST /TagResource
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -660,7 +677,7 @@ export def "tag-resource" [
   --x-amz-signed-headers: string
   resource_arn: string # Required. The Amazon Resource Name (ARN) associated with the resource you want to tag.
   tags: list # Required. A list of objects specifying each key name and value. Number of objects allowed: 1-50. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -708,7 +725,7 @@ export def "untag-resource" [
   --x-amz-signed-headers: string
   resource_arn: string # Required. The Amazon Resource Name (ARN) associated with the resource you want to remove the tag from.
   tag_keys: list<string> # Required. A list of key names of tags to be removed. Number of strings allowed: 0-256.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -160,9 +184,9 @@ def action-completer-52 [] { ["StopDBCluster"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-add-source-identifier-to-subscription" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-add-source-identifier-to-subscription" "post-add-source-identifier-to-subscription" "get-add-tags-to-resource" "post-add-tags-to-resource" "get-apply-pending-maintenance-action" "post-apply-pending-maintenance-action" "get-copy-db-cluster-parameter-group" "post-copy-db-cluster-parameter-group" "get-copy-db-cluster-snapshot" "post-copy-db-cluster-snapshot" "get-create-db-cluster" "post-create-db-cluster" "get-create-db-cluster-parameter-group" "post-create-db-cluster-parameter-group" "get-create-db-cluster-snapshot" "post-create-db-cluster-snapshot" "get-create-db-instance" "post-create-db-instance" "get-create-db-subnet-group" "post-create-db-subnet-group" "get-create-event-subscription" "post-create-event-subscription" "get-create-global-cluster" "post-create-global-cluster" "get-delete-db-cluster" "post-delete-db-cluster" "get-delete-db-cluster-parameter-group" "post-delete-db-cluster-parameter-group" "get-delete-db-cluster-snapshot" "post-delete-db-cluster-snapshot" "get-delete-db-instance" "post-delete-db-instance" "get-delete-db-subnet-group" "post-delete-db-subnet-group" "get-delete-event-subscription" "post-delete-event-subscription" "get-delete-global-cluster" "post-delete-global-cluster" "get-describe-certificates" "post-describe-certificates" "get-describe-db-cluster-parameter-groups" "post-describe-db-cluster-parameter-groups" "get-describe-db-cluster-parameters" "post-describe-db-cluster-parameters" "get-describe-db-cluster-snapshot-attributes" "post-describe-db-cluster-snapshot-attributes" "get-describe-db-cluster-snapshots" "post-describe-db-cluster-snapshots" "get-describe-db-clusters" "post-describe-db-clusters" "get-describe-db-engine-versions" "post-describe-db-engine-versions" "get-describe-db-instances" "post-describe-db-instances" "get-describe-db-subnet-groups" "post-describe-db-subnet-groups" "get-describe-engine-default-cluster-parameters" "post-describe-engine-default-cluster-parameters" "get-describe-event-categories" "post-describe-event-categories" "get-describe-event-subscriptions" "post-describe-event-subscriptions" "get-describe-events" "post-describe-events" "get-describe-global-clusters" "post-describe-global-clusters" "get-describe-orderable-db-instance-options" "post-describe-orderable-db-instance-options" "get-describe-pending-maintenance-actions" "post-describe-pending-maintenance-actions" "get-failover-db-cluster" "post-failover-db-cluster" "get-list-tags-for-resource" "post-list-tags-for-resource" "get-modify-db-cluster" "post-modify-db-cluster" "get-modify-db-cluster-parameter-group" "post-modify-db-cluster-parameter-group" "get-modify-db-cluster-snapshot-attribute" "post-modify-db-cluster-snapshot-attribute" "get-modify-db-instance" "post-modify-db-instance" "get-modify-db-subnet-group" "post-modify-db-subnet-group" "get-modify-event-subscription" "post-modify-event-subscription" "get-modify-global-cluster" "post-modify-global-cluster" "get-reboot-db-instance" "post-reboot-db-instance" "get-remove-from-global-cluster" "post-remove-from-global-cluster" "get-remove-source-identifier-from-subscription" "post-remove-source-identifier-from-subscription" "get-remove-tags-from-resource" "post-remove-tags-from-resource" "get-reset-db-cluster-parameter-group" "post-reset-db-cluster-parameter-group" "get-restore-db-cluster-from-snapshot" "post-restore-db-cluster-from-snapshot" "get-restore-db-cluster-to-point-in-time" "post-restore-db-cluster-to-point-in-time" "get-start-db-cluster" "post-start-db-cluster" "get-stop-db-cluster" "post-stop-db-cluster" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -205,7 +229,7 @@ export def "get-add-source-identifier-to-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
+]: nothing -> oneof<record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_name == null) { error make --unspanned { msg: "required query parameter 'SubscriptionName' missing: pass --subscription-name" } }
@@ -256,7 +280,7 @@ export def "post-add-source-identifier-to-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
+]: any -> oneof<record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -414,7 +438,7 @@ export def "get-apply-pending-maintenance-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResourcePendingMaintenanceActions: record<ResourceIdentifier: string, PendingMaintenanceActionDetails: list<record>>> {
+]: nothing -> oneof<record<ResourcePendingMaintenanceActions: record<ResourceIdentifier: string, PendingMaintenanceActionDetails: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_identifier == null) { error make --unspanned { msg: "required query parameter 'ResourceIdentifier' missing: pass --resource-identifier" } }
@@ -466,7 +490,7 @@ export def "post-apply-pending-maintenance-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ResourcePendingMaintenanceActions: record<ResourceIdentifier: string, PendingMaintenanceActionDetails: list<record>>> {
+]: any -> oneof<record<ResourcePendingMaintenanceActions: record<ResourceIdentifier: string, PendingMaintenanceActionDetails: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -521,7 +545,7 @@ export def "get-copy-db-cluster-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>> {
+]: nothing -> oneof<record<DBClusterParameterGroup: record<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_db_cluster_parameter_group_identifier == null) { error make --unspanned { msg: "required query parameter 'SourceDBClusterParameterGroupIdentifier' missing: pass --source-db-cluster-parameter-group-identifier" } }
@@ -573,7 +597,7 @@ export def "post-copy-db-cluster-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>> {
+]: any -> oneof<record<DBClusterParameterGroup: record<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -630,7 +654,7 @@ export def "get-copy-db-cluster-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
+]: nothing -> oneof<record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_db_cluster_snapshot_identifier == null) { error make --unspanned { msg: "required query parameter 'SourceDBClusterSnapshotIdentifier' missing: pass --source-db-cluster-snapshot-identifier" } }
@@ -681,7 +705,7 @@ export def "post-copy-db-cluster-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
+]: any -> oneof<record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -752,7 +776,7 @@ export def "get-create-db-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: nothing -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
@@ -803,7 +827,7 @@ export def "post-create-db-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: any -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -858,7 +882,7 @@ export def "get-create-db-cluster-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>> {
+]: nothing -> oneof<record<DBClusterParameterGroup: record<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_cluster_parameter_group_name == null) { error make --unspanned { msg: "required query parameter 'DBClusterParameterGroupName' missing: pass --db-cluster-parameter-group-name" } }
@@ -910,7 +934,7 @@ export def "post-create-db-cluster-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>> {
+]: any -> oneof<record<DBClusterParameterGroup: record<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -964,7 +988,7 @@ export def "get-create-db-cluster-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
+]: nothing -> oneof<record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_cluster_snapshot_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterSnapshotIdentifier' missing: pass --db-cluster-snapshot-identifier" } }
@@ -1015,7 +1039,7 @@ export def "post-create-db-cluster-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
+]: any -> oneof<record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1078,7 +1102,7 @@ export def "get-create-db-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
+]: nothing -> oneof<record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_instance_identifier == null) { error make --unspanned { msg: "required query parameter 'DBInstanceIdentifier' missing: pass --db-instance-identifier" } }
@@ -1131,7 +1155,7 @@ export def "post-create-db-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
+]: any -> oneof<record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1186,7 +1210,7 @@ export def "get-create-db-subnet-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list<record>, DBSubnetGroupArn: string>> {
+]: nothing -> oneof<record<DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list<record>, DBSubnetGroupArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_subnet_group_name == null) { error make --unspanned { msg: "required query parameter 'DBSubnetGroupName' missing: pass --db-subnet-group-name" } }
@@ -1238,7 +1262,7 @@ export def "post-create-db-subnet-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list<record>, DBSubnetGroupArn: string>> {
+]: any -> oneof<record<DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list<record>, DBSubnetGroupArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1296,7 +1320,7 @@ export def "get-create-event-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
+]: nothing -> oneof<record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_name == null) { error make --unspanned { msg: "required query parameter 'SubscriptionName' missing: pass --subscription-name" } }
@@ -1347,7 +1371,7 @@ export def "post-create-event-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
+]: any -> oneof<record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1405,7 +1429,7 @@ export def "get-create-global-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
+]: nothing -> oneof<record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'GlobalClusterIdentifier' missing: pass --global-cluster-identifier" } }
@@ -1455,7 +1479,7 @@ export def "post-create-global-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
+]: any -> oneof<record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1509,7 +1533,7 @@ export def "get-delete-db-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: nothing -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
@@ -1559,7 +1583,7 @@ export def "post-delete-db-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: any -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1713,7 +1737,7 @@ export def "get-delete-db-cluster-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
+]: nothing -> oneof<record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_cluster_snapshot_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterSnapshotIdentifier' missing: pass --db-cluster-snapshot-identifier" } }
@@ -1763,7 +1787,7 @@ export def "post-delete-db-cluster-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
+]: any -> oneof<record<DBClusterSnapshot: record<AvailabilityZones: list<string>, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1815,7 +1839,7 @@ export def "get-delete-db-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
+]: nothing -> oneof<record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_instance_identifier == null) { error make --unspanned { msg: "required query parameter 'DBInstanceIdentifier' missing: pass --db-instance-identifier" } }
@@ -1865,7 +1889,7 @@ export def "post-delete-db-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
+]: any -> oneof<record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2019,7 +2043,7 @@ export def "get-delete-event-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
+]: nothing -> oneof<record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_name == null) { error make --unspanned { msg: "required query parameter 'SubscriptionName' missing: pass --subscription-name" } }
@@ -2069,7 +2093,7 @@ export def "post-delete-event-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
+]: any -> oneof<record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2121,7 +2145,7 @@ export def "get-delete-global-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
+]: nothing -> oneof<record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'GlobalClusterIdentifier' missing: pass --global-cluster-identifier" } }
@@ -2171,7 +2195,7 @@ export def "post-delete-global-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
+]: any -> oneof<record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2226,7 +2250,7 @@ export def "get-describe-certificates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Certificates: table<CertificateIdentifier: string, CertificateType: string, Thumbprint: string, ValidFrom: string, ValidTill: string, CertificateArn: string>, Marker: string> {
+]: nothing -> oneof<record<Certificates: table<CertificateIdentifier: string, CertificateType: string, Thumbprint: string, ValidFrom: string, ValidTill: string, CertificateArn: string>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeCertificates")
@@ -2277,7 +2301,7 @@ export def "post-describe-certificates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Certificates: table<CertificateIdentifier: string, CertificateType: string, Thumbprint: string, ValidFrom: string, ValidTill: string, CertificateArn: string>, Marker: string> {
+]: any -> oneof<record<Certificates: table<CertificateIdentifier: string, CertificateType: string, Thumbprint: string, ValidFrom: string, ValidTill: string, CertificateArn: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2332,7 +2356,7 @@ export def "get-describe-db-cluster-parameter-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: string, DBClusterParameterGroups: table<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>> {
+]: nothing -> oneof<record<Marker: string, DBClusterParameterGroups: table<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeDBClusterParameterGroups")
@@ -2383,7 +2407,7 @@ export def "post-describe-db-cluster-parameter-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: string, DBClusterParameterGroups: table<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>> {
+]: any -> oneof<record<Marker: string, DBClusterParameterGroups: table<DBClusterParameterGroupName: string, DBParameterGroupFamily: string, Description: string, DBClusterParameterGroupArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2439,7 +2463,7 @@ export def "get-describe-db-cluster-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Parameters: table<ParameterName: string, ParameterValue: string, Description: string, Source: string, ApplyType: string, DataType: string, AllowedValues: string, IsModifiable: bool, MinimumEngineVersion: string, ApplyMethod: string>, Marker: string> {
+]: nothing -> oneof<record<Parameters: table<ParameterName: string, ParameterValue: string, Description: string, Source: string, ApplyType: string, DataType: string, AllowedValues: string, IsModifiable: bool, MinimumEngineVersion: string, ApplyMethod: string>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_cluster_parameter_group_name == null) { error make --unspanned { msg: "required query parameter 'DBClusterParameterGroupName' missing: pass --db-cluster-parameter-group-name" } }
@@ -2491,7 +2515,7 @@ export def "post-describe-db-cluster-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Parameters: table<ParameterName: string, ParameterValue: string, Description: string, Source: string, ApplyType: string, DataType: string, AllowedValues: string, IsModifiable: bool, MinimumEngineVersion: string, ApplyMethod: string>, Marker: string> {
+]: any -> oneof<record<Parameters: table<ParameterName: string, ParameterValue: string, Description: string, Source: string, ApplyType: string, DataType: string, AllowedValues: string, IsModifiable: bool, MinimumEngineVersion: string, ApplyMethod: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2543,7 +2567,7 @@ export def "get-describe-db-cluster-snapshot-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: string, DBClusterSnapshotAttributes: list<record>>> {
+]: nothing -> oneof<record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: string, DBClusterSnapshotAttributes: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_cluster_snapshot_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterSnapshotIdentifier' missing: pass --db-cluster-snapshot-identifier" } }
@@ -2593,7 +2617,7 @@ export def "post-describe-db-cluster-snapshot-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: string, DBClusterSnapshotAttributes: list<record>>> {
+]: any -> oneof<record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: string, DBClusterSnapshotAttributes: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2652,7 +2676,7 @@ export def "get-describe-db-cluster-snapshots" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: string, DBClusterSnapshots: table<AvailabilityZones: list, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
+]: nothing -> oneof<record<Marker: string, DBClusterSnapshots: table<AvailabilityZones: list, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeDBClusterSnapshots")
@@ -2703,7 +2727,7 @@ export def "post-describe-db-cluster-snapshots" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: string, DBClusterSnapshots: table<AvailabilityZones: list, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>> {
+]: any -> oneof<record<Marker: string, DBClusterSnapshots: table<AvailabilityZones: list, DBClusterSnapshotIdentifier: string, DBClusterIdentifier: string, SnapshotCreateTime: string, Engine: string, Status: string, Port: int, VpcId: string, ClusterCreateTime: string, MasterUsername: string, EngineVersion: string, SnapshotType: string, PercentProgress: int, StorageEncrypted: bool, KmsKeyId: string, DBClusterSnapshotArn: string, SourceDBClusterSnapshotArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2758,7 +2782,7 @@ export def "get-describe-db-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: string, DBClusters: table<AvailabilityZones: list, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list, DBClusterMembers: list, VpcSecurityGroups: list, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list, DeletionProtection: bool>> {
+]: nothing -> oneof<record<Marker: string, DBClusters: table<AvailabilityZones: list, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list, DBClusterMembers: list, VpcSecurityGroups: list, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list, DeletionProtection: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeDBClusters")
@@ -2809,7 +2833,7 @@ export def "post-describe-db-clusters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: string, DBClusters: table<AvailabilityZones: list, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list, DBClusterMembers: list, VpcSecurityGroups: list, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list, DeletionProtection: bool>> {
+]: any -> oneof<record<Marker: string, DBClusters: table<AvailabilityZones: list, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list, DBClusterMembers: list, VpcSecurityGroups: list, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list, DeletionProtection: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2869,7 +2893,7 @@ export def "get-describe-db-engine-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: string, DBEngineVersions: table<Engine: string, EngineVersion: string, DBParameterGroupFamily: string, DBEngineDescription: string, DBEngineVersionDescription: string, ValidUpgradeTarget: list, ExportableLogTypes: list, SupportsLogExportsToCloudwatchLogs: bool>> {
+]: nothing -> oneof<record<Marker: string, DBEngineVersions: table<Engine: string, EngineVersion: string, DBParameterGroupFamily: string, DBEngineDescription: string, DBEngineVersionDescription: string, ValidUpgradeTarget: list, ExportableLogTypes: list, SupportsLogExportsToCloudwatchLogs: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeDBEngineVersions")
@@ -2920,7 +2944,7 @@ export def "post-describe-db-engine-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: string, DBEngineVersions: table<Engine: string, EngineVersion: string, DBParameterGroupFamily: string, DBEngineDescription: string, DBEngineVersionDescription: string, ValidUpgradeTarget: list, ExportableLogTypes: list, SupportsLogExportsToCloudwatchLogs: bool>> {
+]: any -> oneof<record<Marker: string, DBEngineVersions: table<Engine: string, EngineVersion: string, DBParameterGroupFamily: string, DBEngineDescription: string, DBEngineVersionDescription: string, ValidUpgradeTarget: list, ExportableLogTypes: list, SupportsLogExportsToCloudwatchLogs: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2975,7 +2999,7 @@ export def "get-describe-db-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: string, DBInstances: table<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list, AvailabilityZone: string, DBSubnetGroup: record, PreferredMaintenanceWindow: string, PendingModifiedValues: record, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list>> {
+]: nothing -> oneof<record<Marker: string, DBInstances: table<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list, AvailabilityZone: string, DBSubnetGroup: record, PreferredMaintenanceWindow: string, PendingModifiedValues: record, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeDBInstances")
@@ -3026,7 +3050,7 @@ export def "post-describe-db-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: string, DBInstances: table<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list, AvailabilityZone: string, DBSubnetGroup: record, PreferredMaintenanceWindow: string, PendingModifiedValues: record, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list>> {
+]: any -> oneof<record<Marker: string, DBInstances: table<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list, AvailabilityZone: string, DBSubnetGroup: record, PreferredMaintenanceWindow: string, PendingModifiedValues: record, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3081,7 +3105,7 @@ export def "get-describe-db-subnet-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: string, DBSubnetGroups: table<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>> {
+]: nothing -> oneof<record<Marker: string, DBSubnetGroups: table<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeDBSubnetGroups")
@@ -3132,7 +3156,7 @@ export def "post-describe-db-subnet-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: string, DBSubnetGroups: table<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>> {
+]: any -> oneof<record<Marker: string, DBSubnetGroups: table<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3187,7 +3211,7 @@ export def "get-describe-engine-default-cluster-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EngineDefaults: record<DBParameterGroupFamily: string, Marker: string, Parameters: list<record>>> {
+]: nothing -> oneof<record<EngineDefaults: record<DBParameterGroupFamily: string, Marker: string, Parameters: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_parameter_group_family == null) { error make --unspanned { msg: "required query parameter 'DBParameterGroupFamily' missing: pass --db-parameter-group-family" } }
@@ -3237,7 +3261,7 @@ export def "post-describe-engine-default-cluster-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EngineDefaults: record<DBParameterGroupFamily: string, Marker: string, Parameters: list<record>>> {
+]: any -> oneof<record<EngineDefaults: record<DBParameterGroupFamily: string, Marker: string, Parameters: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3290,7 +3314,7 @@ export def "get-describe-event-categories" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventCategoriesMapList: table<SourceType: string, EventCategories: list>> {
+]: nothing -> oneof<record<EventCategoriesMapList: table<SourceType: string, EventCategories: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeEventCategories")
@@ -3339,7 +3363,7 @@ export def "post-describe-event-categories" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EventCategoriesMapList: table<SourceType: string, EventCategories: list>> {
+]: any -> oneof<record<EventCategoriesMapList: table<SourceType: string, EventCategories: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3394,7 +3418,7 @@ export def "get-describe-event-subscriptions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: string, EventSubscriptionsList: table<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list, EventCategoriesList: list, Enabled: bool, EventSubscriptionArn: string>> {
+]: nothing -> oneof<record<Marker: string, EventSubscriptionsList: table<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list, EventCategoriesList: list, Enabled: bool, EventSubscriptionArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeEventSubscriptions")
@@ -3445,7 +3469,7 @@ export def "post-describe-event-subscriptions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: string, EventSubscriptionsList: table<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list, EventCategoriesList: list, Enabled: bool, EventSubscriptionArn: string>> {
+]: any -> oneof<record<Marker: string, EventSubscriptionsList: table<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list, EventCategoriesList: list, Enabled: bool, EventSubscriptionArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3505,7 +3529,7 @@ export def "get-describe-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: string, Events: table<SourceIdentifier: string, SourceType: string, Message: string, EventCategories: list, Date: string, SourceArn: string>> {
+]: nothing -> oneof<record<Marker: string, Events: table<SourceIdentifier: string, SourceType: string, Message: string, EventCategories: list, Date: string, SourceArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeEvents")
@@ -3556,7 +3580,7 @@ export def "post-describe-events" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: string, Events: table<SourceIdentifier: string, SourceType: string, Message: string, EventCategories: list, Date: string, SourceArn: string>> {
+]: any -> oneof<record<Marker: string, Events: table<SourceIdentifier: string, SourceType: string, Message: string, EventCategories: list, Date: string, SourceArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3611,7 +3635,7 @@ export def "get-describe-global-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Marker: string, GlobalClusters: table<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list>> {
+]: nothing -> oneof<record<Marker: string, GlobalClusters: table<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeGlobalClusters")
@@ -3662,7 +3686,7 @@ export def "post-describe-global-clusters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Marker: string, GlobalClusters: table<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list>> {
+]: any -> oneof<record<Marker: string, GlobalClusters: table<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3721,7 +3745,7 @@ export def "get-describe-orderable-db-instance-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<OrderableDBInstanceOptions: table<Engine: string, EngineVersion: string, DBInstanceClass: string, LicenseModel: string, AvailabilityZones: list, Vpc: bool>, Marker: string> {
+]: nothing -> oneof<record<OrderableDBInstanceOptions: table<Engine: string, EngineVersion: string, DBInstanceClass: string, LicenseModel: string, AvailabilityZones: list, Vpc: bool>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($engine == null) { error make --unspanned { msg: "required query parameter 'Engine' missing: pass --engine" } }
@@ -3773,7 +3797,7 @@ export def "post-describe-orderable-db-instance-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<OrderableDBInstanceOptions: table<Engine: string, EngineVersion: string, DBInstanceClass: string, LicenseModel: string, AvailabilityZones: list, Vpc: bool>, Marker: string> {
+]: any -> oneof<record<OrderableDBInstanceOptions: table<Engine: string, EngineVersion: string, DBInstanceClass: string, LicenseModel: string, AvailabilityZones: list, Vpc: bool>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3828,7 +3852,7 @@ export def "get-describe-pending-maintenance-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PendingMaintenanceActions: table<ResourceIdentifier: string, PendingMaintenanceActionDetails: list>, Marker: string> {
+]: nothing -> oneof<record<PendingMaintenanceActions: table<ResourceIdentifier: string, PendingMaintenanceActionDetails: list>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribePendingMaintenanceActions")
@@ -3879,7 +3903,7 @@ export def "post-describe-pending-maintenance-actions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PendingMaintenanceActions: table<ResourceIdentifier: string, PendingMaintenanceActionDetails: list>, Marker: string> {
+]: any -> oneof<record<PendingMaintenanceActions: table<ResourceIdentifier: string, PendingMaintenanceActionDetails: list>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3932,7 +3956,7 @@ export def "get-failover-db-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: nothing -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "FailoverDBCluster")
@@ -3981,7 +4005,7 @@ export def "post-failover-db-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: any -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4034,7 +4058,7 @@ export def "get-list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TagList: table<Key: string, Value: string>> {
+]: nothing -> oneof<record<TagList: table<Key: string, Value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_name == null) { error make --unspanned { msg: "required query parameter 'ResourceName' missing: pass --resource-name" } }
@@ -4084,7 +4108,7 @@ export def "post-list-tags-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TagList: table<Key: string, Value: string>> {
+]: any -> oneof<record<TagList: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4148,7 +4172,7 @@ export def "get-modify-db-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: nothing -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
@@ -4198,7 +4222,7 @@ export def "post-modify-db-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: any -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4251,7 +4275,7 @@ export def "get-modify-db-cluster-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterParameterGroupName: string> {
+]: nothing -> oneof<record<DBClusterParameterGroupName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_cluster_parameter_group_name == null) { error make --unspanned { msg: "required query parameter 'DBClusterParameterGroupName' missing: pass --db-cluster-parameter-group-name" } }
@@ -4302,7 +4326,7 @@ export def "post-modify-db-cluster-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterParameterGroupName: string> {
+]: any -> oneof<record<DBClusterParameterGroupName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4357,7 +4381,7 @@ export def "get-modify-db-cluster-snapshot-attribute" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: string, DBClusterSnapshotAttributes: list<record>>> {
+]: nothing -> oneof<record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: string, DBClusterSnapshotAttributes: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_cluster_snapshot_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterSnapshotIdentifier' missing: pass --db-cluster-snapshot-identifier" } }
@@ -4408,7 +4432,7 @@ export def "post-modify-db-cluster-snapshot-attribute" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: string, DBClusterSnapshotAttributes: list<record>>> {
+]: any -> oneof<record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: string, DBClusterSnapshotAttributes: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4470,7 +4494,7 @@ export def "get-modify-db-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
+]: nothing -> oneof<record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_instance_identifier == null) { error make --unspanned { msg: "required query parameter 'DBInstanceIdentifier' missing: pass --db-instance-identifier" } }
@@ -4520,7 +4544,7 @@ export def "post-modify-db-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
+]: any -> oneof<record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4574,7 +4598,7 @@ export def "get-modify-db-subnet-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list<record>, DBSubnetGroupArn: string>> {
+]: nothing -> oneof<record<DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list<record>, DBSubnetGroupArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_subnet_group_name == null) { error make --unspanned { msg: "required query parameter 'DBSubnetGroupName' missing: pass --db-subnet-group-name" } }
@@ -4625,7 +4649,7 @@ export def "post-modify-db-subnet-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list<record>, DBSubnetGroupArn: string>> {
+]: any -> oneof<record<DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list<record>, DBSubnetGroupArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4681,7 +4705,7 @@ export def "get-modify-event-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
+]: nothing -> oneof<record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_name == null) { error make --unspanned { msg: "required query parameter 'SubscriptionName' missing: pass --subscription-name" } }
@@ -4731,7 +4755,7 @@ export def "post-modify-event-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
+]: any -> oneof<record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4785,7 +4809,7 @@ export def "get-modify-global-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
+]: nothing -> oneof<record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'GlobalClusterIdentifier' missing: pass --global-cluster-identifier" } }
@@ -4835,7 +4859,7 @@ export def "post-modify-global-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
+]: any -> oneof<record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4888,7 +4912,7 @@ export def "get-reboot-db-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
+]: nothing -> oneof<record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_instance_identifier == null) { error make --unspanned { msg: "required query parameter 'DBInstanceIdentifier' missing: pass --db-instance-identifier" } }
@@ -4938,7 +4962,7 @@ export def "post-reboot-db-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>> {
+]: any -> oneof<record<DBInstance: record<DBInstanceIdentifier: string, DBInstanceClass: string, Engine: string, DBInstanceStatus: string, Endpoint: record<Address: string, Port: int, HostedZoneId: string>, InstanceCreateTime: string, PreferredBackupWindow: string, BackupRetentionPeriod: int, VpcSecurityGroups: list<record>, AvailabilityZone: string, DBSubnetGroup: record<DBSubnetGroupName: string, DBSubnetGroupDescription: string, VpcId: string, SubnetGroupStatus: string, Subnets: list, DBSubnetGroupArn: string>, PreferredMaintenanceWindow: string, PendingModifiedValues: record<DBInstanceClass: string, AllocatedStorage: int, MasterUserPassword: string, Port: int, BackupRetentionPeriod: int, MultiAZ: bool, EngineVersion: string, LicenseModel: string, Iops: int, DBInstanceIdentifier: string, StorageType: string, CACertificateIdentifier: string, DBSubnetGroupName: string, PendingCloudwatchLogsExports: record>, LatestRestorableTime: string, EngineVersion: string, AutoMinorVersionUpgrade: bool, PubliclyAccessible: bool, StatusInfos: list<record>, DBClusterIdentifier: string, StorageEncrypted: bool, KmsKeyId: string, DbiResourceId: string, CACertificateIdentifier: string, CopyTagsToSnapshot: bool, PromotionTier: int, DBInstanceArn: string, EnabledCloudwatchLogsExports: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4991,7 +5015,7 @@ export def "get-remove-from-global-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
+]: nothing -> oneof<record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'GlobalClusterIdentifier' missing: pass --global-cluster-identifier" } }
@@ -5042,7 +5066,7 @@ export def "post-remove-from-global-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>> {
+]: any -> oneof<record<GlobalCluster: record<GlobalClusterIdentifier: string, GlobalClusterResourceId: string, GlobalClusterArn: string, Status: string, Engine: string, EngineVersion: string, DatabaseName: string, StorageEncrypted: bool, DeletionProtection: bool, GlobalClusterMembers: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5095,7 +5119,7 @@ export def "get-remove-source-identifier-from-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
+]: nothing -> oneof<record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_name == null) { error make --unspanned { msg: "required query parameter 'SubscriptionName' missing: pass --subscription-name" } }
@@ -5146,7 +5170,7 @@ export def "post-remove-source-identifier-from-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>> {
+]: any -> oneof<record<EventSubscription: record<CustomerAwsId: string, CustSubscriptionId: string, SnsTopicArn: string, Status: string, SubscriptionCreationTime: string, SourceType: string, SourceIdsList: list<string>, EventCategoriesList: list<string>, Enabled: bool, EventSubscriptionArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5304,7 +5328,7 @@ export def "get-reset-db-cluster-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBClusterParameterGroupName: string> {
+]: nothing -> oneof<record<DBClusterParameterGroupName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_cluster_parameter_group_name == null) { error make --unspanned { msg: "required query parameter 'DBClusterParameterGroupName' missing: pass --db-cluster-parameter-group-name" } }
@@ -5354,7 +5378,7 @@ export def "post-reset-db-cluster-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBClusterParameterGroupName: string> {
+]: any -> oneof<record<DBClusterParameterGroupName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5418,7 +5442,7 @@ export def "get-restore-db-cluster-from-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: nothing -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
@@ -5470,7 +5494,7 @@ export def "post-restore-db-cluster-from-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: any -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5533,7 +5557,7 @@ export def "get-restore-db-cluster-to-point-in-time" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: nothing -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
@@ -5584,7 +5608,7 @@ export def "post-restore-db-cluster-to-point-in-time" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: any -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5636,7 +5660,7 @@ export def "get-start-db-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: nothing -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
@@ -5686,7 +5710,7 @@ export def "post-start-db-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: any -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5738,7 +5762,7 @@ export def "get-stop-db-cluster" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: nothing -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($db_cluster_identifier == null) { error make --unspanned { msg: "required query parameter 'DBClusterIdentifier' missing: pass --db-cluster-identifier" } }
@@ -5788,7 +5812,7 @@ export def "post-stop-db-cluster" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>> {
+]: any -> oneof<record<DBCluster: record<AvailabilityZones: list<string>, BackupRetentionPeriod: int, DBClusterIdentifier: string, DBClusterParameterGroup: string, DBSubnetGroup: string, Status: string, PercentProgress: string, EarliestRestorableTime: string, Endpoint: string, ReaderEndpoint: string, MultiAZ: bool, Engine: string, EngineVersion: string, LatestRestorableTime: string, Port: int, MasterUsername: string, PreferredBackupWindow: string, PreferredMaintenanceWindow: string, ReplicationSourceIdentifier: string, ReadReplicaIdentifiers: list<string>, DBClusterMembers: list<record>, VpcSecurityGroups: list<record>, HostedZoneId: string, StorageEncrypted: bool, KmsKeyId: string, DbClusterResourceId: string, DBClusterArn: string, AssociatedRoles: list<record>, CloneGroupId: string, ClusterCreateTime: string, EnabledCloudwatchLogsExports: list<string>, DeletionProtection: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "jwt" => { {scheme: $scheme, headers: {"Authorization": $"JWT ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,12 +111,13 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # HEAD — bodyless; default surfaces just the headers on success
 def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url)
+  let resp = http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url
   if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
   $resp | handle-response $allow_errors $full $ok_codes
 }
@@ -168,9 +192,9 @@ def type-completer [] { ["projects" "servers" "users"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auth-jwt-token-auth" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["auth-jwt-token-auth" "auth-jwt-token-refresh" "auth-jwt-token-verify" "oauth-login" "auth-register" "me" "servers-options-sizes-list" "servers-options-server-size-create" "servers-options-server-size-delete" "servers-options-resources-read" "servers-options-server-size-update" "servers-options-server-size-replace" "teams-list" "teams-create" "teams-delete" "teams-read" "teams-update" "teams-replace" "teams-billing-invoices-list" "teams-billing-invoices-read" "teams-billing-invoice-items-list" "teams-billing-invoice-items-read" "teams-billing-subscriptions-list" "teams-billing-subscriptions-create" "teams-billing-subscriptions-delete" "teams-billing-subscriptions-read" "teams-groups-list" "teams-groups-delete" "teams-groups-read" "teams-groups-update" "teams-groups-replace" "teams-groups-add-to-group" "teams-groups-remove-from-group" "users-list" "users-create" "users-delete" "users-read" "users-update" "users-api-key-list" "user-avatar-delete" "user-avatar-get" "user-avatar-update" "user-avatar-set" "users-emails-list" "users-emails-create" "users-emails-delete" "users-emails-read" "users-emails-update" "users-emails-replace" "users-ssh-key-list" "users-ssh-key-reset" "billing-cards-list" "billing-cards-create" "billing-cards-delete" "billing-cards-read" "billing-cards-update" "billing-cards-replace" "billing-invoices-list" "billing-invoices-read" "billing-invoice-items-list" "billing-invoice-items-read" "billing-plans-list" "billing-plans-read" "billing-subscriptions-list" "billing-subscriptions-create" "billing-subscriptions-delete" "billing-subscriptions-read" "notifications-list" "notifications-update-list" "notifications-list-entity" "notifications-update-entity-list" "notification-settings-read" "notification-settings-update" "notification-settings-create" "notification-settings-entity-read" "notification-settings-entity-update" "notification-settings-entity-create" "notification-read" "notification-update" "oauth-applications-list" "oauth-application-create" "oauth-application-delete" "oauth-application-read" "oauth-application-update" "oauth-application-replace" "projects-list" "projects-create" "project-copy-check" "project-copy" "projects-delete" "projects-read" "projects-update" "projects-replace" "projects-collaborators-list" "projects-collaborators-create" "projects-collaborators-delete" "projects-collaborators-read" "projects-collaborators-update" "projects-deployments-list" "projects-deployments-create" "projects-deployment-delete" "projects-deployments-read" "projects-deployments-update" "projects-deployments-replace" "projects-deployments-deploy" "projects-project-files-list" "projects-project-files-create" "projects-project-files-delete" "projects-project-files-read" "projects-project-files-update" "projects-project-files-replace" "projects-servers-list" "projects-servers-create" "projects-servers-statuses" "projects-servers-delete" "projects-servers-read" "projects-servers-update" "projects-servers-replace" "projects-servers-api-key" "projects-servers-auth" "projects-servers-run-stats-create" "projects-servers-run-stats-delete" "projects-servers-run-stats-read" "projects-servers-run-stats-update" "projects-servers-run-stats-replace" "projects-servers-ssh-tunnels-list" "projects-servers-ssh-tunnels-create" "projects-servers-ssh-tunnels-delete" "projects-servers-ssh-tunnels-read" "projects-servers-ssh-tunnels-update" "projects-servers-ssh-tunnels-replace" "projects-servers-start" "projects-servers-stats-delete" "projects-servers-stats-read" "projects-servers-stats-update" "projects-servers-stats-replace" "projects-servers-stop" "service-trigger-list" "service-trigger-create" "service-trigger-delete" "service-trigger-read" "service-trigger-update" "service-trigger-replace" "search" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -205,7 +229,7 @@ export def "auth-jwt-token-auth" [
   --accept: string@accept-completer # Response content type
   password: string # User password.
   username: string # User name.
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -244,7 +268,7 @@ export def "auth-jwt-token-refresh" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body-token: string # Refreshed token.
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -284,7 +308,7 @@ export def "auth-jwt-token-verify" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body-token: string # JSON Web Token (JWT).
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -348,7 +372,6 @@ export def "oauth-login" [
 #
 # POST /auth/register/
 # operationId: auth_register
-# --profile shape: {avatar?: string, bio?: string, company?: string, location?: string, timezone?: string, url?: string}
 export def "auth-register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -366,7 +389,7 @@ export def "auth-register" [
   password: string # User password.
   profile: record # shape: {avatar?: string, bio?: string, company?: string, location?: string, timezone?: string, url?: string}
   username: string # Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
-]: any -> record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string> {
+]: any -> oneof<record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -404,7 +427,7 @@ export def "me" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string> {
+]: nothing -> oneof<record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me" $auth.query)
@@ -442,7 +465,7 @@ export def "servers-options-sizes-list" [
   --limit: string # Set limit when retrieving items.
   --offset: string # Offset when retrieving items.
   --ordering: string # Set order when retrieving items.
-]: nothing -> table<active: bool, cpu: int, id: string, memory: int, name: string> {
+]: nothing -> oneof<table<active: bool, cpu: int, id: string, memory: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
@@ -482,7 +505,7 @@ export def "servers-options-server-size-create" [
   cpu: int # CPU set for server size.
   memory: int # Memory set for server size.
   name: string # Server size name.
-]: any -> record<active: bool, cpu: int, id: string, memory: int, name: string> {
+]: any -> oneof<record<active: bool, cpu: int, id: string, memory: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -559,7 +582,7 @@ export def "servers-options-resources-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<active: bool, cpu: int, id: string, memory: int, name: string> {
+]: nothing -> oneof<record<active: bool, cpu: int, id: string, memory: int, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($size | is-empty) { error make --unspanned { msg: "path parameter 'size' must be non-empty" } }
@@ -600,7 +623,7 @@ export def "servers-options-server-size-update" [
   cpu: int # CPU set for server size.
   memory: int # Memory set for server size.
   name: string # Server size name.
-]: any -> record<active: bool, cpu: int, id: string, memory: int, name: string> {
+]: any -> oneof<record<active: bool, cpu: int, id: string, memory: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -645,7 +668,7 @@ export def "servers-options-server-size-replace" [
   cpu: int # CPU set for server size.
   memory: int # Memory set for server size.
   name: string # Server size name.
-]: any -> record<active: bool, cpu: int, id: string, memory: int, name: string> {
+]: any -> oneof<record<active: bool, cpu: int, id: string, memory: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -687,7 +710,7 @@ export def "teams-list" [
   --accept: string@accept-completer # Response content type
   --limit: string # Limit when getting data.
   --offset: string # Offset when getting data.
-]: nothing -> table<avatar: string, avatar_url: string, created_by: string, description: string, id: string, location: string, name: string, website: string> {
+]: nothing -> oneof<table<avatar: string, avatar_url: string, created_by: string, description: string, id: string, location: string, name: string, website: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -729,7 +752,7 @@ export def "teams-create" [
   --location: string # Team location.
   name: string # Team name
   --website: string # Teams website.
-]: any -> record<avatar: string, avatar_url: string, created_by: string, description: string, id: string, location: string, name: string, website: string> {
+]: any -> oneof<record<avatar: string, avatar_url: string, created_by: string, description: string, id: string, location: string, name: string, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -805,7 +828,7 @@ export def "teams-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<avatar: string, avatar_url: string, created_by: string, description: string, id: string, location: string, name: string, website: string> {
+]: nothing -> oneof<record<avatar: string, avatar_url: string, created_by: string, description: string, id: string, location: string, name: string, website: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -848,7 +871,7 @@ export def "teams-update" [
   --location: string # Team location.
   name: string # Team name
   --website: string # Teams website.
-]: any -> record<avatar: string, avatar_url: string, created_by: string, description: string, id: string, location: string, name: string, website: string> {
+]: any -> oneof<record<avatar: string, avatar_url: string, created_by: string, description: string, id: string, location: string, name: string, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -894,7 +917,7 @@ export def "teams-replace" [
   --location: string # Team location.
   name: string # Team name
   --website: string # Teams website.
-]: any -> record<avatar: string, avatar_url: string, created_by: string, description: string, id: string, location: string, name: string, website: string> {
+]: any -> oneof<record<avatar: string, avatar_url: string, created_by: string, description: string, id: string, location: string, name: string, website: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -936,7 +959,7 @@ export def "teams-billing-invoices-list" [
   --accept: string@accept-completer # Response content type
   --limit: string # Limit when getting items.
   --offset: string # Offset when getting items.
-]: nothing -> table<amount_due: int, application_fee: int, attempt_count: int, attempted: bool, closed: bool, created: string, currency: string, customer: string, description: string, id: string, invoice_date: string, livemode: bool, metadata: record, next_payment_attempt: string, paid: bool, period_end: string, period_start: string, reciept_number: string, starting_balance: int, statement_descriptor: string, stripe_id: string, subscription: string, subtotal: int, tax: int, total: int> {
+]: nothing -> oneof<table<amount_due: int, application_fee: int, attempt_count: int, attempted: bool, closed: bool, created: string, currency: string, customer: string, description: string, id: string, invoice_date: string, livemode: bool, metadata: record, next_payment_attempt: string, paid: bool, period_end: string, period_start: string, reciept_number: string, starting_balance: int, statement_descriptor: string, stripe_id: string, subscription: string, subtotal: int, tax: int, total: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -975,7 +998,7 @@ export def "teams-billing-invoices-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<amount_due: int, application_fee: int, attempt_count: int, attempted: bool, closed: bool, created: string, currency: string, customer: string, description: string, id: string, invoice_date: string, livemode: bool, metadata: record, next_payment_attempt: string, paid: bool, period_end: string, period_start: string, reciept_number: string, starting_balance: int, statement_descriptor: string, stripe_id: string, subscription: string, subtotal: int, tax: int, total: int> {
+]: nothing -> oneof<record<amount_due: int, application_fee: int, attempt_count: int, attempted: bool, closed: bool, created: string, currency: string, customer: string, description: string, id: string, invoice_date: string, livemode: bool, metadata: record, next_payment_attempt: string, paid: bool, period_end: string, period_start: string, reciept_number: string, starting_balance: int, statement_descriptor: string, stripe_id: string, subscription: string, subtotal: int, tax: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -1017,7 +1040,7 @@ export def "teams-billing-invoice-items-list" [
   --limit: string # Limit when getting items.
   --offset: string # Offset when getting items.
   --ordering: string # Ordering when getting items.
-]: nothing -> table<amount: int, created: string, currency: string, description: string, id: string, invoice: string, invoice_date: string, livemode: bool, metadata: record, proration: bool, quantity: int, stripe_id: string> {
+]: nothing -> oneof<table<amount: int, created: string, currency: string, description: string, id: string, invoice: string, invoice_date: string, livemode: bool, metadata: record, proration: bool, quantity: int, stripe_id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -1058,7 +1081,7 @@ export def "teams-billing-invoice-items-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<amount: int, created: string, currency: string, description: string, id: string, invoice: string, invoice_date: string, livemode: bool, metadata: record, proration: bool, quantity: int, stripe_id: string> {
+]: nothing -> oneof<record<amount: int, created: string, currency: string, description: string, id: string, invoice: string, invoice_date: string, livemode: bool, metadata: record, proration: bool, quantity: int, stripe_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -1100,7 +1123,7 @@ export def "teams-billing-subscriptions-list" [
   --limit: string # Limit when getting items.
   --offset: string # Offset when getting items.
   --ordering: string # Ordering when getting items.
-]: nothing -> table<application_fee_percent: float, cancel_at_period_end: bool, canceled_at: string, created: string, current_period_end: string, current_period_start: string, ended_at: string, id: string, livemode: bool, plan: string, quantity: int, start: string, status: string, stripe_id: string, trial_end: string, trial_start: string> {
+]: nothing -> oneof<table<application_fee_percent: float, cancel_at_period_end: bool, canceled_at: string, created: string, current_period_end: string, current_period_start: string, ended_at: string, id: string, livemode: bool, plan: string, quantity: int, start: string, status: string, stripe_id: string, trial_end: string, trial_start: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -1139,7 +1162,7 @@ export def "teams-billing-subscriptions-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   plan: string # Plan unique identifier.
-]: any -> record<application_fee_percent: float, cancel_at_period_end: bool, canceled_at: string, created: string, current_period_end: string, current_period_start: string, ended_at: string, id: string, livemode: bool, plan: string, quantity: int, start: string, status: string, stripe_id: string, trial_end: string, trial_start: string> {
+]: any -> oneof<record<application_fee_percent: float, cancel_at_period_end: bool, canceled_at: string, created: string, current_period_end: string, current_period_start: string, ended_at: string, id: string, livemode: bool, plan: string, quantity: int, start: string, status: string, stripe_id: string, trial_end: string, trial_start: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -1219,7 +1242,7 @@ export def "teams-billing-subscriptions-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<application_fee_percent: float, cancel_at_period_end: bool, canceled_at: string, created: string, current_period_end: string, current_period_start: string, ended_at: string, id: string, livemode: bool, plan: string, quantity: int, start: string, status: string, stripe_id: string, trial_end: string, trial_start: string> {
+]: nothing -> oneof<record<application_fee_percent: float, cancel_at_period_end: bool, canceled_at: string, created: string, current_period_end: string, current_period_start: string, ended_at: string, id: string, livemode: bool, plan: string, quantity: int, start: string, status: string, stripe_id: string, trial_end: string, trial_start: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -1259,7 +1282,7 @@ export def "teams-groups-list" [
   --accept: string@accept-completer # Response content type
   --limit: string # Limit when getting data.
   --offset: string # Offset when getting data.
-]: nothing -> table<created_by: string, description: string, id: string, members: list<string>, name: string, parent: string, permissions: list<string>, private: bool> {
+]: nothing -> oneof<table<created_by: string, description: string, id: string, members: list<string>, name: string, parent: string, permissions: list<string>, private: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -1337,7 +1360,7 @@ export def "teams-groups-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<created_by: string, description: string, id: string, members: list<string>, name: string, parent: string, permissions: list<string>, private: bool> {
+]: nothing -> oneof<record<created_by: string, description: string, id: string, members: list<string>, name: string, parent: string, permissions: list<string>, private: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -1380,7 +1403,7 @@ export def "teams-groups-update" [
   name: string # Group name
   --parent: string # Parent group
   --private: oneof<nothing, bool> # States whether group is visible to all users.
-]: any -> record<created_by: string, description: string, id: string, members: list<string>, name: string, parent: string, permissions: list<string>, private: bool> {
+]: any -> oneof<record<created_by: string, description: string, id: string, members: list<string>, name: string, parent: string, permissions: list<string>, private: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -1426,7 +1449,7 @@ export def "teams-groups-replace" [
   name: string # Group name
   --parent: string # Parent group
   --private: oneof<nothing, bool> # States whether group is visible to all users.
-]: any -> record<created_by: string, description: string, id: string, members: list<string>, name: string, parent: string, permissions: list<string>, private: bool> {
+]: any -> oneof<record<created_by: string, description: string, id: string, members: list<string>, name: string, parent: string, permissions: list<string>, private: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -1468,7 +1491,7 @@ export def "teams-groups-add-to-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<user: string> {
+]: nothing -> oneof<record<user: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($team | is-empty) { error make --unspanned { msg: "path parameter 'team' must be non-empty" } }
@@ -1549,7 +1572,7 @@ export def "users-list" [
   --username: string # User username.
   --email: string # User email.
   --ordering: string # Ordering when getting users.
-]: nothing -> table<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string> {
+]: nothing -> oneof<table<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "ordering" $ordering "scalar")] | flatten | str join "&"
@@ -1574,7 +1597,6 @@ export def "users-list" [
 #
 # POST /v1/users/profiles/
 # operationId: users_create
-# --profile shape: {avatar?: string, bio?: string, company?: string, location?: string, timezone?: string, url?: string}
 export def "users-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1592,7 +1614,7 @@ export def "users-create" [
   password: string # User password.
   profile: record # shape: {avatar?: string, bio?: string, company?: string, location?: string, timezone?: string, url?: string}
   username: string # Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
-]: any -> record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string> {
+]: any -> oneof<record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -1668,7 +1690,7 @@ export def "users-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string> {
+]: nothing -> oneof<record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -1693,7 +1715,6 @@ export def "users-read" [
 #
 # PATCH /v1/users/profiles/{user}/
 # operationId: users_update
-# --profile shape: {avatar?: string, bio?: string, company?: string, location?: string, timezone?: string, url?: string}
 export def "users-update" [
   user: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1712,7 +1733,7 @@ export def "users-update" [
   password: string # User password.
   profile: record # shape: {avatar?: string, bio?: string, company?: string, location?: string, timezone?: string, url?: string}
   username: string # Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
-]: any -> record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string> {
+]: any -> oneof<record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -1863,7 +1884,7 @@ export def "user-avatar-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string> {
+]: nothing -> oneof<record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -1900,7 +1921,7 @@ export def "user-avatar-set" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string> {
+]: nothing -> oneof<record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -1940,7 +1961,7 @@ export def "users-emails-list" [
   --limit: string # Limite when getting email list.
   --offset: string # Offset when getting email list.
   --ordering: string # Ordering when getting email list.
-]: nothing -> table<address: string, id: string, public: bool, unsubscribed: bool, user: string> {
+]: nothing -> oneof<table<address: string, id: string, public: bool, unsubscribed: bool, user: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -1981,7 +2002,7 @@ export def "users-emails-create" [
   address: string # Email address.
   --public: oneof<nothing, bool> # Public or private email address.
   --unsubscribed: oneof<nothing, bool> # Unsubscribed or suscribed.
-]: any -> record<address: string, id: string, public: bool, unsubscribed: bool, user: string> {
+]: any -> oneof<record<address: string, id: string, public: bool, unsubscribed: bool, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -2061,7 +2082,7 @@ export def "users-emails-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<address: string, id: string, public: bool, unsubscribed: bool, user: string> {
+]: nothing -> oneof<record<address: string, id: string, public: bool, unsubscribed: bool, user: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -2103,7 +2124,7 @@ export def "users-emails-update" [
   address: string # Email address.
   --public: oneof<nothing, bool> # Public or private email address.
   --unsubscribed: oneof<nothing, bool> # Unsubscribed or suscribed.
-]: any -> record<address: string, id: string, public: bool, unsubscribed: bool, user: string> {
+]: any -> oneof<record<address: string, id: string, public: bool, unsubscribed: bool, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -2148,7 +2169,7 @@ export def "users-emails-replace" [
   address: string # Email address.
   --public: oneof<nothing, bool> # Public or private email address.
   --unsubscribed: oneof<nothing, bool> # Unsubscribed or suscribed.
-]: any -> record<address: string, id: string, public: bool, unsubscribed: bool, user: string> {
+]: any -> oneof<record<address: string, id: string, public: bool, unsubscribed: bool, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -2266,7 +2287,7 @@ export def "billing-cards-list" [
   --limit: string # Set limit when retrieving credit or debit cards.
   --offset: string # Set offset when retriving cards.
   --ordering: string # Order when retrieving cards.
-]: nothing -> table<address_city: string, address_country: string, address_line1: string, address_line1_check: string, address_line2: string, address_state: string, address_zip: string, address_zip_check: string, brand: string, created: string, customer: string, cvc_check: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, id: string, last4: string, name: string, stripe_id: string, token: string> {
+]: nothing -> oneof<table<address_city: string, address_country: string, address_line1: string, address_line1_check: string, address_line2: string, address_state: string, address_zip: string, address_zip_check: string, brand: string, created: string, customer: string, cvc_check: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, id: string, last4: string, name: string, stripe_id: string, token: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -2314,7 +2335,7 @@ export def "billing-cards-create" [
   --exp-year: int # Card expiration year.
   --name: string # Card name.
   --body-token: string # Card unique token.
-]: any -> record<address_city: string, address_country: string, address_line1: string, address_line1_check: string, address_line2: string, address_state: string, address_zip: string, address_zip_check: string, brand: string, created: string, customer: string, cvc_check: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, id: string, last4: string, name: string, stripe_id: string, token: string> {
+]: any -> oneof<record<address_city: string, address_country: string, address_line1: string, address_line1_check: string, address_line2: string, address_state: string, address_zip: string, address_zip_check: string, brand: string, created: string, customer: string, cvc_check: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, id: string, last4: string, name: string, stripe_id: string, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -2394,7 +2415,7 @@ export def "billing-cards-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<address_city: string, address_country: string, address_line1: string, address_line1_check: string, address_line2: string, address_state: string, address_zip: string, address_zip_check: string, brand: string, created: string, customer: string, cvc_check: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, id: string, last4: string, name: string, stripe_id: string, token: string> {
+]: nothing -> oneof<record<address_city: string, address_country: string, address_line1: string, address_line1_check: string, address_line2: string, address_state: string, address_zip: string, address_zip_check: string, brand: string, created: string, customer: string, cvc_check: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, id: string, last4: string, name: string, stripe_id: string, token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -2442,7 +2463,7 @@ export def "billing-cards-update" [
   --exp-month: int # Card expiration month.
   --exp-year: int # Card expiration year.
   --name: string # Card name.
-]: any -> record<address_city: string, address_country: string, address_line1: string, address_line1_check: string, address_line2: string, address_state: string, address_zip: string, address_zip_check: string, brand: string, created: string, customer: string, cvc_check: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, id: string, last4: string, name: string, stripe_id: string, token: string> {
+]: any -> oneof<record<address_city: string, address_country: string, address_line1: string, address_line1_check: string, address_line2: string, address_state: string, address_zip: string, address_zip_check: string, brand: string, created: string, customer: string, cvc_check: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, id: string, last4: string, name: string, stripe_id: string, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -2493,7 +2514,7 @@ export def "billing-cards-replace" [
   --exp-month: int # Card expiration month.
   --exp-year: int # Card expiration year.
   --name: string # Card name.
-]: any -> record<address_city: string, address_country: string, address_line1: string, address_line1_check: string, address_line2: string, address_state: string, address_zip: string, address_zip_check: string, brand: string, created: string, customer: string, cvc_check: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, id: string, last4: string, name: string, stripe_id: string, token: string> {
+]: any -> oneof<record<address_city: string, address_country: string, address_line1: string, address_line1_check: string, address_line2: string, address_state: string, address_zip: string, address_zip_check: string, brand: string, created: string, customer: string, cvc_check: string, exp_month: int, exp_year: int, fingerprint: string, funding: string, id: string, last4: string, name: string, stripe_id: string, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -2537,7 +2558,7 @@ export def "billing-invoices-list" [
   --limit: string # Limit when getting items.
   --offset: string # Offset when getting items.
   --ordering: string # Ordering when getting items.
-]: nothing -> table<amount_due: int, application_fee: int, attempt_count: int, attempted: bool, closed: bool, created: string, currency: string, customer: string, description: string, id: string, invoice_date: string, livemode: bool, metadata: record, next_payment_attempt: string, paid: bool, period_end: string, period_start: string, reciept_number: string, starting_balance: int, statement_descriptor: string, stripe_id: string, subscription: string, subtotal: int, tax: int, total: int> {
+]: nothing -> oneof<table<amount_due: int, application_fee: int, attempt_count: int, attempted: bool, closed: bool, created: string, currency: string, customer: string, description: string, id: string, invoice_date: string, livemode: bool, metadata: record, next_payment_attempt: string, paid: bool, period_end: string, period_start: string, reciept_number: string, starting_balance: int, statement_descriptor: string, stripe_id: string, subscription: string, subtotal: int, tax: int, total: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -2576,7 +2597,7 @@ export def "billing-invoices-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<amount_due: int, application_fee: int, attempt_count: int, attempted: bool, closed: bool, created: string, currency: string, customer: string, description: string, id: string, invoice_date: string, livemode: bool, metadata: record, next_payment_attempt: string, paid: bool, period_end: string, period_start: string, reciept_number: string, starting_balance: int, statement_descriptor: string, stripe_id: string, subscription: string, subtotal: int, tax: int, total: int> {
+]: nothing -> oneof<record<amount_due: int, application_fee: int, attempt_count: int, attempted: bool, closed: bool, created: string, currency: string, customer: string, description: string, id: string, invoice_date: string, livemode: bool, metadata: record, next_payment_attempt: string, paid: bool, period_end: string, period_start: string, reciept_number: string, starting_balance: int, statement_descriptor: string, stripe_id: string, subscription: string, subtotal: int, tax: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -2618,7 +2639,7 @@ export def "billing-invoice-items-list" [
   --limit: string # Limit when getting items.
   --offset: string # Offset when getting items.
   --ordering: string # Ordering when getting items.
-]: nothing -> table<amount: int, created: string, currency: string, description: string, id: string, invoice: string, invoice_date: string, livemode: bool, metadata: record, proration: bool, quantity: int, stripe_id: string> {
+]: nothing -> oneof<table<amount: int, created: string, currency: string, description: string, id: string, invoice: string, invoice_date: string, livemode: bool, metadata: record, proration: bool, quantity: int, stripe_id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -2659,7 +2680,7 @@ export def "billing-invoice-items-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<amount: int, created: string, currency: string, description: string, id: string, invoice: string, invoice_date: string, livemode: bool, metadata: record, proration: bool, quantity: int, stripe_id: string> {
+]: nothing -> oneof<record<amount: int, created: string, currency: string, description: string, id: string, invoice: string, invoice_date: string, livemode: bool, metadata: record, proration: bool, quantity: int, stripe_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -2701,7 +2722,7 @@ export def "billing-plans-list" [
   --limit: string # Limit when getting items.
   --offset: string # Offset when getting items.
   --ordering: string # Ordering when getting items.
-]: nothing -> table<amount: int, created: string, currency: string, id: string, interval: string, interval_count: int, livemode: bool, metadata: record, name: string, statement_descriptor: string, stripe_id: string, trial_period_days: int> {
+]: nothing -> oneof<table<amount: int, created: string, currency: string, id: string, interval: string, interval_count: int, livemode: bool, metadata: record, name: string, statement_descriptor: string, stripe_id: string, trial_period_days: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -2740,7 +2761,7 @@ export def "billing-plans-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<amount: int, created: string, currency: string, id: string, interval: string, interval_count: int, livemode: bool, metadata: record, name: string, statement_descriptor: string, stripe_id: string, trial_period_days: int> {
+]: nothing -> oneof<record<amount: int, created: string, currency: string, id: string, interval: string, interval_count: int, livemode: bool, metadata: record, name: string, statement_descriptor: string, stripe_id: string, trial_period_days: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -2781,7 +2802,7 @@ export def "billing-subscriptions-list" [
   --limit: string # Limit when getting items.
   --offset: string # Offset when getting items.
   --ordering: string # Ordering when getting items.
-]: nothing -> table<application_fee_percent: float, cancel_at_period_end: bool, canceled_at: string, created: string, current_period_end: string, current_period_start: string, ended_at: string, id: string, livemode: bool, plan: string, quantity: int, start: string, status: string, stripe_id: string, trial_end: string, trial_start: string> {
+]: nothing -> oneof<table<application_fee_percent: float, cancel_at_period_end: bool, canceled_at: string, created: string, current_period_end: string, current_period_start: string, ended_at: string, id: string, livemode: bool, plan: string, quantity: int, start: string, status: string, stripe_id: string, trial_end: string, trial_start: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -2820,7 +2841,7 @@ export def "billing-subscriptions-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   plan: string # Plan unique identifier.
-]: any -> record<application_fee_percent: float, cancel_at_period_end: bool, canceled_at: string, created: string, current_period_end: string, current_period_start: string, ended_at: string, id: string, livemode: bool, plan: string, quantity: int, start: string, status: string, stripe_id: string, trial_end: string, trial_start: string> {
+]: any -> oneof<record<application_fee_percent: float, cancel_at_period_end: bool, canceled_at: string, created: string, current_period_end: string, current_period_start: string, ended_at: string, id: string, livemode: bool, plan: string, quantity: int, start: string, status: string, stripe_id: string, trial_end: string, trial_start: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -2900,7 +2921,7 @@ export def "billing-subscriptions-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<application_fee_percent: float, cancel_at_period_end: bool, canceled_at: string, created: string, current_period_end: string, current_period_start: string, ended_at: string, id: string, livemode: bool, plan: string, quantity: int, start: string, status: string, stripe_id: string, trial_end: string, trial_start: string> {
+]: nothing -> oneof<record<application_fee_percent: float, cancel_at_period_end: bool, canceled_at: string, created: string, current_period_end: string, current_period_start: string, ended_at: string, id: string, livemode: bool, plan: string, quantity: int, start: string, status: string, stripe_id: string, trial_end: string, trial_start: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -2942,7 +2963,7 @@ export def "notifications-list" [
   --offset: string # Offset when getting items.
   --ordering: string # Ordering when getting items.
   --read: oneof<nothing, bool> # When true, get only read notifications. When false, get only unread notifications. Default behavior is to return both read and unread.
-]: nothing -> table<actor: string, id: string, read: bool, target: string, timestamp: string, type: string, user: string> {
+]: nothing -> oneof<table<actor: string, id: string, read: bool, target: string, timestamp: string, type: string, user: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -2982,7 +3003,7 @@ export def "notifications-update-list" [
   --accept: string@accept-completer # Response content type
   notifications: list<string> # An array of notification IDs to update.
   --read: oneof<nothing, bool> # Mark the notification as either read or unread
-]: any -> record<actor: string, id: string, read: bool, target: string, timestamp: string, type: string, user: string> {
+]: any -> oneof<record<actor: string, id: string, read: bool, target: string, timestamp: string, type: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -3028,7 +3049,7 @@ export def "notifications-list-entity" [
   --offset: string # Offset when getting items.
   --ordering: string # Ordering when getting items.
   --read: oneof<nothing, bool> # When true, get only read notifications. When false, get only unread notifications. Default behavior is to return both read and unread.
-]: nothing -> table<actor: string, id: string, read: bool, target: string, timestamp: string, type: string, user: string> {
+]: nothing -> oneof<table<actor: string, id: string, read: bool, target: string, timestamp: string, type: string, user: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -3070,7 +3091,7 @@ export def "notifications-update-entity-list" [
   --accept: string@accept-completer # Response content type
   notifications: list<string> # An array of notification IDs to update.
   --read: oneof<nothing, bool> # Mark the notification as either read or unread
-]: any -> record<actor: string, id: string, read: bool, target: string, timestamp: string, type: string, user: string> {
+]: any -> oneof<record<actor: string, id: string, read: bool, target: string, timestamp: string, type: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -3112,7 +3133,7 @@ export def "notification-settings-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<email_address: string, emails_enabled: bool, enabled: bool, entity: string, id: string, user: string> {
+]: nothing -> oneof<table<email_address: string, emails_enabled: bool, enabled: bool, entity: string, id: string, user: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -3151,7 +3172,7 @@ export def "notification-settings-update" [
   --accept: string@accept-completer # Response content type
   --emails-enabled: oneof<nothing, bool> # Turn emails on or off.
   --enabled: oneof<nothing, bool> # Turn notifications on or off entirely.
-]: any -> record<email_address: string, emails_enabled: bool, enabled: bool, entity: string, id: string, user: string> {
+]: any -> oneof<record<email_address: string, emails_enabled: bool, enabled: bool, entity: string, id: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -3195,7 +3216,7 @@ export def "notification-settings-create" [
   --accept: string@accept-completer # Response content type
   --emails-enabled: oneof<nothing, bool> # Turn emails on or off.
   --enabled: oneof<nothing, bool> # Turn notifications on or off entirely.
-]: any -> record<email_address: string, emails_enabled: bool, enabled: bool, entity: string, id: string, user: string> {
+]: any -> oneof<record<email_address: string, emails_enabled: bool, enabled: bool, entity: string, id: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -3238,7 +3259,7 @@ export def "notification-settings-entity-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<email_address: string, emails_enabled: bool, enabled: bool, entity: string, id: string, user: string> {
+]: nothing -> oneof<table<email_address: string, emails_enabled: bool, enabled: bool, entity: string, id: string, user: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -3279,7 +3300,7 @@ export def "notification-settings-entity-update" [
   --accept: string@accept-completer # Response content type
   --emails-enabled: oneof<nothing, bool> # Turn emails on or off.
   --enabled: oneof<nothing, bool> # Turn notifications on or off entirely.
-]: any -> record<email_address: string, emails_enabled: bool, enabled: bool, entity: string, id: string, user: string> {
+]: any -> oneof<record<email_address: string, emails_enabled: bool, enabled: bool, entity: string, id: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -3325,7 +3346,7 @@ export def "notification-settings-entity-create" [
   --accept: string@accept-completer # Response content type
   --emails-enabled: oneof<nothing, bool> # Turn emails on or off.
   --enabled: oneof<nothing, bool> # Turn notifications on or off entirely.
-]: any -> record<email_address: string, emails_enabled: bool, enabled: bool, entity: string, id: string, user: string> {
+]: any -> oneof<record<email_address: string, emails_enabled: bool, enabled: bool, entity: string, id: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -3369,7 +3390,7 @@ export def "notification-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<actor: string, id: string, read: bool, target: string, timestamp: string, type: string, user: string> {
+]: nothing -> oneof<record<actor: string, id: string, read: bool, target: string, timestamp: string, type: string, user: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -3409,7 +3430,7 @@ export def "notification-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --read: oneof<nothing, bool> # Mark the notification as either read or unread
-]: any -> record<actor: string, id: string, read: bool, target: string, timestamp: string, type: string, user: string> {
+]: any -> oneof<record<actor: string, id: string, read: bool, target: string, timestamp: string, type: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -3454,7 +3475,7 @@ export def "oauth-applications-list" [
   --limit: string # Set limit when retrieving items.
   --offset: string # Offset when retrieving items.
   --ordering: string # Set order when retrieving items.
-]: nothing -> table<authorization_grant_type: string, client_id: string, client_secret: string, client_type: string, id: string, name: string, redirect_uris: string> {
+]: nothing -> oneof<table<authorization_grant_type: string, client_id: string, client_secret: string, client_type: string, id: string, name: string, redirect_uris: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -3496,7 +3517,7 @@ export def "oauth-application-create" [
   client_type: string@client-type-completer # OAuth2 client type
   name: string # Application name
   --redirect-uris: string # Uris to redirect auth request
-]: any -> record<authorization_grant_type: string, client_id: string, client_secret: string, client_type: string, id: string, name: string, redirect_uris: string> {
+]: any -> oneof<record<authorization_grant_type: string, client_id: string, client_secret: string, client_type: string, id: string, name: string, redirect_uris: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -3576,7 +3597,7 @@ export def "oauth-application-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<authorization_grant_type: string, client_id: string, client_secret: string, client_type: string, id: string, name: string, redirect_uris: string> {
+]: nothing -> oneof<record<authorization_grant_type: string, client_id: string, client_secret: string, client_type: string, id: string, name: string, redirect_uris: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -3619,7 +3640,7 @@ export def "oauth-application-update" [
   client_type: string@client-type-completer # OAuth2 client type
   name: string # Application name
   --redirect-uris: string # Uris to redirect auth request
-]: any -> record<authorization_grant_type: string, client_id: string, client_secret: string, client_type: string, id: string, name: string, redirect_uris: string> {
+]: any -> oneof<record<authorization_grant_type: string, client_id: string, client_secret: string, client_type: string, id: string, name: string, redirect_uris: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -3665,7 +3686,7 @@ export def "oauth-application-replace" [
   client_type: string@client-type-completer # OAuth2 client type
   name: string # Application name
   --redirect-uris: string # Uris to redirect auth request
-]: any -> record<authorization_grant_type: string, client_id: string, client_secret: string, client_type: string, id: string, name: string, redirect_uris: string> {
+]: any -> oneof<record<authorization_grant_type: string, client_id: string, client_secret: string, client_type: string, id: string, name: string, redirect_uris: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -3711,7 +3732,7 @@ export def "projects-list" [
   --private: string # Private project or public project.
   --name: string # Project name.
   --ordering: string # Ordering when getting projects.
-]: nothing -> table<collaborators: list<string>, description: string, id: string, last_updated: string, name: string, owner: string, private: bool, team: string> {
+]: nothing -> oneof<table<collaborators: list<string>, description: string, id: string, last_updated: string, name: string, owner: string, private: bool, team: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -3752,7 +3773,7 @@ export def "projects-create" [
   --description: string # Project description.
   name: string # Project name.
   --private: oneof<nothing, bool> # Private project true, otherwise public.
-]: any -> record<collaborators: list<string>, description: string, id: string, last_updated: string, name: string, owner: string, private: bool, team: string> {
+]: any -> oneof<record<collaborators: list<string>, description: string, id: string, last_updated: string, name: string, owner: string, private: bool, team: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -3792,7 +3813,7 @@ export def "project-copy-check" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -3831,7 +3852,7 @@ export def "project-copy" [
   --accept: string@accept-completer # Response content type
   --name: string # Name for the newly copied project
   project: string # UUID of the project the user wishes to copy.
-]: any -> record<collaborators: list<string>, description: string, id: string, last_updated: string, name: string, owner: string, private: bool, team: string> {
+]: any -> oneof<record<collaborators: list<string>, description: string, id: string, last_updated: string, name: string, owner: string, private: bool, team: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -3911,7 +3932,7 @@ export def "projects-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<collaborators: list<string>, description: string, id: string, last_updated: string, name: string, owner: string, private: bool, team: string> {
+]: nothing -> oneof<record<collaborators: list<string>, description: string, id: string, last_updated: string, name: string, owner: string, private: bool, team: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -3953,7 +3974,7 @@ export def "projects-update" [
   --description: string # Project description.
   name: string # Project name.
   --private: oneof<nothing, bool> # Private project true, otherwise public.
-]: any -> record<collaborators: list<string>, description: string, id: string, last_updated: string, name: string, owner: string, private: bool, team: string> {
+]: any -> oneof<record<collaborators: list<string>, description: string, id: string, last_updated: string, name: string, owner: string, private: bool, team: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -3998,7 +4019,7 @@ export def "projects-replace" [
   --description: string # Project description.
   name: string # Project name.
   --private: oneof<nothing, bool> # Private project true, otherwise public.
-]: any -> record<collaborators: list<string>, description: string, id: string, last_updated: string, name: string, owner: string, private: bool, team: string> {
+]: any -> oneof<record<collaborators: list<string>, description: string, id: string, last_updated: string, name: string, owner: string, private: bool, team: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -4043,7 +4064,7 @@ export def "projects-collaborators-list" [
   --limit: string # Limit when retrieving items.
   --offset: string # Offset when retrieving items.
   --ordering: string # Ordering when retrieving items.
-]: nothing -> table<email: string, first_name: string, id: string, joined: string, last_name: string, owner: bool, permissions: list<string>, project: string, user: string, username: string> {
+]: nothing -> oneof<table<email: string, first_name: string, id: string, joined: string, last_name: string, owner: bool, permissions: list<string>, project: string, user: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -4086,7 +4107,7 @@ export def "projects-collaborators-create" [
   member: string # Project member username.
   --owner: oneof<nothing, bool> # Project owner. Defaults to false.
   permissions: string@permissions-completer # Permissions assigned to collaborator.
-]: any -> record<email: string, first_name: string, id: string, joined: string, last_name: string, owner: bool, permissions: list<string>, project: string, user: string, username: string> {
+]: any -> oneof<record<email: string, first_name: string, id: string, joined: string, last_name: string, owner: bool, permissions: list<string>, project: string, user: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -4170,7 +4191,7 @@ export def "projects-collaborators-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<email: string, first_name: string, id: string, joined: string, last_name: string, owner: bool, permissions: list<string>, project: string, user: string, username: string> {
+]: nothing -> oneof<record<email: string, first_name: string, id: string, joined: string, last_name: string, owner: bool, permissions: list<string>, project: string, user: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -4214,7 +4235,7 @@ export def "projects-collaborators-update" [
   member: string # Project member username.
   --owner: oneof<nothing, bool> # Project owner. Defaults to false.
   permissions: string@permissions-completer # Permissions assigned to collaborator.
-]: any -> record<email: string, first_name: string, id: string, joined: string, last_name: string, owner: bool, permissions: list<string>, project: string, user: string, username: string> {
+]: any -> oneof<record<email: string, first_name: string, id: string, joined: string, last_name: string, owner: bool, permissions: list<string>, project: string, user: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -4261,7 +4282,7 @@ export def "projects-deployments-list" [
   --offset: string # Offset results when getting deployment list.
   --name: string # Server name.
   --ordering: string # Ordering option when getting deployment list.
-]: nothing -> table<config: record<files: list, handler: string>, created_at: string, created_by: string, framework: string, id: string, name: string, project: string, runtime: string> {
+]: nothing -> oneof<table<config: record<files: list, handler: string>, created_at: string, created_by: string, framework: string, id: string, name: string, project: string, runtime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -4288,7 +4309,6 @@ export def "projects-deployments-list" [
 #
 # POST /v1/{namespace}/projects/{project}/deployments/
 # operationId: projects_deployments_create
-# --config shape: {files?: list<string>, handler?: string}
 export def "projects-deployments-create" [
   namespace: string
   project: string
@@ -4306,7 +4326,7 @@ export def "projects-deployments-create" [
   framework: string@framework-completer # Framework that the deployment will have access to.
   name: string # Deployment name.
   runtime: string@runtime-completer # Language runtime the deployment will use.
-]: any -> record<config: record<files: list<string>, handler: string>, created_at: string, created_by: string, framework: string, id: string, name: string, project: string, runtime: string> {
+]: any -> oneof<record<config: record<files: list<string>, handler: string>, created_at: string, created_by: string, framework: string, id: string, name: string, project: string, runtime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -4390,7 +4410,7 @@ export def "projects-deployments-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<config: record<files: list<string>, handler: string>, created_at: string, created_by: string, framework: string, id: string, name: string, project: string, runtime: string> {
+]: nothing -> oneof<record<config: record<files: list<string>, handler: string>, created_at: string, created_by: string, framework: string, id: string, name: string, project: string, runtime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -4417,7 +4437,6 @@ export def "projects-deployments-read" [
 #
 # PATCH /v1/{namespace}/projects/{project}/deployments/{deployment}/
 # operationId: projects_deployments_update
-# --config shape: {files?: list<string>, handler?: string}
 export def "projects-deployments-update" [
   namespace: string
   project: string
@@ -4436,7 +4455,7 @@ export def "projects-deployments-update" [
   framework: string@framework-completer # Framework that the deployment will have access to.
   name: string # Deployment name.
   runtime: string@runtime-completer # Language runtime the deployment will use.
-]: any -> record<config: record<files: list<string>, handler: string>, created_at: string, created_by: string, framework: string, id: string, name: string, project: string, runtime: string> {
+]: any -> oneof<record<config: record<files: list<string>, handler: string>, created_at: string, created_by: string, framework: string, id: string, name: string, project: string, runtime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -4466,7 +4485,6 @@ export def "projects-deployments-update" [
 #
 # PUT /v1/{namespace}/projects/{project}/deployments/{deployment}/
 # operationId: projects_deployments_replace
-# --config shape: {files?: list<string>, handler?: string}
 export def "projects-deployments-replace" [
   namespace: string
   project: string
@@ -4485,7 +4503,7 @@ export def "projects-deployments-replace" [
   framework: string@framework-completer # Framework that the deployment will have access to.
   name: string # Deployment name.
   runtime: string@runtime-completer # Language runtime the deployment will use.
-]: any -> record<config: record<files: list<string>, handler: string>, created_at: string, created_by: string, framework: string, id: string, name: string, project: string, runtime: string> {
+]: any -> oneof<record<config: record<files: list<string>, handler: string>, created_at: string, created_by: string, framework: string, id: string, name: string, project: string, runtime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -4574,7 +4592,7 @@ export def "projects-project-files-list" [
   --ordering: string # Ordering of list values when getting project file list.
   --filename: string # Exact file name, relative to the project root. If no such file is found, an empty list will be returned.
   --content: string # Determines whether or not content is returned as base64. Defaults to false.
-]: nothing -> table<content: string, id: string, name: string, path: string, project: string> {
+]: nothing -> oneof<table<content: string, id: string, name: string, path: string, project: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -4618,7 +4636,7 @@ export def "projects-project-files-create" [
   --base64-data: string # Fila data, represented as base64.
   --name: string # File name. May include path when creating file with base64 field.
   --path: string # File path. Defaults to (/).
-]: any -> record<content: string, id: string, name: string, path: string, project: string> {
+]: any -> oneof<record<content: string, id: string, name: string, path: string, project: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -4705,7 +4723,7 @@ export def "projects-project-files-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --content: string # Determines whether or not content is returned as base64. Defaults to false.
-]: nothing -> record<content: string, id: string, name: string, path: string, project: string> {
+]: nothing -> oneof<record<content: string, id: string, name: string, path: string, project: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -4751,7 +4769,7 @@ export def "projects-project-files-update" [
   --base64-data: string # Fila data, represented as base64.
   --name: string # File name. May include path when creating file with base64 field.
   --path: string # File path. Defaults to (/).
-]: any -> record<content: string, id: string, name: string, path: string, project: string> {
+]: any -> oneof<record<content: string, id: string, name: string, path: string, project: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -4801,7 +4819,7 @@ export def "projects-project-files-replace" [
   --base64-data: string # Fila data, represented as base64.
   --name: string # File name. May include path when creating file with base64 field.
   --path: string # File path. Defaults to (/).
-]: any -> record<content: string, id: string, name: string, path: string, project: string> {
+]: any -> oneof<record<content: string, id: string, name: string, path: string, project: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -4850,7 +4868,7 @@ export def "projects-servers-list" [
   --offset: string # Offset results when getting server list.
   --name: string # Server name.
   --ordering: string # Ordering option when getting server list.
-]: nothing -> table<config: record, connected: list<string>, created_at: string, created_by: string, endpoint: string, host: string, id: string, image_name: string, logs_url: string, name: string, project: string, server_size: string, startup_script: string, status: string, status_url: string> {
+]: nothing -> oneof<table<config: record, connected: list<string>, created_at: string, created_by: string, endpoint: string, host: string, id: string, image_name: string, logs_url: string, name: string, project: string, server_size: string, startup_script: string, status: string, status_url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -4877,7 +4895,6 @@ export def "projects-servers-list" [
 #
 # POST /v1/{namespace}/projects/{project}/servers/
 # operationId: projects_servers_create
-# --config shape: {command?: string, function?: string, script?: string, type?: "jupyter"|"restful"|"cron"}
 export def "projects-servers-create" [
   namespace: string
   project: string
@@ -4898,7 +4915,7 @@ export def "projects-servers-create" [
   name: string # Server name.
   --server-size: string # Server size unique identifier.
   --startup-script: string # Startup script to run when launching server.
-]: any -> record<config: record, connected: list<string>, created_at: string, created_by: string, endpoint: string, host: string, id: string, image_name: string, logs_url: string, name: string, project: string, server_size: string, startup_script: string, status: string, status_url: string> {
+]: any -> oneof<record<config: record, connected: list<string>, created_at: string, created_by: string, endpoint: string, host: string, id: string, image_name: string, logs_url: string, name: string, project: string, server_size: string, startup_script: string, status: string, status_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -4940,7 +4957,7 @@ export def "projects-servers-statuses" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<id: string, status: string> {
+]: nothing -> oneof<table<id: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -5021,7 +5038,7 @@ export def "projects-servers-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<config: record, connected: list<string>, created_at: string, created_by: string, endpoint: string, host: string, id: string, image_name: string, logs_url: string, name: string, project: string, server_size: string, startup_script: string, status: string, status_url: string> {
+]: nothing -> oneof<record<config: record, connected: list<string>, created_at: string, created_by: string, endpoint: string, host: string, id: string, image_name: string, logs_url: string, name: string, project: string, server_size: string, startup_script: string, status: string, status_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -5048,7 +5065,6 @@ export def "projects-servers-read" [
 #
 # PATCH /v1/{namespace}/projects/{project}/servers/{server}/
 # operationId: projects_servers_update
-# --config shape: {command?: string, function?: string, script?: string, type?: "jupyter"|"restful"|"cron"}
 export def "projects-servers-update" [
   namespace: string
   project: string
@@ -5070,7 +5086,7 @@ export def "projects-servers-update" [
   name: string # Server name.
   --server-size: string # Server size unique identifier.
   --startup-script: string # Startup script to run when launching server.
-]: any -> record<config: record, connected: list<string>, created_at: string, created_by: string, endpoint: string, host: string, id: string, image_name: string, logs_url: string, name: string, project: string, server_size: string, startup_script: string, status: string, status_url: string> {
+]: any -> oneof<record<config: record, connected: list<string>, created_at: string, created_by: string, endpoint: string, host: string, id: string, image_name: string, logs_url: string, name: string, project: string, server_size: string, startup_script: string, status: string, status_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -5100,7 +5116,6 @@ export def "projects-servers-update" [
 #
 # PUT /v1/{namespace}/projects/{project}/servers/{server}/
 # operationId: projects_servers_replace
-# --config shape: {command?: string, function?: string, script?: string, type?: "jupyter"|"restful"|"cron"}
 export def "projects-servers-replace" [
   namespace: string
   project: string
@@ -5122,7 +5137,7 @@ export def "projects-servers-replace" [
   name: string # Server name.
   --server-size: string # Server size unique identifier.
   --startup-script: string # Startup script to run when launching server.
-]: any -> record<config: record, connected: list<string>, created_at: string, created_by: string, endpoint: string, host: string, id: string, image_name: string, logs_url: string, name: string, project: string, server_size: string, startup_script: string, status: string, status_url: string> {
+]: any -> oneof<record<config: record, connected: list<string>, created_at: string, created_by: string, endpoint: string, host: string, id: string, image_name: string, logs_url: string, name: string, project: string, server_size: string, startup_script: string, status: string, status_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -5166,7 +5181,7 @@ export def "projects-servers-api-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<token: string> {
+]: nothing -> oneof<record<token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -5253,7 +5268,7 @@ export def "projects-servers-run-stats-create" [
   --stacktrace: string # Server stacktrace.
   --start: string # Server start.
   --stop: string # Server stop.
-]: any -> record<exit_code: int, id: string, server: string, size: int, stacktrace: string, start: string, stop: string> {
+]: any -> oneof<record<exit_code: int, id: string, server: string, size: int, stacktrace: string, start: string, stop: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -5341,7 +5356,7 @@ export def "projects-servers-run-stats-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<exit_code: int, id: string, server: string, size: int, stacktrace: string, start: string, stop: string> {
+]: nothing -> oneof<record<exit_code: int, id: string, server: string, size: int, stacktrace: string, start: string, stop: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -5389,7 +5404,7 @@ export def "projects-servers-run-stats-update" [
   --stacktrace: string # Server stacktrace.
   --start: string # Server start.
   --stop: string # Server stop.
-]: any -> record<exit_code: int, id: string, server: string, size: int, stacktrace: string, start: string, stop: string> {
+]: any -> oneof<record<exit_code: int, id: string, server: string, size: int, stacktrace: string, start: string, stop: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -5440,7 +5455,7 @@ export def "projects-servers-run-stats-replace" [
   --stacktrace: string # Server stacktrace.
   --start: string # Server start.
   --stop: string # Server stop.
-]: any -> record<exit_code: int, id: string, server: string, size: int, stacktrace: string, start: string, stop: string> {
+]: any -> oneof<record<exit_code: int, id: string, server: string, size: int, stacktrace: string, start: string, stop: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -5488,7 +5503,7 @@ export def "projects-servers-ssh-tunnels-list" [
   --limit: string # Limit retrieved items.
   --offset: string # Offset retrieved items.
   --ordering: string # Order retrieved items.
-]: nothing -> table<endpoint: string, host: string, id: string, local_port: int, name: string, remote_port: int, server: string, username: string> {
+]: nothing -> oneof<table<endpoint: string, host: string, id: string, local_port: int, name: string, remote_port: int, server: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -5536,7 +5551,7 @@ export def "projects-servers-ssh-tunnels-create" [
   name: string # SSH tunnel name.
   remote_port: int # SSH tunnel remote port.
   username: string # User name to establish SSH tunnel.
-]: any -> record<endpoint: string, host: string, id: string, local_port: int, name: string, remote_port: int, server: string, username: string> {
+]: any -> oneof<record<endpoint: string, host: string, id: string, local_port: int, name: string, remote_port: int, server: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -5624,7 +5639,7 @@ export def "projects-servers-ssh-tunnels-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<endpoint: string, host: string, id: string, local_port: int, name: string, remote_port: int, server: string, username: string> {
+]: nothing -> oneof<record<endpoint: string, host: string, id: string, local_port: int, name: string, remote_port: int, server: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -5673,7 +5688,7 @@ export def "projects-servers-ssh-tunnels-update" [
   name: string # SSH tunnel name.
   remote_port: int # SSH tunnel remote port.
   username: string # User name to establish SSH tunnel.
-]: any -> record<endpoint: string, host: string, id: string, local_port: int, name: string, remote_port: int, server: string, username: string> {
+]: any -> oneof<record<endpoint: string, host: string, id: string, local_port: int, name: string, remote_port: int, server: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -5725,7 +5740,7 @@ export def "projects-servers-ssh-tunnels-replace" [
   name: string # SSH tunnel name.
   remote_port: int # SSH tunnel remote port.
   username: string # User name to establish SSH tunnel.
-]: any -> record<endpoint: string, host: string, id: string, local_port: int, name: string, remote_port: int, server: string, username: string> {
+]: any -> oneof<record<endpoint: string, host: string, id: string, local_port: int, name: string, remote_port: int, server: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -5855,7 +5870,7 @@ export def "projects-servers-stats-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, server: string, size: int, start: string, stop: string> {
+]: nothing -> oneof<record<id: string, server: string, size: int, start: string, stop: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -5903,7 +5918,7 @@ export def "projects-servers-stats-update" [
   --size: list<string> # size field errors.
   --start: list<string> # start field errors.
   --stop: list<string> # stop field errors.
-]: any -> record<id: string, server: string, size: int, start: string, stop: string> {
+]: any -> oneof<record<id: string, server: string, size: int, start: string, stop: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -5954,7 +5969,7 @@ export def "projects-servers-stats-replace" [
   --size: list<string> # size field errors.
   --start: list<string> # start field errors.
   --stop: list<string> # stop field errors.
-]: any -> record<id: string, server: string, size: int, start: string, stop: string> {
+]: any -> oneof<record<id: string, server: string, size: int, start: string, stop: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -6044,7 +6059,7 @@ export def "service-trigger-list" [
   --limit: string # Limit when getting triggers.
   --offset: string # Offset when getting triggers.
   --ordering: string # Ordering when getting triggers.
-]: nothing -> table<id: string, name: string, operation: string, webhook: record<payload: record, url: string>> {
+]: nothing -> oneof<table<id: string, name: string, operation: string, webhook: record<payload: record, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -6072,7 +6087,6 @@ export def "service-trigger-list" [
 #
 # POST /v1/{namespace}/projects/{project}/servers/{server}/triggers/
 # operationId: service_trigger_create
-# --webhook shape: {payload?: record, url: string}
 export def "service-trigger-create" [
   namespace: string
   project: string
@@ -6090,7 +6104,7 @@ export def "service-trigger-create" [
   --name: string # Name of server action.
   --operation: string@operation-completer # Manage server state. Starting a server changes state from Pending to Running. Terminating a server changes state from Running to Terminated. Stopping a server changes state from Running to Stopped. If the action results in Error, status will change to Error.
   --webhook: record # shape: {payload?: record, url: string}
-]: any -> record<id: string, name: string, operation: string, webhook: record<payload: record, url: string>> {
+]: any -> oneof<record<id: string, name: string, operation: string, webhook: record<payload: record, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -6178,7 +6192,7 @@ export def "service-trigger-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, name: string, operation: string, webhook: record<payload: record, url: string>> {
+]: nothing -> oneof<record<id: string, name: string, operation: string, webhook: record<payload: record, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -6206,7 +6220,6 @@ export def "service-trigger-read" [
 #
 # PATCH /v1/{namespace}/projects/{project}/servers/{server}/triggers/{trigger}/
 # operationId: service_trigger_update
-# --webhook shape: {payload?: record, url: string}
 export def "service-trigger-update" [
   namespace: string
   project: string
@@ -6225,7 +6238,7 @@ export def "service-trigger-update" [
   --name: string # Name of server action.
   --operation: string@operation-completer # Manage server state. Starting a server changes state from Pending to Running. Terminating a server changes state from Running to Terminated. Stopping a server changes state from Running to Stopped. If the action results in Error, status will change to Error.
   --webhook: record # shape: {payload?: record, url: string}
-]: any -> record<id: string, name: string, operation: string, webhook: record<payload: record, url: string>> {
+]: any -> oneof<record<id: string, name: string, operation: string, webhook: record<payload: record, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -6256,7 +6269,6 @@ export def "service-trigger-update" [
 #
 # PUT /v1/{namespace}/projects/{project}/servers/{server}/triggers/{trigger}/
 # operationId: service_trigger_replace
-# --webhook shape: {payload?: record, url: string}
 export def "service-trigger-replace" [
   namespace: string
   project: string
@@ -6275,7 +6287,7 @@ export def "service-trigger-replace" [
   --name: string # Name of server action.
   --operation: string@operation-completer # Manage server state. Starting a server changes state from Pending to Running. Terminating a server changes state from Running to Terminated. Stopping a server changes state from Running to Stopped. If the action results in Error, status will change to Error.
   --webhook: record # shape: {payload?: record, url: string}
-]: any -> record<id: string, name: string, operation: string, webhook: record<payload: record, url: string>> {
+]: any -> oneof<record<id: string, name: string, operation: string, webhook: record<payload: record, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
@@ -6322,7 +6334,7 @@ export def "search" [
   --type: string@type-completer # Limit results to specific types.
   --limit: string # Limit data when getting items.
   --offset: string # Offset data when getting items.
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "jwt"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }

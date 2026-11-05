@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -137,9 +161,9 @@ def media-format-completer [] { ["MEDIA_FORMAT_UNSPECIFIED" "PHOTO" "VIDEO"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mybusiness-accounts-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["mybusiness-accounts-list" "mybusiness-accounts-create" "mybusiness-attributes-list" "mybusiness-categories-list" "mybusiness-categories-batch-get" "mybusiness-chains-search" "mybusiness-google-locations-search" "mybusiness-accounts-locations-questions-delete" "mybusiness-chains-get" "mybusiness-accounts-locations-questions-patch" "mybusiness-accounts-update-notifications" "mybusiness-accounts-locations-local-posts-report-insights" "mybusiness-accounts-locations-batch-get" "mybusiness-accounts-locations-batch-get-reviews" "mybusiness-accounts-locations-report-insights" "mybusiness-accounts-locations-reviews-delete-reply" "mybusiness-accounts-locations-reviews-update-reply" "mybusiness-accounts-invitations-accept" "mybusiness-accounts-locations-associate" "mybusiness-accounts-locations-clear-association" "mybusiness-accounts-locations-verifications-complete" "mybusiness-accounts-invitations-decline" "mybusiness-accounts-locations-fetch-verification-options" "mybusiness-accounts-locations-find-matches" "mybusiness-accounts-generate-account-number" "mybusiness-accounts-locations-lodging-get-google-updated" "mybusiness-accounts-locations-get-google-updated" "mybusiness-accounts-list-recommend-google-locations" "mybusiness-google-locations-report" "mybusiness-accounts-locations-transfer" "mybusiness-accounts-locations-verify" "mybusiness-accounts-locations-admins-list" "mybusiness-accounts-locations-admins-create" "mybusiness-accounts-locations-questions-answers-list" "mybusiness-accounts-locations-questions-answers-delete" "mybusiness-accounts-locations-questions-answers-upsert" "mybusiness-accounts-locations-insurance-networks-list" "mybusiness-accounts-invitations-list" "mybusiness-accounts-locations-local-posts-list" "mybusiness-accounts-locations-local-posts-create" "mybusiness-accounts-locations-list" "mybusiness-accounts-locations-create" "mybusiness-accounts-locations-media-list" "mybusiness-accounts-locations-media-create" "mybusiness-accounts-locations-media-customers-list" "mybusiness-accounts-locations-media-start-upload" "mybusiness-accounts-locations-questions-list" "mybusiness-accounts-locations-questions-create" "mybusiness-accounts-locations-reviews-list" "mybusiness-accounts-locations-verifications-list" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -186,7 +210,7 @@ export def "mybusiness-accounts-list" [
   --name: string # The resource name of the account for which the list of directly accessible accounts is to be retrieved. This only makes sense for Organizations and User Groups. If empty, will return `ListAccounts` for the authenticated user.
   --page-size: int # How many accounts to fetch per page. Default is 20, minimum is 2, and maximum page size is 20.
   --page-token: string # If specified, the next page of accounts is retrieved. The `pageToken` is returned when a call to `accounts.list` returns more results than can fit into the requested page size.
-]: nothing -> record<accounts: table<accountName: string, accountNumber: string, name: string, organizationInfo: record, permissionLevel: string, role: string, state: record, type: string>, nextPageToken: string> {
+]: nothing -> oneof<record<accounts: table<accountName: string, accountNumber: string, name: string, organizationInfo: record, permissionLevel: string, role: string, state: record, type: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -211,8 +235,6 @@ export def "mybusiness-accounts-list" [
 #
 # POST /v4/accounts
 # operationId: mybusiness.accounts.create
-# --organizationInfo shape: {phoneNumber?: string, postalAddress?: record, registeredDomain?: string}
-# --state shape: {status?: "ACCOUNT_STATUS_UNSPECIFIED"|"VERIFIED"|"UNVERIFIED"|"VERIFICATION_REQUESTED"}
 export def "mybusiness-accounts-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -243,7 +265,7 @@ export def "mybusiness-accounts-create" [
   --role: string@role-completer # Output only. Specifies the AccountRole the caller has for this account.
   --state: record # Indicates status of the account, such as whether the account has been verified by Google. — shape: {status?: "ACCOUNT_STATUS_UNSPECIFIED"|"VERIFIED"|"UNVERIFIED"|"VERIFICATION_REQUESTED"}
   --type: string@type-completer # Output only. Specifies the AccountType of this account.
-]: any -> record<accountName: string, accountNumber: string, name: string, organizationInfo: record<phoneNumber: string, postalAddress: record<addressLines: list, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list, regionCode: string, revision: int, sortingCode: string, sublocality: string>, registeredDomain: string>, permissionLevel: string, role: string, state: record<status: string>, type: string> {
+]: any -> oneof<record<accountName: string, accountNumber: string, name: string, organizationInfo: record<phoneNumber: string, postalAddress: record<addressLines: list, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list, regionCode: string, revision: int, sortingCode: string, sublocality: string>, registeredDomain: string>, permissionLevel: string, role: string, state: record<status: string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -298,7 +320,7 @@ export def "mybusiness-attributes-list" [
   --name: string # Resource name of the location to look up available attributes.
   --page-size: int # How many attributes to include per page. Default is 200, minimum is 1.
   --page-token: string # If specified, the next page of attribute metadata is retrieved. The `pageToken` is returned when a call to `attributes.list` returns more results than can fit into the requested page size.
-]: nothing -> record<attributes: table<attributeId: string, displayName: string, groupDisplayName: string, isDeprecated: bool, isRepeatable: bool, valueMetadata: list, valueType: string>, nextPageToken: string> {
+]: nothing -> oneof<record<attributes: table<attributeId: string, displayName: string, groupDisplayName: string, isDeprecated: bool, isRepeatable: bool, valueMetadata: list, valueType: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "categoryId" $category_id "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -350,7 +372,7 @@ export def "mybusiness-categories-list" [
   --region-code: string # The ISO 3166-1 alpha-2 country code.
   --search-term: string # Optional filter string from user.
   --view: string@view-completer # Optional. Specifies which parts to the Category resource should be returned in the response.
-]: nothing -> record<categories: table<categoryId: string, displayName: string, moreHoursTypes: list, serviceTypes: list>, nextPageToken: string, totalCategoryCount: int> {
+]: nothing -> oneof<record<categories: table<categoryId: string, displayName: string, moreHoursTypes: list, serviceTypes: list>, nextPageToken: string, totalCategoryCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "regionCode" $region_code "scalar") (serialize-qp "searchTerm" $search_term "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -400,7 +422,7 @@ export def "mybusiness-categories-batch-get" [
   --language-code: string # Required. The BCP 47 code of language that the category names should be returned in.
   --region-code: string # Optional. The ISO 3166-1 alpha-2 country code used to infer non-standard language.
   --view: string@view-completer # Required. Specifies which parts to the Category resource should be returned in the response.
-]: nothing -> record<categories: table<categoryId: string, displayName: string, moreHoursTypes: list, serviceTypes: list>> {
+]: nothing -> oneof<record<categories: table<categoryId: string, displayName: string, moreHoursTypes: list, serviceTypes: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "categoryIds" $category_ids "multi") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "regionCode" $region_code "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -448,7 +470,7 @@ export def "mybusiness-chains-search" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --chain-display-name: string # Search for a chain by its name. Exact/partial/fuzzy/related queries are supported. Examples: "walmart", "wal-mart", "walmmmart", "沃尔玛"
   --result-count: int # The maximum number of matched chains to return from this query. The default is 10. The maximum possible value is 500.
-]: nothing -> record<chains: table<chainNames: list, locationCount: int, name: string, websites: list>> {
+]: nothing -> oneof<record<chains: table<chainNames: list, locationCount: int, name: string, websites: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "chainDisplayName" $chain_display_name "scalar") (serialize-qp "resultCount" $result_count "scalar")] | flatten | str join "&"
@@ -473,7 +495,6 @@ export def "mybusiness-chains-search" [
 #
 # POST /v4/googleLocations:search
 # operationId: mybusiness.googleLocations.search
-# --location shape: {adWordsLocationExtensions?: record, additionalCategories?: list, additionalPhones?: list<string>, address?: record, attributes?: list, labels?: list<string>, languageCode?: string, latlng?: record, locationKey?: record, locationName?: string, locationState?: record, metadata?: record, moreHours?: list, name?: string, openInfo?: record, priceLists?: list, primaryCategory?: record, primaryPhone?: string, profile?: record, regularHours?: record, relationshipData?: record, serviceArea?: record, ... (3 more fields)}
 export def "mybusiness-google-locations-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,7 +519,7 @@ export def "mybusiness-google-locations-search" [
   --location: record # A location. See the [help center article] (https://support.google.com/business/answer/3038177) for a detailed description of these fields, or the [category endpoint](/my-business/reference/rest/v4/categories) for a list of valid business categories. — shape: {adWordsLocationExtensions?: record, additionalCategories?: list, additionalPhones?: list<string>, address?: record, attributes?: list, labels?: list<string>, languageCode?: string, latlng?: record, locationKey?: record, locationName?: string, locationState?: record, metadata?: record, moreHours?: list, name?: string, openInfo?: record, priceLists?: list, primaryCategory?: record, primaryPhone?: string, profile?: record, regularHours?: record, relationshipData?: record, serviceArea?: record, ... (3 more fields)}
   --query: string # Text query to search for. The search results from a query string will be less accurate than if providing an exact location, but can provide more inexact matches.
   --result-count: int # The number of matches to return. The default value is 3, with a maximum of 10. Note that latency may increase if more are requested. There is no pagination. (format: int32)
-]: any -> record<googleLocations: table<location: record, name: string, requestAdminRightsUrl: string>> {
+]: any -> oneof<record<googleLocations: table<location: record, name: string, requestAdminRightsUrl: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -548,7 +569,7 @@ export def "mybusiness-accounts-locations-questions-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -596,7 +617,7 @@ export def "mybusiness-chains-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<chainNames: table<displayName: string, languageCode: string>, locationCount: int, name: string, websites: table<url: string>> {
+]: nothing -> oneof<record<chainNames: table<displayName: string, languageCode: string>, locationCount: int, name: string, websites: table<url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -622,8 +643,6 @@ export def "mybusiness-chains-get" [
 #
 # PATCH /v4/{name}
 # operationId: mybusiness.accounts.locations.questions.patch
-# --author shape: {displayName?: string, profilePhotoUrl?: string, type?: "AUTHOR_TYPE_UNSPECIFIED"|"REGULAR_USER"|"LOCAL_GUIDE"|"MERCHANT"}
-# --topAnswers item shape: {author?: record, createTime?: string, name?: string, text?: string, updateTime?: string, upvoteCount?: int}
 export def "mybusiness-accounts-locations-questions-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -655,7 +674,7 @@ export def "mybusiness-accounts-locations-questions-patch" [
   --total-answer-count: int # Output only. The total number of answers posted for this question. (format: int32)
   --update-time: string # Output only. The timestamp for when the question was last modified. (format: google-datetime)
   --upvote-count: int # Output only. The number of upvotes for the question. (format: int32)
-]: any -> record<author: record<displayName: string, profilePhotoUrl: string, type: string>, createTime: string, name: string, text: string, topAnswers: table<author: record, createTime: string, name: string, text: string, updateTime: string, upvoteCount: int>, totalAnswerCount: int, updateTime: string, upvoteCount: int> {
+]: any -> oneof<record<author: record<displayName: string, profilePhotoUrl: string, type: string>, createTime: string, name: string, text: string, topAnswers: table<author: record, createTime: string, name: string, text: string, updateTime: string, upvoteCount: int>, totalAnswerCount: int, updateTime: string, upvoteCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -709,7 +728,7 @@ export def "mybusiness-accounts-update-notifications" [
   --body-name: string # Output only. The notifications resource name.
   --notification-types: list<string> # The types of notifications that will be sent to the Cloud Pub/Sub topic. At least one must be specified. To stop receiving notifications entirely, use DeleteNotifications.
   --topic-name: string # The Google Cloud Pub/Sub topic that will receive notifications when locations managed by this account are updated. If unset, no notifications will be posted. The account mybusiness-api-pubsub@system.gserviceaccount.com must have at least Publish permissions on the Cloud Pub/Sub topic.
-]: any -> record<name: string, notificationTypes: list<string>, topicName: string> {
+]: any -> oneof<record<name: string, notificationTypes: list<string>, topicName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -738,7 +757,6 @@ export def "mybusiness-accounts-update-notifications" [
 #
 # POST /v4/{name}/localPosts:reportInsights
 # operationId: mybusiness.accounts.locations.localPosts.reportInsights
-# --basicRequest shape: {metricRequests?: list, timeRange?: record}
 export def "mybusiness-accounts-locations-local-posts-report-insights" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -763,7 +781,7 @@ export def "mybusiness-accounts-locations-local-posts-report-insights" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --basic-request: record # A request for basic metric insights. — shape: {metricRequests?: list, timeRange?: record}
   --local-post-names: list<string> # Required. The list of posts for which to fetch insights data. All posts have to belong to the location whose name is specified in the `name` field.
-]: any -> record<localPostMetrics: table<localPostName: string, metricValues: list>, name: string, timeZone: string> {
+]: any -> oneof<record<localPostMetrics: table<localPostName: string, metricValues: list>, name: string, timeZone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -815,7 +833,7 @@ export def "mybusiness-accounts-locations-batch-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --location-names: list<string> # A collection of locations to fetch, specified by their names.
-]: any -> record<locations: table<adWordsLocationExtensions: record, additionalCategories: list, additionalPhones: list, address: record, attributes: list, labels: list, languageCode: string, latlng: record, locationKey: record, locationName: string, locationState: record, metadata: record, moreHours: list, name: string, openInfo: record, priceLists: list, primaryCategory: record, primaryPhone: string, profile: record, regularHours: record, relationshipData: record, serviceArea: record, specialHours: record, storeCode: string, websiteUrl: string>> {
+]: any -> oneof<record<locations: table<adWordsLocationExtensions: record, additionalCategories: list, additionalPhones: list, address: record, attributes: list, labels: list, languageCode: string, latlng: record, locationKey: record, locationName: string, locationState: record, metadata: record, moreHours: list, name: string, openInfo: record, priceLists: list, primaryCategory: record, primaryPhone: string, profile: record, regularHours: record, relationshipData: record, serviceArea: record, specialHours: record, storeCode: string, websiteUrl: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -871,7 +889,7 @@ export def "mybusiness-accounts-locations-batch-get-reviews" [
   --order-by: string # Optional. Specifies the field to sort reviews by. If unspecified, the order of reviews returned will default to `update_time desc`. Valid orders to sort by are `rating`, `rating desc` and `update_time desc`. `rating` will return reviews in ascending order. `update_time`(i.e. ascending order) is not supported.
   --page-size: int # How many reviews to fetch per page. The default value is 200. (format: int32)
   --page-token: string # If specified, it fetches the next page of reviews.
-]: any -> record<locationReviews: table<name: string, review: record>, nextPageToken: string> {
+]: any -> oneof<record<locationReviews: table<name: string, review: record>, nextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -900,8 +918,6 @@ export def "mybusiness-accounts-locations-batch-get-reviews" [
 #
 # POST /v4/{name}/locations:reportInsights
 # operationId: mybusiness.accounts.locations.reportInsights
-# --basicRequest shape: {metricRequests?: list, timeRange?: record}
-# --drivingDirectionsRequest shape: {languageCode?: string, numDays?: "SEVEN"|"THIRTY"|"NINETY"}
 export def "mybusiness-accounts-locations-report-insights" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -927,7 +943,7 @@ export def "mybusiness-accounts-locations-report-insights" [
   --basic-request: record # A request for basic metric insights. — shape: {metricRequests?: list, timeRange?: record}
   --driving-directions-request: record # A request for driving direction insights. — shape: {languageCode?: string, numDays?: "SEVEN"|"THIRTY"|"NINETY"}
   --location-names: list<string> # A collection of locations to fetch insights for, specified by their names.
-]: any -> record<locationDrivingDirectionMetrics: table<locationName: string, timeZone: string, topDirectionSources: list>, locationMetrics: table<locationName: string, metricValues: list, timeZone: string>> {
+]: any -> oneof<record<locationDrivingDirectionMetrics: table<locationName: string, timeZone: string, topDirectionSources: list>, locationMetrics: table<locationName: string, metricValues: list, timeZone: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -978,7 +994,7 @@ export def "mybusiness-accounts-locations-reviews-delete-reply" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1028,7 +1044,7 @@ export def "mybusiness-accounts-locations-reviews-update-reply" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --comment: string # The body of the reply as plain text with markups. The maximum length is 4096 bytes.
   --update-time: string # Output only. The timestamp for when the reply was last modified. (format: google-datetime)
-]: any -> record<comment: string, updateTime: string> {
+]: any -> oneof<record<comment: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1080,7 +1096,7 @@ export def "mybusiness-accounts-invitations-accept" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1132,7 +1148,7 @@ export def "mybusiness-accounts-locations-associate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --place-id: string # The association to establish. If not set, it indicates no match.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1184,7 +1200,7 @@ export def "mybusiness-accounts-locations-clear-association" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1236,7 +1252,7 @@ export def "mybusiness-accounts-locations-verifications-complete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --pin: string # PIN code received by the merchant to complete the verification.
-]: any -> record<verification: record<createTime: string, method: string, name: string, state: string>> {
+]: any -> oneof<record<verification: record<createTime: string, method: string, name: string, state: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1288,7 +1304,7 @@ export def "mybusiness-accounts-invitations-decline" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1317,7 +1333,6 @@ export def "mybusiness-accounts-invitations-decline" [
 #
 # POST /v4/{name}:fetchVerificationOptions
 # operationId: mybusiness.accounts.locations.fetchVerificationOptions
-# --context shape: {address?: record}
 export def "mybusiness-accounts-locations-fetch-verification-options" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1342,7 +1357,7 @@ export def "mybusiness-accounts-locations-fetch-verification-options" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --context: record # Additional data for service business verification. — shape: {address?: record}
   --language-code: string # The BCP 47 language code representing the language that is to be used for the verification process. Available options vary by language.
-]: any -> record<options: table<addressData: record, emailData: record, phoneData: record, verificationMethod: string>> {
+]: any -> oneof<record<options: table<addressData: record, emailData: record, phoneData: record, verificationMethod: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1396,7 +1411,7 @@ export def "mybusiness-accounts-locations-find-matches" [
   --language-code: string # The preferred language for the matching location (in BCP-47 format).
   --max-cache-duration: string # Deprecated. This field is ignored for all requests. (format: google-duration)
   --num-results: int # The number of matches to return. The default value is 3, with a maximum of 10. Note that latency may increase if more are requested. There is no pagination. (format: int32)
-]: any -> record<matchTime: string, matchedLocations: table<isExactMatch: bool, location: record>> {
+]: any -> oneof<record<matchTime: string, matchedLocations: table<isExactMatch: bool, location: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1448,7 +1463,7 @@ export def "mybusiness-accounts-generate-account-number" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<accountName: string, accountNumber: string, name: string, organizationInfo: record<phoneNumber: string, postalAddress: record<addressLines: list, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list, regionCode: string, revision: int, sortingCode: string, sublocality: string>, registeredDomain: string>, permissionLevel: string, role: string, state: record<status: string>, type: string> {
+]: any -> oneof<record<accountName: string, accountNumber: string, name: string, organizationInfo: record<phoneNumber: string, postalAddress: record<addressLines: list, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list, regionCode: string, revision: int, sortingCode: string, sublocality: string>, registeredDomain: string>, permissionLevel: string, role: string, state: record<status: string>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1500,7 +1515,7 @@ export def "mybusiness-accounts-locations-lodging-get-google-updated" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --read-mask: string # Optional. The specific fields to return. If no mask is specified, then it returns the full Lodging (same as "*"). Repeated field items cannot be individually specified.
-]: nothing -> record<diffMask: string, lodging: record<accessibility: record<mobilityAccessible: bool, mobilityAccessibleElevator: bool, mobilityAccessibleElevatorException: string, mobilityAccessibleException: string, mobilityAccessibleParking: bool, mobilityAccessibleParkingException: string, mobilityAccessiblePool: bool, mobilityAccessiblePoolException: string>, activities: record<beachAccess: bool, beachAccessException: string, beachFront: bool, beachFrontException: string, bicycleRental: bool, bicycleRentalException: string, boutiqueStores: bool, boutiqueStoresException: string, casino: bool, casinoException: string, freeBicycleRental: bool, freeBicycleRentalException: string, freeWatercraftRental: bool, freeWatercraftRentalException: string, gameRoom: bool, gameRoomException: string, golf: bool, golfException: string, horsebackRiding: bool, horsebackRidingException: string, nightclub: bool, nightclubException: string, privateBeach: bool, privateBeachException: string, scuba: bool, scubaException: string, snorkeling: bool, snorkelingException: string, tennis: bool, tennisException: string, waterSkiing: bool, waterSkiingException: string, watercraftRental: bool, watercraftRentalException: string>, allUnits: record<bungalowOrVilla: bool, bungalowOrVillaException: string, connectingUnitAvailable: bool, connectingUnitAvailableException: string, executiveFloor: bool, executiveFloorException: string, maxAdultOccupantsCount: int, maxAdultOccupantsCountException: string, maxChildOccupantsCount: int, maxChildOccupantsCountException: string, maxOccupantsCount: int, maxOccupantsCountException: string, privateHome: bool, privateHomeException: string, suite: bool, suiteException: string, tier: string, tierException: string, totalLivingAreas: record, views: record>, business: record<businessCenter: bool, businessCenterException: string, meetingRooms: bool, meetingRoomsCount: int, meetingRoomsCountException: string, meetingRoomsException: string>, commonLivingArea: record<accessibility: record, eating: record, features: record, layout: record, sleeping: record>, connectivity: record<freeWifi: bool, freeWifiException: string, publicAreaWifiAvailable: bool, publicAreaWifiAvailableException: string, publicInternetTerminal: bool, publicInternetTerminalException: string, wifiAvailable: bool, wifiAvailableException: string>, families: record<babysitting: bool, babysittingException: string, kidsActivities: bool, kidsActivitiesException: string, kidsClub: bool, kidsClubException: string>, foodAndDrink: record<bar: bool, barException: string, breakfastAvailable: bool, breakfastAvailableException: string, breakfastBuffet: bool, breakfastBuffetException: string, buffet: bool, buffetException: string, dinnerBuffet: bool, dinnerBuffetException: string, freeBreakfast: bool, freeBreakfastException: string, restaurant: bool, restaurantException: string, restaurantsCount: int, restaurantsCountException: string, roomService: bool, roomServiceException: string, tableService: bool, tableServiceException: string, twentyFourHourRoomService: bool, twentyFourHourRoomServiceException: string, vendingMachine: bool, vendingMachineException: string>, guestUnits: list<record>, healthAndSafety: record<enhancedCleaning: record, increasedFoodSafety: record, minimizedContact: record, personalProtection: record, physicalDistancing: record>, housekeeping: record<dailyHousekeeping: bool, dailyHousekeepingException: string, housekeepingAvailable: bool, housekeepingAvailableException: string, turndownService: bool, turndownServiceException: string>, metadata: record<updateTime: string>, name: string, parking: record<electricCarChargingStations: bool, electricCarChargingStationsException: string, freeParking: bool, freeParkingException: string, freeSelfParking: bool, freeSelfParkingException: string, freeValetParking: bool, freeValetParkingException: string, parkingAvailable: bool, parkingAvailableException: string, selfParkingAvailable: bool, selfParkingAvailableException: string, valetParkingAvailable: bool, valetParkingAvailableException: string>, pets: record<catsAllowed: bool, catsAllowedException: string, dogsAllowed: bool, dogsAllowedException: string, petsAllowed: bool, petsAllowedException: string, petsAllowedFree: bool, petsAllowedFreeException: string>, policies: record<allInclusiveAvailable: bool, allInclusiveAvailableException: string, allInclusiveOnly: bool, allInclusiveOnlyException: string, checkinTime: record, checkinTimeException: string, checkoutTime: record, checkoutTimeException: string, kidsStayFree: bool, kidsStayFreeException: string, maxChildAge: int, maxChildAgeException: string, maxKidsStayFreeCount: int, maxKidsStayFreeCountException: string, paymentOptions: record, smokeFreeProperty: bool, smokeFreePropertyException: string>, pools: record<adultPool: bool, adultPoolException: string, hotTub: bool, hotTubException: string, indoorPool: bool, indoorPoolException: string, indoorPoolsCount: int, indoorPoolsCountException: string, lazyRiver: bool, lazyRiverException: string, lifeguard: bool, lifeguardException: string, outdoorPool: bool, outdoorPoolException: string, outdoorPoolsCount: int, outdoorPoolsCountException: string, pool: bool, poolException: string, poolsCount: int, poolsCountException: string, wadingPool: bool, wadingPoolException: string, waterPark: bool, waterParkException: string, waterslide: bool, waterslideException: string, wavePool: bool, wavePoolException: string>, property: record<builtYear: int, builtYearException: string, floorsCount: int, floorsCountException: string, lastRenovatedYear: int, lastRenovatedYearException: string, roomsCount: int, roomsCountException: string>, services: record<baggageStorage: bool, baggageStorageException: string, concierge: bool, conciergeException: string, convenienceStore: bool, convenienceStoreException: string, currencyExchange: bool, currencyExchangeException: string, elevator: bool, elevatorException: string, frontDesk: bool, frontDeskException: string, fullServiceLaundry: bool, fullServiceLaundryException: string, giftShop: bool, giftShopException: string, languagesSpoken: record, selfServiceLaundry: bool, selfServiceLaundryException: string, socialHour: bool, socialHourException: string, twentyFourHourFrontDesk: bool, twentyFourHourFrontDeskException: string, wakeUpCalls: bool, wakeUpCallsException: string>, someUnits: record<bungalowOrVilla: bool, bungalowOrVillaException: string, connectingUnitAvailable: bool, connectingUnitAvailableException: string, executiveFloor: bool, executiveFloorException: string, maxAdultOccupantsCount: int, maxAdultOccupantsCountException: string, maxChildOccupantsCount: int, maxChildOccupantsCountException: string, maxOccupantsCount: int, maxOccupantsCountException: string, privateHome: bool, privateHomeException: string, suite: bool, suiteException: string, tier: string, tierException: string, totalLivingAreas: record, views: record>, transportation: record<airportShuttle: bool, airportShuttleException: string, carRentalOnProperty: bool, carRentalOnPropertyException: string, freeAirportShuttle: bool, freeAirportShuttleException: string, freePrivateCarService: bool, freePrivateCarServiceException: string, localShuttle: bool, localShuttleException: string, privateCarService: bool, privateCarServiceException: string, transfer: bool, transferException: string>, wellness: record<doctorOnCall: bool, doctorOnCallException: string, ellipticalMachine: bool, ellipticalMachineException: string, fitnessCenter: bool, fitnessCenterException: string, freeFitnessCenter: bool, freeFitnessCenterException: string, freeWeights: bool, freeWeightsException: string, massage: bool, massageException: string, salon: bool, salonException: string, sauna: bool, saunaException: string, spa: bool, spaException: string, treadmill: bool, treadmillException: string, weightMachine: bool, weightMachineException: string>>> {
+]: nothing -> oneof<record<diffMask: string, lodging: record<accessibility: record<mobilityAccessible: bool, mobilityAccessibleElevator: bool, mobilityAccessibleElevatorException: string, mobilityAccessibleException: string, mobilityAccessibleParking: bool, mobilityAccessibleParkingException: string, mobilityAccessiblePool: bool, mobilityAccessiblePoolException: string>, activities: record<beachAccess: bool, beachAccessException: string, beachFront: bool, beachFrontException: string, bicycleRental: bool, bicycleRentalException: string, boutiqueStores: bool, boutiqueStoresException: string, casino: bool, casinoException: string, freeBicycleRental: bool, freeBicycleRentalException: string, freeWatercraftRental: bool, freeWatercraftRentalException: string, gameRoom: bool, gameRoomException: string, golf: bool, golfException: string, horsebackRiding: bool, horsebackRidingException: string, nightclub: bool, nightclubException: string, privateBeach: bool, privateBeachException: string, scuba: bool, scubaException: string, snorkeling: bool, snorkelingException: string, tennis: bool, tennisException: string, waterSkiing: bool, waterSkiingException: string, watercraftRental: bool, watercraftRentalException: string>, allUnits: record<bungalowOrVilla: bool, bungalowOrVillaException: string, connectingUnitAvailable: bool, connectingUnitAvailableException: string, executiveFloor: bool, executiveFloorException: string, maxAdultOccupantsCount: int, maxAdultOccupantsCountException: string, maxChildOccupantsCount: int, maxChildOccupantsCountException: string, maxOccupantsCount: int, maxOccupantsCountException: string, privateHome: bool, privateHomeException: string, suite: bool, suiteException: string, tier: string, tierException: string, totalLivingAreas: record, views: record>, business: record<businessCenter: bool, businessCenterException: string, meetingRooms: bool, meetingRoomsCount: int, meetingRoomsCountException: string, meetingRoomsException: string>, commonLivingArea: record<accessibility: record, eating: record, features: record, layout: record, sleeping: record>, connectivity: record<freeWifi: bool, freeWifiException: string, publicAreaWifiAvailable: bool, publicAreaWifiAvailableException: string, publicInternetTerminal: bool, publicInternetTerminalException: string, wifiAvailable: bool, wifiAvailableException: string>, families: record<babysitting: bool, babysittingException: string, kidsActivities: bool, kidsActivitiesException: string, kidsClub: bool, kidsClubException: string>, foodAndDrink: record<bar: bool, barException: string, breakfastAvailable: bool, breakfastAvailableException: string, breakfastBuffet: bool, breakfastBuffetException: string, buffet: bool, buffetException: string, dinnerBuffet: bool, dinnerBuffetException: string, freeBreakfast: bool, freeBreakfastException: string, restaurant: bool, restaurantException: string, restaurantsCount: int, restaurantsCountException: string, roomService: bool, roomServiceException: string, tableService: bool, tableServiceException: string, twentyFourHourRoomService: bool, twentyFourHourRoomServiceException: string, vendingMachine: bool, vendingMachineException: string>, guestUnits: list<record>, healthAndSafety: record<enhancedCleaning: record, increasedFoodSafety: record, minimizedContact: record, personalProtection: record, physicalDistancing: record>, housekeeping: record<dailyHousekeeping: bool, dailyHousekeepingException: string, housekeepingAvailable: bool, housekeepingAvailableException: string, turndownService: bool, turndownServiceException: string>, metadata: record<updateTime: string>, name: string, parking: record<electricCarChargingStations: bool, electricCarChargingStationsException: string, freeParking: bool, freeParkingException: string, freeSelfParking: bool, freeSelfParkingException: string, freeValetParking: bool, freeValetParkingException: string, parkingAvailable: bool, parkingAvailableException: string, selfParkingAvailable: bool, selfParkingAvailableException: string, valetParkingAvailable: bool, valetParkingAvailableException: string>, pets: record<catsAllowed: bool, catsAllowedException: string, dogsAllowed: bool, dogsAllowedException: string, petsAllowed: bool, petsAllowedException: string, petsAllowedFree: bool, petsAllowedFreeException: string>, policies: record<allInclusiveAvailable: bool, allInclusiveAvailableException: string, allInclusiveOnly: bool, allInclusiveOnlyException: string, checkinTime: record, checkinTimeException: string, checkoutTime: record, checkoutTimeException: string, kidsStayFree: bool, kidsStayFreeException: string, maxChildAge: int, maxChildAgeException: string, maxKidsStayFreeCount: int, maxKidsStayFreeCountException: string, paymentOptions: record, smokeFreeProperty: bool, smokeFreePropertyException: string>, pools: record<adultPool: bool, adultPoolException: string, hotTub: bool, hotTubException: string, indoorPool: bool, indoorPoolException: string, indoorPoolsCount: int, indoorPoolsCountException: string, lazyRiver: bool, lazyRiverException: string, lifeguard: bool, lifeguardException: string, outdoorPool: bool, outdoorPoolException: string, outdoorPoolsCount: int, outdoorPoolsCountException: string, pool: bool, poolException: string, poolsCount: int, poolsCountException: string, wadingPool: bool, wadingPoolException: string, waterPark: bool, waterParkException: string, waterslide: bool, waterslideException: string, wavePool: bool, wavePoolException: string>, property: record<builtYear: int, builtYearException: string, floorsCount: int, floorsCountException: string, lastRenovatedYear: int, lastRenovatedYearException: string, roomsCount: int, roomsCountException: string>, services: record<baggageStorage: bool, baggageStorageException: string, concierge: bool, conciergeException: string, convenienceStore: bool, convenienceStoreException: string, currencyExchange: bool, currencyExchangeException: string, elevator: bool, elevatorException: string, frontDesk: bool, frontDeskException: string, fullServiceLaundry: bool, fullServiceLaundryException: string, giftShop: bool, giftShopException: string, languagesSpoken: record, selfServiceLaundry: bool, selfServiceLaundryException: string, socialHour: bool, socialHourException: string, twentyFourHourFrontDesk: bool, twentyFourHourFrontDeskException: string, wakeUpCalls: bool, wakeUpCallsException: string>, someUnits: record<bungalowOrVilla: bool, bungalowOrVillaException: string, connectingUnitAvailable: bool, connectingUnitAvailableException: string, executiveFloor: bool, executiveFloorException: string, maxAdultOccupantsCount: int, maxAdultOccupantsCountException: string, maxChildOccupantsCount: int, maxChildOccupantsCountException: string, maxOccupantsCount: int, maxOccupantsCountException: string, privateHome: bool, privateHomeException: string, suite: bool, suiteException: string, tier: string, tierException: string, totalLivingAreas: record, views: record>, transportation: record<airportShuttle: bool, airportShuttleException: string, carRentalOnProperty: bool, carRentalOnPropertyException: string, freeAirportShuttle: bool, freeAirportShuttleException: string, freePrivateCarService: bool, freePrivateCarServiceException: string, localShuttle: bool, localShuttleException: string, privateCarService: bool, privateCarServiceException: string, transfer: bool, transferException: string>, wellness: record<doctorOnCall: bool, doctorOnCallException: string, ellipticalMachine: bool, ellipticalMachineException: string, fitnessCenter: bool, fitnessCenterException: string, freeFitnessCenter: bool, freeFitnessCenterException: string, freeWeights: bool, freeWeightsException: string, massage: bool, massageException: string, salon: bool, salonException: string, sauna: bool, saunaException: string, spa: bool, spaException: string, treadmill: bool, treadmillException: string, weightMachine: bool, weightMachineException: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1548,7 +1563,7 @@ export def "mybusiness-accounts-locations-get-google-updated" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<diffMask: string, location: record<adWordsLocationExtensions: record<adPhone: string>, additionalCategories: list<record>, additionalPhones: list<string>, address: record<addressLines: list, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list, regionCode: string, revision: int, sortingCode: string, sublocality: string>, attributes: list<record>, labels: list<string>, languageCode: string, latlng: record<latitude: float, longitude: float>, locationKey: record<explicitNoPlaceId: bool, placeId: string, plusPageId: string, requestId: string>, locationName: string, locationState: record<canDelete: bool, canHaveFoodMenus: bool, canModifyServiceList: bool, canOperateHealthData: bool, canOperateLodgingData: bool, canUpdate: bool, hasPendingEdits: bool, hasPendingVerification: bool, isDisabled: bool, isDisconnected: bool, isDuplicate: bool, isGoogleUpdated: bool, isLocalPostApiDisabled: bool, isPendingReview: bool, isPublished: bool, isSuspended: bool, isVerified: bool, needsReverification: bool>, metadata: record<duplicate: record, mapsUrl: string, newReviewUrl: string>, moreHours: list<record>, name: string, openInfo: record<canReopen: bool, openingDate: record, status: string>, priceLists: list<record>, primaryCategory: record<categoryId: string, displayName: string, moreHoursTypes: list, serviceTypes: list>, primaryPhone: string, profile: record<description: string>, regularHours: record<periods: list>, relationshipData: record<parentChain: string>, serviceArea: record<businessType: string, places: record, radius: record>, specialHours: record<specialHourPeriods: list>, storeCode: string, websiteUrl: string>> {
+]: nothing -> oneof<record<diffMask: string, location: record<adWordsLocationExtensions: record<adPhone: string>, additionalCategories: list<record>, additionalPhones: list<string>, address: record<addressLines: list, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list, regionCode: string, revision: int, sortingCode: string, sublocality: string>, attributes: list<record>, labels: list<string>, languageCode: string, latlng: record<latitude: float, longitude: float>, locationKey: record<explicitNoPlaceId: bool, placeId: string, plusPageId: string, requestId: string>, locationName: string, locationState: record<canDelete: bool, canHaveFoodMenus: bool, canModifyServiceList: bool, canOperateHealthData: bool, canOperateLodgingData: bool, canUpdate: bool, hasPendingEdits: bool, hasPendingVerification: bool, isDisabled: bool, isDisconnected: bool, isDuplicate: bool, isGoogleUpdated: bool, isLocalPostApiDisabled: bool, isPendingReview: bool, isPublished: bool, isSuspended: bool, isVerified: bool, needsReverification: bool>, metadata: record<duplicate: record, mapsUrl: string, newReviewUrl: string>, moreHours: list<record>, name: string, openInfo: record<canReopen: bool, openingDate: record, status: string>, priceLists: list<record>, primaryCategory: record<categoryId: string, displayName: string, moreHoursTypes: list, serviceTypes: list>, primaryPhone: string, profile: record<description: string>, regularHours: record<periods: list>, relationshipData: record<parentChain: string>, serviceArea: record<businessType: string, places: record, radius: record>, specialHours: record<specialHourPeriods: list>, storeCode: string, websiteUrl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1598,7 +1613,7 @@ export def "mybusiness-accounts-list-recommend-google-locations" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # How many locations to fetch per page. Default is 25, minimum is 1, and maximum page size is 100.
   --page-token: string # If specified, the next page of locations is retrieved.
-]: nothing -> record<googleLocations: table<location: record, name: string, requestAdminRightsUrl: string>, nextPageToken: string, totalSize: int> {
+]: nothing -> oneof<record<googleLocations: table<location: record, name: string, requestAdminRightsUrl: string>, nextPageToken: string, totalSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1651,7 +1666,7 @@ export def "mybusiness-google-locations-report" [
   --report-reason-bad-recommendation: string@report-reason-bad-recommendation-completer # The reason for which the user is reporting this location when the issue is with the recommendation. This report is useful if the location has been recommended to the Business Profile account.
   --report-reason-elaboration: string # Optional. A text entry for elaborating on the reason for which the user is reporting this location. The maximum length is 512 characters.
   --report-reason-language-code: string # Optional. The BCP 47 code of language used in `report_reason_elaboration`.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1703,7 +1718,7 @@ export def "mybusiness-accounts-locations-transfer" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --to-account: string # Name of the account resource to transfer the location to (for example, "accounts/8675309").
-]: any -> record<adWordsLocationExtensions: record<adPhone: string>, additionalCategories: table<categoryId: string, displayName: string, moreHoursTypes: list, serviceTypes: list>, additionalPhones: list<string>, address: record<addressLines: list<string>, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list<string>, regionCode: string, revision: int, sortingCode: string, sublocality: string>, attributes: table<attributeId: string, repeatedEnumValue: record, urlValues: list, valueType: string, values: list>, labels: list<string>, languageCode: string, latlng: record<latitude: float, longitude: float>, locationKey: record<explicitNoPlaceId: bool, placeId: string, plusPageId: string, requestId: string>, locationName: string, locationState: record<canDelete: bool, canHaveFoodMenus: bool, canModifyServiceList: bool, canOperateHealthData: bool, canOperateLodgingData: bool, canUpdate: bool, hasPendingEdits: bool, hasPendingVerification: bool, isDisabled: bool, isDisconnected: bool, isDuplicate: bool, isGoogleUpdated: bool, isLocalPostApiDisabled: bool, isPendingReview: bool, isPublished: bool, isSuspended: bool, isVerified: bool, needsReverification: bool>, metadata: record<duplicate: record<access: string, locationName: string, placeId: string>, mapsUrl: string, newReviewUrl: string>, moreHours: table<hoursTypeId: string, periods: list>, name: string, openInfo: record<canReopen: bool, openingDate: record<day: int, month: int, year: int>, status: string>, priceLists: table<labels: list, priceListId: string, sections: list, sourceUrl: string>, primaryCategory: record<categoryId: string, displayName: string, moreHoursTypes: list<record>, serviceTypes: list<record>>, primaryPhone: string, profile: record<description: string>, regularHours: record<periods: list<record>>, relationshipData: record<parentChain: string>, serviceArea: record<businessType: string, places: record<placeInfos: list>, radius: record<latlng: record, radiusKm: float>>, specialHours: record<specialHourPeriods: list<record>>, storeCode: string, websiteUrl: string> {
+]: any -> oneof<record<adWordsLocationExtensions: record<adPhone: string>, additionalCategories: table<categoryId: string, displayName: string, moreHoursTypes: list, serviceTypes: list>, additionalPhones: list<string>, address: record<addressLines: list<string>, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list<string>, regionCode: string, revision: int, sortingCode: string, sublocality: string>, attributes: table<attributeId: string, repeatedEnumValue: record, urlValues: list, valueType: string, values: list>, labels: list<string>, languageCode: string, latlng: record<latitude: float, longitude: float>, locationKey: record<explicitNoPlaceId: bool, placeId: string, plusPageId: string, requestId: string>, locationName: string, locationState: record<canDelete: bool, canHaveFoodMenus: bool, canModifyServiceList: bool, canOperateHealthData: bool, canOperateLodgingData: bool, canUpdate: bool, hasPendingEdits: bool, hasPendingVerification: bool, isDisabled: bool, isDisconnected: bool, isDuplicate: bool, isGoogleUpdated: bool, isLocalPostApiDisabled: bool, isPendingReview: bool, isPublished: bool, isSuspended: bool, isVerified: bool, needsReverification: bool>, metadata: record<duplicate: record<access: string, locationName: string, placeId: string>, mapsUrl: string, newReviewUrl: string>, moreHours: table<hoursTypeId: string, periods: list>, name: string, openInfo: record<canReopen: bool, openingDate: record<day: int, month: int, year: int>, status: string>, priceLists: table<labels: list, priceListId: string, sections: list, sourceUrl: string>, primaryCategory: record<categoryId: string, displayName: string, moreHoursTypes: list<record>, serviceTypes: list<record>>, primaryPhone: string, profile: record<description: string>, regularHours: record<periods: list<record>>, relationshipData: record<parentChain: string>, serviceArea: record<businessType: string, places: record<placeInfos: list>, radius: record<latlng: record, radiusKm: float>>, specialHours: record<specialHourPeriods: list<record>>, storeCode: string, websiteUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1732,10 +1747,6 @@ export def "mybusiness-accounts-locations-transfer" [
 #
 # POST /v4/{name}:verify
 # operationId: mybusiness.accounts.locations.verify
-# --addressInput shape: {mailerContactName?: string}
-# --context shape: {address?: record}
-# --emailInput shape: {emailAddress?: string}
-# --phoneInput shape: {phoneNumber?: string}
 export def "mybusiness-accounts-locations-verify" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1764,7 +1775,7 @@ export def "mybusiness-accounts-locations-verify" [
   --language-code: string # The BCP 47 language code representing the language that is to be used for the verification process.
   --method: string@method-completer # Verification method.
   --phone-input: record # Input for PHONE_CALL/SMS verification. — shape: {phoneNumber?: string}
-]: any -> record<verification: record<createTime: string, method: string, name: string, state: string>> {
+]: any -> oneof<record<verification: record<createTime: string, method: string, name: string, state: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1815,7 +1826,7 @@ export def "mybusiness-accounts-locations-admins-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<admins: table<adminName: string, name: string, pendingInvitation: bool, role: string>> {
+]: nothing -> oneof<record<admins: table<adminName: string, name: string, pendingInvitation: bool, role: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1867,7 +1878,7 @@ export def "mybusiness-accounts-locations-admins-create" [
   --name: string # The resource name. For account admins, this is in the form: `accounts/{account_id}/admins/{admin_id}` For location admins, this is in the form: `accounts/{account_id}/locations/{location_id}/admins/{admin_id}`
   --pending-invitation: oneof<nothing, bool> # Output only. Indicates whether this admin has a pending invitation for the specified resource.
   --role: string@role-completer-1 # Specifies the AdminRole that this admin uses with the specified Account or Location resource.
-]: any -> record<adminName: string, name: string, pendingInvitation: bool, role: string> {
+]: any -> oneof<record<adminName: string, name: string, pendingInvitation: bool, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1921,7 +1932,7 @@ export def "mybusiness-accounts-locations-questions-answers-list" [
   --order-by: string # The order to return the answers. Valid options include 'update_time desc' and 'upvote_count desc', which will return the answers sorted descendingly by the requested field. The default sort order is 'update_time desc'.
   --page-size: int # How many answers to fetch per page. The default and maximum `page_size` values are 10.
   --page-token: string # If specified, the next page of answers is retrieved.
-]: nothing -> record<answers: table<author: record, createTime: string, name: string, text: string, updateTime: string, upvoteCount: int>, nextPageToken: string, totalSize: int> {
+]: nothing -> oneof<record<answers: table<author: record, createTime: string, name: string, text: string, updateTime: string, upvoteCount: int>, nextPageToken: string, totalSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1969,7 +1980,7 @@ export def "mybusiness-accounts-locations-questions-answers-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1995,7 +2006,6 @@ export def "mybusiness-accounts-locations-questions-answers-delete" [
 #
 # POST /v4/{parent}/answers:upsert
 # operationId: mybusiness.accounts.locations.questions.answers.upsert
-# --answer shape: {author?: record, createTime?: string, name?: string, text?: string, updateTime?: string, upvoteCount?: int}
 export def "mybusiness-accounts-locations-questions-answers-upsert" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2019,7 +2029,7 @@ export def "mybusiness-accounts-locations-questions-answers-upsert" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --answer: record # Represents an answer to a question — shape: {author?: record, createTime?: string, name?: string, text?: string, updateTime?: string, upvoteCount?: int}
-]: any -> record<author: record<displayName: string, profilePhotoUrl: string, type: string>, createTime: string, name: string, text: string, updateTime: string, upvoteCount: int> {
+]: any -> oneof<record<author: record<displayName: string, profilePhotoUrl: string, type: string>, createTime: string, name: string, text: string, updateTime: string, upvoteCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2073,7 +2083,7 @@ export def "mybusiness-accounts-locations-insurance-networks-list" [
   --language-code: string # Optional. The BCP 47 code for the language. If a language code is not provided, it defaults to English. Right now only 'en' is supported.
   --page-size: int # How many insurance networks to return per page. The default value is 5000. Maximum page size is 10000.
   --page-token: string # If specified, returns the next page of insurance networks.
-]: nothing -> record<networks: table<networkId: string, networkNames: record, payerNames: record, state: string>, nextPageToken: string> {
+]: nothing -> oneof<record<networks: table<networkId: string, networkNames: record, payerNames: record, state: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2122,7 +2132,7 @@ export def "mybusiness-accounts-invitations-list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --target-type: string@target-type-completer # Specifies which target types should appear in the response.
-]: nothing -> record<invitations: table<name: string, role: string, targetAccount: record, targetLocation: record>> {
+]: nothing -> oneof<record<invitations: table<name: string, role: string, targetAccount: record, targetLocation: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2172,7 +2182,7 @@ export def "mybusiness-accounts-locations-local-posts-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # How many local posts to return per page. Default of 20. The minimum is 1, and maximum page size is 100.
   --page-token: string # If specified, returns the next page of local posts.
-]: nothing -> record<localPosts: table<alertType: string, callToAction: record, createTime: string, event: record, languageCode: string, media: list, name: string, offer: record, searchUrl: string, state: string, summary: string, topicType: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<localPosts: table<alertType: string, callToAction: record, createTime: string, event: record, languageCode: string, media: list, name: string, offer: record, searchUrl: string, state: string, summary: string, topicType: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2198,10 +2208,6 @@ export def "mybusiness-accounts-locations-local-posts-list" [
 #
 # POST /v4/{parent}/localPosts
 # operationId: mybusiness.accounts.locations.localPosts.create
-# --callToAction shape: {actionType?: "ACTION_TYPE_UNSPECIFIED"|"BOOK"|"ORDER"|"SHOP"|"LEARN_MORE"|"SIGN_UP"|"GET_OFFER"|"CALL", url?: string}
-# --event shape: {schedule?: record, title?: string}
-# --media item shape: {attribution?: record, createTime?: string, dataRef?: record, description?: string, dimensions?: record, googleUrl?: string, insights?: record, locationAssociation?: record, mediaFormat?: "MEDIA_FORMAT_UNSPECIFIED"|"PHOTO"|"VIDEO", name?: string, sourceUrl?: string, thumbnailUrl?: string}
-# --offer shape: {couponCode?: string, redeemOnlineUrl?: string, termsConditions?: string}
 export def "mybusiness-accounts-locations-local-posts-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2237,7 +2243,7 @@ export def "mybusiness-accounts-locations-local-posts-create" [
   --summary: string # Description/body of the local post.
   --topic-type: string@topic-type-completer # Required. The topic type of the post: standard, event, offer, or alert.
   --update-time: string # Output only. Time of the last modification of the post made by the user. (format: google-datetime)
-]: any -> record<alertType: string, callToAction: record<actionType: string, url: string>, createTime: string, event: record<schedule: record<endDate: record, endTime: record, startDate: record, startTime: record>, title: string>, languageCode: string, media: table<attribution: record, createTime: string, dataRef: record, description: string, dimensions: record, googleUrl: string, insights: record, locationAssociation: record, mediaFormat: string, name: string, sourceUrl: string, thumbnailUrl: string>, name: string, offer: record<couponCode: string, redeemOnlineUrl: string, termsConditions: string>, searchUrl: string, state: string, summary: string, topicType: string, updateTime: string> {
+]: any -> oneof<record<alertType: string, callToAction: record<actionType: string, url: string>, createTime: string, event: record<schedule: record<endDate: record, endTime: record, startDate: record, startTime: record>, title: string>, languageCode: string, media: table<attribution: record, createTime: string, dataRef: record, description: string, dimensions: record, googleUrl: string, insights: record, locationAssociation: record, mediaFormat: string, name: string, sourceUrl: string, thumbnailUrl: string>, name: string, offer: record<couponCode: string, redeemOnlineUrl: string, termsConditions: string>, searchUrl: string, state: string, summary: string, topicType: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2293,7 +2299,7 @@ export def "mybusiness-accounts-locations-list" [
   --order-by: string # Sorting order for the request. Multiple fields should be comma-separated, following SQL syntax. The default sorting order is ascending. To specify descending order, a suffix " desc" should be added. Valid fields to order_by are location_name and store_code. For example: "location_name, store_code desc" or "location_name" or "store_code desc"
   --page-size: int # How many locations to fetch per page. Default is 100, minimum is 1, and maximum page size is 100.
   --page-token: string # If specified, it fetches the next `page` of locations. The page token is returned by previous calls to `ListLocations` when there were more locations than could fit in the requested page size.
-]: nothing -> record<locations: table<adWordsLocationExtensions: record, additionalCategories: list, additionalPhones: list, address: record, attributes: list, labels: list, languageCode: string, latlng: record, locationKey: record, locationName: string, locationState: record, metadata: record, moreHours: list, name: string, openInfo: record, priceLists: list, primaryCategory: record, primaryPhone: string, profile: record, regularHours: record, relationshipData: record, serviceArea: record, specialHours: record, storeCode: string, websiteUrl: string>, nextPageToken: string, totalSize: int> {
+]: nothing -> oneof<record<locations: table<adWordsLocationExtensions: record, additionalCategories: list, additionalPhones: list, address: record, attributes: list, labels: list, languageCode: string, latlng: record, locationKey: record, locationName: string, locationState: record, metadata: record, moreHours: list, name: string, openInfo: record, priceLists: list, primaryCategory: record, primaryPhone: string, profile: record, regularHours: record, relationshipData: record, serviceArea: record, specialHours: record, storeCode: string, websiteUrl: string>, nextPageToken: string, totalSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2319,23 +2325,6 @@ export def "mybusiness-accounts-locations-list" [
 #
 # POST /v4/{parent}/locations
 # operationId: mybusiness.accounts.locations.create
-# --adWordsLocationExtensions shape: {adPhone?: string}
-# --additionalCategories item shape: {categoryId?: string, displayName?: string, serviceTypes?: list}
-# --address shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, organization?: string, postalCode?: string, recipients?: list<string>, regionCode?: string, revision?: int, sortingCode?: string, sublocality?: string}
-# --attributes item shape: {attributeId?: string, repeatedEnumValue?: record, urlValues?: list, valueType?: "ATTRIBUTE_VALUE_TYPE_UNSPECIFIED"|"BOOL"|"ENUM"|"URL"|"REPEATED_ENUM", values?: list}
-# --latlng shape: {latitude?: float, longitude?: float}
-# --locationKey shape: {explicitNoPlaceId?: bool, placeId?: string, plusPageId?: string, requestId?: string}
-# --locationState shape: {canDelete?: bool, canUpdate?: bool, hasPendingEdits?: bool, hasPendingVerification?: bool, isDisabled?: bool, isDisconnected?: bool, isDuplicate?: bool, isGoogleUpdated?: bool, isLocalPostApiDisabled?: bool, isPendingReview?: bool, isPublished?: bool, isSuspended?: bool, isVerified?: bool, needsReverification?: bool}
-# --metadata shape: {duplicate?: record, mapsUrl?: string, newReviewUrl?: string}
-# --moreHours item shape: {hoursTypeId?: string, periods?: list}
-# --openInfo shape: {canReopen?: bool, openingDate?: record, status?: "OPEN_FOR_BUSINESS_UNSPECIFIED"|"OPEN"|"CLOSED_PERMANENTLY"|"CLOSED_TEMPORARILY"}
-# --priceLists item shape: {labels?: list, priceListId?: string, sections?: list, sourceUrl?: string}
-# --primaryCategory shape: {categoryId?: string, displayName?: string, serviceTypes?: list}
-# --profile shape: {description?: string}
-# --regularHours shape: {periods?: list}
-# --relationshipData shape: {parentChain?: string}
-# --serviceArea shape: {businessType?: "BUSINESS_TYPE_UNSPECIFIED"|"CUSTOMER_LOCATION_ONLY"|"CUSTOMER_AND_BUSINESS_LOCATION", places?: record, radius?: record}
-# --specialHours shape: {specialHourPeriods?: list}
 export def "mybusiness-accounts-locations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2385,7 +2374,7 @@ export def "mybusiness-accounts-locations-create" [
   --special-hours: record # Represents a set of time periods when a location's operational hours differ from its normal business hours. — shape: {specialHourPeriods?: list}
   --store-code: string # External identifier for this location, which must be unique inside a given account. This is a means of associating the location with your own records.
   --website-url: string # A URL for this business. If possible, use a URL that represents this individual business location instead of a generic website/URL that represents all locations, or the brand.
-]: any -> record<adWordsLocationExtensions: record<adPhone: string>, additionalCategories: table<categoryId: string, displayName: string, moreHoursTypes: list, serviceTypes: list>, additionalPhones: list<string>, address: record<addressLines: list<string>, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list<string>, regionCode: string, revision: int, sortingCode: string, sublocality: string>, attributes: table<attributeId: string, repeatedEnumValue: record, urlValues: list, valueType: string, values: list>, labels: list<string>, languageCode: string, latlng: record<latitude: float, longitude: float>, locationKey: record<explicitNoPlaceId: bool, placeId: string, plusPageId: string, requestId: string>, locationName: string, locationState: record<canDelete: bool, canHaveFoodMenus: bool, canModifyServiceList: bool, canOperateHealthData: bool, canOperateLodgingData: bool, canUpdate: bool, hasPendingEdits: bool, hasPendingVerification: bool, isDisabled: bool, isDisconnected: bool, isDuplicate: bool, isGoogleUpdated: bool, isLocalPostApiDisabled: bool, isPendingReview: bool, isPublished: bool, isSuspended: bool, isVerified: bool, needsReverification: bool>, metadata: record<duplicate: record<access: string, locationName: string, placeId: string>, mapsUrl: string, newReviewUrl: string>, moreHours: table<hoursTypeId: string, periods: list>, name: string, openInfo: record<canReopen: bool, openingDate: record<day: int, month: int, year: int>, status: string>, priceLists: table<labels: list, priceListId: string, sections: list, sourceUrl: string>, primaryCategory: record<categoryId: string, displayName: string, moreHoursTypes: list<record>, serviceTypes: list<record>>, primaryPhone: string, profile: record<description: string>, regularHours: record<periods: list<record>>, relationshipData: record<parentChain: string>, serviceArea: record<businessType: string, places: record<placeInfos: list>, radius: record<latlng: record, radiusKm: float>>, specialHours: record<specialHourPeriods: list<record>>, storeCode: string, websiteUrl: string> {
+]: any -> oneof<record<adWordsLocationExtensions: record<adPhone: string>, additionalCategories: table<categoryId: string, displayName: string, moreHoursTypes: list, serviceTypes: list>, additionalPhones: list<string>, address: record<addressLines: list<string>, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list<string>, regionCode: string, revision: int, sortingCode: string, sublocality: string>, attributes: table<attributeId: string, repeatedEnumValue: record, urlValues: list, valueType: string, values: list>, labels: list<string>, languageCode: string, latlng: record<latitude: float, longitude: float>, locationKey: record<explicitNoPlaceId: bool, placeId: string, plusPageId: string, requestId: string>, locationName: string, locationState: record<canDelete: bool, canHaveFoodMenus: bool, canModifyServiceList: bool, canOperateHealthData: bool, canOperateLodgingData: bool, canUpdate: bool, hasPendingEdits: bool, hasPendingVerification: bool, isDisabled: bool, isDisconnected: bool, isDuplicate: bool, isGoogleUpdated: bool, isLocalPostApiDisabled: bool, isPendingReview: bool, isPublished: bool, isSuspended: bool, isVerified: bool, needsReverification: bool>, metadata: record<duplicate: record<access: string, locationName: string, placeId: string>, mapsUrl: string, newReviewUrl: string>, moreHours: table<hoursTypeId: string, periods: list>, name: string, openInfo: record<canReopen: bool, openingDate: record<day: int, month: int, year: int>, status: string>, priceLists: table<labels: list, priceListId: string, sections: list, sourceUrl: string>, primaryCategory: record<categoryId: string, displayName: string, moreHoursTypes: list<record>, serviceTypes: list<record>>, primaryPhone: string, profile: record<description: string>, regularHours: record<periods: list<record>>, relationshipData: record<parentChain: string>, serviceArea: record<businessType: string, places: record<placeInfos: list>, radius: record<latlng: record, radiusKm: float>>, specialHours: record<specialHourPeriods: list<record>>, storeCode: string, websiteUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2438,7 +2427,7 @@ export def "mybusiness-accounts-locations-media-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # How many media items to return per page. The default value is 100, which is also the maximum supported number of media items able to be added to a location with the Google My Business API. Maximum page size is 2500.
   --page-token: string # If specified, returns the next page of media items.
-]: nothing -> record<mediaItems: table<attribution: record, createTime: string, dataRef: record, description: string, dimensions: record, googleUrl: string, insights: record, locationAssociation: record, mediaFormat: string, name: string, sourceUrl: string, thumbnailUrl: string>, nextPageToken: string, totalMediaItemCount: int> {
+]: nothing -> oneof<record<mediaItems: table<attribution: record, createTime: string, dataRef: record, description: string, dimensions: record, googleUrl: string, insights: record, locationAssociation: record, mediaFormat: string, name: string, sourceUrl: string, thumbnailUrl: string>, nextPageToken: string, totalMediaItemCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2464,11 +2453,6 @@ export def "mybusiness-accounts-locations-media-list" [
 #
 # POST /v4/{parent}/media
 # operationId: mybusiness.accounts.locations.media.create
-# --attribution shape: {profileName?: string, profilePhotoUrl?: string, profileUrl?: string, takedownUrl?: string}
-# --dataRef shape: {resourceName?: string}
-# --dimensions shape: {heightPixels?: int, widthPixels?: int}
-# --insights shape: {viewCount?: string}
-# --locationAssociation shape: {category?: "CATEGORY_UNSPECIFIED"|"COVER"|"PROFILE"|"LOGO"|"EXTERIOR"|"INTERIOR"|"PRODUCT"|"AT_WORK"|"FOOD_AND_DRINK"|"MENU"|"COMMON_AREA"|"ROOMS"|"TEAMS"|"ADDITIONAL", priceListItemId?: string}
 export def "mybusiness-accounts-locations-media-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2503,7 +2487,7 @@ export def "mybusiness-accounts-locations-media-create" [
   --name: string # The resource name for this media item. `accounts/{account_id}/locations/{location_id}/media/{media_key}`
   --source-url: string # A publicly accessible URL where the media item can be retrieved from. When creating one of this or data_ref must be set to specify the source of the media item. If `source_url` was used when creating a media item, it will be populated with that source URL when the media item is retrieved. This field cannot be updated.
   --thumbnail-url: string # Output only. Where provided, the URL of a thumbnail image for this media item.
-]: any -> record<attribution: record<profileName: string, profilePhotoUrl: string, profileUrl: string, takedownUrl: string>, createTime: string, dataRef: record<resourceName: string>, description: string, dimensions: record<heightPixels: int, widthPixels: int>, googleUrl: string, insights: record<viewCount: string>, locationAssociation: record<category: string, priceListItemId: string>, mediaFormat: string, name: string, sourceUrl: string, thumbnailUrl: string> {
+]: any -> oneof<record<attribution: record<profileName: string, profilePhotoUrl: string, profileUrl: string, takedownUrl: string>, createTime: string, dataRef: record<resourceName: string>, description: string, dimensions: record<heightPixels: int, widthPixels: int>, googleUrl: string, insights: record<viewCount: string>, locationAssociation: record<category: string, priceListItemId: string>, mediaFormat: string, name: string, sourceUrl: string, thumbnailUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2556,7 +2540,7 @@ export def "mybusiness-accounts-locations-media-customers-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # How many media items to return per page. The default value is 100, the maximum supported page size is 200.
   --page-token: string # If specified, returns the next page of media items.
-]: nothing -> record<mediaItems: table<attribution: record, createTime: string, dataRef: record, description: string, dimensions: record, googleUrl: string, insights: record, locationAssociation: record, mediaFormat: string, name: string, sourceUrl: string, thumbnailUrl: string>, nextPageToken: string, totalMediaItemCount: int> {
+]: nothing -> oneof<record<mediaItems: table<attribution: record, createTime: string, dataRef: record, description: string, dimensions: record, googleUrl: string, insights: record, locationAssociation: record, mediaFormat: string, name: string, sourceUrl: string, thumbnailUrl: string>, nextPageToken: string, totalMediaItemCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2605,7 +2589,7 @@ export def "mybusiness-accounts-locations-media-start-upload" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<resourceName: string> {
+]: any -> oneof<record<resourceName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2661,7 +2645,7 @@ export def "mybusiness-accounts-locations-questions-list" [
   --order-by: string # The order to return the questions. Valid options include 'update_time desc' and 'upvote_count desc', which will return the questions sorted descendingly by the requested field. The default sort order is 'update_time desc'.
   --page-size: int # How many questions to fetch per page. The default and maximum `page_size` values are 10.
   --page-token: string # If specified, the next page of questions is retrieved.
-]: nothing -> record<nextPageToken: string, questions: table<author: record, createTime: string, name: string, text: string, topAnswers: list, totalAnswerCount: int, updateTime: string, upvoteCount: int>, totalSize: int> {
+]: nothing -> oneof<record<nextPageToken: string, questions: table<author: record, createTime: string, name: string, text: string, topAnswers: list, totalAnswerCount: int, updateTime: string, upvoteCount: int>, totalSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2687,8 +2671,6 @@ export def "mybusiness-accounts-locations-questions-list" [
 #
 # POST /v4/{parent}/questions
 # operationId: mybusiness.accounts.locations.questions.create
-# --author shape: {displayName?: string, profilePhotoUrl?: string, type?: "AUTHOR_TYPE_UNSPECIFIED"|"REGULAR_USER"|"LOCAL_GUIDE"|"MERCHANT"}
-# --topAnswers item shape: {author?: record, createTime?: string, name?: string, text?: string, updateTime?: string, upvoteCount?: int}
 export def "mybusiness-accounts-locations-questions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2719,7 +2701,7 @@ export def "mybusiness-accounts-locations-questions-create" [
   --total-answer-count: int # Output only. The total number of answers posted for this question. (format: int32)
   --update-time: string # Output only. The timestamp for when the question was last modified. (format: google-datetime)
   --upvote-count: int # Output only. The number of upvotes for the question. (format: int32)
-]: any -> record<author: record<displayName: string, profilePhotoUrl: string, type: string>, createTime: string, name: string, text: string, topAnswers: table<author: record, createTime: string, name: string, text: string, updateTime: string, upvoteCount: int>, totalAnswerCount: int, updateTime: string, upvoteCount: int> {
+]: any -> oneof<record<author: record<displayName: string, profilePhotoUrl: string, type: string>, createTime: string, name: string, text: string, topAnswers: table<author: record, createTime: string, name: string, text: string, updateTime: string, upvoteCount: int>, totalAnswerCount: int, updateTime: string, upvoteCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2773,7 +2755,7 @@ export def "mybusiness-accounts-locations-reviews-list" [
   --order-by: string # Specifies the field to sort reviews by. If unspecified, the order of reviews returned will default to `update_time desc`. Valid orders to sort by are `rating`, `rating desc` and `update_time desc`.
   --page-size: int # How many reviews to fetch per page. The maximum `page_size` is 50.
   --page-token: string # If specified, it fetches the next page of reviews.
-]: nothing -> record<averageRating: float, nextPageToken: string, reviews: table<comment: string, createTime: string, name: string, reviewId: string, reviewReply: record, reviewer: record, starRating: string, updateTime: string>, totalReviewCount: int> {
+]: nothing -> oneof<record<averageRating: float, nextPageToken: string, reviews: table<comment: string, createTime: string, name: string, reviewId: string, reviewReply: record, reviewer: record, starRating: string, updateTime: string>, totalReviewCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -2823,7 +2805,7 @@ export def "mybusiness-accounts-locations-verifications-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # How many verification to include per page. If not set, return all.
   --page-token: string # If specified, returns the next page of verifications.
-]: nothing -> record<nextPageToken: string, verifications: table<createTime: string, method: string, name: string, state: string>> {
+]: nothing -> oneof<record<nextPageToken: string, verifications: table<createTime: string, method: string, name: string, state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -127,9 +151,9 @@ def kind-completer-2 [] { ["AdlsGen1File" "AdlsGen1Folder" "AdlsGen2File" "AdlsG
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "consumer-invitations-list-invitations" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["consumer-invitations-list-invitations" "consumer-invitations-reject-invitation" "consumer-invitations-get" "operations-list" "accounts-list-by-subscription" "accounts-list-by-resource-group" "accounts-delete" "accounts-get" "accounts-update" "accounts-create" "share-subscriptions-list-by-account" "share-subscriptions-delete" "share-subscriptions-get" "share-subscriptions-create" "consumer-source-data-sets-list-by-share-subscription" "share-subscriptions-synchronize" "share-subscriptions-cancel-synchronization" "data-set-mappings-list-by-share-subscription" "data-set-mappings-delete" "data-set-mappings-get" "data-set-mappings-create" "share-subscriptions-list-source-share-synchronization-settings" "share-subscriptions-list-synchronization-details" "share-subscriptions-list-synchronizations" "triggers-list-by-share-subscription" "triggers-delete" "triggers-get" "triggers-create" "shares-list-by-account" "shares-delete" "shares-get" "shares-create" "data-sets-list-by-share" "data-sets-delete" "data-sets-get" "data-sets-create" "invitations-list-by-share" "invitations-delete" "invitations-get" "invitations-create" "shares-list-synchronization-details" "shares-list-synchronizations" "provider-share-subscriptions-list-by-share" "provider-share-subscriptions-get-by-share" "provider-share-subscriptions-reinstate" "provider-share-subscriptions-revoke" "synchronization-settings-list-by-share" "synchronization-settings-delete" "synchronization-settings-get" "synchronization-settings-create" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -163,7 +187,7 @@ export def "consumer-invitations-list-invitations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --skip-token: string # The continuation token
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -189,7 +213,6 @@ export def "consumer-invitations-list-invitations" [
 #
 # POST /providers/Microsoft.DataShare/locations/{location}/RejectInvitation
 # operationId: ConsumerInvitations_RejectInvitation
-# --properties shape: {invitationId: string}
 export def "consumer-invitations-reject-invitation" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -203,7 +226,7 @@ export def "consumer-invitations-reject-invitation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   properties: record # Properties of consumer invitation — shape: {invitationId: string}
-]: any -> record<properties: record<dataSetCount: int, description: string, invitationId: string, invitationStatus: string, location: string, providerEmail: string, providerName: string, providerTenantName: string, respondedAt: string, sentAt: string, shareName: string, termsOfUse: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<dataSetCount: int, description: string, invitationId: string, invitationStatus: string, location: string, providerEmail: string, providerName: string, providerTenantName: string, respondedAt: string, sentAt: string, shareName: string, termsOfUse: string, userEmail: string, userName: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -246,7 +269,7 @@ export def "consumer-invitations-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<properties: record<dataSetCount: int, description: string, invitationId: string, invitationStatus: string, location: string, providerEmail: string, providerName: string, providerTenantName: string, respondedAt: string, sentAt: string, shareName: string, termsOfUse: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<dataSetCount: int, description: string, invitationId: string, invitationStatus: string, location: string, providerEmail: string, providerName: string, providerTenantName: string, respondedAt: string, sentAt: string, shareName: string, termsOfUse: string, userEmail: string, userName: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($location | is-empty) { error make --unspanned { msg: "path parameter 'location' must be non-empty" } }
@@ -285,7 +308,7 @@ export def "operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -324,7 +347,7 @@ export def "accounts-list-by-subscription" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -365,7 +388,7 @@ export def "accounts-list-by-resource-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -407,7 +430,7 @@ export def "accounts-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<endTime: string, error: record<code: string, details: list<any>, message: string, target: string>, startTime: string, status: string> {
+]: nothing -> oneof<record<endTime: string, error: record<code: string, details: list<any>, message: string, target: string>, startTime: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -450,7 +473,7 @@ export def "accounts-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createdAt: string, provisioningState: string, userEmail: string, userName: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createdAt: string, provisioningState: string, userEmail: string, userName: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -494,7 +517,7 @@ export def "accounts-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --tags: record # Tags on the azure resource.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createdAt: string, provisioningState: string, userEmail: string, userName: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createdAt: string, provisioningState: string, userEmail: string, userName: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -526,7 +549,6 @@ export def "accounts-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}
 # operationId: Accounts_Create
-# --identity shape: {type?: "SystemAssigned"}
 export def "accounts-create" [
   subscription_id: string
   resource_group_name: string
@@ -545,7 +567,7 @@ export def "accounts-create" [
   --properties: record # Account property bag.
   --location: string # Location of the azure resource.
   --tags: record # Tags on the azure resource.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createdAt: string, provisioningState: string, userEmail: string, userName: string>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createdAt: string, provisioningState: string, userEmail: string, userName: string>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -592,7 +614,7 @@ export def "share-subscriptions-list-by-account" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation Token
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -636,7 +658,7 @@ export def "share-subscriptions-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<endTime: string, error: record<code: string, details: list<any>, message: string, target: string>, startTime: string, status: string> {
+]: nothing -> oneof<record<endTime: string, error: record<code: string, details: list<any>, message: string, target: string>, startTime: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -681,7 +703,7 @@ export def "share-subscriptions-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<properties: record<createdAt: string, invitationId: string, providerEmail: string, providerName: string, providerTenantName: string, provisioningState: string, shareDescription: string, shareKind: string, shareName: string, shareSubscriptionStatus: string, shareTerms: string, sourceShareLocation: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<createdAt: string, invitationId: string, providerEmail: string, providerName: string, providerTenantName: string, provisioningState: string, shareDescription: string, shareKind: string, shareName: string, shareSubscriptionStatus: string, shareTerms: string, sourceShareLocation: string, userEmail: string, userName: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -711,7 +733,6 @@ export def "share-subscriptions-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}
 # operationId: ShareSubscriptions_Create
-# --properties shape: {invitationId: string, sourceShareLocation: string}
 export def "share-subscriptions-create" [
   subscription_id: string
   resource_group_name: string
@@ -728,7 +749,7 @@ export def "share-subscriptions-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   properties: record # Share subscription property bag. — shape: {invitationId: string, sourceShareLocation: string}
-]: any -> record<properties: record<createdAt: string, invitationId: string, providerEmail: string, providerName: string, providerTenantName: string, provisioningState: string, shareDescription: string, shareKind: string, shareName: string, shareSubscriptionStatus: string, shareTerms: string, sourceShareLocation: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<createdAt: string, invitationId: string, providerEmail: string, providerName: string, providerTenantName: string, provisioningState: string, shareDescription: string, shareKind: string, shareName: string, shareSubscriptionStatus: string, shareTerms: string, sourceShareLocation: string, userEmail: string, userName: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -777,7 +798,7 @@ export def "consumer-source-data-sets-list-by-share-subscription" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -823,7 +844,7 @@ export def "share-subscriptions-synchronize" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --synchronization-mode: string@synchronization-mode-completer # Mode of synchronization used in triggers and snapshot sync. Incremental by default
-]: any -> record<durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string> {
+]: any -> oneof<record<durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -872,7 +893,7 @@ export def "share-subscriptions-cancel-synchronization" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   synchronization_id: string # Synchronization id
-]: any -> record<durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string> {
+]: any -> oneof<record<durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -921,7 +942,7 @@ export def "data-set-mappings-list-by-share-subscription" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
-]: nothing -> record<nextLink: string, value: table<kind: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<kind: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -997,6 +1018,7 @@ export def "data-set-mappings-delete" [
 # Get DataSetMapping in a shareSubscription.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/dataSetMappings/{dataSetMappingName}
+# Discriminator (response): kind
 # operationId: DataSetMappings_Get
 export def "data-set-mappings-get" [
   subscription_id: string
@@ -1014,7 +1036,7 @@ export def "data-set-mappings-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<kind: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<kind: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1063,7 +1085,7 @@ export def "data-set-mappings-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   kind: string@kind-completer # Kind of data set mapping.
-]: any -> record<kind: string, id: string, name: string, type: string> {
+]: any -> oneof<record<kind: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1113,7 +1135,7 @@ export def "share-subscriptions-list-source-share-synchronization-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
-]: nothing -> record<nextLink: string, value: table<kind: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<kind: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1160,7 +1182,7 @@ export def "share-subscriptions-list-synchronization-details" [
   --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
   synchronization_id: string # Synchronization id
-]: any -> record<nextLink: string, value: table<dataSetId: string, dataSetType: string, durationMs: int, endTime: string, filesRead: int, filesWritten: int, message: string, name: string, rowsCopied: int, rowsRead: int, sizeRead: int, sizeWritten: int, startTime: string, status: string, vCore: int>> {
+]: any -> oneof<record<nextLink: string, value: table<dataSetId: string, dataSetType: string, durationMs: int, endTime: string, filesRead: int, filesWritten: int, message: string, name: string, rowsCopied: int, rowsRead: int, sizeRead: int, sizeWritten: int, startTime: string, status: string, vCore: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1209,7 +1231,7 @@ export def "share-subscriptions-list-synchronizations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
-]: nothing -> record<nextLink: string, value: table<durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1255,7 +1277,7 @@ export def "triggers-list-by-share-subscription" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
-]: nothing -> record<nextLink: string, value: table<kind: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<kind: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1301,7 +1323,7 @@ export def "triggers-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<endTime: string, error: record<code: string, details: list<any>, message: string, target: string>, startTime: string, status: string> {
+]: nothing -> oneof<record<endTime: string, error: record<code: string, details: list<any>, message: string, target: string>, startTime: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1331,6 +1353,7 @@ export def "triggers-delete" [
 # Get Trigger in a shareSubscription.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shareSubscriptions/{shareSubscriptionName}/triggers/{triggerName}
+# Discriminator (response): kind
 # operationId: Triggers_Get
 export def "triggers-get" [
   subscription_id: string
@@ -1348,7 +1371,7 @@ export def "triggers-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<kind: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<kind: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1397,7 +1420,7 @@ export def "triggers-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   kind: string@kind-completer-1 # Kind of synchronization
-]: any -> record<kind: string, id: string, name: string, type: string> {
+]: any -> oneof<record<kind: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1446,7 +1469,7 @@ export def "shares-list-by-account" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation Token
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1490,7 +1513,7 @@ export def "shares-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<endTime: string, error: record<code: string, details: list<any>, message: string, target: string>, startTime: string, status: string> {
+]: nothing -> oneof<record<endTime: string, error: record<code: string, details: list<any>, message: string, target: string>, startTime: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1535,7 +1558,7 @@ export def "shares-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<properties: record<createdAt: string, description: string, provisioningState: string, shareKind: string, terms: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<createdAt: string, description: string, provisioningState: string, shareKind: string, terms: string, userEmail: string, userName: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1565,7 +1588,6 @@ export def "shares-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}
 # operationId: Shares_Create
-# --properties shape: {description?: string, shareKind?: "CopyBased"|"InPlace", terms?: string}
 export def "shares-create" [
   subscription_id: string
   resource_group_name: string
@@ -1582,7 +1604,7 @@ export def "shares-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --properties: record # Share property bag. — shape: {description?: string, shareKind?: "CopyBased"|"InPlace", terms?: string}
-]: any -> record<properties: record<createdAt: string, description: string, provisioningState: string, shareKind: string, terms: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<createdAt: string, description: string, provisioningState: string, shareKind: string, terms: string, userEmail: string, userName: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1631,7 +1653,7 @@ export def "data-sets-list-by-share" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --skip-token: string # continuation token
-]: nothing -> record<nextLink: string, value: table<kind: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<kind: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1707,6 +1729,7 @@ export def "data-sets-delete" [
 # Get DataSet in a share.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/dataSets/{dataSetName}
+# Discriminator (response): kind
 # operationId: DataSets_Get
 export def "data-sets-get" [
   subscription_id: string
@@ -1724,7 +1747,7 @@ export def "data-sets-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<kind: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<kind: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1773,7 +1796,7 @@ export def "data-sets-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   kind: string@kind-completer-2 # Kind of data set.
-]: any -> record<kind: string, id: string, name: string, type: string> {
+]: any -> oneof<record<kind: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1823,7 +1846,7 @@ export def "invitations-list-by-share" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --skip-token: string # The continuation token
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1916,7 +1939,7 @@ export def "invitations-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<properties: record<invitationId: string, invitationStatus: string, respondedAt: string, sentAt: string, targetActiveDirectoryId: string, targetEmail: string, targetObjectId: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<invitationId: string, invitationStatus: string, respondedAt: string, sentAt: string, targetActiveDirectoryId: string, targetEmail: string, targetObjectId: string, userEmail: string, userName: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1947,7 +1970,6 @@ export def "invitations-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/invitations/{invitationName}
 # operationId: Invitations_Create
-# --properties shape: {targetActiveDirectoryId?: string, targetEmail?: string, targetObjectId?: string}
 export def "invitations-create" [
   subscription_id: string
   resource_group_name: string
@@ -1965,7 +1987,7 @@ export def "invitations-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --properties: record # Invitation property bag. — shape: {targetActiveDirectoryId?: string, targetEmail?: string, targetObjectId?: string}
-]: any -> record<properties: record<invitationId: string, invitationStatus: string, respondedAt: string, sentAt: string, targetActiveDirectoryId: string, targetEmail: string, targetObjectId: string, userEmail: string, userName: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<invitationId: string, invitationStatus: string, respondedAt: string, sentAt: string, targetActiveDirectoryId: string, targetEmail: string, targetObjectId: string, userEmail: string, userName: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2024,7 +2046,7 @@ export def "shares-list-synchronization-details" [
   --start-time: string # start time of synchronization (format: date-time)
   --status: string # Raw Status
   --synchronization-id: string # Synchronization id
-]: any -> record<nextLink: string, value: table<dataSetId: string, dataSetType: string, durationMs: int, endTime: string, filesRead: int, filesWritten: int, message: string, name: string, rowsCopied: int, rowsRead: int, sizeRead: int, sizeWritten: int, startTime: string, status: string, vCore: int>> {
+]: any -> oneof<record<nextLink: string, value: table<dataSetId: string, dataSetType: string, durationMs: int, endTime: string, filesRead: int, filesWritten: int, message: string, name: string, rowsCopied: int, rowsRead: int, sizeRead: int, sizeWritten: int, startTime: string, status: string, vCore: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2073,7 +2095,7 @@ export def "shares-list-synchronizations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation token
-]: nothing -> record<nextLink: string, value: table<consumerEmail: string, consumerName: string, consumerTenantName: string, durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<consumerEmail: string, consumerName: string, consumerTenantName: string, durationMs: int, endTime: string, message: string, startTime: string, status: string, synchronizationId: string, synchronizationMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2119,7 +2141,7 @@ export def "provider-share-subscriptions-list-by-share" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --skip-token: string # Continuation Token
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2165,7 +2187,7 @@ export def "provider-share-subscriptions-get-by-share" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<properties: record<consumerEmail: string, consumerName: string, consumerTenantName: string, createdAt: string, providerEmail: string, providerName: string, shareSubscriptionObjectId: string, shareSubscriptionStatus: string, sharedAt: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<consumerEmail: string, consumerName: string, consumerTenantName: string, createdAt: string, providerEmail: string, providerName: string, shareSubscriptionObjectId: string, shareSubscriptionStatus: string, sharedAt: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2212,7 +2234,7 @@ export def "provider-share-subscriptions-reinstate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<properties: record<consumerEmail: string, consumerName: string, consumerTenantName: string, createdAt: string, providerEmail: string, providerName: string, shareSubscriptionObjectId: string, shareSubscriptionStatus: string, sharedAt: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<consumerEmail: string, consumerName: string, consumerTenantName: string, createdAt: string, providerEmail: string, providerName: string, shareSubscriptionObjectId: string, shareSubscriptionStatus: string, sharedAt: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2259,7 +2281,7 @@ export def "provider-share-subscriptions-revoke" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<properties: record<consumerEmail: string, consumerName: string, consumerTenantName: string, createdAt: string, providerEmail: string, providerName: string, shareSubscriptionObjectId: string, shareSubscriptionStatus: string, sharedAt: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<consumerEmail: string, consumerName: string, consumerTenantName: string, createdAt: string, providerEmail: string, providerName: string, shareSubscriptionObjectId: string, shareSubscriptionStatus: string, sharedAt: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2306,7 +2328,7 @@ export def "synchronization-settings-list-by-share" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   --skip-token: string # continuation token
-]: nothing -> record<nextLink: string, value: table<kind: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<kind: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2352,7 +2374,7 @@ export def "synchronization-settings-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<endTime: string, error: record<code: string, details: list<any>, message: string, target: string>, startTime: string, status: string> {
+]: nothing -> oneof<record<endTime: string, error: record<code: string, details: list<any>, message: string, target: string>, startTime: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2382,6 +2404,7 @@ export def "synchronization-settings-delete" [
 # Get synchronizationSetting in a share.
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataShare/accounts/{accountName}/shares/{shareName}/synchronizationSettings/{synchronizationSettingName}
+# Discriminator (response): kind
 # operationId: SynchronizationSettings_Get
 export def "synchronization-settings-get" [
   subscription_id: string
@@ -2399,7 +2422,7 @@ export def "synchronization-settings-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
-]: nothing -> record<kind: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<kind: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2448,7 +2471,7 @@ export def "synchronization-settings-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version to use. (required)
   kind: string@kind-completer-1 # Kind of synchronization
-]: any -> record<kind: string, id: string, name: string, type: string> {
+]: any -> oneof<record<kind: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

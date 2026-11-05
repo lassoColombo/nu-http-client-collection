@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "oauth" => { {scheme: $scheme, headers: {"Authorization": $"Oauth ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def sort-order-completer [] { ["recency" "relevancy"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-batch-compliance-jobs" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-batch-compliance-jobs" "create-batch-compliance-job" "get-batch-compliance-job" "dm-conversation-id-create" "get-dm-conversations-with-participant-id-dm-events" "dm-conversation-with-user-event-id-create" "dm-conversation-by-id-event-id-create" "get-dm-conversations-id-dm-events" "get-dm-events" "list-id-create" "list-id-delete" "list-id-get" "list-id-update" "list-get-followers" "list-get-members" "list-add-member" "list-remove-member" "lists-id-tweets" "get-open-api-spec" "find-spaces-by-ids" "find-spaces-by-creator-ids" "search-spaces" "find-space-by-id" "space-buyers" "space-tweets" "find-tweets-by-id" "create-tweet" "get-tweets-compliance-stream" "tweet-counts-full-archive-search" "tweet-counts-recent-search" "get-tweets-firehose-stream" "get-tweets-label-stream" "sample-stream" "get-tweets-sample10-stream" "tweets-fullarchive-search" "tweets-recent-search" "search-stream" "get-rules" "add-or-delete-rules" "delete-tweet-by-id" "find-tweet-by-id" "tweets-id-liking-users" "find-tweets-that-quote-a-tweet" "tweets-id-retweeting-users" "hide-reply-by-id" "find-users-by-id" "find-users-by-username" "find-user-by-username" "get-users-compliance-stream" "find-my-user" "find-user-by-id" "users-id-blocking" "users-id-block" "get-users-id-bookmarks" "post-users-id-bookmarks" "users-id-bookmarks-delete" "user-followed-lists" "list-user-follow" "list-user-unfollow" "users-id-followers" "users-id-following" "users-id-follow" "users-id-liked-tweets" "users-id-like" "users-id-unlike" "get-user-list-memberships" "users-id-mentions" "users-id-muting" "users-id-mute" "list-user-owned-lists" "list-user-pinned-lists" "list-user-pin" "list-user-unpin" "users-id-retweets" "users-id-unretweets" "users-id-timeline" "users-id-tweets" "users-id-unblock" "users-id-unfollow" "users-id-unmute" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -165,7 +189,7 @@ export def "list-batch-compliance-jobs" [
   --type: string@type-completer # Type of Compliance Job to list. (required)
   --status: string@status-completer # Status of Compliance Job to list.
   --compliance-job-fields: list<string> # A comma separated list of ComplianceJob fields to display. (e.g. [created_at, download_expires_at, download_url, id, name, resumable, status, type, upload_expires_at, upload_url])
-]: nothing -> record<data: table<created_at: string, download_expires_at: string, download_url: string, id: string, name: string, status: string, type: string, upload_expires_at: string, upload_url: string>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, download_expires_at: string, download_url: string, id: string, name: string, status: string, type: string, upload_expires_at: string, upload_url: string>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
@@ -206,7 +230,7 @@ export def "create-batch-compliance-job" [
   --name: string # User-provided name for a compliance job. (e.g. my-job)
   --resumable: oneof<nothing, bool> # If true, this endpoint will return a pre-signed URL with resumable uploads enabled.
   type: string@type-completer # Type of compliance job to list.
-]: any -> record<data: record<created_at: string, download_expires_at: string, download_url: string, id: string, name: string, status: string, type: string, upload_expires_at: string, upload_url: string>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<created_at: string, download_expires_at: string, download_url: string, id: string, name: string, status: string, type: string, upload_expires_at: string, upload_url: string>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -247,7 +271,7 @@ export def "get-batch-compliance-job" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --compliance-job-fields: list<string> # A comma separated list of ComplianceJob fields to display. (e.g. [created_at, download_expires_at, download_url, id, name, resumable, status, type, upload_expires_at, upload_url])
-]: nothing -> record<data: record<created_at: string, download_expires_at: string, download_url: string, id: string, name: string, status: string, type: string, upload_expires_at: string, upload_url: string>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: nothing -> oneof<record<data: record<created_at: string, download_expires_at: string, download_url: string, id: string, name: string, status: string, type: string, upload_expires_at: string, upload_url: string>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -287,7 +311,7 @@ export def "dm-conversation-id-create" [
   conversation_type: string@conversation-type-completer # The conversation type that is being created.
   message: any
   participant_ids: list<string> # Participants for the DM Conversation.
-]: any -> record<data: record<dm_conversation_id: string, dm_event_id: string>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<dm_conversation_id: string, dm_event_id: string>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -334,7 +358,7 @@ export def "get-dm-conversations-with-participant-id-dm-events" [
   --media-fields: list<string> # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: table<attachments: record, created_at: string, dm_conversation_id: string, event_type: string, id: string, participant_ids: list, referenced_tweets: list, sender_id: string, text: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<attachments: record, created_at: string, dm_conversation_id: string, event_type: string, id: string, participant_ids: list, referenced_tweets: list, sender_id: string, text: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($participant_id | is-empty) { error make --unspanned { msg: "path parameter 'participant_id' must be non-empty" } }
@@ -360,7 +384,6 @@ export def "get-dm-conversations-with-participant-id-dm-events" [
 #
 # POST /2/dm_conversations/with/{participant_id}/messages
 # operationId: dmConversationWithUserEventIdCreate
-# --attachments item shape: {media_id: string}
 export def "dm-conversation-with-user-event-id-create" [
   participant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -375,7 +398,7 @@ export def "dm-conversation-with-user-event-id-create" [
   --accept: string@accept-completer # Response content type
   --attachments: list # Attachments to a DM Event. — item shape: {media_id: string}
   --text: string # Text of the message.
-]: any -> record<data: record<dm_conversation_id: string, dm_event_id: string>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<dm_conversation_id: string, dm_event_id: string>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -403,7 +426,6 @@ export def "dm-conversation-with-user-event-id-create" [
 #
 # POST /2/dm_conversations/{dm_conversation_id}/messages
 # operationId: dmConversationByIdEventIdCreate
-# --attachments item shape: {media_id: string}
 export def "dm-conversation-by-id-event-id-create" [
   dm_conversation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -418,7 +440,7 @@ export def "dm-conversation-by-id-event-id-create" [
   --accept: string@accept-completer # Response content type
   --attachments: list # Attachments to a DM Event. — item shape: {media_id: string}
   --text: string # Text of the message.
-]: any -> record<data: record<dm_conversation_id: string, dm_event_id: string>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<dm_conversation_id: string, dm_event_id: string>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -466,7 +488,7 @@ export def "get-dm-conversations-id-dm-events" [
   --media-fields: list<string> # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: table<attachments: record, created_at: string, dm_conversation_id: string, event_type: string, id: string, participant_ids: list, referenced_tweets: list, sender_id: string, text: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<attachments: record, created_at: string, dm_conversation_id: string, event_type: string, id: string, participant_ids: list, referenced_tweets: list, sender_id: string, text: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -511,7 +533,7 @@ export def "get-dm-events" [
   --media-fields: list<string> # A comma separated list of Media fields to display. (e.g. [alt_text, duration_ms, height, media_key, non_public_metrics, organic_metrics, preview_image_url, promoted_metrics, public_metrics, type, url, variants, width])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: table<attachments: record, created_at: string, dm_conversation_id: string, event_type: string, id: string, participant_ids: list, referenced_tweets: list, sender_id: string, text: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<attachments: record, created_at: string, dm_conversation_id: string, event_type: string, id: string, participant_ids: list, referenced_tweets: list, sender_id: string, text: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "event_types" $event_types "csv") (serialize-qp "dm_event.fields" $dm_event_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
@@ -551,7 +573,7 @@ export def "list-id-create" [
   --description: string
   name: string
   --private: oneof<nothing, bool> # default: false
-]: any -> record<data: record<id: string, name: string>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<id: string, name: string>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -591,7 +613,7 @@ export def "list-id-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<data: record<deleted: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: nothing -> oneof<record<data: record<deleted: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -632,7 +654,7 @@ export def "list-id-get" [
   --list-fields: list<string> # A comma separated list of List fields to display. (e.g. [created_at, description, follower_count, id, member_count, name, owner_id, private])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [owner_id])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-]: nothing -> record<data: record<created_at: string, description: string, follower_count: int, id: string, member_count: int, name: string, owner_id: string, private: bool>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
+]: nothing -> oneof<record<data: record<created_at: string, description: string, follower_count: int, id: string, member_count: int, name: string, owner_id: string, private: bool>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -674,7 +696,7 @@ export def "list-id-update" [
   --description: string
   --name: string
   --private: oneof<nothing, bool>
-]: any -> record<data: record<updated: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<updated: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -720,7 +742,7 @@ export def "list-get-followers" [
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -764,7 +786,7 @@ export def "list-get-members" [
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -804,7 +826,7 @@ export def "list-add-member" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   user_id: string # Unique identifier of this User. This is returned as a string in order to avoid complications with languages and tools that cannot handle large integers. (e.g. 2244994945)
-]: any -> record<data: record<is_member: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<is_member: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -846,7 +868,7 @@ export def "list-remove-member" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<data: record<is_member: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: nothing -> oneof<record<data: record<is_member: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -893,7 +915,7 @@ export def "lists-id-tweets" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -929,7 +951,7 @@ export def "get-open-api-spec" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2/openapi.json" $auth.query)
@@ -970,7 +992,7 @@ export def "find-spaces-by-ids" [
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [creator_id, host_ids, invited_user_ids, speaker_ids, topic_ids])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --topic-fields: list<string> # A comma separated list of Topic fields to display. (e.g. [description, id, name])
-]: nothing -> record<data: table<created_at: string, creator_id: string, ended_at: string, host_ids: list, id: string, invited_user_ids: list, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list, started_at: string, state: string, subscriber_count: int, title: string, topics: list, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
+]: nothing -> oneof<record<data: table<created_at: string, creator_id: string, ended_at: string, host_ids: list, id: string, invited_user_ids: list, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list, started_at: string, state: string, subscriber_count: int, title: string, topics: list, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -1013,7 +1035,7 @@ export def "find-spaces-by-creator-ids" [
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [creator_id, host_ids, invited_user_ids, speaker_ids, topic_ids])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --topic-fields: list<string> # A comma separated list of Topic fields to display. (e.g. [description, id, name])
-]: nothing -> record<data: table<created_at: string, creator_id: string, ended_at: string, host_ids: list, id: string, invited_user_ids: list, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list, started_at: string, state: string, subscriber_count: int, title: string, topics: list, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, creator_id: string, ended_at: string, host_ids: list, id: string, invited_user_ids: list, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list, started_at: string, state: string, subscriber_count: int, title: string, topics: list, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_ids == null) { error make --unspanned { msg: "required query parameter 'user_ids' missing: pass --user-ids" } }
@@ -1058,7 +1080,7 @@ export def "search-spaces" [
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [creator_id, host_ids, invited_user_ids, speaker_ids, topic_ids])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --topic-fields: list<string> # A comma separated list of Topic fields to display. (e.g. [description, id, name])
-]: nothing -> record<data: table<created_at: string, creator_id: string, ended_at: string, host_ids: list, id: string, invited_user_ids: list, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list, started_at: string, state: string, subscriber_count: int, title: string, topics: list, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, creator_id: string, ended_at: string, host_ids: list, id: string, invited_user_ids: list, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list, started_at: string, state: string, subscriber_count: int, title: string, topics: list, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -1101,7 +1123,7 @@ export def "find-space-by-id" [
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [creator_id, host_ids, invited_user_ids, speaker_ids, topic_ids])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --topic-fields: list<string> # A comma separated list of Topic fields to display. (e.g. [description, id, name])
-]: nothing -> record<data: record<created_at: string, creator_id: string, ended_at: string, host_ids: list<string>, id: string, invited_user_ids: list<string>, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list<string>, started_at: string, state: string, subscriber_count: int, title: string, topics: list<record>, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
+]: nothing -> oneof<record<data: record<created_at: string, creator_id: string, ended_at: string, host_ids: list<string>, id: string, invited_user_ids: list<string>, is_ticketed: bool, lang: string, participant_count: int, scheduled_start: string, speaker_ids: list<string>, started_at: string, state: string, subscriber_count: int, title: string, topics: list<record>, updated_at: string>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1145,7 +1167,7 @@ export def "space-buyers" [
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1191,7 +1213,7 @@ export def "space-tweets" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1236,7 +1258,7 @@ export def "find-tweets-by-id" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
+]: nothing -> oneof<record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -1263,10 +1285,6 @@ export def "find-tweets-by-id" [
 # POST /2/tweets
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/manage-tweets/api-reference/post-tweets
 # operationId: createTweet
-# --geo shape: {place_id?: string}
-# --media shape: {media_ids: list<string>, tagged_user_ids?: list<string>}
-# --poll shape: {duration_minutes: int, options: list<string>, reply_settings?: "following"|"mentionedUsers"}
-# --reply shape: {exclude_reply_user_ids?: list<string>, in_reply_to_tweet_id: string}
 export def "create-tweet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1289,7 +1307,7 @@ export def "create-tweet" [
   --reply: record # Tweet information of the Tweet being replied to. — shape: {exclude_reply_user_ids?: list<string>, in_reply_to_tweet_id: string}
   --reply-settings: string@reply-settings-completer # Settings to indicate who can reply to the Tweet.
   --text: string # The content of the Tweet. (e.g. Learn how to use the user Tweet timeline and user mention timeline endpoints in the Twitter API v2 to explore Tweet\u2026 https:\/\/t.co\/56a0vZUx7i)
-]: any -> record<data: record<id: string, text: string>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<id: string, text: string>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1378,7 +1396,7 @@ export def "tweet-counts-full-archive-search" [
   --pagination-token: string # This parameter is used to get the next 'page' of results. The value used with the parameter is pulled directly from the response provided by the API, and should not be modified.
   --granularity: string@granularity-completer # The granularity for the search counts results. (default: hour)
   --search-count-fields: list<string> # A comma separated list of SearchCount fields to display. (e.g. [end, start, tweet_count])
-]: nothing -> record<data: table<end: string, start: string, tweet_count: int>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<newest_id: string, next_token: string, oldest_id: string, total_tweet_count: int>> {
+]: nothing -> oneof<record<data: table<end: string, start: string, tweet_count: int>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<newest_id: string, next_token: string, oldest_id: string, total_tweet_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -1425,7 +1443,7 @@ export def "tweet-counts-recent-search" [
   --pagination-token: string # This parameter is used to get the next 'page' of results. The value used with the parameter is pulled directly from the response provided by the API, and should not be modified.
   --granularity: string@granularity-completer # The granularity for the search counts results. (default: hour)
   --search-count-fields: list<string> # A comma separated list of SearchCount fields to display. (e.g. [end, start, tweet_count])
-]: nothing -> record<data: table<end: string, start: string, tweet_count: int>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<newest_id: string, next_token: string, oldest_id: string, total_tweet_count: int>> {
+]: nothing -> oneof<record<data: table<end: string, start: string, tweet_count: int>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<newest_id: string, next_token: string, oldest_id: string, total_tweet_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -1472,7 +1490,7 @@ export def "get-tweets-firehose-stream" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
+]: nothing -> oneof<record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($partition == null) { error make --unspanned { msg: "required query parameter 'partition' missing: pass --partition" } }
@@ -1556,7 +1574,7 @@ export def "sample-stream" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
+]: nothing -> oneof<record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
@@ -1602,7 +1620,7 @@ export def "get-tweets-sample10-stream" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
+]: nothing -> oneof<record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($partition == null) { error make --unspanned { msg: "required query parameter 'partition' missing: pass --partition" } }
@@ -1655,7 +1673,7 @@ export def "tweets-fullarchive-search" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -1708,7 +1726,7 @@ export def "tweets-recent-search" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -1755,7 +1773,7 @@ export def "search-stream" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, matching_rules: table<id: string, tag: string>> {
+]: nothing -> oneof<record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, matching_rules: table<id: string, tag: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "backfill_minutes" $backfill_minutes "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "tweet.fields" $tweet_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "media.fields" $media_fields "csv") (serialize-qp "poll.fields" $poll_fields "csv") (serialize-qp "user.fields" $user_fields "csv") (serialize-qp "place.fields" $place_fields "csv")] | flatten | str join "&"
@@ -1795,7 +1813,7 @@ export def "get-rules" [
   --ids: list # A comma-separated list of Rule IDs.
   --max-results: int # The maximum number of results. (format: int32, default: 1000)
   --pagination-token: string # This value is populated by passing the 'next_token' returned in a request to paginate through results.
-]: nothing -> record<data: table<id: string, tag: string, value: string>, meta: record<next_token: string, result_count: int, sent: string, summary: any>> {
+]: nothing -> oneof<record<data: table<id: string, tag: string, value: string>, meta: record<next_token: string, result_count: int, sent: string, summary: any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "pagination_token" $pagination_token "scalar")] | flatten | str join "&"
@@ -1821,8 +1839,6 @@ export def "get-rules" [
 # POST /2/tweets/search/stream/rules
 # Docs: https://developer.twitter.com/en/docs/twitter-api/tweets/filtered-stream/api-reference/post-tweets-search-stream-rules
 # operationId: addOrDeleteRules
-# --add item shape: {tag?: string, value: string}
-# --delete shape: {ids?: list<string>, values?: list<string>}
 export def "add-or-delete-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1837,7 +1853,7 @@ export def "add-or-delete-rules" [
   --qp-dry-run: oneof<nothing, bool> # Dry Run can be used with both the add and delete action, with the expected result given, but without actually taking any action in the system (meaning the end state will always be as it was when the request was submitted). This is particularly useful to validate rule changes.
   --add: list # item shape: {tag?: string, value: string}
   --delete: record # IDs and values of all deleted user-specified stream filtering rules. — shape: {ids?: list<string>, values?: list<string>}
-]: any -> record<data: table<id: string, tag: string, value: string>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<next_token: string, result_count: int, sent: string, summary: any>> {
+]: any -> oneof<record<data: table<id: string, tag: string, value: string>, errors: table<detail: string, status: int, title: string, type: string>, meta: record<next_token: string, result_count: int, sent: string, summary: any>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1878,7 +1894,7 @@ export def "delete-tweet-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<data: record<deleted: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: nothing -> oneof<record<data: record<deleted: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1922,7 +1938,7 @@ export def "find-tweet-by-id" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
+]: nothing -> oneof<record<data: record<attachments: record<media_keys: list, poll_ids: list>, author_id: string, context_annotations: list<record>, conversation_id: string, created_at: string, edit_controls: record<editable_until: string, edits_remaining: int, is_edit_eligible: bool>, edit_history_tweet_ids: list<string>, entities: record<annotations: list, cashtags: list, hashtags: list, mentions: list, urls: list>, geo: record<coordinates: record, place_id: string>, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record<impression_count: int>, organic_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, possibly_sensitive: bool, promoted_metrics: record<impression_count: int, like_count: int, reply_count: int, retweet_count: int>, public_metrics: record<impression_count: int, like_count: int, quote_count: int, reply_count: int, retweet_count: int>, referenced_tweets: list<record>, reply_settings: string, source: string, text: string, withheld: record<copyright: bool, country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1966,7 +1982,7 @@ export def "tweets-id-liking-users" [
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2014,7 +2030,7 @@ export def "find-tweets-that-quote-a-tweet" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2058,7 +2074,7 @@ export def "tweets-id-retweeting-users" [
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2098,7 +2114,7 @@ export def "hide-reply-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --hidden: oneof<nothing, bool>
-]: any -> record<data: record<hidden: bool>> {
+]: any -> oneof<record<data: record<hidden: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2143,7 +2159,7 @@ export def "find-users-by-id" [
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
+]: nothing -> oneof<record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -2185,7 +2201,7 @@ export def "find-users-by-username" [
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
+]: nothing -> oneof<record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($usernames == null) { error make --unspanned { msg: "required query parameter 'usernames' missing: pass --usernames" } }
@@ -2227,7 +2243,7 @@ export def "find-user-by-username" [
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: record<created_at: string, description: string, entities: record<description: record, url: record>, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record<followers_count: int, following_count: int, listed_count: int, tweet_count: int>, url: string, username: string, verified: bool, verified_type: string, withheld: record<country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
+]: nothing -> oneof<record<data: record<created_at: string, description: string, entities: record<description: record, url: record>, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record<followers_count: int, following_count: int, listed_count: int, tweet_count: int>, url: string, username: string, verified: bool, verified_type: string, withheld: record<country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2309,7 +2325,7 @@ export def "find-my-user" [
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: record<created_at: string, description: string, entities: record<description: record, url: record>, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record<followers_count: int, following_count: int, listed_count: int, tweet_count: int>, url: string, username: string, verified: bool, verified_type: string, withheld: record<country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
+]: nothing -> oneof<record<data: record<created_at: string, description: string, entities: record<description: record, url: record>, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record<followers_count: int, following_count: int, listed_count: int, tweet_count: int>, url: string, username: string, verified: bool, verified_type: string, withheld: record<country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user.fields" $user_fields "csv") (serialize-qp "expansions" $expansions "csv") (serialize-qp "tweet.fields" $tweet_fields "csv")] | flatten | str join "&"
@@ -2350,7 +2366,7 @@ export def "find-user-by-id" [
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: record<created_at: string, description: string, entities: record<description: record, url: record>, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record<followers_count: int, following_count: int, listed_count: int, tweet_count: int>, url: string, username: string, verified: bool, verified_type: string, withheld: record<country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>> {
+]: nothing -> oneof<record<data: record<created_at: string, description: string, entities: record<description: record, url: record>, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record<followers_count: int, following_count: int, listed_count: int, tweet_count: int>, url: string, username: string, verified: bool, verified_type: string, withheld: record<country_codes: list, scope: string>>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2394,7 +2410,7 @@ export def "users-id-blocking" [
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2434,7 +2450,7 @@ export def "users-id-block" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   target_user_id: string # Unique identifier of this User. This is returned as a string in order to avoid complications with languages and tools that cannot handle large integers. (e.g. 2244994945)
-]: any -> record<data: record<blocking: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<blocking: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2483,7 +2499,7 @@ export def "get-users-id-bookmarks" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2523,7 +2539,7 @@ export def "post-users-id-bookmarks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   tweet_id: string # Unique identifier of this Tweet. This is returned as a string in order to avoid complications with languages and tools that cannot handle large integers. (e.g. 1346889436626259968)
-]: any -> record<data: record<bookmarked: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<bookmarked: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2565,7 +2581,7 @@ export def "users-id-bookmarks-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<data: record<bookmarked: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: nothing -> oneof<record<data: record<bookmarked: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2609,7 +2625,7 @@ export def "user-followed-lists" [
   --list-fields: list<string> # A comma separated list of List fields to display. (e.g. [created_at, description, follower_count, id, member_count, name, owner_id, private])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [owner_id])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-]: nothing -> record<data: table<created_at: string, description: string, follower_count: int, id: string, member_count: int, name: string, owner_id: string, private: bool>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, description: string, follower_count: int, id: string, member_count: int, name: string, owner_id: string, private: bool>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2649,7 +2665,7 @@ export def "list-user-follow" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   list_id: string # The unique identifier of this List. (e.g. 1146654567674912769)
-]: any -> record<data: record<following: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<following: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2691,7 +2707,7 @@ export def "list-user-unfollow" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<data: record<following: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: nothing -> oneof<record<data: record<following: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2735,7 +2751,7 @@ export def "users-id-followers" [
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2779,7 +2795,7 @@ export def "users-id-following" [
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2819,7 +2835,7 @@ export def "users-id-follow" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   target_user_id: string # Unique identifier of this User. This is returned as a string in order to avoid complications with languages and tools that cannot handle large integers. (e.g. 2244994945)
-]: any -> record<data: record<following: bool, pending_follow: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<following: bool, pending_follow: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2868,7 +2884,7 @@ export def "users-id-liked-tweets" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2908,7 +2924,7 @@ export def "users-id-like" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   tweet_id: string # Unique identifier of this Tweet. This is returned as a string in order to avoid complications with languages and tools that cannot handle large integers. (e.g. 1346889436626259968)
-]: any -> record<data: record<liked: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<liked: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2950,7 +2966,7 @@ export def "users-id-unlike" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<data: record<liked: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: nothing -> oneof<record<data: record<liked: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2994,7 +3010,7 @@ export def "get-user-list-memberships" [
   --list-fields: list<string> # A comma separated list of List fields to display. (e.g. [created_at, description, follower_count, id, member_count, name, owner_id, private])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [owner_id])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-]: nothing -> record<data: table<created_at: string, description: string, follower_count: int, id: string, member_count: int, name: string, owner_id: string, private: bool>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, description: string, follower_count: int, id: string, member_count: int, name: string, owner_id: string, private: bool>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3045,7 +3061,7 @@ export def "users-id-mentions" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3089,7 +3105,7 @@ export def "users-id-muting" [
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [pinned_tweet_id])
   --tweet-fields: list<string> # A comma separated list of Tweet fields to display. (e.g. [attachments, author_id, context_annotations, conversation_id, created_at, edit_controls, edit_history_tweet_ids, entities, geo, id, in_reply_to_user_id, lang, non_public_metrics, organic_metrics, possibly_sensitive, promoted_metrics, public_metrics, referenced_tweets, reply_settings, source, text, withheld])
-]: nothing -> record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, description: string, entities: record, id: string, location: string, name: string, pinned_tweet_id: string, profile_image_url: string, protected: bool, public_metrics: record, url: string, username: string, verified: bool, verified_type: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3129,7 +3145,7 @@ export def "users-id-mute" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   target_user_id: string # Unique identifier of this User. This is returned as a string in order to avoid complications with languages and tools that cannot handle large integers. (e.g. 2244994945)
-]: any -> record<data: record<muting: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<muting: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3175,7 +3191,7 @@ export def "list-user-owned-lists" [
   --list-fields: list<string> # A comma separated list of List fields to display. (e.g. [created_at, description, follower_count, id, member_count, name, owner_id, private])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [owner_id])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-]: nothing -> record<data: table<created_at: string, description: string, follower_count: int, id: string, member_count: int, name: string, owner_id: string, private: bool>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, description: string, follower_count: int, id: string, member_count: int, name: string, owner_id: string, private: bool>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<next_token: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3217,7 +3233,7 @@ export def "list-user-pinned-lists" [
   --list-fields: list<string> # A comma separated list of List fields to display. (e.g. [created_at, description, follower_count, id, member_count, name, owner_id, private])
   --expansions: list<string> # A comma separated list of fields to expand. (e.g. [owner_id])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
-]: nothing -> record<data: table<created_at: string, description: string, follower_count: int, id: string, member_count: int, name: string, owner_id: string, private: bool>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<result_count: int>> {
+]: nothing -> oneof<record<data: table<created_at: string, description: string, follower_count: int, id: string, member_count: int, name: string, owner_id: string, private: bool>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3257,7 +3273,7 @@ export def "list-user-pin" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   list_id: string # The unique identifier of this List. (e.g. 1146654567674912769)
-]: any -> record<data: record<pinned: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<pinned: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3299,7 +3315,7 @@ export def "list-user-unpin" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<data: record<pinned: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: nothing -> oneof<record<data: record<pinned: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3339,7 +3355,7 @@ export def "users-id-retweets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   tweet_id: string # Unique identifier of this Tweet. This is returned as a string in order to avoid complications with languages and tools that cannot handle large integers. (e.g. 1346889436626259968)
-]: any -> record<data: record<retweeted: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: any -> oneof<record<data: record<retweeted: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3381,7 +3397,7 @@ export def "users-id-unretweets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<data: record<retweeted: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: nothing -> oneof<record<data: record<retweeted: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3433,7 +3449,7 @@ export def "users-id-timeline" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3485,7 +3501,7 @@ export def "users-id-tweets" [
   --poll-fields: list<string> # A comma separated list of Poll fields to display. (e.g. [duration_minutes, end_datetime, id, options, voting_status])
   --user-fields: list<string> # A comma separated list of User fields to display. (e.g. [created_at, description, entities, id, location, name, pinned_tweet_id, profile_image_url, protected, public_metrics, url, username, verified, verified_type, withheld])
   --place-fields: list<string> # A comma separated list of Place fields to display. (e.g. [contained_within, country, country_code, full_name, geo, id, name, place_type])
-]: nothing -> record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, previous_token: string, result_count: int>> {
+]: nothing -> oneof<record<data: table<attachments: record, author_id: string, context_annotations: list, conversation_id: string, created_at: string, edit_controls: record, edit_history_tweet_ids: list, entities: record, geo: record, id: string, in_reply_to_user_id: string, lang: string, non_public_metrics: record, organic_metrics: record, possibly_sensitive: bool, promoted_metrics: record, public_metrics: record, referenced_tweets: list, reply_settings: string, source: string, text: string, withheld: record>, errors: table<detail: string, status: int, title: string, type: string>, includes: record<media: list<record>, places: list<record>, polls: list<record>, topics: list<record>, tweets: list<record>, users: list<record>>, meta: record<newest_id: string, next_token: string, oldest_id: string, previous_token: string, result_count: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3525,7 +3541,7 @@ export def "users-id-unblock" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<data: record<blocking: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: nothing -> oneof<record<data: record<blocking: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_user_id | is-empty) { error make --unspanned { msg: "path parameter 'source_user_id' must be non-empty" } }
@@ -3565,7 +3581,7 @@ export def "users-id-unfollow" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<data: record<following: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: nothing -> oneof<record<data: record<following: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_user_id | is-empty) { error make --unspanned { msg: "path parameter 'source_user_id' must be non-empty" } }
@@ -3605,7 +3621,7 @@ export def "users-id-unmute" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<data: record<muting: bool>, errors: table<detail: string, status: int, title: string, type: string>> {
+]: nothing -> oneof<record<data: record<muting: bool>, errors: table<detail: string, status: int, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source_user_id | is-empty) { error make --unspanned { msg: "path parameter 'source_user_id' must be non-empty" } }

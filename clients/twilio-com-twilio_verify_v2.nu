@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -124,9 +148,9 @@ def version-completer [] { ["v1" "v2"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-verification-attempt" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-verification-attempt" "fetch-verification-attempts-summary" "fetch-verification-attempt" "fetch-form" "create-safelist" "delete-safelist" "fetch-safelist" "list-service" "create-service" "create-access-token" "fetch-access-token" "list-entity" "create-entity" "delete-entity" "fetch-entity" "list-challenge" "create-challenge" "create-notification" "fetch-challenge" "update-challenge" "list-factor" "create-new-factor" "delete-factor" "fetch-factor" "update-factor" "list-messaging-configuration" "create-messaging-configuration" "delete-messaging-configuration" "fetch-messaging-configuration" "update-messaging-configuration" "list-rate-limit" "create-rate-limit" "list-bucket" "create-bucket" "delete-bucket" "fetch-bucket" "update-bucket" "delete-rate-limit" "fetch-rate-limit" "update-rate-limit" "create-verification-check" "create-verification" "fetch-verification" "update-verification" "list-webhook" "create-webhook" "delete-webhook" "fetch-webhook" "update-webhook" "delete-service" "fetch-service" "update-service" "list-verification-template" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -169,7 +193,7 @@ export def "list-verification-attempt" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<attempts: table<account_sid: string, channel: string, channel_data: any, conversion_status: string, date_created: string, date_updated: string, price: any, service_sid: string, sid: string, url: string, verification_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<attempts: table<account_sid: string, channel: string, channel_data: any, conversion_status: string, date_created: string, date_updated: string, price: any, service_sid: string, sid: string, url: string, verification_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   let qp = [(serialize-qp "DateCreatedAfter" $date_created_after "scalar") (serialize-qp "DateCreatedBefore" $date_created_before "scalar") (serialize-qp "ChannelData.To" $channel_data_to "scalar") (serialize-qp "Country" $country "scalar") (serialize-qp "Channel" $channel "scalar") (serialize-qp "VerifyServiceSid" $verify_service_sid "scalar") (serialize-qp "VerificationSid" $verification_sid "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
@@ -210,7 +234,7 @@ export def "fetch-verification-attempts-summary" [
   --country: string # Filter used to consider only Verification Attempts sent to the specified destination country on the summary aggregation. (format: iso-country-code)
   --channel: string@channel-completer # Filter Verification Attempts considered on the summary aggregation by communication channel. Valid values are `SMS` and `CALL`
   --destination-prefix: string # Filter the Verification Attempts considered on the summary aggregation by Destination prefix. It is the prefix of a phone number in E.164 format.
-]: nothing -> record<conversion_rate_percentage: float, total_attempts: int, total_converted: int, total_unconverted: int, url: string> {
+]: nothing -> oneof<record<conversion_rate_percentage: float, total_attempts: int, total_converted: int, total_unconverted: int, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   let qp = [(serialize-qp "VerifyServiceSid" $verify_service_sid "scalar") (serialize-qp "DateCreatedAfter" $date_created_after "scalar") (serialize-qp "DateCreatedBefore" $date_created_before "scalar") (serialize-qp "Country" $country "scalar") (serialize-qp "Channel" $channel "scalar") (serialize-qp "DestinationPrefix" $destination_prefix "scalar")] | flatten | str join "&"
@@ -246,7 +270,7 @@ export def "fetch-verification-attempt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, channel: string, channel_data: any, conversion_status: string, date_created: string, date_updated: string, price: any, service_sid: string, sid: string, url: string, verification_sid: string> {
+]: nothing -> oneof<record<account_sid: string, channel: string, channel_data: any, conversion_status: string, date_created: string, date_updated: string, price: any, service_sid: string, sid: string, url: string, verification_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
@@ -282,7 +306,7 @@ export def "fetch-form" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<form_meta: any, form_type: string, forms: any, url: string> {
+]: nothing -> oneof<record<form_meta: any, form_type: string, forms: any, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($form_type | is-empty) { error make --unspanned { msg: "path parameter 'FormType' must be non-empty" } }
@@ -318,7 +342,7 @@ export def "create-safelist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   phone_number: string # The phone number to be added in SafeList. Phone numbers must be in [E.164 format](https://www.twilio.com/docs/glossary/what-e164).
-]: any -> record<phone_number: string, sid: string, url: string> {
+]: any -> oneof<record<phone_number: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -327,7 +351,7 @@ export def "create-safelist" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -393,7 +417,7 @@ export def "fetch-safelist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<phone_number: string, sid: string, url: string> {
+]: nothing -> oneof<record<phone_number: string, sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($phone_number | is-empty) { error make --unspanned { msg: "path parameter 'PhoneNumber' must be non-empty" } }
@@ -431,7 +455,7 @@ export def "list-service" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, services: table<account_sid: string, code_length: int, custom_code_enabled: bool, date_created: string, date_updated: string, default_template_sid: string, do_not_share_warning_enabled: bool, dtmf_input_required: bool, friendly_name: string, links: record, lookup_enabled: bool, psd2_enabled: bool, push: any, sid: string, skip_sms_to_landlines: bool, totp: any, tts_name: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, services: table<account_sid: string, code_length: int, custom_code_enabled: bool, date_created: string, date_updated: string, default_template_sid: string, do_not_share_warning_enabled: bool, dtmf_input_required: bool, friendly_name: string, links: record, lookup_enabled: bool, psd2_enabled: bool, push: any, sid: string, skip_sms_to_landlines: bool, totp: any, tts_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
@@ -483,7 +507,7 @@ export def "create-service" [
   --totp-skew: int # Optional configuration for the TOTP factors. The number of time-steps, past and future, that are valid for validation of TOTP codes. Must be between 0 and 2, inclusive. Defaults to 1
   --totp-time-step: int # Optional configuration for the TOTP factors. Defines how often, in seconds, are TOTP codes generated. i.e, a new TOTP code is generated every time_step seconds. Must be between 20 and 60 seconds, inclusive. Defaults to 30 seconds
   --tts-name: string # The name of an alternative text-to-speech service to use in phone calls. Applies only to TTS languages.
-]: any -> record<account_sid: string, code_length: int, custom_code_enabled: bool, date_created: string, date_updated: string, default_template_sid: string, do_not_share_warning_enabled: bool, dtmf_input_required: bool, friendly_name: string, links: record, lookup_enabled: bool, psd2_enabled: bool, push: any, sid: string, skip_sms_to_landlines: bool, totp: any, tts_name: string, url: string> {
+]: any -> oneof<record<account_sid: string, code_length: int, custom_code_enabled: bool, date_created: string, date_updated: string, default_template_sid: string, do_not_share_warning_enabled: bool, dtmf_input_required: bool, friendly_name: string, links: record, lookup_enabled: bool, psd2_enabled: bool, push: any, sid: string, skip_sms_to_landlines: bool, totp: any, tts_name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -492,7 +516,7 @@ export def "create-service" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -526,7 +550,7 @@ export def "create-access-token" [
   factor_type: string@factor-type-completer
   identity: string # The unique external identifier for the Entity of the Service. This identifier should be immutable, not PII, and generated by your external system, such as your user's UUID, GUID, or SID.
   --ttl: int # How long, in seconds, the access token is valid. Can be an integer between 60 and 300. Default is 60.
-]: any -> record<account_sid: string, date_created: string, entity_identity: string, factor_friendly_name: string, factor_type: string, service_sid: string, sid: string, token: string, ttl: int, url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, entity_identity: string, factor_friendly_name: string, factor_type: string, service_sid: string, sid: string, token: string, ttl: int, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -536,7 +560,7 @@ export def "create-access-token" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -567,7 +591,7 @@ export def "fetch-access-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, date_created: string, entity_identity: string, factor_friendly_name: string, factor_type: string, service_sid: string, sid: string, token: string, ttl: int, url: string> {
+]: nothing -> oneof<record<account_sid: string, date_created: string, entity_identity: string, factor_friendly_name: string, factor_type: string, service_sid: string, sid: string, token: string, ttl: int, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -607,7 +631,7 @@ export def "list-entity" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<entities: table<account_sid: string, date_created: string, date_updated: string, identity: string, links: record, service_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<entities: table<account_sid: string, date_created: string, date_updated: string, identity: string, links: record, service_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -645,7 +669,7 @@ export def "create-entity" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   identity: string # The unique external identifier for the Entity of the Service. This identifier should be immutable, not PII, length between 8 and 64 characters, and generated by your external system, such as your user's UUID, GUID, or SID. It can only contain dash (-) separated alphanumeric characters.
-]: any -> record<account_sid: string, date_created: string, date_updated: string, identity: string, links: record, service_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, identity: string, links: record, service_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -655,7 +679,7 @@ export def "create-entity" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -724,7 +748,7 @@ export def "fetch-entity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, date_created: string, date_updated: string, identity: string, links: record, service_sid: string, sid: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, identity: string, links: record, service_sid: string, sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -768,7 +792,7 @@ export def "list-challenge" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<challenges: table<account_sid: string, date_created: string, date_responded: string, date_updated: string, details: any, entity_sid: string, expiration_date: string, factor_sid: string, factor_type: string, hidden_details: any, identity: string, links: record, metadata: any, responded_reason: string, service_sid: string, sid: string, status: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<challenges: table<account_sid: string, date_created: string, date_responded: string, date_updated: string, details: any, entity_sid: string, expiration_date: string, factor_sid: string, factor_type: string, hidden_details: any, identity: string, links: record, metadata: any, responded_reason: string, service_sid: string, sid: string, status: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -813,7 +837,7 @@ export def "create-challenge" [
   --expiration-date: string # The date-time when this Challenge expires, given in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. The default value is five (5) minutes after Challenge creation. The max value is sixty (60) minutes after creation. (format: date-time)
   factor_sid: string # The unique SID identifier of the Factor.
   --hidden-details: any # Details provided to give context about the Challenge. Not shown to the end user. It must be a stringified JSON with only strings values eg. `{"ip": "172.168.1.234"}`. Can be up to 1024 characters in length
-]: any -> record<account_sid: string, date_created: string, date_responded: string, date_updated: string, details: any, entity_sid: string, expiration_date: string, factor_sid: string, factor_type: string, hidden_details: any, identity: string, links: record, metadata: any, responded_reason: string, service_sid: string, sid: string, status: string, url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_responded: string, date_updated: string, details: any, entity_sid: string, expiration_date: string, factor_sid: string, factor_type: string, hidden_details: any, identity: string, links: record, metadata: any, responded_reason: string, service_sid: string, sid: string, status: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -824,7 +848,7 @@ export def "create-challenge" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -857,7 +881,7 @@ export def "create-notification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ttl: int # How long, in seconds, the notification is valid. Can be an integer between 0 and 300. Default is 300. Delivery is attempted until the TTL elapses, even if the device is offline. 0 means that the notification delivery is attempted immediately, only once, and is not stored for future delivery.
-]: any -> record<account_sid: string, challenge_sid: string, date_created: string, entity_sid: string, identity: string, priority: string, service_sid: string, sid: string, ttl: int> {
+]: any -> oneof<record<account_sid: string, challenge_sid: string, date_created: string, entity_sid: string, identity: string, priority: string, service_sid: string, sid: string, ttl: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -869,7 +893,7 @@ export def "create-notification" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -901,7 +925,7 @@ export def "fetch-challenge" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, date_created: string, date_responded: string, date_updated: string, details: any, entity_sid: string, expiration_date: string, factor_sid: string, factor_type: string, hidden_details: any, identity: string, links: record, metadata: any, responded_reason: string, service_sid: string, sid: string, status: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, date_created: string, date_responded: string, date_updated: string, details: any, entity_sid: string, expiration_date: string, factor_sid: string, factor_type: string, hidden_details: any, identity: string, links: record, metadata: any, responded_reason: string, service_sid: string, sid: string, status: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -943,7 +967,7 @@ export def "update-challenge" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --auth-payload: string # The optional payload needed to verify the Challenge. E.g., a TOTP would use the numeric code. For `TOTP` this value must be between 3 and 8 characters long. For `Push` this value can be up to 5456 characters in length
   --metadata: any # Custom metadata associated with the challenge. This is added by the Device/SDK directly to allow for the inclusion of device information. It must be a stringified JSON with only strings values eg. `{"os": "Android"}`. Can be up to 1024 characters in length.
-]: any -> record<account_sid: string, date_created: string, date_responded: string, date_updated: string, details: any, entity_sid: string, expiration_date: string, factor_sid: string, factor_type: string, hidden_details: any, identity: string, links: record, metadata: any, responded_reason: string, service_sid: string, sid: string, status: string, url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_responded: string, date_updated: string, details: any, entity_sid: string, expiration_date: string, factor_sid: string, factor_type: string, hidden_details: any, identity: string, links: record, metadata: any, responded_reason: string, service_sid: string, sid: string, status: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -955,7 +979,7 @@ export def "update-challenge" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -989,7 +1013,7 @@ export def "list-factor" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<factors: table<account_sid: string, config: any, date_created: string, date_updated: string, entity_sid: string, factor_type: string, friendly_name: string, identity: string, metadata: any, service_sid: string, sid: string, status: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<factors: table<account_sid: string, config: any, date_created: string, date_updated: string, entity_sid: string, factor_type: string, friendly_name: string, identity: string, metadata: any, service_sid: string, sid: string, status: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -1042,7 +1066,7 @@ export def "create-new-factor" [
   factor_type: string@factor-type-completer-1
   friendly_name: string # The friendly name of this Factor. This can be any string up to 64 characters, meant for humans to distinguish between Factors. For `factor_type` `push`, this could be a device name. For `factor_type` `totp`, this value is used as the “account name” in constructing the `binding.uri` property. At the same time, we recommend avoiding providing PII.
   --metadata: any # Custom metadata associated with the factor. This is added by the Device/SDK directly to allow for the inclusion of device information. It must be a stringified JSON with only strings values eg. `{"os": "Android"}`. Can be up to 1024 characters in length.
-]: any -> record<account_sid: string, binding: any, config: any, date_created: string, date_updated: string, entity_sid: string, factor_type: string, friendly_name: string, identity: string, metadata: any, service_sid: string, sid: string, status: string, url: string> {
+]: any -> oneof<record<account_sid: string, binding: any, config: any, date_created: string, date_updated: string, entity_sid: string, factor_type: string, friendly_name: string, identity: string, metadata: any, service_sid: string, sid: string, status: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -1053,7 +1077,7 @@ export def "create-new-factor" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1125,7 +1149,7 @@ export def "fetch-factor" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, config: any, date_created: string, date_updated: string, entity_sid: string, factor_type: string, friendly_name: string, identity: string, metadata: any, service_sid: string, sid: string, status: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, config: any, date_created: string, date_updated: string, entity_sid: string, factor_type: string, friendly_name: string, identity: string, metadata: any, service_sid: string, sid: string, status: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -1174,7 +1198,7 @@ export def "update-factor" [
   --config-skew: int # The number of time-steps, past and future, that are valid for validation of TOTP codes. Must be between 0 and 2, inclusive
   --config-time-step: int # Defines how often, in seconds, are TOTP codes generated. i.e, a new TOTP code is generated every time_step seconds. Must be between 20 and 60 seconds, inclusive
   --friendly-name: string # The new friendly name of this Factor. It can be up to 64 characters.
-]: any -> record<account_sid: string, config: any, date_created: string, date_updated: string, entity_sid: string, factor_type: string, friendly_name: string, identity: string, metadata: any, service_sid: string, sid: string, status: string, url: string> {
+]: any -> oneof<record<account_sid: string, config: any, date_created: string, date_updated: string, entity_sid: string, factor_type: string, friendly_name: string, identity: string, metadata: any, service_sid: string, sid: string, status: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -1186,7 +1210,7 @@ export def "update-factor" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1219,7 +1243,7 @@ export def "list-messaging-configuration" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<messaging_configurations: table<account_sid: string, country: string, date_created: string, date_updated: string, messaging_service_sid: string, service_sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<messaging_configurations: table<account_sid: string, country: string, date_created: string, date_updated: string, messaging_service_sid: string, service_sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -1258,7 +1282,7 @@ export def "create-messaging-configuration" [
   --dry-run(-n) # Return the request that would be sent without executing it
   country: string # The [ISO-3166-1](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) country code of the country this configuration will be applied to. If this is a global configuration, Country will take the value `all`.
   messaging_service_sid: string # The SID of the [Messaging Service](https://www.twilio.com/docs/sms/services/api) to be used to send SMS to the country of this configuration.
-]: any -> record<account_sid: string, country: string, date_created: string, date_updated: string, messaging_service_sid: string, service_sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, country: string, date_created: string, date_updated: string, messaging_service_sid: string, service_sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -1268,7 +1292,7 @@ export def "create-messaging-configuration" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1337,7 +1361,7 @@ export def "fetch-messaging-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, country: string, date_created: string, date_updated: string, messaging_service_sid: string, service_sid: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, country: string, date_created: string, date_updated: string, messaging_service_sid: string, service_sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -1376,7 +1400,7 @@ export def "update-messaging-configuration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   messaging_service_sid: string # The SID of the [Messaging Service](https://www.twilio.com/docs/sms/services/api) to be used to send SMS to the country of this configuration.
-]: any -> record<account_sid: string, country: string, date_created: string, date_updated: string, messaging_service_sid: string, service_sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, country: string, date_created: string, date_updated: string, messaging_service_sid: string, service_sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -1387,7 +1411,7 @@ export def "update-messaging-configuration" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1420,7 +1444,7 @@ export def "list-rate-limit" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, rate_limits: table<account_sid: string, date_created: string, date_updated: string, description: string, links: record, service_sid: string, sid: string, unique_name: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, rate_limits: table<account_sid: string, date_created: string, date_updated: string, description: string, links: record, service_sid: string, sid: string, unique_name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -1459,7 +1483,7 @@ export def "create-rate-limit" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Description of this Rate Limit
   unique_name: string # Provides a unique and addressable name to be assigned to this Rate Limit, assigned by the developer, to be optionally used in addition to SID. **This value should not contain PII.**
-]: any -> record<account_sid: string, date_created: string, date_updated: string, description: string, links: record, service_sid: string, sid: string, unique_name: string, url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, description: string, links: record, service_sid: string, sid: string, unique_name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -1469,7 +1493,7 @@ export def "create-rate-limit" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1503,7 +1527,7 @@ export def "list-bucket" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<buckets: table<account_sid: string, date_created: string, date_updated: string, interval: int, max: int, rate_limit_sid: string, service_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<buckets: table<account_sid: string, date_created: string, date_updated: string, interval: int, max: int, rate_limit_sid: string, service_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -1544,7 +1568,7 @@ export def "create-bucket" [
   --dry-run(-n) # Return the request that would be sent without executing it
   interval: int # Number of seconds that the rate limit will be enforced over.
   max: int # Maximum number of requests permitted in during the interval.
-]: any -> record<account_sid: string, date_created: string, date_updated: string, interval: int, max: int, rate_limit_sid: string, service_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, interval: int, max: int, rate_limit_sid: string, service_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -1555,7 +1579,7 @@ export def "create-bucket" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1627,7 +1651,7 @@ export def "fetch-bucket" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, date_created: string, date_updated: string, interval: int, max: int, rate_limit_sid: string, service_sid: string, sid: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, interval: int, max: int, rate_limit_sid: string, service_sid: string, sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -1669,7 +1693,7 @@ export def "update-bucket" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --interval: int # Number of seconds that the rate limit will be enforced over.
   --max: int # Maximum number of requests permitted in during the interval.
-]: any -> record<account_sid: string, date_created: string, date_updated: string, interval: int, max: int, rate_limit_sid: string, service_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, interval: int, max: int, rate_limit_sid: string, service_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -1681,7 +1705,7 @@ export def "update-bucket" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1750,7 +1774,7 @@ export def "fetch-rate-limit" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, date_created: string, date_updated: string, description: string, links: record, service_sid: string, sid: string, unique_name: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, description: string, links: record, service_sid: string, sid: string, unique_name: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -1789,7 +1813,7 @@ export def "update-rate-limit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # Description of this Rate Limit
-]: any -> record<account_sid: string, date_created: string, date_updated: string, description: string, links: record, service_sid: string, sid: string, unique_name: string, url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, description: string, links: record, service_sid: string, sid: string, unique_name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -1800,7 +1824,7 @@ export def "update-rate-limit" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1835,7 +1859,7 @@ export def "create-verification-check" [
   --payee: string # The payee of the associated PSD2 compliant transaction. Requires the PSD2 Service flag enabled.
   --to: string # The phone number or [email](https://www.twilio.com/docs/verify/email) to verify. Either this parameter or the `verification_sid` must be specified. Phone numbers must be in [E.164 format](https://www.twilio.com/docs/glossary/what-e164).
   --verification-sid: string # A SID that uniquely identifies the Verification Check. Either this parameter or the `to` phone number/[email](https://www.twilio.com/docs/verify/email) must be specified.
-]: any -> record<account_sid: string, amount: string, channel: string, date_created: string, date_updated: string, payee: string, service_sid: string, sid: string, sna_attempts_error_codes: list<any>, status: string, to: string, valid: bool> {
+]: any -> oneof<record<account_sid: string, amount: string, channel: string, date_created: string, date_updated: string, payee: string, service_sid: string, sid: string, sna_attempts_error_codes: list<any>, status: string, to: string, valid: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -1845,7 +1869,7 @@ export def "create-verification-check" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1890,7 +1914,7 @@ export def "create-verification" [
   --template-custom-substitutions: string # A stringified JSON object in which the keys are the template's special variables and the values are the variables substitutions.
   --template-sid: string # The message [template](https://www.twilio.com/docs/verify/api/templates). If provided, will override the default template for the Service. SMS and Voice channels only.
   to: string # The phone number or [email](https://www.twilio.com/docs/verify/email) to verify. Phone numbers must be in [E.164 format](https://www.twilio.com/docs/glossary/what-e164).
-]: any -> record<account_sid: string, amount: string, channel: string, date_created: string, date_updated: string, lookup: any, payee: string, send_code_attempts: list<any>, service_sid: string, sid: string, sna: any, status: string, to: string, url: string, valid: bool> {
+]: any -> oneof<record<account_sid: string, amount: string, channel: string, date_created: string, date_updated: string, lookup: any, payee: string, send_code_attempts: list<any>, service_sid: string, sid: string, sna: any, status: string, to: string, url: string, valid: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -1900,7 +1924,7 @@ export def "create-verification" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1931,7 +1955,7 @@ export def "fetch-verification" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, amount: string, channel: string, date_created: string, date_updated: string, lookup: any, payee: string, send_code_attempts: list<any>, service_sid: string, sid: string, sna: any, status: string, to: string, url: string, valid: bool> {
+]: nothing -> oneof<record<account_sid: string, amount: string, channel: string, date_created: string, date_updated: string, lookup: any, payee: string, send_code_attempts: list<any>, service_sid: string, sid: string, sna: any, status: string, to: string, url: string, valid: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -1970,7 +1994,7 @@ export def "update-verification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   status: string@status-completer-2
-]: any -> record<account_sid: string, amount: string, channel: string, date_created: string, date_updated: string, lookup: any, payee: string, send_code_attempts: list<any>, service_sid: string, sid: string, sna: any, status: string, to: string, url: string, valid: bool> {
+]: any -> oneof<record<account_sid: string, amount: string, channel: string, date_created: string, date_updated: string, lookup: any, payee: string, send_code_attempts: list<any>, service_sid: string, sid: string, sna: any, status: string, to: string, url: string, valid: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -1981,7 +2005,7 @@ export def "update-verification" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2014,7 +2038,7 @@ export def "list-webhook" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, webhooks: table<account_sid: string, date_created: string, date_updated: string, event_types: list, friendly_name: string, service_sid: string, sid: string, status: string, url: string, version: string, webhook_method: string, webhook_url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, webhooks: table<account_sid: string, date_created: string, date_updated: string, event_types: list, friendly_name: string, service_sid: string, sid: string, status: string, url: string, version: string, webhook_method: string, webhook_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -2056,7 +2080,7 @@ export def "create-webhook" [
   --status: string@status-completer-3
   --version: string@version-completer
   webhook_url: string # The URL associated with this Webhook.
-]: any -> record<account_sid: string, date_created: string, date_updated: string, event_types: list<string>, friendly_name: string, service_sid: string, sid: string, status: string, url: string, version: string, webhook_method: string, webhook_url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, event_types: list<string>, friendly_name: string, service_sid: string, sid: string, status: string, url: string, version: string, webhook_method: string, webhook_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -2066,7 +2090,7 @@ export def "create-webhook" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2135,7 +2159,7 @@ export def "fetch-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, date_created: string, date_updated: string, event_types: list<string>, friendly_name: string, service_sid: string, sid: string, status: string, url: string, version: string, webhook_method: string, webhook_url: string> {
+]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, event_types: list<string>, friendly_name: string, service_sid: string, sid: string, status: string, url: string, version: string, webhook_method: string, webhook_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ServiceSid' must be non-empty" } }
@@ -2177,7 +2201,7 @@ export def "update-webhook" [
   --status: string@status-completer-3
   --version: string@version-completer
   --webhook-url: string # The URL associated with this Webhook.
-]: any -> record<account_sid: string, date_created: string, date_updated: string, event_types: list<string>, friendly_name: string, service_sid: string, sid: string, status: string, url: string, version: string, webhook_method: string, webhook_url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, event_types: list<string>, friendly_name: string, service_sid: string, sid: string, status: string, url: string, version: string, webhook_method: string, webhook_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -2188,7 +2212,7 @@ export def "update-webhook" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2254,7 +2278,7 @@ export def "fetch-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, code_length: int, custom_code_enabled: bool, date_created: string, date_updated: string, default_template_sid: string, do_not_share_warning_enabled: bool, dtmf_input_required: bool, friendly_name: string, links: record, lookup_enabled: bool, psd2_enabled: bool, push: any, sid: string, skip_sms_to_landlines: bool, totp: any, tts_name: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, code_length: int, custom_code_enabled: bool, date_created: string, date_updated: string, default_template_sid: string, do_not_share_warning_enabled: bool, dtmf_input_required: bool, friendly_name: string, links: record, lookup_enabled: bool, psd2_enabled: bool, push: any, sid: string, skip_sms_to_landlines: bool, totp: any, tts_name: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
@@ -2307,7 +2331,7 @@ export def "update-service" [
   --totp-skew: int # Optional configuration for the TOTP factors. The number of time-steps, past and future, that are valid for validation of TOTP codes. Must be between 0 and 2, inclusive. Defaults to 1
   --totp-time-step: int # Optional configuration for the TOTP factors. Defines how often, in seconds, are TOTP codes generated. i.e, a new TOTP code is generated every time_step seconds. Must be between 20 and 60 seconds, inclusive. Defaults to 30 seconds
   --tts-name: string # The name of an alternative text-to-speech service to use in phone calls. Applies only to TTS languages.
-]: any -> record<account_sid: string, code_length: int, custom_code_enabled: bool, date_created: string, date_updated: string, default_template_sid: string, do_not_share_warning_enabled: bool, dtmf_input_required: bool, friendly_name: string, links: record, lookup_enabled: bool, psd2_enabled: bool, push: any, sid: string, skip_sms_to_landlines: bool, totp: any, tts_name: string, url: string> {
+]: any -> oneof<record<account_sid: string, code_length: int, custom_code_enabled: bool, date_created: string, date_updated: string, default_template_sid: string, do_not_share_warning_enabled: bool, dtmf_input_required: bool, friendly_name: string, links: record, lookup_enabled: bool, psd2_enabled: bool, push: any, sid: string, skip_sms_to_landlines: bool, totp: any, tts_name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
@@ -2317,7 +2341,7 @@ export def "update-service" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2350,7 +2374,7 @@ export def "list-verification-template" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, templates: table<account_sid: string, channels: list, friendly_name: string, sid: string, translations: any>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, templates: table<account_sid: string, channels: list, friendly_name: string, sid: string, translations: any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://verify.twilio.com")
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -124,9 +148,9 @@ def type-completer-1 [] { ["admin" "guest"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-actions" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-actions" "add-action" "remove-action" "get-action" "update-action" "admin" "log-in-ritc" "ping-ritc" "list-apps" "add-app" "list-app-channels" "list-app-channel-users" "get-app-channel-user" "add-app-channel-user" "list-channel-external-credentials" "add-channel-external-credentials" "remove-channel-external-credentials" "get-channel-external-credentials" "update-channel-external-credentials" "run-rule-group" "run-app" "remove-app" "get-app" "update-app" "list-channels" "add-channel" "list-anonymous-channels" "remove-channel" "get-channel" "update-channel" "list-channel-functions" "add-channel-function" "get-channel-function" "add-organization" "get-my-organization" "list-rules" "add-rule" "remove-rule" "get-rule" "update-rule" "run-rule" "list-triggers" "add-trigger" "remove-trigger" "get-trigger" "update-trigger" "list-app-users" "add-app-user" "list-admin-users" "add-admin-user" "remove-admin-user" "get-admin-user" "update-admin-user" "authenticate-app-user-for-channel" "remove-app-user" "get-app-user" "update-app-user" "list-app-user-channels" "add-app-user-to-channel" "remove-app-user-from-channel" "get-app-user-channel" "list-app-user-rules" "remove-app-user-from-rule" "get-app-user-rule" "add-app-user-to-rule" "run-rule-for-app-user" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -158,7 +182,7 @@ export def "list-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string> {
+]: nothing -> oneof<table<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/actions" $auth.query)
@@ -198,7 +222,7 @@ export def "add-action" [
   function_id: string # Hash id of channel function used by action
   name: string # Action name
   --parameters: record # Object containing channel-defined action parameters
-]: any -> record<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string> {
+]: any -> oneof<record<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -272,7 +296,7 @@ export def "get-action" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<channelId: int, codes: record, createdDate: string, description: string, functionId: string, id: int, modifiedDate: string, name: string, parameters: record, status: string> {
+]: nothing -> oneof<table<channelId: int, codes: record, createdDate: string, description: string, functionId: string, id: int, modifiedDate: string, name: string, parameters: record, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($action_id | is-empty) { error make --unspanned { msg: "path parameter 'action_id' must be non-empty" } }
@@ -314,7 +338,7 @@ export def "update-action" [
   function_id: string # Hash id of channel function used by action
   name: string # Action name
   --parameters: record # Object containing channel-defined action parameters
-]: any -> record<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string> {
+]: any -> oneof<record<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -352,7 +376,7 @@ export def "admin" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin" $auth.query)
@@ -387,7 +411,7 @@ export def "log-in-ritc" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -424,7 +448,7 @@ export def "ping-ritc" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/ping" $auth.query)
@@ -458,7 +482,7 @@ export def "list-apps" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<apiKey: string, createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string> {
+]: nothing -> oneof<table<apiKey: string, createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/apps" $auth.query)
@@ -494,7 +518,7 @@ export def "add-app" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --desc: string # App description
   --name: string # App name
-]: any -> record<apiKey: string, createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string> {
+]: any -> oneof<record<apiKey: string, createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -531,7 +555,7 @@ export def "list-app-channels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<channelId: int, createdDate: string, id: int, status: string, userId: int> {
+]: nothing -> oneof<table<channelId: int, createdDate: string, id: int, status: string, userId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/apps/channels/users" $auth.query)
@@ -566,7 +590,7 @@ export def "list-app-channel-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<channelId: int, createdDate: string, id: int, status: string, userId: int> {
+]: nothing -> oneof<table<channelId: int, createdDate: string, id: int, status: string, userId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -603,7 +627,7 @@ export def "get-app-channel-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<channelId: int, createdDate: string, id: int, status: string, userId: int> {
+]: nothing -> oneof<table<channelId: int, createdDate: string, id: int, status: string, userId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -641,7 +665,7 @@ export def "add-app-channel-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<channelId: int, createdDate: string, id: int, status: string, userId: int> {
+]: nothing -> oneof<record<channelId: int, createdDate: string, id: int, status: string, userId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -677,7 +701,7 @@ export def "list-channel-external-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<authType: string, channel_id: string, credentials: record, id: string, name: string> {
+]: nothing -> oneof<table<authType: string, channel_id: string, credentials: record, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/apps/ext/api/credentials" $auth.query)
@@ -715,7 +739,7 @@ export def "add-channel-external-credentials" [
   --channel-id: string
   --credentials: record
   --name: string # App external credentials api name
-]: any -> record<authType: string, channel_id: string, credentials: record, id: string, name: string> {
+]: any -> oneof<record<authType: string, channel_id: string, credentials: record, id: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -789,7 +813,7 @@ export def "get-channel-external-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<authType: string, channel_id: string, credentials: record, id: string, name: string> {
+]: nothing -> oneof<table<authType: string, channel_id: string, credentials: record, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -829,7 +853,7 @@ export def "update-channel-external-credentials" [
   --body-channel-id: string
   --credentials: record
   --name: string # App external credentials api name
-]: any -> record<authType: string, channel_id: string, credentials: record, id: string, name: string> {
+]: any -> oneof<record<authType: string, channel_id: string, credentials: record, id: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -870,7 +894,7 @@ export def "run-rule-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --break-when-rule-fires: oneof<nothing, bool> # Do not continue with remaining rules after a rule fires
   --body: record
-]: any -> table<id: string, name: string, type: string> {
+]: any -> oneof<table<id: string, name: string, type: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -911,7 +935,7 @@ export def "run-app" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --break-when-rule-fires: oneof<nothing, bool> # Do not continue with remaining rules after a rule fires
   --body: record
-]: any -> table<id: string, name: string, type: string> {
+]: any -> oneof<table<id: string, name: string, type: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -986,7 +1010,7 @@ export def "get-app" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<apiKey: string, createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string> {
+]: nothing -> oneof<table<apiKey: string, createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -1024,7 +1048,7 @@ export def "update-app" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --desc: string # App description
   --name: string # App name
-]: any -> record<apiKey: string, createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string> {
+]: any -> oneof<record<apiKey: string, createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1062,7 +1086,7 @@ export def "list-channels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, functions: list<record>, id: string, name: string, type: record> {
+]: nothing -> oneof<table<description: string, functions: list<record>, id: string, name: string, type: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channels" $auth.query)
@@ -1086,7 +1110,6 @@ export def "list-channels" [
 #
 # POST /channels
 # operationId: addChannel
-# --functions item shape: {id?: string, name?: string, parameters?: list, type?: "action"|"trigger"}
 export def "add-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1102,7 +1125,7 @@ export def "add-channel" [
   --id: string # Id of channel
   --name: string # Channel name
   --type: record # Type of channel. Choices are 'public' or 'private'. Private channels are only viewable within an account, while public channels are viewable to everyone in the system
-]: any -> record<description: string, functions: table<description: string, id: string, name: string, type: string>, id: string, name: string, type: record> {
+]: any -> oneof<record<description: string, functions: table<description: string, id: string, name: string, type: string>, id: string, name: string, type: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1139,7 +1162,7 @@ export def "list-anonymous-channels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, functions: list<record>, id: string, name: string, type: record> {
+]: nothing -> oneof<table<description: string, functions: list<record>, id: string, name: string, type: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channels/anonymous" $auth.query)
@@ -1210,7 +1233,7 @@ export def "get-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, functions: list<record>, id: string, name: string, type: record> {
+]: nothing -> oneof<table<description: string, functions: list<record>, id: string, name: string, type: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -1251,7 +1274,7 @@ export def "update-channel" [
   --name: string # Rule name
   --status: string@status-completer
   --trigger-ids: string # Rule description
-]: any -> record<description: string, functions: table<description: string, id: string, name: string, type: string>, id: string, name: string, type: record> {
+]: any -> oneof<record<description: string, functions: table<description: string, id: string, name: string, type: string>, id: string, name: string, type: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1290,7 +1313,7 @@ export def "list-channel-functions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<apiType: string, description: string, endpoint: string, httpMethod: string, id: string, name: string, requestParameters: list<record>, responseFormat: string, type: string> {
+]: nothing -> oneof<table<apiType: string, description: string, endpoint: string, httpMethod: string, id: string, name: string, requestParameters: list<record>, responseFormat: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -1315,7 +1338,6 @@ export def "list-channel-functions" [
 #
 # POST /channels/{channel_id}/functions
 # operationId: addChannelFunction
-# --requestParameters item shape: {description?: string, fieldType?: string, label?: string, name?: string, schema?: record}
 export def "add-channel-function" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1335,7 +1357,7 @@ export def "add-channel-function" [
   --request-parameters: list # item shape: {description?: string, fieldType?: string, label?: string, name?: string, schema?: record}
   --response-format: string@response-format-completer
   --type: string@type-completer
-]: any -> record<apiType: string, description: string, endpoint: string, httpMethod: string, id: string, name: string, requestParameters: table<description: string, fieldType: string, label: string, name: string, schema: record>, responseFormat: string, type: string> {
+]: any -> oneof<record<apiType: string, description: string, endpoint: string, httpMethod: string, id: string, name: string, requestParameters: table<description: string, fieldType: string, label: string, name: string, schema: record>, responseFormat: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1375,7 +1397,7 @@ export def "get-channel-function" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<apiType: string, description: string, endpoint: string, httpMethod: string, id: string, name: string, requestParameters: list<record>, responseFormat: string, type: string> {
+]: nothing -> oneof<table<apiType: string, description: string, endpoint: string, httpMethod: string, id: string, name: string, requestParameters: list<record>, responseFormat: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -1414,7 +1436,7 @@ export def "add-organization" [
   --desc: string # Org description
   name: string # Org name
   --type: string # Org type
-]: any -> table<createdDate: string, id: string, modifiedDate: string, name: string, plan: string, planCat: record, status: string, type: record> {
+]: any -> oneof<table<createdDate: string, id: string, modifiedDate: string, name: string, plan: string, planCat: record, status: string, type: record>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1451,7 +1473,7 @@ export def "get-my-organization" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<createdDate: string, id: string, modifiedDate: string, name: string, plan: string, planCat: record, status: string, type: record> {
+]: nothing -> oneof<table<createdDate: string, id: string, modifiedDate: string, name: string, plan: string, planCat: record, status: string, type: record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orgs/me" $auth.query)
@@ -1485,7 +1507,7 @@ export def "list-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string> {
+]: nothing -> oneof<table<createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rules" $auth.query)
@@ -1524,7 +1546,7 @@ export def "add-rule" [
   --name: string # Rule name
   --status: string@status-completer
   --trigger-ids: string # Rule description
-]: any -> record<actions: table<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string>, createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string, triggers: table<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string>> {
+]: any -> oneof<record<actions: table<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string>, createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string, triggers: table<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1598,7 +1620,7 @@ export def "get-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<actions: list<record>, createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string, triggers: list<record>> {
+]: nothing -> oneof<table<actions: list<record>, createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string, triggers: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'rule_id' must be non-empty" } }
@@ -1639,7 +1661,7 @@ export def "update-rule" [
   --name: string # Rule name
   --status: string@status-completer
   --trigger-ids: string # Rule description
-]: any -> record<actions: table<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string>, createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string, triggers: table<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string>> {
+]: any -> oneof<record<actions: table<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string>, createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string, triggers: table<channelId: string, createdDate: string, description: string, functionId: string, id: string, modifiedDate: string, name: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1679,7 +1701,7 @@ export def "run-rule" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1717,7 +1739,7 @@ export def "list-triggers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<channelId: int, createdDate: string, description: string, functionId: string, id: int, modifiedDate: string, name: string, status: string> {
+]: nothing -> oneof<table<channelId: int, createdDate: string, description: string, functionId: string, id: int, modifiedDate: string, name: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/triggers" $auth.query)
@@ -1757,7 +1779,7 @@ export def "add-trigger" [
   function_id: string # Hash id of channel function used by trigger
   name: string # Trigger name
   --parameters: record # Object containing channel-defined trigger parameters
-]: any -> record<channelId: int, createdDate: string, description: string, functionId: string, id: int, modifiedDate: string, name: string, status: string> {
+]: any -> oneof<record<channelId: int, createdDate: string, description: string, functionId: string, id: int, modifiedDate: string, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1831,7 +1853,7 @@ export def "get-trigger" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<channelId: int, codes: record, createdDate: string, description: string, functionId: string, id: int, modifiedDate: string, name: string, parameters: record, status: string> {
+]: nothing -> oneof<table<channelId: int, codes: record, createdDate: string, description: string, functionId: string, id: int, modifiedDate: string, name: string, parameters: record, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($trigger_id | is-empty) { error make --unspanned { msg: "path parameter 'trigger_id' must be non-empty" } }
@@ -1873,7 +1895,7 @@ export def "update-trigger" [
   function_id: string # Hash id of channel function used by trigger
   name: string # Trigger name
   --parameters: record # Object containing channel-defined trigger parameters
-]: any -> record<channelId: int, createdDate: string, description: string, functionId: string, id: int, modifiedDate: string, name: string, status: string> {
+]: any -> oneof<record<channelId: int, createdDate: string, description: string, functionId: string, id: int, modifiedDate: string, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1911,7 +1933,7 @@ export def "list-app-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string> {
+]: nothing -> oneof<table<createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users" $auth.query)
@@ -1948,7 +1970,7 @@ export def "add-app-user" [
   --config: record # Object containing user-defined app user configuration
   --name: string # Display name of App User
   --password: string # App User password
-]: any -> record<createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string> {
+]: any -> oneof<record<createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1985,7 +2007,7 @@ export def "list-admin-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<createdDate: string, email: string, id: int, modifiedDate: string, name: string, status: string> {
+]: nothing -> oneof<table<createdDate: string, email: string, id: int, modifiedDate: string, name: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/admin" $auth.query)
@@ -2022,7 +2044,7 @@ export def "add-admin-user" [
   --email: string # Admin User email address
   --password: string # Admin User password
   --type: string@type-completer-1
-]: any -> record<createdDate: string, email: string, id: int, modifiedDate: string, name: string, status: string> {
+]: any -> oneof<record<createdDate: string, email: string, id: int, modifiedDate: string, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2096,7 +2118,7 @@ export def "get-admin-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<createdDate: string, email: string, id: int, modifiedDate: string, name: string, status: string> {
+]: nothing -> oneof<table<createdDate: string, email: string, id: int, modifiedDate: string, name: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -2135,7 +2157,7 @@ export def "update-admin-user" [
   --email: string # Admin User email address
   --password: string # Admin User password
   --type: string@type-completer-1
-]: any -> record<createdDate: string, email: string, id: int, modifiedDate: string, name: string, status: string> {
+]: any -> oneof<record<createdDate: string, email: string, id: int, modifiedDate: string, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2175,7 +2197,7 @@ export def "authenticate-app-user-for-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<url: string> {
+]: nothing -> oneof<table<url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -2248,7 +2270,7 @@ export def "get-app-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string> {
+]: nothing -> oneof<table<createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -2287,7 +2309,7 @@ export def "update-app-user" [
   --config: record # Object containing user-defined app user configuration
   --name: string # Display name of App User
   --password: string # App User password
-]: any -> record<createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string> {
+]: any -> oneof<record<createdDate: string, description: string, id: string, modifiedDate: string, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2326,7 +2348,7 @@ export def "list-app-user-channels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<channelId: int, userId: int> {
+]: nothing -> oneof<table<channelId: int, userId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -2363,7 +2385,7 @@ export def "add-app-user-to-channel" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> record<channelId: int, userId: int> {
+]: any -> oneof<record<channelId: int, userId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2441,7 +2463,7 @@ export def "get-app-user-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<channelId: int, userId: int> {
+]: nothing -> oneof<table<channelId: int, userId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -2478,7 +2500,7 @@ export def "list-app-user-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string> {
+]: nothing -> oneof<table<createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -2553,7 +2575,7 @@ export def "get-app-user-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<actions: list<record>, createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string, triggers: list<record>> {
+]: nothing -> oneof<table<actions: list<record>, createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string, triggers: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -2591,7 +2613,7 @@ export def "add-app-user-to-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string> {
+]: nothing -> oneof<record<createdDate: string, description: string, id: int, modifiedDate: string, name: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -2629,7 +2651,7 @@ export def "run-rule-for-app-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }

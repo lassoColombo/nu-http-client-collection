@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -141,9 +165,9 @@ def payer-completer [] { ["Client" "CoClient" "Joint" "Other"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-types-get-by-country" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["account-types-get-by-country" "account-types-get-by-id" "accounts-get-accounts-by-fact-finder-id-by-factfinderid-externalsourceid" "accounts-post-by-model" "accounts-get-account-holdings-by-accountid" "accounts-post-account-holding-by-accountid-model" "accounts-put-holdings-by-accountid-holdings" "accounts-delete-account-holding-by-accountid-id" "accounts-get-account-holding-by-accountid-id" "accounts-put-by-accountid-id-holding" "accounts-delete-savings-strategies-by-accountid" "accounts-get-savings-strategies-by-account-id-by-accountid" "accounts-post-savings-strategy-by-accountid-savingsstrategy" "accounts-delete-savings-strategy-by-accountid-id" "accounts-get-savings-strategies-by-account-id-and-savings-strategy-id-by-accountid-id" "accounts-put-savings-strategy-by-accountid-id-savingsstrategy" "accounts-delete-account-by-id" "accounts-get-by-id" "accounts-put-by-id-model" "clients-post-by-model" "critical-illness-insurance-policies-get-critical-illness-insurance-policies-by-fact-finder-id-by-factfinderid" "critical-illness-insurance-policies-post-by-model" "critical-illness-insurance-policies-delete-by-id" "critical-illness-insurance-policies-get-by-id" "critical-illness-insurance-policies-put-by-id-model" "critical-illness-insurance-policy-types-get-by-country" "critical-illness-insurance-policy-types-get-by-id" "defined-benefit-pensions-get-defined-benefit-pensions-by-fact-finder-id-by-factfinderid" "defined-benefit-pensions-post-by-model" "defined-benefit-pensions-delete-defined-benefit-pension-by-id" "defined-benefit-pensions-get-by-id" "defined-benefit-pensions-put-defined-benefit-pension-by-id-model" "demographics-get-demographics-by-fact-finder-id-by-factfinderid" "demographics-post-by-model" "demographics-get-dependents-by-demographicid" "demographics-post-by-demographicid-model" "demographics-delete-dependent-by-demographicid-id" "demographics-get-dependent-by-demographicid-id" "demographics-put-by-demographicid-id-model" "demographics-get-by-id" "demographics-put-by-id-model" "disability-insurance-policies-get-disability-insurance-policies-by-fact-finder-id-by-factfinderid" "disability-insurance-policies-post-by-model" "disability-insurance-policies-delete-by-id" "disability-insurance-policies-get-by-id" "disability-insurance-policies-put-by-id-model" "disability-insurance-policy-types-get-by-country" "disability-insurance-policy-types-get-by-id" "education-goals-get-education-goals-by-fact-finder-id-by-factfinderid" "education-goals-post-by-model" "education-goals-get-education-expenses-by-education-goal-id-by-educationgoalid" "education-goals-post-by-educationgoalid-model" "education-goals-delete-by-educationgoalid-id" "education-goals-get-education-expense-by-educationgoalid-id" "education-goals-put-by-educationgoalid-id-model" "education-goals-delete-by-id" "education-goals-get-by-id" "education-goals-put-by-id-model" "expense-types-get-by-country" "expense-types-get-by-id" "expenses-get-expenses-by-fact-finder-id-by-factfinderid" "expenses-post-by-model" "expenses-delete-by-id" "expenses-get-by-id" "expenses-put-by-id-model" "fact-finders-get-by-household-id-by-householdid" "fact-finders-post-by-model" "fact-finders-post-populate-by-model" "fact-finder-modules-get-by-factfinderid" "fact-finder-modules-get-by-factfinderid-id" "fact-finder-modules-put-by-model-factfinderid-id" "fact-finders-get-snapshots-by-factfinderid" "fact-finders-post-snapshots-by-factfinderid" "fact-finders-delete-by-id" "fact-finders-get-by-id" "fact-finders-put-by-id-model" "fact-finders-put-populate-fact-finder-by-id-model" "filing-status-types-get-by-country" "filing-status-types-get-by-id" "frequency-types-get-by-entity-country" "frequency-types-get-by-id" "income-types-get-by-country" "income-types-get-by-id" "incomes-get-incomes-by-fact-finder-id-by-factfinderid" "incomes-post-by-model" "incomes-delete-by-id" "incomes-get-by-id" "incomes-put-by-id-model" "liabilities-get-liabilities-by-fact-finder-id-by-factfinderid-externalsourceid" "liabilities-post-by-model" "liabilities-delete-by-id" "liabilities-get-by-id" "liabilities-put-by-id-model" "liability-types-get-by-country" "liability-types-get-by-id" "life-insurance-policies-get-life-insurance-policies-by-fact-finder-id-by-factfinderid" "life-insurance-policies-post-by-model" "life-insurance-policies-delete-by-id" "life-insurance-policies-get-by-id" "life-insurance-policies-put-by-id-model" "life-insurance-policies-get-subaccounts-by-lifeinsurancepolicyid" "life-insurance-policies-post-subaccount-by-lifeinsurancepolicyid-model" "life-insurance-policies-delete-subaccount-by-lifeinsurancepolicyid-id" "life-insurance-policies-get-subaccount-by-lifeinsurancepolicyid-id" "life-insurance-policies-put-subaccount-by-lifeinsurancepolicyid-id-model" "life-insurance-policy-types-get-by-country" "life-insurance-policy-types-get-by-id" "lifestyle-asset-types-get-by-country" "lifestyle-asset-types-get-by-id" "lifestyle-assets-get-lifestyle-assets-by-fact-finder-id-by-factfinderid" "lifestyle-assets-post-by-model" "lifestyle-assets-delete-by-id" "lifestyle-assets-get-by-id" "lifestyle-assets-put-by-id-model" "long-term-care-insurance-policies-get-long-term-care-insurance-policies-by-fact-finder-id-by-factfinderid" "long-term-care-insurance-policies-post-by-model" "long-term-care-insurance-policies-delete-by-id" "long-term-care-insurance-policies-get-by-id" "long-term-care-insurance-policies-put-by-id-model" "major-purchase-goal-types-get-by-country" "major-purchase-goal-types-get-by-id" "major-purchase-goals-get-major-purchase-goals-by-fact-finder-id-by-factfinderid" "major-purchase-goals-post-by-model" "major-purchase-goals-delete-by-id" "major-purchase-goals-get-by-id" "major-purchase-goals-put-by-id-model" "presentation-get-accounts-by-factfinderid-externalsourceid" "presentation-get-demographic-owners-by-factfinderid" "presentation-get-demographic-relationships" "presentation-get-incomes-by-factfinderid" "presentation-get-liabilities-by-factfinderid" "presentation-get-life-insurance-policies-by-factfinderid" "presentation-get-pensions-by-factfinderid" "real-estate-assets-get-real-estate-assets-by-fact-finder-id-by-factfinderid" "real-estate-assets-post-by-model" "real-estate-assets-delete-by-id" "real-estate-assets-get-by-id" "real-estate-assets-put-by-id-model" "retirement-goals-get-retirement-goals-by-fact-finder-id-by-factfinderid" "retirement-goals-post-by-model" "retirement-goals-delete-by-id" "retirement-goals-get-by-id" "retirement-goals-put-by-id-model" "retirement-goals-get-retirement-expenses-by-retirement-goal-id-by-retirementgoalid" "retirement-goals-post-by-retirementgoalid-model" "retirement-goals-delete-by-retirementgoalid-id" "retirement-goals-get-retirement-expense-by-retirementgoalid-id" "retirement-goals-put-by-retirementgoalid-id-model" "fact-finder-service-information-get" "states-provinces-get-by-country" "states-provinces-get-by-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -177,7 +201,7 @@ export def "account-types-get-by-country" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --country: string@country-completer # The country used to filter Account Types (required)
-]: nothing -> record<accountTypes: table<allowedSavingsTypes: list, id: int, links: list, name: string>> {
+]: nothing -> oneof<record<accountTypes: table<allowedSavingsTypes: list, id: int, links: list, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -215,7 +239,7 @@ export def "account-types-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<allowedSavingsTypes: table<typeName: string, validAmountTypes: list>, id: int, links: table<href: string, rel: string>, name: string> {
+]: nothing -> oneof<record<allowedSavingsTypes: table<typeName: string, validAmountTypes: list>, id: int, links: table<href: string, rel: string>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -253,7 +277,7 @@ export def "accounts-get-accounts-by-fact-finder-id-by-factfinderid-externalsour
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Accounts (required, format: int32)
   --external-source-id: string # The external ID used to filter Accounts
-]: nothing -> record<accounts: table<accountId: int, accountType: int, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, lastUpdated: string, links: list, marketValue: float, owner: string, ownerDependentId: int>> {
+]: nothing -> oneof<record<accounts: table<accountId: int, accountType: int, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, lastUpdated: string, links: list, marketValue: float, owner: string, ownerDependentId: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -300,7 +324,7 @@ export def "accounts-post-by-model" [
   --market-value: float # format: double
   --owner: string@owner-completer
   --owner-dependent-id: int # format: int32
-]: any -> record<accountId: int, accountType: int, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, lastUpdated: string, links: table<href: string, rel: string>, marketValue: float, owner: string, ownerDependentId: int> {
+]: any -> oneof<record<accountId: int, accountType: int, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, lastUpdated: string, links: table<href: string, rel: string>, marketValue: float, owner: string, ownerDependentId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -339,7 +363,7 @@ export def "accounts-get-account-holdings-by-accountid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<holdings: table<accountHoldingId: int, accountId: int, costBasis: float, cusip: string, description: string, externalDestinationId: string, links: list, marketValue: float, symbol: string, valuationDate: string>> {
+]: nothing -> oneof<record<holdings: table<accountHoldingId: int, accountId: int, costBasis: float, cusip: string, description: string, externalDestinationId: string, links: list, marketValue: float, symbol: string, valuationDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -383,7 +407,7 @@ export def "accounts-post-account-holding-by-accountid-model" [
   --market-value: float # format: double
   --symbol: string
   --valuation-date: string # format: date-time
-]: any -> record<accountHoldingId: int, accountId: int, costBasis: float, cusip: string, description: string, externalDestinationId: string, links: table<href: string, rel: string>, marketValue: float, symbol: string, valuationDate: string> {
+]: any -> oneof<record<accountHoldingId: int, accountId: int, costBasis: float, cusip: string, description: string, externalDestinationId: string, links: table<href: string, rel: string>, marketValue: float, symbol: string, valuationDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -411,7 +435,6 @@ export def "accounts-post-account-holding-by-accountid-model" [
 #
 # PUT /api/Accounts/{accountId}/Holdings
 # operationId: Accounts_PutHoldingsByAccountidHoldings
-# --holdings item shape: {costBasis?: float, cusip?: string, description: string, externalDestinationId?: string, marketValue?: float, symbol?: string, valuationDate?: string}
 export def "accounts-put-holdings-by-accountid-holdings" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -425,7 +448,7 @@ export def "accounts-put-holdings-by-accountid-holdings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --holdings: list # item shape: {costBasis?: float, cusip?: string, description: string, externalDestinationId?: string, marketValue?: float, symbol?: string, valuationDate?: string}
-]: any -> record<holdings: table<accountHoldingId: int, accountId: int, costBasis: float, cusip: string, description: string, externalDestinationId: string, links: list, marketValue: float, symbol: string, valuationDate: string>> {
+]: any -> oneof<record<holdings: table<accountHoldingId: int, accountId: int, costBasis: float, cusip: string, description: string, externalDestinationId: string, links: list, marketValue: float, symbol: string, valuationDate: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -505,7 +528,7 @@ export def "accounts-get-account-holding-by-accountid-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<accountHoldingId: int, accountId: int, costBasis: float, cusip: string, description: string, externalDestinationId: string, links: table<href: string, rel: string>, marketValue: float, symbol: string, valuationDate: string> {
+]: nothing -> oneof<record<accountHoldingId: int, accountId: int, costBasis: float, cusip: string, description: string, externalDestinationId: string, links: table<href: string, rel: string>, marketValue: float, symbol: string, valuationDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -551,7 +574,7 @@ export def "accounts-put-by-accountid-id-holding" [
   --market-value: float # format: double
   --symbol: string
   --valuation-date: string # format: date-time
-]: any -> record<costBasis: float, cusip: string, description: string, externalDestinationId: string, marketValue: float, symbol: string, valuationDate: string> {
+]: any -> oneof<record<costBasis: float, cusip: string, description: string, externalDestinationId: string, marketValue: float, symbol: string, valuationDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -629,7 +652,7 @@ export def "accounts-get-savings-strategies-by-account-id-by-accountid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<savingsStrategies: table<accountId: int, employerSavingsAmount: float, employerSavingsAmountType: string, endDate: string, externalDestinationId: string, frequencyId: int, mandatoryAmount: float, mandatoryAmountType: string, postTaxSavingsAmount: float, postTaxSavingsAmountType: string, preTaxSavingsAmount: float, preTaxSavingsAmountType: string, savingsStrategyId: int, startDate: string>> {
+]: nothing -> oneof<record<savingsStrategies: table<accountId: int, employerSavingsAmount: float, employerSavingsAmountType: string, endDate: string, externalDestinationId: string, frequencyId: int, mandatoryAmount: float, mandatoryAmountType: string, postTaxSavingsAmount: float, postTaxSavingsAmountType: string, preTaxSavingsAmount: float, preTaxSavingsAmountType: string, savingsStrategyId: int, startDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -678,7 +701,7 @@ export def "accounts-post-savings-strategy-by-accountid-savingsstrategy" [
   --pre-tax-savings-amount: float # format: double
   --pre-tax-savings-amount-type: string@pre-tax-savings-amount-type-completer
   --start-date: string # format: date-time
-]: any -> record<accountId: int, employerSavingsAmount: float, employerSavingsAmountType: string, endDate: string, externalDestinationId: string, frequencyId: int, mandatoryAmount: float, mandatoryAmountType: string, postTaxSavingsAmount: float, postTaxSavingsAmountType: string, preTaxSavingsAmount: float, preTaxSavingsAmountType: string, savingsStrategyId: int, startDate: string> {
+]: any -> oneof<record<accountId: int, employerSavingsAmount: float, employerSavingsAmountType: string, endDate: string, externalDestinationId: string, frequencyId: int, mandatoryAmount: float, mandatoryAmountType: string, postTaxSavingsAmount: float, postTaxSavingsAmountType: string, preTaxSavingsAmount: float, preTaxSavingsAmountType: string, savingsStrategyId: int, startDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -758,7 +781,7 @@ export def "accounts-get-savings-strategies-by-account-id-and-savings-strategy-i
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<accountId: int, employerSavingsAmount: float, employerSavingsAmountType: string, endDate: string, externalDestinationId: string, frequencyId: int, mandatoryAmount: float, mandatoryAmountType: string, postTaxSavingsAmount: float, postTaxSavingsAmountType: string, preTaxSavingsAmount: float, preTaxSavingsAmountType: string, savingsStrategyId: int, startDate: string> {
+]: nothing -> oneof<record<accountId: int, employerSavingsAmount: float, employerSavingsAmountType: string, endDate: string, externalDestinationId: string, frequencyId: int, mandatoryAmount: float, mandatoryAmountType: string, postTaxSavingsAmount: float, postTaxSavingsAmountType: string, preTaxSavingsAmount: float, preTaxSavingsAmountType: string, savingsStrategyId: int, startDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
@@ -809,7 +832,7 @@ export def "accounts-put-savings-strategy-by-accountid-id-savingsstrategy" [
   --pre-tax-savings-amount: float # format: double
   --pre-tax-savings-amount-type: string@pre-tax-savings-amount-type-completer
   --start-date: string # format: date-time
-]: any -> record<accountId: int, employerSavingsAmount: float, employerSavingsAmountType: string, endDate: string, externalDestinationId: string, frequencyId: int, mandatoryAmount: float, mandatoryAmountType: string, postTaxSavingsAmount: float, postTaxSavingsAmountType: string, preTaxSavingsAmount: float, preTaxSavingsAmountType: string, savingsStrategyId: int, startDate: string> {
+]: any -> oneof<record<accountId: int, employerSavingsAmount: float, employerSavingsAmountType: string, endDate: string, externalDestinationId: string, frequencyId: int, mandatoryAmount: float, mandatoryAmountType: string, postTaxSavingsAmount: float, postTaxSavingsAmountType: string, preTaxSavingsAmount: float, preTaxSavingsAmountType: string, savingsStrategyId: int, startDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -887,7 +910,7 @@ export def "accounts-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<accountId: int, accountType: int, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, lastUpdated: string, links: table<href: string, rel: string>, marketValue: float, owner: string, ownerDependentId: int> {
+]: nothing -> oneof<record<accountId: int, accountType: int, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, lastUpdated: string, links: table<href: string, rel: string>, marketValue: float, owner: string, ownerDependentId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -934,7 +957,7 @@ export def "accounts-put-by-id-model" [
   --market-value: float # format: double
   --owner: string@owner-completer
   --owner-dependent-id: int # format: int32
-]: any -> record<accountId: int, accountType: int, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, lastUpdated: string, links: table<href: string, rel: string>, marketValue: float, owner: string, ownerDependentId: int> {
+]: any -> oneof<record<accountId: int, accountType: int, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, lastUpdated: string, links: table<href: string, rel: string>, marketValue: float, owner: string, ownerDependentId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -976,7 +999,7 @@ export def "clients-post-by-model" [
   --external-destination-name: string
   fact_finder_id: int # format: int32
   plan_action: string@plan-action-completer
-]: any -> record<clientId: int, message: string, ownerUser: string, planId: int, success: bool> {
+]: any -> oneof<record<clientId: int, message: string, ownerUser: string, planId: int, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1015,7 +1038,7 @@ export def "critical-illness-insurance-policies-get-critical-illness-insurance-p
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Critical Illness Insurance Policies (required, format: int32)
-]: nothing -> record<criticalIllnessInsurancePolicies: table<benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, insurancePolicyId: int, insured: string, links: list, policyType: int, premium: float>> {
+]: nothing -> oneof<record<criticalIllnessInsurancePolicies: table<benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, insurancePolicyId: int, insured: string, links: list, policyType: int, premium: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -1060,7 +1083,7 @@ export def "critical-illness-insurance-policies-post-by-model" [
   --insured: string@insured-completer
   --policy-type: int # format: int32
   --premium: float # format: double
-]: any -> record<benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, policyType: int, premium: float> {
+]: any -> oneof<record<benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, policyType: int, premium: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1136,7 +1159,7 @@ export def "critical-illness-insurance-policies-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, policyType: int, premium: float> {
+]: nothing -> oneof<record<benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, policyType: int, premium: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1181,7 +1204,7 @@ export def "critical-illness-insurance-policies-put-by-id-model" [
   --insured: string@insured-completer
   --policy-type: int # format: int32
   --premium: float # format: double
-]: any -> record<benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, policyType: int, premium: float> {
+]: any -> oneof<record<benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, policyType: int, premium: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1221,7 +1244,7 @@ export def "critical-illness-insurance-policy-types-get-by-country" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --country: string@country-completer # The country used to filter Critical Illness Insurance Policy Types (required)
-]: nothing -> record<insurancePolicyTypes: table<id: int, links: list, name: string>> {
+]: nothing -> oneof<record<insurancePolicyTypes: table<id: int, links: list, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -1259,7 +1282,7 @@ export def "critical-illness-insurance-policy-types-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, links: table<href: string, rel: string>, name: string> {
+]: nothing -> oneof<record<id: int, links: table<href: string, rel: string>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1296,7 +1319,7 @@ export def "defined-benefit-pensions-get-defined-benefit-pensions-by-fact-finder
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Defined Benefit Pensions (required, format: int32)
-]: nothing -> record<definedBenefitPensions: table<definedBenefitPensionId: int, description: string, estimatedAmount: float, externalDestinationId: string, factFinderId: int, links: list, member: string, startDate: string>> {
+]: nothing -> oneof<record<definedBenefitPensions: table<definedBenefitPensionId: int, description: string, estimatedAmount: float, externalDestinationId: string, factFinderId: int, links: list, member: string, startDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -1339,7 +1362,7 @@ export def "defined-benefit-pensions-post-by-model" [
   fact_finder_id: int # format: int32
   --member: string@member-completer
   --start-date: string # format: date-time
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1378,7 +1401,7 @@ export def "defined-benefit-pensions-delete-defined-benefit-pension-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1415,7 +1438,7 @@ export def "defined-benefit-pensions-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<definedBenefitPensionId: int, description: string, estimatedAmount: float, externalDestinationId: string, factFinderId: int, links: table<href: string, rel: string>, member: string, startDate: string> {
+]: nothing -> oneof<record<definedBenefitPensionId: int, description: string, estimatedAmount: float, externalDestinationId: string, factFinderId: int, links: table<href: string, rel: string>, member: string, startDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1458,7 +1481,7 @@ export def "defined-benefit-pensions-put-defined-benefit-pension-by-id-model" [
   fact_finder_id: int # format: int32
   --member: string@member-completer
   --start-date: string # format: date-time
-]: any -> record<description: string, estimatedAmount: float, externalDestinationId: string, factFinderId: int, member: string, startDate: string> {
+]: any -> oneof<record<description: string, estimatedAmount: float, externalDestinationId: string, factFinderId: int, member: string, startDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1498,7 +1521,7 @@ export def "demographics-get-demographics-by-fact-finder-id-by-factfinderid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Demographic information (required, format: int32)
-]: nothing -> record<city: string, created: string, demographicsId: int, externalDestinationId: string, externalSourceId: string, factFinderId: int, head1: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, head2: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, jointAnalysis: bool, links: table<href: string, rel: string>, lockRetirement: bool, state: int> {
+]: nothing -> oneof<record<city: string, created: string, demographicsId: int, externalDestinationId: string, externalSourceId: string, factFinderId: int, head1: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, head2: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, jointAnalysis: bool, links: table<href: string, rel: string>, lockRetirement: bool, state: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -1524,8 +1547,6 @@ export def "demographics-get-demographics-by-fact-finder-id-by-factfinderid" [
 #
 # POST /api/Demographics
 # operationId: Demographics_PostByModel
-# --head1 shape: {alreadyRetired: bool, birthDate: string, externalDestinationId?: string, firstName: string, gender: "Male"|"Female"|"None", lastName: string, taxFilingStatus: int}
-# --head2 shape: {alreadyRetired: bool, birthDate: string, externalDestinationId?: string, firstName: string, gender: "Male"|"Female"|"None", lastName: string, taxFilingStatus: int}
 export def "demographics-post-by-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1545,7 +1566,7 @@ export def "demographics-post-by-model" [
   --head2: record # shape: {alreadyRetired: bool, birthDate: string, externalDestinationId?: string, firstName: string, gender: "Male"|"Female"|"None", lastName: string, taxFilingStatus: int}
   --joint-analysis: oneof<nothing, bool>
   state: int # format: int32
-]: any -> record<city: string, created: string, demographicsId: int, externalDestinationId: string, externalSourceId: string, factFinderId: int, head1: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, head2: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, jointAnalysis: bool, links: table<href: string, rel: string>, lockRetirement: bool, state: int> {
+]: any -> oneof<record<city: string, created: string, demographicsId: int, externalDestinationId: string, externalSourceId: string, factFinderId: int, head1: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, head2: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, jointAnalysis: bool, links: table<href: string, rel: string>, lockRetirement: bool, state: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1585,7 +1606,7 @@ export def "demographics-get-dependents-by-demographicid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<dependents: table<birthDate: string, demographicsId: int, dependentId: int, dependentOf: string, externalDestinationId: string, firstName: string, lastName: string, links: list, relationship: string>> {
+]: nothing -> oneof<record<dependents: table<birthDate: string, demographicsId: int, dependentId: int, dependentOf: string, externalDestinationId: string, firstName: string, lastName: string, links: list, relationship: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($demographic_id | is-empty) { error make --unspanned { msg: "path parameter 'demographicId' must be non-empty" } }
@@ -1628,7 +1649,7 @@ export def "demographics-post-by-demographicid-model" [
   first_name: string
   last_name: string
   relationship: string@relationship-completer
-]: any -> record<birthDate: string, demographicsId: int, dependentId: int, dependentOf: string, externalDestinationId: string, firstName: string, lastName: string, links: table<href: string, rel: string>, relationship: string> {
+]: any -> oneof<record<birthDate: string, demographicsId: int, dependentId: int, dependentOf: string, externalDestinationId: string, firstName: string, lastName: string, links: table<href: string, rel: string>, relationship: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1708,7 +1729,7 @@ export def "demographics-get-dependent-by-demographicid-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<birthDate: string, demographicsId: int, dependentId: int, dependentOf: string, externalDestinationId: string, firstName: string, lastName: string, links: table<href: string, rel: string>, relationship: string> {
+]: nothing -> oneof<record<birthDate: string, demographicsId: int, dependentId: int, dependentOf: string, externalDestinationId: string, firstName: string, lastName: string, links: table<href: string, rel: string>, relationship: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($demographic_id | is-empty) { error make --unspanned { msg: "path parameter 'demographicId' must be non-empty" } }
@@ -1753,7 +1774,7 @@ export def "demographics-put-by-demographicid-id-model" [
   first_name: string
   last_name: string
   relationship: string@relationship-completer
-]: any -> record<birthDate: string, demographicsId: int, dependentId: int, dependentOf: string, externalDestinationId: string, firstName: string, lastName: string, links: table<href: string, rel: string>, relationship: string> {
+]: any -> oneof<record<birthDate: string, demographicsId: int, dependentId: int, dependentOf: string, externalDestinationId: string, firstName: string, lastName: string, links: table<href: string, rel: string>, relationship: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1794,7 +1815,7 @@ export def "demographics-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<city: string, created: string, demographicsId: int, externalDestinationId: string, externalSourceId: string, factFinderId: int, head1: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, head2: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, jointAnalysis: bool, links: table<href: string, rel: string>, lockRetirement: bool, state: int> {
+]: nothing -> oneof<record<city: string, created: string, demographicsId: int, externalDestinationId: string, externalSourceId: string, factFinderId: int, head1: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, head2: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, jointAnalysis: bool, links: table<href: string, rel: string>, lockRetirement: bool, state: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1819,8 +1840,6 @@ export def "demographics-get-by-id" [
 #
 # PUT /api/Demographics/{id}
 # operationId: Demographics_PutByIdModel
-# --head1 shape: {alreadyRetired: bool, birthDate: string, externalDestinationId?: string, firstName: string, gender: "Male"|"Female"|"None", lastName: string, taxFilingStatus: int}
-# --head2 shape: {alreadyRetired: bool, birthDate: string, externalDestinationId?: string, firstName: string, gender: "Male"|"Female"|"None", lastName: string, taxFilingStatus: int}
 export def "demographics-put-by-id-model" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1841,7 +1860,7 @@ export def "demographics-put-by-id-model" [
   --head2: record # shape: {alreadyRetired: bool, birthDate: string, externalDestinationId?: string, firstName: string, gender: "Male"|"Female"|"None", lastName: string, taxFilingStatus: int}
   --joint-analysis: oneof<nothing, bool>
   state: int # format: int32
-]: any -> record<city: string, created: string, demographicsId: int, externalDestinationId: string, externalSourceId: string, factFinderId: int, head1: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, head2: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, jointAnalysis: bool, links: table<href: string, rel: string>, lockRetirement: bool, state: int> {
+]: any -> oneof<record<city: string, created: string, demographicsId: int, externalDestinationId: string, externalSourceId: string, factFinderId: int, head1: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, head2: record<alreadyRetired: bool, birthDate: string, externalDestinationId: string, firstName: string, gender: string, lastName: string, taxFilingStatus: int>, jointAnalysis: bool, links: table<href: string, rel: string>, lockRetirement: bool, state: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1882,7 +1901,7 @@ export def "disability-insurance-policies-get-disability-insurance-policies-by-f
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Disability Insurance Policies (required, format: int32)
-]: nothing -> record<disabilityInsurancePolicies: table<benefit: float, benefitFrequency: int, benefitType: string, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: list, policyType: int, premium: float, premiumFrequency: int>> {
+]: nothing -> oneof<record<disabilityInsurancePolicies: table<benefit: float, benefitFrequency: int, benefitType: string, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: list, policyType: int, premium: float, premiumFrequency: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -1929,7 +1948,7 @@ export def "disability-insurance-policies-post-by-model" [
   --policy-type: int # format: int32
   --premium: float # format: double
   --premium-frequency: int # format: int32
-]: any -> record<benefit: float, benefitFrequency: int, benefitType: string, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, policyType: int, premium: float, premiumFrequency: int> {
+]: any -> oneof<record<benefit: float, benefitFrequency: int, benefitType: string, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, policyType: int, premium: float, premiumFrequency: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2005,7 +2024,7 @@ export def "disability-insurance-policies-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<benefit: float, benefitFrequency: int, benefitType: string, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, policyType: int, premium: float, premiumFrequency: int> {
+]: nothing -> oneof<record<benefit: float, benefitFrequency: int, benefitType: string, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, policyType: int, premium: float, premiumFrequency: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2052,7 +2071,7 @@ export def "disability-insurance-policies-put-by-id-model" [
   --policy-type: int # format: int32
   --premium: float # format: double
   --premium-frequency: int # format: int32
-]: any -> record<benefit: float, benefitFrequency: int, benefitType: string, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, policyType: int, premium: float, premiumFrequency: int> {
+]: any -> oneof<record<benefit: float, benefitFrequency: int, benefitType: string, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, policyType: int, premium: float, premiumFrequency: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2092,7 +2111,7 @@ export def "disability-insurance-policy-types-get-by-country" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --country: string@country-completer # The country used to filter Disability Insurance Policy Types (required)
-]: nothing -> record<insurancePolicyTypes: table<id: int, links: list, name: string>> {
+]: nothing -> oneof<record<insurancePolicyTypes: table<id: int, links: list, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -2130,7 +2149,7 @@ export def "disability-insurance-policy-types-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, links: table<href: string, rel: string>, name: string> {
+]: nothing -> oneof<record<id: int, links: table<href: string, rel: string>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2167,7 +2186,7 @@ export def "education-goals-get-education-goals-by-fact-finder-id-by-factfinderi
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Education Goals (required, format: int32)
-]: nothing -> record<educationGoals: table<description: string, educationGoalId: int, externalDestinationId: string, factFinderId: int, links: list, projectedCost: float>> {
+]: nothing -> oneof<record<educationGoals: table<description: string, educationGoalId: int, externalDestinationId: string, factFinderId: int, links: list, projectedCost: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -2208,7 +2227,7 @@ export def "education-goals-post-by-model" [
   --external-destination-id: string
   fact_finder_id: int # format: int32
   --projected-cost: float # format: double
-]: any -> record<description: string, educationGoalId: int, externalDestinationId: string, factFinderId: int, links: table<href: string, rel: string>, projectedCost: float> {
+]: any -> oneof<record<description: string, educationGoalId: int, externalDestinationId: string, factFinderId: int, links: table<href: string, rel: string>, projectedCost: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2247,7 +2266,7 @@ export def "education-goals-get-education-expenses-by-education-goal-id-by-educa
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<educationExpenses: table<annualCost: float, educationExpenseId: int, educationGoalId: int, externalDestinationId: string, links: list, member: string, memberDependentId: int, startYear: string, years: int>> {
+]: nothing -> oneof<record<educationExpenses: table<annualCost: float, educationExpenseId: int, educationGoalId: int, externalDestinationId: string, links: list, member: string, memberDependentId: int, startYear: string, years: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($education_goal_id | is-empty) { error make --unspanned { msg: "path parameter 'educationGoalId' must be non-empty" } }
@@ -2290,7 +2309,7 @@ export def "education-goals-post-by-educationgoalid-model" [
   --member-dependent-id: int # format: int32
   --start-year: string # format: date-time
   --years: int # format: int32
-]: any -> record<annualCost: float, educationExpenseId: int, educationGoalId: int, externalDestinationId: string, links: table<href: string, rel: string>, member: string, memberDependentId: int, startYear: string, years: int> {
+]: any -> oneof<record<annualCost: float, educationExpenseId: int, educationGoalId: int, externalDestinationId: string, links: table<href: string, rel: string>, member: string, memberDependentId: int, startYear: string, years: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2370,7 +2389,7 @@ export def "education-goals-get-education-expense-by-educationgoalid-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<annualCost: float, educationExpenseId: int, educationGoalId: int, externalDestinationId: string, links: table<href: string, rel: string>, member: string, memberDependentId: int, startYear: string, years: int> {
+]: nothing -> oneof<record<annualCost: float, educationExpenseId: int, educationGoalId: int, externalDestinationId: string, links: table<href: string, rel: string>, member: string, memberDependentId: int, startYear: string, years: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($education_goal_id | is-empty) { error make --unspanned { msg: "path parameter 'educationGoalId' must be non-empty" } }
@@ -2415,7 +2434,7 @@ export def "education-goals-put-by-educationgoalid-id-model" [
   --member-dependent-id: int # format: int32
   --start-year: string # format: date-time
   --years: int # format: int32
-]: any -> record<annualCost: float, educationExpenseId: int, educationGoalId: int, externalDestinationId: string, links: table<href: string, rel: string>, member: string, memberDependentId: int, startYear: string, years: int> {
+]: any -> oneof<record<annualCost: float, educationExpenseId: int, educationGoalId: int, externalDestinationId: string, links: table<href: string, rel: string>, member: string, memberDependentId: int, startYear: string, years: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2493,7 +2512,7 @@ export def "education-goals-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<description: string, educationGoalId: int, externalDestinationId: string, factFinderId: int, links: table<href: string, rel: string>, projectedCost: float> {
+]: nothing -> oneof<record<description: string, educationGoalId: int, externalDestinationId: string, factFinderId: int, links: table<href: string, rel: string>, projectedCost: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2534,7 +2553,7 @@ export def "education-goals-put-by-id-model" [
   --external-destination-id: string
   fact_finder_id: int # format: int32
   --projected-cost: float # format: double
-]: any -> record<description: string, educationGoalId: int, externalDestinationId: string, factFinderId: int, links: table<href: string, rel: string>, projectedCost: float> {
+]: any -> oneof<record<description: string, educationGoalId: int, externalDestinationId: string, factFinderId: int, links: table<href: string, rel: string>, projectedCost: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2574,7 +2593,7 @@ export def "expense-types-get-by-country" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --country: string@country-completer # The country used to filter Expense Types (required)
-]: nothing -> record<expenseTypes: table<id: int, links: list, name: string>> {
+]: nothing -> oneof<record<expenseTypes: table<id: int, links: list, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -2612,7 +2631,7 @@ export def "expense-types-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, links: table<href: string, rel: string>, name: string> {
+]: nothing -> oneof<record<id: int, links: table<href: string, rel: string>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2649,7 +2668,7 @@ export def "expenses-get-expenses-by-fact-finder-id-by-factfinderid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Expenses (required, format: int32)
-]: nothing -> record<expenses: table<annualPeriod: int, description: string, endDate: string, expenseAmount: float, expenseId: int, expenseTypeId: int, externalDestinationId: string, factFinderId: int, frequency: int, links: list, member: string, startDate: string>> {
+]: nothing -> oneof<record<expenses: table<annualPeriod: int, description: string, endDate: string, expenseAmount: float, expenseId: int, expenseTypeId: int, externalDestinationId: string, factFinderId: int, frequency: int, links: list, member: string, startDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -2696,7 +2715,7 @@ export def "expenses-post-by-model" [
   --frequency: int # format: int32
   --member: string@member-completer-2
   --start-date: string # format: date-time
-]: any -> record<annualPeriod: int, description: string, endDate: string, expenseAmount: float, expenseId: int, expenseTypeId: int, externalDestinationId: string, factFinderId: int, frequency: int, links: table<href: string, rel: string>, member: string, startDate: string> {
+]: any -> oneof<record<annualPeriod: int, description: string, endDate: string, expenseAmount: float, expenseId: int, expenseTypeId: int, externalDestinationId: string, factFinderId: int, frequency: int, links: table<href: string, rel: string>, member: string, startDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2772,7 +2791,7 @@ export def "expenses-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<annualPeriod: int, description: string, endDate: string, expenseAmount: float, expenseId: int, expenseTypeId: int, externalDestinationId: string, factFinderId: int, frequency: int, links: table<href: string, rel: string>, member: string, startDate: string> {
+]: nothing -> oneof<record<annualPeriod: int, description: string, endDate: string, expenseAmount: float, expenseId: int, expenseTypeId: int, externalDestinationId: string, factFinderId: int, frequency: int, links: table<href: string, rel: string>, member: string, startDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2819,7 +2838,7 @@ export def "expenses-put-by-id-model" [
   --frequency: int # format: int32
   --member: string@member-completer-2
   --start-date: string # format: date-time
-]: any -> record<annualPeriod: int, description: string, endDate: string, expenseAmount: float, expenseId: int, expenseTypeId: int, externalDestinationId: string, factFinderId: int, frequency: int, links: table<href: string, rel: string>, member: string, startDate: string> {
+]: any -> oneof<record<annualPeriod: int, description: string, endDate: string, expenseAmount: float, expenseId: int, expenseTypeId: int, externalDestinationId: string, factFinderId: int, frequency: int, links: table<href: string, rel: string>, member: string, startDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2859,7 +2878,7 @@ export def "fact-finders-get-by-household-id-by-householdid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --household-id: int # The ID of the household used to retrieve the fact finders. If not set, uses all households associated with the user (format: int32)
-]: nothing -> table<countryCode: string, created: string, factFinderId: int, householdId: int, lastStatusUpdate: string, links: list<record>, modules: record<factFinderModules: list>, planId: int, planLevel: string, status: string> {
+]: nothing -> oneof<table<countryCode: string, created: string, factFinderId: int, householdId: int, lastStatusUpdate: string, links: list<record>, modules: record<factFinderModules: list>, planId: int, planLevel: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "householdId" $household_id "scalar")] | flatten | str join "&"
@@ -2898,7 +2917,7 @@ export def "fact-finders-post-by-model" [
   household_id: int # format: int32
   --modules: list<string>
   --plan-level: string@plan-level-completer
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2940,7 +2959,7 @@ export def "fact-finders-post-populate-by-model" [
   --modules: list<string>
   --plan-id: int # format: int32
   --plan-level: string@plan-level-completer
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2979,7 +2998,7 @@ export def "fact-finder-modules-get-by-factfinderid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<factFinderModules: table<available: bool, factFinderId: int, links: list, moduleId: int, moduleName: string, visited: bool>> {
+]: nothing -> oneof<record<factFinderModules: table<available: bool, factFinderId: int, links: list, moduleId: int, moduleName: string, visited: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id | is-empty) { error make --unspanned { msg: "path parameter 'factFinderId' must be non-empty" } }
@@ -3017,7 +3036,7 @@ export def "fact-finder-modules-get-by-factfinderid-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<available: bool, factFinderId: int, links: table<href: string, rel: string>, moduleId: int, moduleName: string, visited: bool> {
+]: nothing -> oneof<record<available: bool, factFinderId: int, links: table<href: string, rel: string>, moduleId: int, moduleName: string, visited: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id | is-empty) { error make --unspanned { msg: "path parameter 'factFinderId' must be non-empty" } }
@@ -3059,7 +3078,7 @@ export def "fact-finder-modules-put-by-model-factfinderid-id" [
   --available: oneof<nothing, bool>
   module_name: string@module-name-completer
   --visited: oneof<nothing, bool>
-]: any -> record<available: bool, factFinderId: int, links: table<href: string, rel: string>, moduleId: int, moduleName: string, visited: bool> {
+]: any -> oneof<record<available: bool, factFinderId: int, links: table<href: string, rel: string>, moduleId: int, moduleName: string, visited: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3100,7 +3119,7 @@ export def "fact-finders-get-snapshots-by-factfinderid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<snapshots: table<created: string, factFinderData: record, factFinderId: int, factFinderStatus: string, snapshotId: int>> {
+]: nothing -> oneof<record<snapshots: table<created: string, factFinderData: record, factFinderId: int, factFinderStatus: string, snapshotId: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id | is-empty) { error make --unspanned { msg: "path parameter 'factFinderId' must be non-empty" } }
@@ -3137,7 +3156,7 @@ export def "fact-finders-post-snapshots-by-factfinderid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id | is-empty) { error make --unspanned { msg: "path parameter 'factFinderId' must be non-empty" } }
@@ -3174,7 +3193,7 @@ export def "fact-finders-delete-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3211,7 +3230,7 @@ export def "fact-finders-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<countryCode: string, created: string, factFinderId: int, householdId: int, lastStatusUpdate: string, links: table<href: string, rel: string>, modules: record<factFinderModules: list<record>>, planId: int, planLevel: string, status: string> {
+]: nothing -> oneof<record<countryCode: string, created: string, factFinderId: int, householdId: int, lastStatusUpdate: string, links: table<href: string, rel: string>, modules: record<factFinderModules: list<record>>, planId: int, planLevel: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3249,7 +3268,7 @@ export def "fact-finders-put-by-id-model" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --status: string@status-completer
-]: any -> record<countryCode: string, created: string, factFinderId: int, householdId: int, lastStatusUpdate: string, links: table<href: string, rel: string>, modules: record<factFinderModules: list<record>>, planId: int, planLevel: string, status: string> {
+]: any -> oneof<record<countryCode: string, created: string, factFinderId: int, householdId: int, lastStatusUpdate: string, links: table<href: string, rel: string>, modules: record<factFinderModules: list<record>>, planId: int, planLevel: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3290,7 +3309,7 @@ export def "fact-finders-put-populate-fact-finder-by-id-model" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: int # format: int32
-]: any -> record<countryCode: string, created: string, factFinderId: int, householdId: int, lastStatusUpdate: string, links: table<href: string, rel: string>, modules: record<factFinderModules: list<record>>, planId: int, planLevel: string, status: string> {
+]: any -> oneof<record<countryCode: string, created: string, factFinderId: int, householdId: int, lastStatusUpdate: string, links: table<href: string, rel: string>, modules: record<factFinderModules: list<record>>, planId: int, planLevel: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3330,7 +3349,7 @@ export def "filing-status-types-get-by-country" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --country: string@country-completer # The country used to filter Filing Status Types (required)
-]: nothing -> record<filingStatusTypes: table<filingStatusTypeId: int, filingStatusTypeName: string, hasJointDependent: bool, links: list, partnerStatuses: list, validForSingleAnalysis: bool>> {
+]: nothing -> oneof<record<filingStatusTypes: table<filingStatusTypeId: int, filingStatusTypeName: string, hasJointDependent: bool, links: list, partnerStatuses: list, validForSingleAnalysis: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -3368,7 +3387,7 @@ export def "filing-status-types-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<filingStatusTypeId: int, filingStatusTypeName: string, hasJointDependent: bool, links: table<href: string, rel: string>, partnerStatuses: list<int>, validForSingleAnalysis: bool> {
+]: nothing -> oneof<record<filingStatusTypeId: int, filingStatusTypeName: string, hasJointDependent: bool, links: table<href: string, rel: string>, partnerStatuses: list<int>, validForSingleAnalysis: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3406,7 +3425,7 @@ export def "frequency-types-get-by-entity-country" [
   --accept: string@accept-completer # Response content type
   --entity: string@entity-completer # The entity used to filter Frequency Types (required)
   --country: string@country-completer # The country used to filter Frequency Types (required)
-]: nothing -> record<frequencyTypes: table<id: int, links: list, name: string>> {
+]: nothing -> oneof<record<frequencyTypes: table<id: int, links: list, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($entity == null) { error make --unspanned { msg: "required query parameter 'entity' missing: pass --entity" } }
@@ -3445,7 +3464,7 @@ export def "frequency-types-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, links: table<href: string, rel: string>, name: string> {
+]: nothing -> oneof<record<id: int, links: table<href: string, rel: string>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3482,7 +3501,7 @@ export def "income-types-get-by-country" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --country: string@country-completer # The country used to filter Income Types (required)
-]: nothing -> record<incomeTypes: table<id: int, links: list, name: string>> {
+]: nothing -> oneof<record<incomeTypes: table<id: int, links: list, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -3520,7 +3539,7 @@ export def "income-types-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, links: table<href: string, rel: string>, name: string> {
+]: nothing -> oneof<record<id: int, links: table<href: string, rel: string>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3557,7 +3576,7 @@ export def "incomes-get-incomes-by-fact-finder-id-by-factfinderid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Incomes (required, format: int32)
-]: nothing -> record<incomes: table<annualAmount: float, description: string, endDate: string, externalDestinationId: string, factFinderId: int, incomeId: int, incomeTypeId: int, links: list, owner: string, startDate: string>> {
+]: nothing -> oneof<record<incomes: table<annualAmount: float, description: string, endDate: string, externalDestinationId: string, factFinderId: int, incomeId: int, incomeTypeId: int, links: list, owner: string, startDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -3602,7 +3621,7 @@ export def "incomes-post-by-model" [
   --income-type-id: int # format: int32
   --owner: string@owner-completer-1
   --start-date: string # format: date-time
-]: any -> record<annualAmount: float, description: string, endDate: string, externalDestinationId: string, factFinderId: int, incomeId: int, incomeTypeId: int, links: table<href: string, rel: string>, owner: string, startDate: string> {
+]: any -> oneof<record<annualAmount: float, description: string, endDate: string, externalDestinationId: string, factFinderId: int, incomeId: int, incomeTypeId: int, links: table<href: string, rel: string>, owner: string, startDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3678,7 +3697,7 @@ export def "incomes-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<annualAmount: float, description: string, endDate: string, externalDestinationId: string, factFinderId: int, incomeId: int, incomeTypeId: int, links: table<href: string, rel: string>, owner: string, startDate: string> {
+]: nothing -> oneof<record<annualAmount: float, description: string, endDate: string, externalDestinationId: string, factFinderId: int, incomeId: int, incomeTypeId: int, links: table<href: string, rel: string>, owner: string, startDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3723,7 +3742,7 @@ export def "incomes-put-by-id-model" [
   --income-type-id: int # format: int32
   --owner: string@owner-completer-1
   --start-date: string # format: date-time
-]: any -> record<annualAmount: float, description: string, endDate: string, externalDestinationId: string, factFinderId: int, incomeId: int, incomeTypeId: int, links: table<href: string, rel: string>, owner: string, startDate: string> {
+]: any -> oneof<record<annualAmount: float, description: string, endDate: string, externalDestinationId: string, factFinderId: int, incomeId: int, incomeTypeId: int, links: table<href: string, rel: string>, owner: string, startDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3764,7 +3783,7 @@ export def "liabilities-get-liabilities-by-fact-finder-id-by-factfinderid-extern
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Liabilities (required, format: int32)
   --external-source-id: string # The external source ID used to filter Liabilities
-]: nothing -> record<liabilities: table<balance: float, balanceAsOfDate: string, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, frequency: int, interestRate: float, lastUpdated: string, liabilityId: int, liabilityType: int, links: list, loanDate: string, originalPrincipal: float, owner: string, payment: float, paymentType: string>> {
+]: nothing -> oneof<record<liabilities: table<balance: float, balanceAsOfDate: string, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, frequency: int, interestRate: float, lastUpdated: string, liabilityId: int, liabilityType: int, links: list, loanDate: string, originalPrincipal: float, owner: string, payment: float, paymentType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -3817,7 +3836,7 @@ export def "liabilities-post-by-model" [
   --owner: string@owner-completer-2
   --payment: float # format: double
   --payment-type: string@payment-type-completer
-]: any -> record<balance: float, balanceAsOfDate: string, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, frequency: int, interestRate: float, lastUpdated: string, liabilityId: int, liabilityType: int, links: table<href: string, rel: string>, loanDate: string, originalPrincipal: float, owner: string, payment: float, paymentType: string> {
+]: any -> oneof<record<balance: float, balanceAsOfDate: string, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, frequency: int, interestRate: float, lastUpdated: string, liabilityId: int, liabilityType: int, links: table<href: string, rel: string>, loanDate: string, originalPrincipal: float, owner: string, payment: float, paymentType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3893,7 +3912,7 @@ export def "liabilities-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<balance: float, balanceAsOfDate: string, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, frequency: int, interestRate: float, lastUpdated: string, liabilityId: int, liabilityType: int, links: table<href: string, rel: string>, loanDate: string, originalPrincipal: float, owner: string, payment: float, paymentType: string> {
+]: nothing -> oneof<record<balance: float, balanceAsOfDate: string, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, frequency: int, interestRate: float, lastUpdated: string, liabilityId: int, liabilityType: int, links: table<href: string, rel: string>, loanDate: string, originalPrincipal: float, owner: string, payment: float, paymentType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3946,7 +3965,7 @@ export def "liabilities-put-by-id-model" [
   --owner: string@owner-completer-2
   --payment: float # format: double
   --payment-type: string@payment-type-completer
-]: any -> record<balance: float, balanceAsOfDate: string, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, frequency: int, interestRate: float, lastUpdated: string, liabilityId: int, liabilityType: int, links: table<href: string, rel: string>, loanDate: string, originalPrincipal: float, owner: string, payment: float, paymentType: string> {
+]: any -> oneof<record<balance: float, balanceAsOfDate: string, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, frequency: int, interestRate: float, lastUpdated: string, liabilityId: int, liabilityType: int, links: table<href: string, rel: string>, loanDate: string, originalPrincipal: float, owner: string, payment: float, paymentType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3986,7 +4005,7 @@ export def "liability-types-get-by-country" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --country: string@country-completer # The country used to filter Liability Types (required)
-]: nothing -> record<liabilityTypes: table<id: int, links: list, name: string>> {
+]: nothing -> oneof<record<liabilityTypes: table<id: int, links: list, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -4024,7 +4043,7 @@ export def "liability-types-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, links: table<href: string, rel: string>, name: string> {
+]: nothing -> oneof<record<id: int, links: table<href: string, rel: string>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4061,7 +4080,7 @@ export def "life-insurance-policies-get-life-insurance-policies-by-fact-finder-i
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Life Insurance Policies (required, format: int32)
-]: nothing -> record<lifeInsurancePolicies: table<beneficiary: string, beneficiaryDependentId: int, benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, generalAccountMarketValue: float, insurancePolicyId: int, insured: string, links: list, payer: string, policyType: int, premium: float>> {
+]: nothing -> oneof<record<lifeInsurancePolicies: table<beneficiary: string, beneficiaryDependentId: int, benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, generalAccountMarketValue: float, insurancePolicyId: int, insured: string, links: list, payer: string, policyType: int, premium: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -4110,7 +4129,7 @@ export def "life-insurance-policies-post-by-model" [
   --payer: string@payer-completer
   --policy-type: int # format: int32
   --premium: float # format: double
-]: any -> record<beneficiary: string, beneficiaryDependentId: int, benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, generalAccountMarketValue: float, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, payer: string, policyType: int, premium: float> {
+]: any -> oneof<record<beneficiary: string, beneficiaryDependentId: int, benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, generalAccountMarketValue: float, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, payer: string, policyType: int, premium: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4186,7 +4205,7 @@ export def "life-insurance-policies-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<beneficiary: string, beneficiaryDependentId: int, benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, generalAccountMarketValue: float, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, payer: string, policyType: int, premium: float> {
+]: nothing -> oneof<record<beneficiary: string, beneficiaryDependentId: int, benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, generalAccountMarketValue: float, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, payer: string, policyType: int, premium: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4235,7 +4254,7 @@ export def "life-insurance-policies-put-by-id-model" [
   --payer: string@payer-completer
   --policy-type: int # format: int32
   --premium: float # format: double
-]: any -> record<beneficiary: string, beneficiaryDependentId: int, benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, generalAccountMarketValue: float, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, payer: string, policyType: int, premium: float> {
+]: any -> oneof<record<beneficiary: string, beneficiaryDependentId: int, benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, generalAccountMarketValue: float, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, payer: string, policyType: int, premium: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4275,7 +4294,7 @@ export def "life-insurance-policies-get-subaccounts-by-lifeinsurancepolicyid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<lifeInsurancePolicySubaccounts: table<description: string, externalDestinationId: string, lifeInsurancePolicyId: int, lifeInsurancePolicySubaccountId: int, marketValue: float, symbol: string>> {
+]: nothing -> oneof<record<lifeInsurancePolicySubaccounts: table<description: string, externalDestinationId: string, lifeInsurancePolicyId: int, lifeInsurancePolicySubaccountId: int, marketValue: float, symbol: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($life_insurance_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'lifeInsurancePolicyId' must be non-empty" } }
@@ -4316,7 +4335,7 @@ export def "life-insurance-policies-post-subaccount-by-lifeinsurancepolicyid-mod
   --external-destination-id: string
   --market-value: float # format: double
   --symbol: string
-]: any -> record<description: string, externalDestinationId: string, lifeInsurancePolicyId: int, lifeInsurancePolicySubaccountId: int, marketValue: float, symbol: string> {
+]: any -> oneof<record<description: string, externalDestinationId: string, lifeInsurancePolicyId: int, lifeInsurancePolicySubaccountId: int, marketValue: float, symbol: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4396,7 +4415,7 @@ export def "life-insurance-policies-get-subaccount-by-lifeinsurancepolicyid-id" 
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<description: string, externalDestinationId: string, lifeInsurancePolicyId: int, lifeInsurancePolicySubaccountId: int, marketValue: float, symbol: string> {
+]: nothing -> oneof<record<description: string, externalDestinationId: string, lifeInsurancePolicyId: int, lifeInsurancePolicySubaccountId: int, marketValue: float, symbol: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($life_insurance_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'lifeInsurancePolicyId' must be non-empty" } }
@@ -4439,7 +4458,7 @@ export def "life-insurance-policies-put-subaccount-by-lifeinsurancepolicyid-id-m
   --external-destination-id: string
   --market-value: float # format: double
   --symbol: string
-]: any -> record<description: string, externalDestinationId: string, marketValue: float, symbol: string> {
+]: any -> oneof<record<description: string, externalDestinationId: string, marketValue: float, symbol: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4480,7 +4499,7 @@ export def "life-insurance-policy-types-get-by-country" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --country: string@country-completer # The country used to filter Life Insurance Policy Types (required)
-]: nothing -> record<insurancePolicyTypes: table<id: int, links: list, name: string>> {
+]: nothing -> oneof<record<insurancePolicyTypes: table<id: int, links: list, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -4518,7 +4537,7 @@ export def "life-insurance-policy-types-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, links: table<href: string, rel: string>, name: string> {
+]: nothing -> oneof<record<id: int, links: table<href: string, rel: string>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4555,7 +4574,7 @@ export def "lifestyle-asset-types-get-by-country" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --country: string@country-completer # The country used to filter Lifestyle Asset Types (required)
-]: nothing -> record<lifestyleAssetTypes: table<id: int, links: list, name: string>> {
+]: nothing -> oneof<record<lifestyleAssetTypes: table<id: int, links: list, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -4593,7 +4612,7 @@ export def "lifestyle-asset-types-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, links: table<href: string, rel: string>, name: string> {
+]: nothing -> oneof<record<id: int, links: table<href: string, rel: string>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4630,7 +4649,7 @@ export def "lifestyle-assets-get-lifestyle-assets-by-fact-finder-id-by-factfinde
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Lifestyle Assets (required, format: int32)
-]: nothing -> record<lifestyleAssets: table<description: string, externalDestinationId: string, factFinderId: int, lifestyleAssetId: int, links: list, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, type: int>> {
+]: nothing -> oneof<record<lifestyleAssets: table<description: string, externalDestinationId: string, factFinderId: int, lifestyleAssetId: int, links: list, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, type: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -4675,7 +4694,7 @@ export def "lifestyle-assets-post-by-model" [
   --purchase-amount: float # format: double
   --purchase-date: string # format: date-time
   --type: int # format: int32
-]: any -> record<description: string, externalDestinationId: string, factFinderId: int, lifestyleAssetId: int, links: table<href: string, rel: string>, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, type: int> {
+]: any -> oneof<record<description: string, externalDestinationId: string, factFinderId: int, lifestyleAssetId: int, links: table<href: string, rel: string>, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, type: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4751,7 +4770,7 @@ export def "lifestyle-assets-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<description: string, externalDestinationId: string, factFinderId: int, lifestyleAssetId: int, links: table<href: string, rel: string>, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, type: int> {
+]: nothing -> oneof<record<description: string, externalDestinationId: string, factFinderId: int, lifestyleAssetId: int, links: table<href: string, rel: string>, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, type: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4796,7 +4815,7 @@ export def "lifestyle-assets-put-by-id-model" [
   --purchase-amount: float # format: double
   --purchase-date: string # format: date-time
   --type: int # format: int32
-]: any -> record<description: string, externalDestinationId: string, factFinderId: int, lifestyleAssetId: int, links: table<href: string, rel: string>, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, type: int> {
+]: any -> oneof<record<description: string, externalDestinationId: string, factFinderId: int, lifestyleAssetId: int, links: table<href: string, rel: string>, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, type: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4836,7 +4855,7 @@ export def "long-term-care-insurance-policies-get-long-term-care-insurance-polic
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Long Term Care Insurance Policies (required, format: int32)
-]: nothing -> record<longTermCareInsurancePolicies: table<benefit: float, benefitFrequency: int, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: list, premium: float, premiumFrequency: int>> {
+]: nothing -> oneof<record<longTermCareInsurancePolicies: table<benefit: float, benefitFrequency: int, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: list, premium: float, premiumFrequency: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -4881,7 +4900,7 @@ export def "long-term-care-insurance-policies-post-by-model" [
   --insured: string@insured-completer
   --premium: float # format: double
   --premium-frequency: int # format: int32
-]: any -> record<benefit: float, benefitFrequency: int, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, premium: float, premiumFrequency: int> {
+]: any -> oneof<record<benefit: float, benefitFrequency: int, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, premium: float, premiumFrequency: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4957,7 +4976,7 @@ export def "long-term-care-insurance-policies-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<benefit: float, benefitFrequency: int, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, premium: float, premiumFrequency: int> {
+]: nothing -> oneof<record<benefit: float, benefitFrequency: int, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, premium: float, premiumFrequency: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5002,7 +5021,7 @@ export def "long-term-care-insurance-policies-put-by-id-model" [
   --insured: string@insured-completer
   --premium: float # format: double
   --premium-frequency: int # format: int32
-]: any -> record<benefit: float, benefitFrequency: int, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, premium: float, premiumFrequency: int> {
+]: any -> oneof<record<benefit: float, benefitFrequency: int, description: string, externalDestinationId: string, factFinderId: int, insurancePolicyId: int, insured: string, links: table<href: string, rel: string>, premium: float, premiumFrequency: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5042,7 +5061,7 @@ export def "major-purchase-goal-types-get-by-country" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --country: string@country-completer # The country used to filter Major Purchase Goal Types (required)
-]: nothing -> record<majorPurchaseGoalTypes: table<description: string, links: list, majorPurchaseGoalTypeId: int>> {
+]: nothing -> oneof<record<majorPurchaseGoalTypes: table<description: string, links: list, majorPurchaseGoalTypeId: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -5080,7 +5099,7 @@ export def "major-purchase-goal-types-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<description: string, links: table<href: string, rel: string>, majorPurchaseGoalTypeId: int> {
+]: nothing -> oneof<record<description: string, links: table<href: string, rel: string>, majorPurchaseGoalTypeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5117,7 +5136,7 @@ export def "major-purchase-goals-get-major-purchase-goals-by-fact-finder-id-by-f
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Major Purchases (required, format: int32)
-]: nothing -> record<majorPurchaseGoals: table<amount: float, description: string, externalDestinationId: string, factFinderId: int, links: list, majorPurchaseGoalId: int, majorPurchaseGoalTypeId: int, member: string, targetDate: string>> {
+]: nothing -> oneof<record<majorPurchaseGoals: table<amount: float, description: string, externalDestinationId: string, factFinderId: int, links: list, majorPurchaseGoalId: int, majorPurchaseGoalTypeId: int, member: string, targetDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -5161,7 +5180,7 @@ export def "major-purchase-goals-post-by-model" [
   --major-purchase-goal-type-id: int # format: int32
   --member: string@member-completer-2
   --target-date: string # format: date-time
-]: any -> record<amount: float, description: string, externalDestinationId: string, factFinderId: int, links: table<href: string, rel: string>, majorPurchaseGoalId: int, majorPurchaseGoalTypeId: int, member: string, targetDate: string> {
+]: any -> oneof<record<amount: float, description: string, externalDestinationId: string, factFinderId: int, links: table<href: string, rel: string>, majorPurchaseGoalId: int, majorPurchaseGoalTypeId: int, member: string, targetDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5237,7 +5256,7 @@ export def "major-purchase-goals-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<amount: float, description: string, externalDestinationId: string, factFinderId: int, links: table<href: string, rel: string>, majorPurchaseGoalId: int, majorPurchaseGoalTypeId: int, member: string, targetDate: string> {
+]: nothing -> oneof<record<amount: float, description: string, externalDestinationId: string, factFinderId: int, links: table<href: string, rel: string>, majorPurchaseGoalId: int, majorPurchaseGoalTypeId: int, member: string, targetDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5281,7 +5300,7 @@ export def "major-purchase-goals-put-by-id-model" [
   --major-purchase-goal-type-id: int # format: int32
   --member: string@member-completer-2
   --target-date: string # format: date-time
-]: any -> record<amount: float, description: string, externalDestinationId: string, factFinderId: int, links: table<href: string, rel: string>, majorPurchaseGoalId: int, majorPurchaseGoalTypeId: int, member: string, targetDate: string> {
+]: any -> oneof<record<amount: float, description: string, externalDestinationId: string, factFinderId: int, links: table<href: string, rel: string>, majorPurchaseGoalId: int, majorPurchaseGoalTypeId: int, member: string, targetDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5322,7 +5341,7 @@ export def "presentation-get-accounts-by-factfinderid-externalsourceid" [
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Accounts (required, format: int32)
   --external-source-id: string # The external ID used to filter Accounts
-]: nothing -> record<accounts: table<accountId: int, accountType: int, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, holdings: list, lastUpdated: string, links: list, marketValue: float, owner: string, ownerDependentId: int, savingsStrategies: list>> {
+]: nothing -> oneof<record<accounts: table<accountId: int, accountType: int, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, holdings: list, lastUpdated: string, links: list, marketValue: float, owner: string, ownerDependentId: int, savingsStrategies: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -5360,7 +5379,7 @@ export def "presentation-get-demographic-owners-by-factfinderid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve owners. (required, format: int32)
-]: nothing -> record<owners: table<displayName: string, owner: string, ownerDependentId: int>> {
+]: nothing -> oneof<record<owners: table<displayName: string, owner: string, ownerDependentId: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -5397,7 +5416,7 @@ export def "presentation-get-demographic-relationships" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<relationshipTypes: table<id: int, isChildType: bool, relationshipType: string>> {
+]: nothing -> oneof<record<relationshipTypes: table<id: int, isChildType: bool, relationshipType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Presentation/Demographics/Relationships" $auth.query)
@@ -5433,7 +5452,7 @@ export def "presentation-get-incomes-by-factfinderid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Incomes (required, format: int32)
-]: nothing -> record<incomes: table<annualAmount: float, description: string, endDate: string, externalDestinationId: string, factFinderId: int, incomeId: int, incomeTypeId: int, links: list, owner: string, startDate: string>> {
+]: nothing -> oneof<record<incomes: table<annualAmount: float, description: string, endDate: string, externalDestinationId: string, factFinderId: int, incomeId: int, incomeTypeId: int, links: list, owner: string, startDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -5471,7 +5490,7 @@ export def "presentation-get-liabilities-by-factfinderid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Liabilities (required, format: int32)
-]: nothing -> record<liabilities: table<balance: float, balanceAsOfDate: string, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, frequency: int, interestRate: float, lastUpdated: string, liabilityId: int, liabilityType: int, links: list, loanDate: string, originalPrincipal: float, owner: string, payment: float, paymentType: string>> {
+]: nothing -> oneof<record<liabilities: table<balance: float, balanceAsOfDate: string, description: string, externalDestinationId: string, externalSourceId: string, externalSourceName: string, factFinderId: int, frequency: int, interestRate: float, lastUpdated: string, liabilityId: int, liabilityType: int, links: list, loanDate: string, originalPrincipal: float, owner: string, payment: float, paymentType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -5509,7 +5528,7 @@ export def "presentation-get-life-insurance-policies-by-factfinderid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Life Insurance Policies. (required, format: int32)
-]: nothing -> record<lifeInsurancePolicies: table<beneficiary: string, beneficiaryDependentId: int, benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, generalAccountMarketValue: float, insurancePolicyId: int, insured: string, links: list, payer: string, policyType: int, premium: float, subaccounts: list>> {
+]: nothing -> oneof<record<lifeInsurancePolicies: table<beneficiary: string, beneficiaryDependentId: int, benefit: float, description: string, externalDestinationId: string, factFinderId: int, frequency: int, generalAccountMarketValue: float, insurancePolicyId: int, insured: string, links: list, payer: string, policyType: int, premium: float, subaccounts: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -5547,7 +5566,7 @@ export def "presentation-get-pensions-by-factfinderid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Pensions. (required, format: int32)
-]: nothing -> record<definedBenefitPensions: table<definedBenefitPensionId: int, description: string, estimatedAmount: float, externalDestinationId: string, factFinderId: int, links: list, member: string, startDate: string>> {
+]: nothing -> oneof<record<definedBenefitPensions: table<definedBenefitPensionId: int, description: string, estimatedAmount: float, externalDestinationId: string, factFinderId: int, links: list, member: string, startDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -5585,7 +5604,7 @@ export def "real-estate-assets-get-real-estate-assets-by-fact-finder-id-by-factf
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Real Estate Assets (required, format: int32)
-]: nothing -> record<realEstateAssets: table<description: string, externalDestinationId: string, factFinderId: int, frequency: int, links: list, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, realEstateAssetId: int, rentalIncome: float>> {
+]: nothing -> oneof<record<realEstateAssets: table<description: string, externalDestinationId: string, factFinderId: int, frequency: int, links: list, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, realEstateAssetId: int, rentalIncome: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -5631,7 +5650,7 @@ export def "real-estate-assets-post-by-model" [
   --purchase-amount: float # format: double
   --purchase-date: string # format: date-time
   --rental-income: float # format: double
-]: any -> record<description: string, externalDestinationId: string, factFinderId: int, frequency: int, links: table<href: string, rel: string>, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, realEstateAssetId: int, rentalIncome: float> {
+]: any -> oneof<record<description: string, externalDestinationId: string, factFinderId: int, frequency: int, links: table<href: string, rel: string>, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, realEstateAssetId: int, rentalIncome: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5707,7 +5726,7 @@ export def "real-estate-assets-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<description: string, externalDestinationId: string, factFinderId: int, frequency: int, links: table<href: string, rel: string>, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, realEstateAssetId: int, rentalIncome: float> {
+]: nothing -> oneof<record<description: string, externalDestinationId: string, factFinderId: int, frequency: int, links: table<href: string, rel: string>, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, realEstateAssetId: int, rentalIncome: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5753,7 +5772,7 @@ export def "real-estate-assets-put-by-id-model" [
   --purchase-amount: float # format: double
   --purchase-date: string # format: date-time
   --rental-income: float # format: double
-]: any -> record<description: string, externalDestinationId: string, factFinderId: int, frequency: int, links: table<href: string, rel: string>, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, realEstateAssetId: int, rentalIncome: float> {
+]: any -> oneof<record<description: string, externalDestinationId: string, factFinderId: int, frequency: int, links: table<href: string, rel: string>, marketValue: float, owner: string, purchaseAmount: float, purchaseDate: string, realEstateAssetId: int, rentalIncome: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5793,7 +5812,7 @@ export def "retirement-goals-get-retirement-goals-by-fact-finder-id-by-factfinde
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --fact-finder-id: int # The ID of the Fact Finder used to retrieve Retirement Goals (required, format: int32)
-]: nothing -> record<retirementGoals: table<externalDestinationId: string, factFinderId: int, head1RetirementDate: string, head2RetirementDate: string, links: list, retirementGoalId: int>> {
+]: nothing -> oneof<record<retirementGoals: table<externalDestinationId: string, factFinderId: int, head1RetirementDate: string, head2RetirementDate: string, links: list, retirementGoalId: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fact_finder_id == null) { error make --unspanned { msg: "required query parameter 'factFinderId' missing: pass --fact-finder-id" } }
@@ -5834,7 +5853,7 @@ export def "retirement-goals-post-by-model" [
   fact_finder_id: int # format: int32
   --head1-retirement-date: string # format: date-time
   --head2-retirement-date: string # format: date-time
-]: any -> record<externalDestinationId: string, factFinderId: int, head1RetirementDate: string, head2RetirementDate: string, links: table<href: string, rel: string>, retirementGoalId: int> {
+]: any -> oneof<record<externalDestinationId: string, factFinderId: int, head1RetirementDate: string, head2RetirementDate: string, links: table<href: string, rel: string>, retirementGoalId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5910,7 +5929,7 @@ export def "retirement-goals-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<externalDestinationId: string, factFinderId: int, head1RetirementDate: string, head2RetirementDate: string, links: table<href: string, rel: string>, retirementGoalId: int> {
+]: nothing -> oneof<record<externalDestinationId: string, factFinderId: int, head1RetirementDate: string, head2RetirementDate: string, links: table<href: string, rel: string>, retirementGoalId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5951,7 +5970,7 @@ export def "retirement-goals-put-by-id-model" [
   fact_finder_id: int # format: int32
   --head1-retirement-date: string # format: date-time
   --head2-retirement-date: string # format: date-time
-]: any -> record<externalDestinationId: string, factFinderId: int, head1RetirementDate: string, head2RetirementDate: string, links: table<href: string, rel: string>, retirementGoalId: int> {
+]: any -> oneof<record<externalDestinationId: string, factFinderId: int, head1RetirementDate: string, head2RetirementDate: string, links: table<href: string, rel: string>, retirementGoalId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5991,7 +6010,7 @@ export def "retirement-goals-get-retirement-expenses-by-retirement-goal-id-by-re
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<retirementExpenses: table<amount: float, annualPeriod: int, description: string, endDate: string, externalDestinationId: string, frequency: int, links: list, member: string, retirementExpenseId: int, retirementGoalId: int, startDate: string>> {
+]: nothing -> oneof<record<retirementExpenses: table<amount: float, annualPeriod: int, description: string, endDate: string, externalDestinationId: string, frequency: int, links: list, member: string, retirementExpenseId: int, retirementGoalId: int, startDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($retirement_goal_id | is-empty) { error make --unspanned { msg: "path parameter 'retirementGoalId' must be non-empty" } }
@@ -6036,7 +6055,7 @@ export def "retirement-goals-post-by-retirementgoalid-model" [
   --frequency: int # format: int32
   --member: string@member-completer-2
   --start-date: string # format: date-time
-]: any -> record<amount: float, annualPeriod: int, description: string, endDate: string, externalDestinationId: string, frequency: int, links: table<href: string, rel: string>, member: string, retirementExpenseId: int, retirementGoalId: int, startDate: string> {
+]: any -> oneof<record<amount: float, annualPeriod: int, description: string, endDate: string, externalDestinationId: string, frequency: int, links: table<href: string, rel: string>, member: string, retirementExpenseId: int, retirementGoalId: int, startDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6116,7 +6135,7 @@ export def "retirement-goals-get-retirement-expense-by-retirementgoalid-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<amount: float, annualPeriod: int, description: string, endDate: string, externalDestinationId: string, frequency: int, links: table<href: string, rel: string>, member: string, retirementExpenseId: int, retirementGoalId: int, startDate: string> {
+]: nothing -> oneof<record<amount: float, annualPeriod: int, description: string, endDate: string, externalDestinationId: string, frequency: int, links: table<href: string, rel: string>, member: string, retirementExpenseId: int, retirementGoalId: int, startDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($retirement_goal_id | is-empty) { error make --unspanned { msg: "path parameter 'retirementGoalId' must be non-empty" } }
@@ -6163,7 +6182,7 @@ export def "retirement-goals-put-by-retirementgoalid-id-model" [
   --frequency: int # format: int32
   --member: string@member-completer-2
   --start-date: string # format: date-time
-]: any -> record<amount: float, annualPeriod: int, description: string, endDate: string, externalDestinationId: string, frequency: int, links: table<href: string, rel: string>, member: string, retirementExpenseId: int, retirementGoalId: int, startDate: string> {
+]: any -> oneof<record<amount: float, annualPeriod: int, description: string, endDate: string, externalDestinationId: string, frequency: int, links: table<href: string, rel: string>, member: string, retirementExpenseId: int, retirementGoalId: int, startDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6203,7 +6222,7 @@ export def "fact-finder-service-information-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<name: string, schemaVersion: int, serviceVersion: string, status: string> {
+]: nothing -> oneof<record<name: string, schemaVersion: int, serviceVersion: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/ServiceInformation" $auth.query)
@@ -6239,7 +6258,7 @@ export def "states-provinces-get-by-country" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --country: string@country-completer # The country used to filter States and Provinces (required)
-]: nothing -> record<statesProvinces: table<links: list, stateProvinceId: int, stateProvinceName: string>> {
+]: nothing -> oneof<record<statesProvinces: table<links: list, stateProvinceId: int, stateProvinceName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country == null) { error make --unspanned { msg: "required query parameter 'country' missing: pass --country" } }
@@ -6277,7 +6296,7 @@ export def "states-provinces-get-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<links: table<href: string, rel: string>, stateProvinceId: int, stateProvinceName: string> {
+]: nothing -> oneof<record<links: table<href: string, rel: string>, stateProvinceId: int, stateProvinceName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

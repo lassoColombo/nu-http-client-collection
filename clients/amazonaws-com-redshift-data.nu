@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -111,9 +134,9 @@ def x-amz-target-completer-9 [] { ["RedshiftData.ListTables"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-execute-statement" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["batch-execute-statement" "cancel-statement" "describe-statement" "describe-table" "execute-statement" "get-statement-result" "list-databases" "list-schemas" "list-statements" "list-tables" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -162,7 +185,7 @@ export def "batch-execute-statement" [
   --statement-name: string # The name of the SQL statements. You can name the SQL statements when you create them to identify the query.
   --with-event: oneof<nothing, bool> # A value that indicates whether to send an event to the Amazon EventBridge event bus after the SQL statements run.
   --workgroup-name: string # The serverless workgroup name or Amazon Resource Name (ARN). This parameter is required when connecting to a serverless workgroup and authenticating using either Secrets Manager or temporary credentials.
-]: any -> record<ClusterIdentifier: string, CreatedAt: string, Database: string, DbUser: string, Id: string, SecretArn: string, WorkgroupName: string> {
+]: any -> oneof<record<ClusterIdentifier: string, CreatedAt: string, Database: string, DbUser: string, Id: string, SecretArn: string, WorkgroupName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -211,7 +234,7 @@ export def "cancel-statement" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-1 # required
   id: string # The identifier of the SQL statement to cancel. This value is a universally unique identifier (UUID) generated by Amazon Redshift Data API. This identifier is returned by BatchExecuteStatment, ExecuteStatment, and ListStatements.
-]: any -> record<Status: bool> {
+]: any -> oneof<record<Status: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -260,7 +283,7 @@ export def "describe-statement" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-2 # required
   id: string # The identifier of the SQL statement to describe. This value is a universally unique identifier (UUID) generated by Amazon Redshift Data API. A suffix indicates the number of the SQL statement. For example, d9b6c0c9-0747-4bf4-b142-e8883122f766:2 has a suffix of :2 that indicates the second SQL statement of a batch query. This identifier is returned by BatchExecuteStatment, ExecuteStatement, and ListStatements.
-]: any -> record<ClusterIdentifier: string, CreatedAt: string, Database: string, DbUser: string, Duration: int, Error: string, HasResultSet: bool, Id: string, QueryParameters: table<name: string, value: string>, QueryString: string, RedshiftPid: int, RedshiftQueryId: int, ResultRows: int, ResultSize: int, SecretArn: string, Status: string, SubStatements: table<CreatedAt: string, Duration: int, Error: string, HasResultSet: bool, Id: string, QueryString: string, RedshiftQueryId: int, ResultRows: int, ResultSize: int, Status: string, UpdatedAt: string>, UpdatedAt: string, WorkgroupName: string> {
+]: any -> oneof<record<ClusterIdentifier: string, CreatedAt: string, Database: string, DbUser: string, Duration: int, Error: string, HasResultSet: bool, Id: string, QueryParameters: table<name: string, value: string>, QueryString: string, RedshiftPid: int, RedshiftQueryId: int, ResultRows: int, ResultSize: int, SecretArn: string, Status: string, SubStatements: table<CreatedAt: string, Duration: int, Error: string, HasResultSet: bool, Id: string, QueryString: string, RedshiftQueryId: int, ResultRows: int, ResultSize: int, Status: string, UpdatedAt: string>, UpdatedAt: string, WorkgroupName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -320,7 +343,7 @@ export def "describe-table" [
   --secret-arn: string # The name or ARN of the secret that enables access to the database. This parameter is required when authenticating using Secrets Manager.
   --table: string # The table name. If no table is specified, then all tables for all matching schemas are returned. If no table and no schema is specified, then all tables for all schemas in the database are returned
   --workgroup-name: string # The serverless workgroup name or Amazon Resource Name (ARN). This parameter is required when connecting to a serverless workgroup and authenticating using either Secrets Manager or temporary credentials.
-]: any -> record<ColumnList: table<columnDefault: string, isCaseSensitive: bool, isCurrency: bool, isSigned: bool, label: string, length: int, name: string, nullable: int, precision: int, scale: int, schemaName: string, tableName: string, typeName: string>, NextToken: string, TableName: string> {
+]: any -> oneof<record<ColumnList: table<columnDefault: string, isCaseSensitive: bool, isCurrency: bool, isSigned: bool, label: string, length: int, name: string, nullable: int, precision: int, scale: int, schemaName: string, tableName: string, typeName: string>, NextToken: string, TableName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -351,7 +374,6 @@ export def "describe-table" [
 #
 # POST /
 # operationId: ExecuteStatement
-# --Parameters item shape: {name: string, value: string}
 export def "execute-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -380,7 +402,7 @@ export def "execute-statement" [
   --statement-name: string # The name of the SQL statement. You can name the SQL statement when you create it to identify the query.
   --with-event: oneof<nothing, bool> # A value that indicates whether to send an event to the Amazon EventBridge event bus after the SQL statement runs.
   --workgroup-name: string # The serverless workgroup name or Amazon Resource Name (ARN). This parameter is required when connecting to a serverless workgroup and authenticating using either Secrets Manager or temporary credentials.
-]: any -> record<ClusterIdentifier: string, CreatedAt: string, Database: string, DbUser: string, Id: string, SecretArn: string, WorkgroupName: string> {
+]: any -> oneof<record<ClusterIdentifier: string, CreatedAt: string, Database: string, DbUser: string, Id: string, SecretArn: string, WorkgroupName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -431,7 +453,7 @@ export def "get-statement-result" [
   --x-amz-target: string@x-amz-target-completer-5 # required
   id: string # The identifier of the SQL statement whose results are to be fetched. This value is a universally unique identifier (UUID) generated by Amazon Redshift Data API. A suffix indicates then number of the SQL statement. For example, d9b6c0c9-0747-4bf4-b142-e8883122f766:2 has a suffix of :2 that indicates the second SQL statement of a batch query. This identifier is returned by BatchExecuteStatment, ExecuteStatment, and ListStatements.
   --next-token-body: string # A value that indicates the starting point for the next set of response records in a subsequent request. If a value is returned in a response, you can retrieve the next set of records by providing this returned NextToken value in the next NextToken parameter and retrying the command. If the NextToken field is empty, all response records have been retrieved for the request. (body field)
-]: any -> record<ColumnMetadata: table<columnDefault: string, isCaseSensitive: bool, isCurrency: bool, isSigned: bool, label: string, length: int, name: string, nullable: int, precision: int, scale: int, schemaName: string, tableName: string, typeName: string>, NextToken: string, Records: list<list<record>>, TotalNumRows: int> {
+]: any -> oneof<record<ColumnMetadata: table<columnDefault: string, isCaseSensitive: bool, isCurrency: bool, isSigned: bool, label: string, length: int, name: string, nullable: int, precision: int, scale: int, schemaName: string, tableName: string, typeName: string>, NextToken: string, Records: list<list<record>>, TotalNumRows: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -489,7 +511,7 @@ export def "list-databases" [
   --next-token-body: string # A value that indicates the starting point for the next set of response records in a subsequent request. If a value is returned in a response, you can retrieve the next set of records by providing this returned NextToken value in the next NextToken parameter and retrying the command. If the NextToken field is empty, all response records have been retrieved for the request. (body field)
   --secret-arn: string # The name or ARN of the secret that enables access to the database. This parameter is required when authenticating using Secrets Manager.
   --workgroup-name: string # The serverless workgroup name or Amazon Resource Name (ARN). This parameter is required when connecting to a serverless workgroup and authenticating using either Secrets Manager or temporary credentials.
-]: any -> record<Databases: list<string>, NextToken: string> {
+]: any -> oneof<record<Databases: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -549,7 +571,7 @@ export def "list-schemas" [
   --schema-pattern: string # A pattern to filter results by schema name. Within a schema pattern, "%" means match any substring of 0 or more characters and "_" means match any one character. Only schema name entries matching the search pattern are returned.
   --secret-arn: string # The name or ARN of the secret that enables access to the database. This parameter is required when authenticating using Secrets Manager.
   --workgroup-name: string # The serverless workgroup name or Amazon Resource Name (ARN). This parameter is required when connecting to a serverless workgroup and authenticating using either Secrets Manager or temporary credentials.
-]: any -> record<NextToken: string, Schemas: list<string>> {
+]: any -> oneof<record<NextToken: string, Schemas: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -605,7 +627,7 @@ export def "list-statements" [
   --role-level: oneof<nothing, bool> # A value that filters which statements to return in the response. If true, all statements run by the caller's IAM role are returned. If false, only statements run by the caller's IAM role in the current IAM session are returned. The default is true.
   --statement-name: string # The name of the SQL statement specified as input to BatchExecuteStatement or ExecuteStatement to identify the query. You can list multiple statements by providing a prefix that matches the beginning of the statement name. For example, to list myStatement1, myStatement2, myStatement3, and so on, then provide the a value of myStatement. Data API does a case-sensitive match of SQL statement names to the prefix value you provide.
   --status: string@status-completer # The status of the SQL statement to list. Status values are defined as follows: ABORTED - The query run was stopped by the user. ALL - A status value that includes all query statuses. This value can be used to filter results. FAILED - The query run failed. FINISHED - The query has finished running. PICKED - The query has been chosen to be run. STARTED - The query run has started. SUBMITTED - The query was submitted, but not yet processed.
-]: any -> record<NextToken: string, Statements: table<CreatedAt: string, Id: string, IsBatchStatement: bool, QueryParameters: list, QueryString: string, QueryStrings: list, SecretArn: string, StatementName: string, Status: string, UpdatedAt: string>> {
+]: any -> oneof<record<NextToken: string, Statements: table<CreatedAt: string, Id: string, IsBatchStatement: bool, QueryParameters: list, QueryString: string, QueryStrings: list, SecretArn: string, StatementName: string, Status: string, UpdatedAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -666,7 +688,7 @@ export def "list-tables" [
   --secret-arn: string # The name or ARN of the secret that enables access to the database. This parameter is required when authenticating using Secrets Manager.
   --table-pattern: string # A pattern to filter results by table name. Within a table pattern, "%" means match any substring of 0 or more characters and "_" means match any one character. Only table name entries matching the search pattern are returned. If TablePattern is not specified, then all tables that match SchemaPatternare returned. If neither SchemaPattern or TablePattern are specified, then all tables are returned.
   --workgroup-name: string # The serverless workgroup name or Amazon Resource Name (ARN). This parameter is required when connecting to a serverless workgroup and authenticating using either Secrets Manager or temporary credentials.
-]: any -> record<NextToken: string, Tables: table<name: string, schema: string, type: string>> {
+]: any -> oneof<record<NextToken: string, Tables: table<name: string, schema: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

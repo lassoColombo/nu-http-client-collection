@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "cast-local-authorization-token" => { {scheme: $scheme, headers: {"cast-local-authorization-token": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -104,9 +128,9 @@ def auth-scheme-completer [] { ["cast-local-authorization-token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "legal-notice" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["legal-notice" "accessibility" "get-alarmsand-timers" "delete-alarmsand-timers" "alarm-volume" "check-ready-status" "do-not-disturb" "night-modesettings" "forgetpaireddevice" "pairwith-speaker" "change-discoverability" "get-paired-devices" "scanfordevices" "get-scan-results" "status" "get-saved-networks" "connectto-wi-fi-network" "eureka-info" "forget-wi-fi-network" "app-device-id" "chromecast-icon" "offer" "rebootand-factory-reset" "get-wi-fi-scan-results" "scanfor-networks" "set-eureka-info" "locales" "timezones" "test-internet-download-speed" "set-equalizer-values" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -174,7 +198,7 @@ export def "accessibility" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --endpoint-enabled: oneof<nothing, bool>
   --hotword-enabled: oneof<nothing, bool>
-]: any -> record<endpoint_enabled: bool, hotword_enabled: bool> {
+]: any -> oneof<record<endpoint_enabled: bool, hotword_enabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -213,7 +237,7 @@ export def "get-alarmsand-timers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<alarm: table<date_pattern: record, fire_time: float, id: string, status: int, time_pattern: record>, timer: table<fire_time: int, id: string, original_duration: int, status: int>> {
+]: nothing -> oneof<record<alarm: table<date_pattern: record, fire_time: float, id: string, status: int, time_pattern: record>, timer: table<fire_time: int, id: string, original_duration: int, status: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assistant/alarms" $auth.query)
@@ -248,7 +272,7 @@ export def "delete-alarmsand-timers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   ids: list<string>
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -286,7 +310,7 @@ export def "alarm-volume" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   volume: int # format: int32
-]: any -> record<volume: float> {
+]: any -> oneof<record<volume: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -325,7 +349,7 @@ export def "check-ready-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --play-ready-message: oneof<nothing, bool>
   user_id: string
-]: any -> record<can_enroll: bool, enrollment_state: int, error_code: int, ready: bool, retryable: bool> {
+]: any -> oneof<record<can_enroll: bool, enrollment_state: int, error_code: int, ready: bool, retryable: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -364,7 +388,7 @@ export def "do-not-disturb" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # required, e.g. application/json
-]: nothing -> record<notifications_enabled: bool> {
+]: nothing -> oneof<record<notifications_enabled: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/assistant/notifications" $auth.query)
@@ -390,7 +414,6 @@ export def "do-not-disturb" [
 #
 # POST /assistant/set_night_mode_params
 # operationId: NightModesettings
-# --windows item shape: {days: list<int>, length_hours: int, start_hour: int}
 export def "night-modesettings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -407,7 +430,7 @@ export def "night-modesettings" [
   led_brightness: float
   volume: float
   windows: list # item shape: {days: list<int>, length_hours: int, start_hour: int}
-]: any -> record<do_not_disturb: bool, enabled: bool, led_brightness: float, volume: float, windows: table<days: list, length_hours: float, start_hour: float>> {
+]: any -> oneof<record<do_not_disturb: bool, enabled: bool, led_brightness: float, volume: float, windows: table<days: list, length_hours: float, start_hour: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -449,7 +472,7 @@ export def "forgetpaireddevice" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --bond: oneof<nothing, bool>
   mac_address: string
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -490,7 +513,7 @@ export def "pairwith-speaker" [
   --connect: oneof<nothing, bool>
   mac_address: string
   profile: int # format: int32
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -529,7 +552,7 @@ export def "change-discoverability" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --enable-discovery: oneof<nothing, bool>
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -567,7 +590,7 @@ export def "get-paired-devices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<bond_date: float, device_class: int, device_type: int, last_connect_date: float, mac_address: string, name: string, rssi: int, service_uuids: list<string>> {
+]: nothing -> oneof<table<bond_date: float, device_class: int, device_type: int, last_connect_date: float, mac_address: string, name: string, rssi: int, service_uuids: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bluetooth/get_bonded" $auth.query)
@@ -604,7 +627,7 @@ export def "scanfordevices" [
   --clear-results: oneof<nothing, bool>
   --enable: oneof<nothing, bool>
   timeout: int # format: int32
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -643,7 +666,7 @@ export def "get-scan-results" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<device_class: int, device_type: int, expected_profiles: int, mac_address: string, name: string, rssi: int> {
+]: nothing -> oneof<table<device_class: int, device_type: int, expected_profiles: int, mac_address: string, name: string, rssi: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bluetooth/scan_results" $auth.query)
@@ -677,7 +700,7 @@ export def "status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<audio_mode: int, connected_devices: table<device: record, enabled_profiles: int>, connecting_devices: list<string>, discovery_enabled: bool, remote_sink: record<bond_date: float, device_class: int, device_type: int, last_connect_date: int, mac_address: string, name: string, rssi: int, service_uuids: list<string>>, scanning_enabled: bool> {
+]: nothing -> oneof<record<audio_mode: int, connected_devices: table<device: record, enabled_profiles: int>, connecting_devices: list<string>, discovery_enabled: bool, remote_sink: record<bond_date: float, device_class: int, device_type: int, last_connect_date: int, mac_address: string, name: string, rssi: int, service_uuids: list<string>>, scanning_enabled: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bluetooth/status" $auth.query)
@@ -711,7 +734,7 @@ export def "get-saved-networks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<ssid: string, wpa_auth: int, wpa_cipher: int, wpa_id: int> {
+]: nothing -> oneof<table<ssid: string, wpa_auth: int, wpa_cipher: int, wpa_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configured_networks" $auth.query)
@@ -791,7 +814,7 @@ export def "eureka-info" [
   --params: string # required, e.g. version,audio,name,build_info,detail,device_info,net,wifi,setup,settings,opt_in,opencast,multizone,proxy,night_mode_params,user_eq,room_equalizer,sign,aogh,ultrasound,mesh
   --options: string # required, e.g. detail,sign
   --nonce: int # required, format: int32, e.g. 1234512345
-]: nothing -> record<aogh: record<aogh_api_version: string>, audio: record<digital: bool>, build_info: record<build_type: int, cast_build_revision: string, cast_control_version: int, preview_channel_state: int, release_track: string, system_build_number: string>, detail: record<icon_list: list<record>, locale: record<display_string: string>, timezone: record<display_string: string, offset: int>>, device_info: record<4k_blocked: int, capabilities: record<aogh_supported: bool, assistant_supported: bool, audio_hdr_supported: bool, audio_surround_mode_supported: bool, ble_supported: bool, bluetooth_audio_sink_supported: bool, bluetooth_audio_source_supported: bool, bluetooth_supported: bool, cloudcast_supported: bool, content_filters_supported: bool, display_supported: bool, fdr_supported: bool, hdmi_prefer_50hz_supported: bool, hdmi_prefer_high_fps_supported: bool, hotspot_supported: bool, https_setup_supported: bool, input_management_supported: bool, keep_hotspot_until_connected_supported: bool, multi_user_supported: bool, multichannel_group_supported: bool, multizone_supported: bool, night_mode_supported: bool, night_mode_supported_v2: bool, opencast_supported: bool, preview_channel_supported: bool, reboot_supported: bool, remote_ducking_supported: bool, separate_tts_volume_supported: bool, setup_supported: bool, sleep_mode_supported: bool, stats_supported: bool, system_sound_effects_supported: bool, user_eq_supported: bool, wifi_auto_save_supported: bool, wifi_regulatory_domain_locked: bool, wifi_supported: bool>, cloud_device_id: string, factory_country_code: string, hotspot_bssid: string, local_authorization_token_hash: string, mac_address: string, manufacturer: string, model_name: string, product_name: string, public_key: string, ssdp_udn: string, uma_client_id: string, uptime: float, weave_device_id: string>, multizone: record<audio_output_delay: int, audio_output_delay_hdmi: int, audio_output_delay_oem: int, aux_in_group: string, dynamic_groups: list<string>, groups: list<string>, multichannel_status: int>, name: string, net: record<ethernet_connected: bool, ip_address: string, online: bool>, night_mode_params: record<device_override_do_not_disturb: int, do_not_disturb: bool, enabled: bool, led_brightness: float, volume: float, windows: list<record>>, opencast: record<pin_code: string>, opt_in: record<audio_hdr: bool, audio_surround_mode: int, autoplay_on_signal: bool, cloud_ipc: bool, hdmi_prefer_50hz: bool, hdmi_prefer_high_fps: bool, managed_mode: bool, opencast: bool, preview_channel: bool, remote_ducking: bool, stats: bool, ui_flipped: bool, wpa3_support_enabled: bool>, proxy: record<mode: string>, settings: record<closed_caption: record, control_notifications: int, country_code: string, locale: string, network_standby: int, system_sound_effects: bool, time_format: int, timezone: string, wake_on_cast: int>, setup: record<qr_ssid_suffix: string, setup_state: int, ssid_suffix: string, stats: record<num_check_connectivity: int, num_connect_wifi: int, num_connected_wifi_not_saved: int, num_initial_eureka_info: int, num_obtain_ip: int>, tos_accepted: bool>, sign: record<certificate: string, intermediate_certs: list<string>, nonce: string, signed_data: string>, user_eq: record<high_shelf: record<frequency: int, gain_db: int, quality: float>, low_shelf: record<frequency: int, gain_db: int, quality: float>, max_peaking_eqs: int, peaking_eqs: list<string>>, version: int, wifi: record<bssid: string, has_changes: bool, noise_level: int, signal_level: int, ssid: string, wpa_configured: bool, wpa_id: int, wpa_state: int>> {
+]: nothing -> oneof<record<aogh: record<aogh_api_version: string>, audio: record<digital: bool>, build_info: record<build_type: int, cast_build_revision: string, cast_control_version: int, preview_channel_state: int, release_track: string, system_build_number: string>, detail: record<icon_list: list<record>, locale: record<display_string: string>, timezone: record<display_string: string, offset: int>>, device_info: record<4k_blocked: int, capabilities: record<aogh_supported: bool, assistant_supported: bool, audio_hdr_supported: bool, audio_surround_mode_supported: bool, ble_supported: bool, bluetooth_audio_sink_supported: bool, bluetooth_audio_source_supported: bool, bluetooth_supported: bool, cloudcast_supported: bool, content_filters_supported: bool, display_supported: bool, fdr_supported: bool, hdmi_prefer_50hz_supported: bool, hdmi_prefer_high_fps_supported: bool, hotspot_supported: bool, https_setup_supported: bool, input_management_supported: bool, keep_hotspot_until_connected_supported: bool, multi_user_supported: bool, multichannel_group_supported: bool, multizone_supported: bool, night_mode_supported: bool, night_mode_supported_v2: bool, opencast_supported: bool, preview_channel_supported: bool, reboot_supported: bool, remote_ducking_supported: bool, separate_tts_volume_supported: bool, setup_supported: bool, sleep_mode_supported: bool, stats_supported: bool, system_sound_effects_supported: bool, user_eq_supported: bool, wifi_auto_save_supported: bool, wifi_regulatory_domain_locked: bool, wifi_supported: bool>, cloud_device_id: string, factory_country_code: string, hotspot_bssid: string, local_authorization_token_hash: string, mac_address: string, manufacturer: string, model_name: string, product_name: string, public_key: string, ssdp_udn: string, uma_client_id: string, uptime: float, weave_device_id: string>, multizone: record<audio_output_delay: int, audio_output_delay_hdmi: int, audio_output_delay_oem: int, aux_in_group: string, dynamic_groups: list<string>, groups: list<string>, multichannel_status: int>, name: string, net: record<ethernet_connected: bool, ip_address: string, online: bool>, night_mode_params: record<device_override_do_not_disturb: int, do_not_disturb: bool, enabled: bool, led_brightness: float, volume: float, windows: list<record>>, opencast: record<pin_code: string>, opt_in: record<audio_hdr: bool, audio_surround_mode: int, autoplay_on_signal: bool, cloud_ipc: bool, hdmi_prefer_50hz: bool, hdmi_prefer_high_fps: bool, managed_mode: bool, opencast: bool, preview_channel: bool, remote_ducking: bool, stats: bool, ui_flipped: bool, wpa3_support_enabled: bool>, proxy: record<mode: string>, settings: record<closed_caption: record, control_notifications: int, country_code: string, locale: string, network_standby: int, system_sound_effects: bool, time_format: int, timezone: string, wake_on_cast: int>, setup: record<qr_ssid_suffix: string, setup_state: int, ssid_suffix: string, stats: record<num_check_connectivity: int, num_connect_wifi: int, num_connected_wifi_not_saved: int, num_initial_eureka_info: int, num_obtain_ip: int>, tos_accepted: bool>, sign: record<certificate: string, intermediate_certs: list<string>, nonce: string, signed_data: string>, user_eq: record<high_shelf: record<frequency: int, gain_db: int, quality: float>, low_shelf: record<frequency: int, gain_db: int, quality: float>, max_peaking_eqs: int, peaking_eqs: list<string>>, version: int, wifi: record<bssid: string, has_changes: bool, noise_level: int, signal_level: int, ssid: string, wpa_configured: bool, wpa_id: int, wpa_state: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   if ($params == null) { error make --unspanned { msg: "required query parameter 'params' missing: pass --params" } }
@@ -830,7 +853,7 @@ export def "forget-wi-fi-network" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   wpa_id: int # format: int32
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -868,7 +891,7 @@ export def "app-device-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   app_id: string
-]: any -> record<app_device_id: string, certificate: string, signed_data: string> {
+]: any -> oneof<record<app_device_id: string, certificate: string, signed_data: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -939,7 +962,7 @@ export def "offer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<token: string> {
+]: nothing -> oneof<record<token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/offer" $auth.query)
@@ -974,7 +997,7 @@ export def "rebootand-factory-reset" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   params: string
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1011,7 +1034,7 @@ export def "get-wi-fi-scan-results" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<bssid: string, signal_level: int, ssid: string, wpa_auth: int, wpa_cipher: int, wpa_id: int> {
+]: nothing -> oneof<table<bssid: string, signal_level: int, ssid: string, wpa_auth: int, wpa_cipher: int, wpa_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scan_results" $auth.query)
@@ -1045,7 +1068,7 @@ export def "scanfor-networks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scan_wifi" $auth.query)
@@ -1069,8 +1092,6 @@ export def "scanfor-networks" [
 #
 # POST /set_eureka_info
 # operationId: SetEurekaInfo
-# --opt_in shape: {opencast: bool, preview_channel: bool, remote_ducking: bool, stats: bool}
-# --settings shape: {control_notifications: int}
 export def "set-eureka-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1084,7 +1105,7 @@ export def "set-eureka-info" [
   name: string
   opt_in: record # e.g. {opencast: true, preview_channel: true, remote_ducking: true, stats: true} — shape: {opencast: bool, preview_channel: bool, remote_ducking: bool, stats: bool}
   settings: record # e.g. {control_notifications: 2} — shape: {control_notifications: int}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1121,7 +1142,7 @@ export def "locales" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<display_string: string, locale: string> {
+]: nothing -> oneof<table<display_string: string, locale: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/supported_locales" $auth.query)
@@ -1155,7 +1176,7 @@ export def "timezones" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<display_string: string, offset: int, timezone: string> {
+]: nothing -> oneof<table<display_string: string, offset: int, timezone: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/supported_timezones" $auth.query)
@@ -1190,7 +1211,7 @@ export def "test-internet-download-speed" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   url: string
-]: any -> record<bytes_received: int, response_code: int, time_for_data_fetch: int, time_for_http_response: int> {
+]: any -> oneof<record<bytes_received: int, response_code: int, time_for_data_fetch: int, time_for_http_response: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1217,8 +1238,6 @@ export def "test-internet-download-speed" [
 #
 # POST /user_eq/set_equalizer
 # operationId: SetEqualizerValues
-# --high_shelf shape: {gain_db: int}
-# --low_shelf shape: {gain_db: int}
 export def "set-equalizer-values" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1231,7 +1250,7 @@ export def "set-equalizer-values" [
   --dry-run(-n) # Return the request that would be sent without executing it
   high_shelf: record # e.g. {gain_db: 0} — shape: {gain_db: int}
   low_shelf: record # e.g. {gain_db: 0} — shape: {gain_db: int}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)

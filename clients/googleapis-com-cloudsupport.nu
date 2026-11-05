@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -115,9 +139,9 @@ def severity-completer [] { ["S0" "S1" "S2" "S3" "S4" "SEVERITY_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudsupport-case-classifications-search" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["cloudsupport-case-classifications-search" "cloudsupport-cases-search" "cloudsupport-cases-get" "cloudsupport-cases-patch" "cloudsupport-cases-close" "cloudsupport-media-download" "cloudsupport-cases-escalate" "cloudsupport-cases-attachments-list" "cloudsupport-media-upload" "cloudsupport-cases-list" "cloudsupport-cases-create" "cloudsupport-cases-comments-list" "cloudsupport-cases-comments-create" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -163,7 +187,7 @@ export def "cloudsupport-case-classifications-search" [
   --page-size: int # The maximum number of cases fetched with each request.
   --page-token: string # A token identifying the page of results to return. If unspecified, the first page is retrieved.
   --query: string # An expression written in the Cloud filter language. If non-empty, then only cases whose fields match the filter are returned. If empty, then no messages are filtered out.
-]: nothing -> record<caseClassifications: table<displayName: string, id: string>, nextPageToken: string> {
+]: nothing -> oneof<record<caseClassifications: table<displayName: string, id: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
@@ -212,7 +236,7 @@ export def "cloudsupport-cases-search" [
   --page-size: int # The maximum number of cases fetched with each request. The default page size is 10.
   --page-token: string # A token identifying the page of results to return. If unspecified, the first page is retrieved.
   --query: string # An expression written in filter language. A query uses the following fields with the operators equals (`=`) and `AND`: - `organization`: An organization name in the form `organizations/`. - `project`: A project name in the form `projects/`. - `state`: The accepted values are `OPEN` or `CLOSED`. - `priority`: The accepted values are `P0`, `P1`, `P2`, `P3`, or `P4`. You can specify multiple values for priority using the `OR` operator. For example, `priority=P1 OR priority=P2`. - [DEPRECATED] `severity`: The accepted values are `S0`, `S1`, `S2`, `S3`, or `S4`. - `creator.email`: The email address of the case creator. - `billingAccount`: A billing account in the form `billingAccounts/` You must specify eitehr `organization` or `project`. To search across `displayName`, `description`, and comments, use a global restriction with no keyword or operator. For example, `"my search"`. To search only cases updated after a certain date, use `update_time` retricted with that particular date, time, and timezone in ISO datetime format. For example, `update_time>"2020-01-01T00:00:00-05:00"`. `update_time` only supports the greater than operator (`>`). Examples: - `organization="organizations/123456789"` - `project="projects/my-project-id"` - `project="projects/123456789"` - `billing_account="billingAccounts/123456-A0B0C0-CUZ789"` - `organization="organizations/123456789" AND state=CLOSED` - `project="projects/my-project-id" AND creator.email="tester@example.com"` - `project="projects/my-project-id" AND (priority=P0 OR priority=P1)`
-]: nothing -> record<cases: table<classification: record, contactEmail: string, createTime: string, creator: record, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list, testCase: bool, timeZone: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<cases: table<classification: record, contactEmail: string, createTime: string, creator: record, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list, testCase: bool, timeZone: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "query" $query "scalar")] | flatten | str join "&"
@@ -259,7 +283,7 @@ export def "cloudsupport-cases-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string> {
+]: nothing -> oneof<record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -285,8 +309,6 @@ export def "cloudsupport-cases-get" [
 #
 # PATCH /v2beta/{name}
 # operationId: cloudsupport.cases.patch
-# --classification shape: {displayName?: string, id?: string}
-# --creator shape: {displayName?: string, email?: string}
 export def "cloudsupport-cases-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -323,7 +345,7 @@ export def "cloudsupport-cases-patch" [
   --subscriber-email-addresses: list<string> # The email addresses to receive updates on this case.
   --test-case: oneof<nothing, bool> # Whether this case was created for internal API testing and should not be acted on by the support team.
   --time-zone: string # The timezone of the user who created the support case. It should be in a format IANA recognizes: https://www.iana.org/time-zones. There is no additional validation done by the API.
-]: any -> record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string> {
+]: any -> oneof<record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -375,7 +397,7 @@ export def "cloudsupport-cases-close" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string> {
+]: any -> oneof<record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -426,7 +448,7 @@ export def "cloudsupport-media-download" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<algorithm: string, bigstoreObjectRef: string, blobRef: string, blobstore2Info: record<blobGeneration: string, blobId: string, downloadReadHandle: string, readToken: string, uploadMetadataContainer: string>, compositeMedia: table<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, contentType: string, contentTypeInfo: record<bestGuess: string, fromBytes: string, fromFileName: string, fromHeader: string, fromUrlPath: string>, cosmoBinaryReference: string, crc32cHash: int, diffChecksumsResponse: record<checksumsLocation: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, chunkSizeBytes: string, objectLocation: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, objectSizeBytes: string, objectVersion: string>, diffDownloadResponse: record<objectLocation: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>>, diffUploadRequest: record<checksumsInfo: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, objectInfo: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, objectVersion: string>, diffUploadResponse: record<objectVersion: string, originalObject: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>>, diffVersionResponse: record<objectSizeBytes: string, objectVersion: string>, downloadParameters: record<allowGzipCompression: bool, ignoreRange: bool>, filename: string, hash: string, hashVerified: bool, inline: string, isPotentialRetry: bool, length: string, md5Hash: string, mediaId: string, objectId: record<bucketName: string, generation: string, objectName: string>, path: string, referenceType: string, sha1Hash: string, sha256Hash: string, timestamp: string, token: string> {
+]: nothing -> oneof<record<algorithm: string, bigstoreObjectRef: string, blobRef: string, blobstore2Info: record<blobGeneration: string, blobId: string, downloadReadHandle: string, readToken: string, uploadMetadataContainer: string>, compositeMedia: table<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, contentType: string, contentTypeInfo: record<bestGuess: string, fromBytes: string, fromFileName: string, fromHeader: string, fromUrlPath: string>, cosmoBinaryReference: string, crc32cHash: int, diffChecksumsResponse: record<checksumsLocation: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, chunkSizeBytes: string, objectLocation: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, objectSizeBytes: string, objectVersion: string>, diffDownloadResponse: record<objectLocation: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>>, diffUploadRequest: record<checksumsInfo: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, objectInfo: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>, objectVersion: string>, diffUploadResponse: record<objectVersion: string, originalObject: record<blobRef: string, blobstore2Info: record, cosmoBinaryReference: string, crc32cHash: int, inline: string, length: string, md5Hash: string, objectId: record, path: string, referenceType: string, sha1Hash: string>>, diffVersionResponse: record<objectSizeBytes: string, objectVersion: string>, downloadParameters: record<allowGzipCompression: bool, ignoreRange: bool>, filename: string, hash: string, hashVerified: bool, inline: string, isPotentialRetry: bool, length: string, md5Hash: string, mediaId: string, objectId: record<bucketName: string, generation: string, objectName: string>, path: string, referenceType: string, sha1Hash: string, sha256Hash: string, timestamp: string, token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -452,7 +474,6 @@ export def "cloudsupport-media-download" [
 #
 # POST /v2beta/{name}:escalate
 # operationId: cloudsupport.cases.escalate
-# --escalation shape: {justification?: string, reason?: "REASON_UNSPECIFIED"|"RESOLUTION_TIME"|"TECHNICAL_EXPERTISE"|"BUSINESS_IMPACT"}
 export def "cloudsupport-cases-escalate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -476,7 +497,7 @@ export def "cloudsupport-cases-escalate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --escalation: record # An escalation of a support case. — shape: {justification?: string, reason?: "REASON_UNSPECIFIED"|"RESOLUTION_TIME"|"TECHNICAL_EXPERTISE"|"BUSINESS_IMPACT"}
-]: any -> record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string> {
+]: any -> oneof<record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -529,7 +550,7 @@ export def "cloudsupport-cases-attachments-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of attachments fetched with each request. If not provided, the default is 10. The maximum page size that will be returned is 100.
   --page-token: string # A token identifying the page of results to return. If unspecified, the first page is retrieved.
-]: nothing -> record<attachments: table<createTime: string, creator: record, filename: string, mimeType: string, name: string, sizeBytes: string>, nextPageToken: string> {
+]: nothing -> oneof<record<attachments: table<createTime: string, creator: record, filename: string, mimeType: string, name: string, sizeBytes: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -578,7 +599,7 @@ export def "cloudsupport-media-upload" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: any
-]: any -> record<createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, filename: string, mimeType: string, name: string, sizeBytes: string> {
+]: any -> oneof<record<createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, filename: string, mimeType: string, name: string, sizeBytes: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -632,7 +653,7 @@ export def "cloudsupport-cases-list" [
   --filter: string # An expression written in filter language. If non-empty, the query returns the cases that match the filter. Else, the query doesn't filter the cases. Filter expressions use the following fields with the operators equals (`=`) and `AND`: - `state`: The accepted values are `OPEN` or `CLOSED`. - `priority`: The accepted values are `P0`, `P1`, `P2`, `P3`, or `P4`. You can specify multiple values for priority using the `OR` operator. For example, `priority=P1 OR priority=P2`. - [DEPRECATED] `severity`: The accepted values are `S0`, `S1`, `S2`, `S3`, or `S4`. - `creator.email`: The email address of the case creator. Examples: - `state=CLOSED` - `state=OPEN AND creator.email="tester@example.com"` - `state=OPEN AND (priority=P0 OR priority=P1)`
   --page-size: int # The maximum number of cases fetched with each request. Defaults to 10.
   --page-token: string # A token identifying the page of results to return. If unspecified, the first page is retrieved.
-]: nothing -> record<cases: table<classification: record, contactEmail: string, createTime: string, creator: record, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list, testCase: bool, timeZone: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<cases: table<classification: record, contactEmail: string, createTime: string, creator: record, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list, testCase: bool, timeZone: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -658,8 +679,6 @@ export def "cloudsupport-cases-list" [
 #
 # POST /v2beta/{parent}/cases
 # operationId: cloudsupport.cases.create
-# --classification shape: {displayName?: string, id?: string}
-# --creator shape: {displayName?: string, email?: string}
 export def "cloudsupport-cases-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -695,7 +714,7 @@ export def "cloudsupport-cases-create" [
   --subscriber-email-addresses: list<string> # The email addresses to receive updates on this case.
   --test-case: oneof<nothing, bool> # Whether this case was created for internal API testing and should not be acted on by the support team.
   --time-zone: string # The timezone of the user who created the support case. It should be in a format IANA recognizes: https://www.iana.org/time-zones. There is no additional validation done by the API.
-]: any -> record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string> {
+]: any -> oneof<record<classification: record<displayName: string, id: string>, contactEmail: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, description: string, displayName: string, escalated: bool, languageCode: string, name: string, priority: string, severity: string, state: string, subscriberEmailAddresses: list<string>, testCase: bool, timeZone: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -748,7 +767,7 @@ export def "cloudsupport-cases-comments-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of comments fetched with each request. Defaults to 10.
   --page-token: string # A token identifying the page of results to return. If unspecified, the first page is retrieved.
-]: nothing -> record<comments: table<body: string, createTime: string, creator: record, name: string, plainTextBody: string>, nextPageToken: string> {
+]: nothing -> oneof<record<comments: table<body: string, createTime: string, creator: record, name: string, plainTextBody: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -774,7 +793,6 @@ export def "cloudsupport-cases-comments-list" [
 #
 # POST /v2beta/{parent}/comments
 # operationId: cloudsupport.cases.comments.create
-# --creator shape: {displayName?: string, email?: string}
 export def "cloudsupport-cases-comments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -799,7 +817,7 @@ export def "cloudsupport-cases-comments-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: string # The full comment body. Maximum of 12800 characters. This can contain rich text syntax.
   --creator: record # An object containing information about the effective user and authenticated principal responsible for an action. — shape: {displayName?: string, email?: string}
-]: any -> record<body: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, name: string, plainTextBody: string> {
+]: any -> oneof<record<body: string, createTime: string, creator: record<displayName: string, email: string, googleSupport: bool>, name: string, plainTextBody: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

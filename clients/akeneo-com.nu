@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def type-completer-2 [] { ["image" "multiple_options" "number" "reference_entity
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-token" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-token" "get-endpoints" "get-asset-categories" "patch-asset-categories" "post-asset-categories" "get-asset-categories-code" "patch-asset-categories-code" "get-asset-families" "get-assets" "patch-assets" "delete-assets-code" "get-assets-code" "patch-asset-code" "get-asset-families-code-attributes" "get-asset-family-attributes-attribute-code-options" "get-asset-attributes-attribute-code-options-code" "patch-asset-attributes-attribute-code-options-code" "get-asset-family-attributes-code" "patch-asset-family-attributes-code" "get-asset-family-code" "patch-asset-family-code" "post-asset-media-files" "get-asset-media-files-code" "get-asset-tags" "get-asset-tags-code" "patch-asset-tags-code" "get-pam-assets" "patch-pam-assets" "post-pam-assets" "get-reference-files-locale-code" "post-reference-files-locale-code" "get-reference-files-channel-code-locale-code-download" "get-variation-files-channel-code-locale-code" "post-variation-files-channel-code-locale-code" "get-variation-files-channel-code-locale-code-download" "get-pam-assets-code" "patch-pam-assets-code" "association-types-get-list" "several-association-types-patch" "association-types-post" "association-types-get" "association-types-patch" "attribute-groups-get-list" "several-attribute-groups-patch" "attribute-groups-post" "attribute-groups-get" "attribute-groups-patch" "get-attributes" "patch-attributes" "post-attributes" "get-attributes-attribute-code-options" "patch-attributes-attribute-code-options" "post-attributes-attribute-code-options" "get-attributes-attribute-code-options-code" "patch-attributes-attribute-code-options-code" "get-attributes-code" "patch-attributes-code" "get-app-catalogs" "post-app-catalog" "delete-app-catalog" "get-app-catalog" "patch-app-catalog" "get-app-catalog-product-uuids" "get-app-catalog-products" "get-app-catalog-products-uuid" "get-categories" "patch-categories" "post-categories" "get-categories-code" "patch-categories-code" "get-category-media-files-code-download" "get-channels" "several-channels-patch" "channels-post" "get-channels-code" "channels-patch" "currencies-get-list" "currencies-get" "get-families" "patch-families" "post-families" "get-families-code" "patch-families-code" "get-families-family-code-variants" "patch-families-family-code-variants" "post-families-family-code-variants" "get-families-family-code-variants-code" "patch-families-family-code-variants-code" "get-locales" "get-locales-code" "measure-families-get-list" "measure-families-get" "measurement-families-get-list" "patch-measurement-families" "get-media-files" "post-media-files" "get-media-files-code" "get-media-files-code-download" "get-product-models" "patch-product-models" "post-product-models" "delete-product-models-code" "get-product-models-code" "patch-product-models-code" "get-product-model-draft-code" "post-product-model-proposal" "get-products" "patch-products" "post-products" "get-products-uuid" "patch-products-uuid" "post-products-uuid" "delete-products-uuid-uuid" "get-products-uuid-uuid" "patch-products-uuid-uuid" "get-draft-uuid-uuid" "post-proposal-uuid" "delete-products-code" "get-products-code" "patch-products-code" "get-draft-code" "post-proposal" "get-published-products" "get-published-products-code" "get-reference-entities" "post-reference-entity-media-files" "get-reference-entity-media-files-code" "get-reference-entities-code" "patch-reference-entity-code" "get-reference-entities-code-attributes" "get-reference-entity-attributes-attribute-code-options" "get-reference-entity-attributes-attribute-code-options-code" "patch-reference-entity-attributes-attribute-code-options-code" "get-reference-entity-attributes-code" "patch-reference-entity-attributes-code" "get-reference-entity-records" "patch-reference-entity-records" "get-reference-entity-records-code" "patch-reference-entity-records-code" "get-system-information" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +185,7 @@ export def "post-token" [
   grant_type: string # Always equal to "password"
   password: string # Your PIM password
   username: string # Your PIM username
-]: any -> record<access_token: string, expires_in: int, refresh_token: string, scope: string, token_type: string> {
+]: any -> oneof<record<access_token: string, expires_in: int, refresh_token: string, scope: string, token_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -174,7 +198,7 @@ export def "post-token" [
   let extra_headers = {"Content-type": $content_type, "Authorization": $authorization} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -203,7 +227,7 @@ export def "get-endpoints" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<authentication: record, host: string, routes: record> {
+]: nothing -> oneof<record<authentication: record, host: string, routes: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1" $auth.query)
@@ -240,7 +264,7 @@ export def "get-asset-categories" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -265,7 +289,6 @@ export def "get-asset-categories" [
 #
 # PATCH /api/rest/v1/asset-categories
 # operationId: patch_asset_categories
-# --labels shape: {localeCode?: string}
 export def "patch-asset-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -279,7 +302,7 @@ export def "patch-asset-categories" [
   code: string # PAM asset category code
   --labels: record # PAM asset category labels for each locale (default: {}) — shape: {localeCode?: string}
   --parent: string # PAM ssset category code of the parent's asset category (default: null)
-]: any -> record<code: string, identifier: string, line: int, message: string, status_code: int> {
+]: any -> oneof<record<code: string, identifier: string, line: int, message: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -306,7 +329,6 @@ export def "patch-asset-categories" [
 #
 # POST /api/rest/v1/asset-categories
 # operationId: post_asset_categories
-# --labels shape: {localeCode?: string}
 export def "post-asset-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -358,7 +380,7 @@ export def "get-asset-categories-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, labels: record<localeCode: string>, parent: string> {
+]: nothing -> oneof<record<code: string, labels: record<localeCode: string>, parent: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -383,7 +405,6 @@ export def "get-asset-categories-code" [
 #
 # PATCH /api/rest/v1/asset-categories/{code}
 # operationId: patch_asset_categories__code_
-# --labels shape: {localeCode?: string}
 export def "patch-asset-categories-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -438,7 +459,7 @@ export def "get-asset-families" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search-after: string # Cursor when using the `search_after` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html) section (default: cursor to the first page)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search_after" $search_after "scalar")] | flatten | str join "&"
@@ -478,7 +499,7 @@ export def "get-assets" [
   --channel: string # Filter asset values to return scopable asset attributes for the given channel as well as the non localizable/non scopable asset attributes, for more details see the Filter asset values by channel (/documentation/filter.html#asset-values-by-channel) section
   --locales: string # Filter asset values to return localizable attributes for the given locales as well as the non localizable/non scopable asset attributes, for more details see the Filter asset values by locale (/documentation/filter.html#asset-values-by-locale) section
   --search-after: string # Cursor when using the `search_after` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html) section (default: cursor to the first page)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<_items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<_items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_family_code | is-empty) { error make --unspanned { msg: "path parameter 'asset_family_code' must be non-empty" } }
@@ -516,7 +537,7 @@ export def "patch-assets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> table<code: string, message: string, status_code: int> {
+]: any -> oneof<table<code: string, message: string, status_code: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -594,7 +615,7 @@ export def "get-assets-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, created: string, updated: string, values: record<attributeCode: list<record>>> {
+]: nothing -> oneof<record<code: string, created: string, updated: string, values: record<attributeCode: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_family_code | is-empty) { error make --unspanned { msg: "path parameter 'asset_family_code' must be non-empty" } }
@@ -620,7 +641,6 @@ export def "get-assets-code" [
 #
 # PATCH /api/rest/v1/asset-families/{asset_family_code}/assets/{code}
 # operationId: patch_asset__code_
-# --values shape: {attributeCode?: list}
 export def "patch-asset-code" [
   asset_family_code: string
   code: string
@@ -678,7 +698,7 @@ export def "get-asset-families-code-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<allowed_extensions: list<string>, code: string, decimals_allowed: bool, is_read_only: bool, is_required_for_completeness: bool, is_rich_text_editor: bool, is_textarea: bool, labels: record<localeCode: string>, max_characters: int, max_file_size: string, max_value: string, media_type: string, min_value: string, prefix: string, suffix: string, type: string, validation_regexp: string, validation_rule: string, value_per_channel: bool, value_per_locale: bool> {
+]: nothing -> oneof<table<allowed_extensions: list<string>, code: string, decimals_allowed: bool, is_read_only: bool, is_required_for_completeness: bool, is_rich_text_editor: bool, is_textarea: bool, labels: record<localeCode: string>, max_characters: int, max_file_size: string, max_value: string, media_type: string, min_value: string, prefix: string, suffix: string, type: string, validation_regexp: string, validation_rule: string, value_per_channel: bool, value_per_locale: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_family_code | is-empty) { error make --unspanned { msg: "path parameter 'asset_family_code' must be non-empty" } }
@@ -715,7 +735,7 @@ export def "get-asset-family-attributes-attribute-code-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<code: string, labels: record<localeCode: string>> {
+]: nothing -> oneof<table<code: string, labels: record<localeCode: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_family_code | is-empty) { error make --unspanned { msg: "path parameter 'asset_family_code' must be non-empty" } }
@@ -754,7 +774,7 @@ export def "get-asset-attributes-attribute-code-options-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, labels: record<localeCode: string>> {
+]: nothing -> oneof<record<code: string, labels: record<localeCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_family_code | is-empty) { error make --unspanned { msg: "path parameter 'asset_family_code' must be non-empty" } }
@@ -781,7 +801,6 @@ export def "get-asset-attributes-attribute-code-options-code" [
 #
 # PATCH /api/rest/v1/asset-families/{asset_family_code}/attributes/{attribute_code}/options/{code}
 # operationId: patch_asset_attributes__attribute_code__options__code_
-# --labels shape: {localeCode?: string}
 export def "patch-asset-attributes-attribute-code-options-code" [
   asset_family_code: string
   attribute_code: string
@@ -840,7 +859,7 @@ export def "get-asset-family-attributes-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<allowed_extensions: list<string>, code: string, decimals_allowed: bool, is_read_only: bool, is_required_for_completeness: bool, is_rich_text_editor: bool, is_textarea: bool, labels: record<localeCode: string>, max_characters: int, max_file_size: string, max_value: string, media_type: string, min_value: string, prefix: string, suffix: string, type: string, validation_regexp: string, validation_rule: string, value_per_channel: bool, value_per_locale: bool> {
+]: nothing -> oneof<record<allowed_extensions: list<string>, code: string, decimals_allowed: bool, is_read_only: bool, is_required_for_completeness: bool, is_rich_text_editor: bool, is_textarea: bool, labels: record<localeCode: string>, max_characters: int, max_file_size: string, max_value: string, media_type: string, min_value: string, prefix: string, suffix: string, type: string, validation_regexp: string, validation_rule: string, value_per_channel: bool, value_per_locale: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_family_code | is-empty) { error make --unspanned { msg: "path parameter 'asset_family_code' must be non-empty" } }
@@ -866,7 +885,6 @@ export def "get-asset-family-attributes-code" [
 #
 # PATCH /api/rest/v1/asset-families/{asset_family_code}/attributes/{code}
 # operationId: patch_asset_family_attributes__code_
-# --labels shape: {localeCode?: string}
 export def "patch-asset-family-attributes-code" [
   asset_family_code: string
   code: string
@@ -940,7 +958,7 @@ export def "get-asset-family-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attribute_as_main_media: string, code: string, labels: record<localeCode: string>, naming_convention: record<abort_asset_creation_on_error: bool, pattern: string, source: record>, product_link_rules: table<assign_assets_to: list, product_selections: list>, transformations: table<filename_prefix: string, filename_suffix: string, label: string, operations: record, source: record, target: record>> {
+]: nothing -> oneof<record<attribute_as_main_media: string, code: string, labels: record<localeCode: string>, naming_convention: record<abort_asset_creation_on_error: bool, pattern: string, source: record>, product_link_rules: table<assign_assets_to: list, product_selections: list>, transformations: table<filename_prefix: string, filename_suffix: string, label: string, operations: record, source: record, target: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -965,10 +983,6 @@ export def "get-asset-family-code" [
 #
 # PATCH /api/rest/v1/asset-families/{code}
 # operationId: patch_asset_family__code_
-# --labels shape: {localeCode?: string}
-# --naming_convention shape: {abort_asset_creation_on_error?: bool, pattern?: string, source?: record}
-# --product_link_rules item shape: {assign_assets_to?: list, product_selections?: list}
-# --transformations item shape: {filename_prefix?: string, filename_suffix?: string, label: string, operations: record, source: record, target: record}
 export def "patch-asset-family-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1039,7 +1053,7 @@ export def "post-asset-media-files" [
   let extra_headers = {"Content-type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1107,7 +1121,7 @@ export def "get-asset-tags" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -1143,7 +1157,7 @@ export def "get-asset-tags-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string> {
+]: nothing -> oneof<record<code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -1224,7 +1238,7 @@ export def "get-pam-assets" [
   --search-after: string # Cursor when using the `search_after` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html) section (default: cursor to the first page)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pagination_type" $pagination_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -1249,8 +1263,6 @@ export def "get-pam-assets" [
 #
 # PATCH /api/rest/v1/assets
 # operationId: patch_pam_assets
-# --reference_files item shape: {_link?: record, code?: string, locale?: string}
-# --variation_files item shape: {_link?: record, code?: string, locale?: string, scope?: string}
 export def "patch-pam-assets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1269,7 +1281,7 @@ export def "patch-pam-assets" [
   --reference-files: list # Reference files of the PAM asset — item shape: {_link?: record, code?: string, locale?: string}
   --tags: list<string> # Tags of the PAM asset (default: [])
   --variation-files: list # Variations of the PAM asset — item shape: {_link?: record, code?: string, locale?: string, scope?: string}
-]: any -> record<code: string, identifier: string, line: int, message: string, status_code: int> {
+]: any -> oneof<record<code: string, identifier: string, line: int, message: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1296,8 +1308,6 @@ export def "patch-pam-assets" [
 #
 # POST /api/rest/v1/assets
 # operationId: post_pam_assets
-# --reference_files item shape: {_link?: record, code?: string, locale?: string}
-# --variation_files item shape: {_link?: record, code?: string, locale?: string, scope?: string}
 export def "post-pam-assets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1355,7 +1365,7 @@ export def "get-reference-files-locale-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_link: record<download: record<href: string>>, code: string, locale: string> {
+]: nothing -> oneof<record<_link: record<download: record<href: string>>, code: string, locale: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_code | is-empty) { error make --unspanned { msg: "path parameter 'asset_code' must be non-empty" } }
@@ -1395,7 +1405,7 @@ export def "post-reference-files-locale-code" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Equal to 'multipart/form-data', no other value allowed (required)
   file: string # The binaries of the file (format: binary)
-]: any -> record<errors: table<channel: string, locale: string, message: string>, message: string> {
+]: any -> oneof<record<errors: table<channel: string, locale: string, message: string>, message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1409,7 +1419,7 @@ export def "post-reference-files-locale-code" [
   let extra_headers = {"Content-type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1479,7 +1489,7 @@ export def "get-variation-files-channel-code-locale-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_link: record<download: record<href: string>>, code: string, locale: string, scope: string> {
+]: nothing -> oneof<record<_link: record<download: record<href: string>>, code: string, locale: string, scope: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_code | is-empty) { error make --unspanned { msg: "path parameter 'asset_code' must be non-empty" } }
@@ -1536,7 +1546,7 @@ export def "post-variation-files-channel-code-locale-code" [
   let extra_headers = {"Content-type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -1606,7 +1616,7 @@ export def "get-pam-assets-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<categories: list<string>, code: string, description: string, end_of_use: string, localizable: bool, reference_files: table<_link: record, code: string, locale: string>, tags: list<string>, variation_files: table<_link: record, code: string, locale: string, scope: string>> {
+]: nothing -> oneof<record<categories: list<string>, code: string, description: string, end_of_use: string, localizable: bool, reference_files: table<_link: record, code: string, locale: string>, tags: list<string>, variation_files: table<_link: record, code: string, locale: string, scope: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -1631,8 +1641,6 @@ export def "get-pam-assets-code" [
 #
 # PATCH /api/rest/v1/assets/{code}
 # operationId: patch_pam_assets__code_
-# --reference_files item shape: {_link?: record, code?: string, locale?: string}
-# --variation_files item shape: {_link?: record, code?: string, locale?: string, scope?: string}
 export def "patch-pam-assets-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1694,7 +1702,7 @@ export def "association-types-get-list" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -1719,7 +1727,6 @@ export def "association-types-get-list" [
 #
 # PATCH /api/rest/v1/association-types
 # operationId: several_association_types_patch
-# --labels shape: {localeCode?: string}
 export def "several-association-types-patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1734,7 +1741,7 @@ export def "several-association-types-patch" [
   --is-quantified: oneof<nothing, bool> # When true, the association is a quantified association (Only available in the PIM Serenity version.) (default: false)
   --is-two-way: oneof<nothing, bool> # When true, the association is a two-way association (Only available in the PIM Serenity version.) (default: false)
   --labels: record # Association type labels for each locale (default: {}) — shape: {localeCode?: string}
-]: any -> record<code: string, identifier: string, line: int, message: string, status_code: int> {
+]: any -> oneof<record<code: string, identifier: string, line: int, message: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1761,7 +1768,6 @@ export def "several-association-types-patch" [
 #
 # POST /api/rest/v1/association-types
 # operationId: association_types_post
-# --labels shape: {localeCode?: string}
 export def "association-types-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1814,7 +1820,7 @@ export def "association-types-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, is_quantified: bool, is_two_way: bool, labels: record<localeCode: string>> {
+]: nothing -> oneof<record<code: string, is_quantified: bool, is_two_way: bool, labels: record<localeCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -1839,7 +1845,6 @@ export def "association-types-get" [
 #
 # PATCH /api/rest/v1/association-types/{code}
 # operationId: association_types_patch
-# --labels shape: {localeCode?: string}
 export def "association-types-patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1898,7 +1903,7 @@ export def "attribute-groups-get-list" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -1923,7 +1928,6 @@ export def "attribute-groups-get-list" [
 #
 # PATCH /api/rest/v1/attribute-groups
 # operationId: several_attribute_groups_patch
-# --labels shape: {localeCode?: string}
 export def "several-attribute-groups-patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1938,7 +1942,7 @@ export def "several-attribute-groups-patch" [
   code: string # Attribute group code
   --labels: record # Attribute group labels for each locale (default: {}) — shape: {localeCode?: string}
   --sort-order: int # Attribute group order among other attribute groups (default: 0)
-]: any -> record<code: string, identifier: string, line: int, message: string, status_code: int> {
+]: any -> oneof<record<code: string, identifier: string, line: int, message: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1965,7 +1969,6 @@ export def "several-attribute-groups-patch" [
 #
 # POST /api/rest/v1/attribute-groups
 # operationId: attribute_groups_post
-# --labels shape: {localeCode?: string}
 export def "attribute-groups-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2018,7 +2021,7 @@ export def "attribute-groups-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attributes: list<string>, code: string, labels: record<localeCode: string>, sort_order: int> {
+]: nothing -> oneof<record<attributes: list<string>, code: string, labels: record<localeCode: string>, sort_order: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -2043,7 +2046,6 @@ export def "attribute-groups-get" [
 #
 # PATCH /api/rest/v1/attribute-groups/{code}
 # operationId: attribute_groups_patch
-# --labels shape: {localeCode?: string}
 export def "attribute-groups-patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2103,7 +2105,7 @@ export def "get-attributes" [
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
   --with-table-select-options: oneof<nothing, bool> # Return the options of 'select' column types (of a table attribute) in the response. (Only available since the 7.0 version) (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar") (serialize-qp "with_table_select_options" $with_table_select_options "scalar")] | flatten | str join "&"
@@ -2128,9 +2130,6 @@ export def "get-attributes" [
 #
 # PATCH /api/rest/v1/attributes
 # operationId: patch_attributes
-# --group_labels shape: {localeCode?: string}
-# --labels shape: {localeCode?: string}
-# --table_configuration item shape: {code: string, data_type: "select"|"text"|"number"|"boolean", is_required_for_completeness?: bool, labels?: record, validations?: record}
 export def "patch-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2169,7 +2168,7 @@ export def "patch-attributes" [
   --validation-regexp: string # Regexp expression used to validate any attribute value when the attribute type is `pim_catalog_text` or `pim_catalog_identifier`
   --validation-rule: string # Validation rule type used to validate any attribute value when the attribute type is `pim_catalog_text` or `pim_catalog_identifier`
   --wysiwyg-enabled: oneof<nothing, bool> # Whether the WYSIWYG interface is shown when the attribute type is `pim_catalog_textarea`
-]: any -> record<code: string, identifier: string, line: int, message: string, status_code: int> {
+]: any -> oneof<record<code: string, identifier: string, line: int, message: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2196,9 +2195,6 @@ export def "patch-attributes" [
 #
 # POST /api/rest/v1/attributes
 # operationId: post_attributes
-# --group_labels shape: {localeCode?: string}
-# --labels shape: {localeCode?: string}
-# --table_configuration item shape: {code: string, data_type: "select"|"text"|"number"|"boolean", is_required_for_completeness?: bool, labels?: record, validations?: record}
 export def "post-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2278,7 +2274,7 @@ export def "get-attributes-attribute-code-options" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attribute_code | is-empty) { error make --unspanned { msg: "path parameter 'attribute_code' must be non-empty" } }
@@ -2304,7 +2300,6 @@ export def "get-attributes-attribute-code-options" [
 #
 # PATCH /api/rest/v1/attributes/{attribute_code}/options
 # operationId: patch_attributes__attribute_code__options
-# --labels shape: {localeCode?: string}
 export def "patch-attributes-attribute-code-options" [
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2320,7 +2315,7 @@ export def "patch-attributes-attribute-code-options" [
   code: string # Code of option
   --labels: record # Attribute option labels for each locale (default: {}) — shape: {localeCode?: string}
   --sort-order: int # Order of attribute option
-]: any -> record<code: string, identifier: string, line: int, message: string, status_code: int> {
+]: any -> oneof<record<code: string, identifier: string, line: int, message: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2348,7 +2343,6 @@ export def "patch-attributes-attribute-code-options" [
 #
 # POST /api/rest/v1/attributes/{attribute_code}/options
 # operationId: post_attributes__attribute_code__options
-# --labels shape: {localeCode?: string}
 export def "post-attributes-attribute-code-options" [
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2404,7 +2398,7 @@ export def "get-attributes-attribute-code-options-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attribute: string, code: string, labels: record<localeCode: string>, sort_order: int> {
+]: nothing -> oneof<record<attribute: string, code: string, labels: record<localeCode: string>, sort_order: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attribute_code | is-empty) { error make --unspanned { msg: "path parameter 'attribute_code' must be non-empty" } }
@@ -2430,7 +2424,6 @@ export def "get-attributes-attribute-code-options-code" [
 #
 # PATCH /api/rest/v1/attributes/{attribute_code}/options/{code}
 # operationId: patch_attributes__attribute_code__options__code_
-# --labels shape: {localeCode?: string}
 export def "patch-attributes-attribute-code-options-code" [
   attribute_code: string
   code: string
@@ -2489,7 +2482,7 @@ export def "get-attributes-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-table-select-options: oneof<nothing, bool> # Return the options of 'select' column types (of a table attribute) in the response. (Only available since the 7.0 version) (default: false)
-]: nothing -> record<allowed_extensions: list<string>, available_locales: list<string>, code: string, date_max: string, date_min: string, decimals_allowed: bool, default_metric_unit: string, default_value: bool, group: string, group_labels: record<localeCode: string>, labels: record<localeCode: string>, localizable: bool, max_characters: int, max_file_size: string, metric_family: string, negative_allowed: bool, number_max: string, number_min: string, reference_data_name: string, scopable: bool, sort_order: int, table_configuration: table<code: string, data_type: string, is_required_for_completeness: bool, labels: record, validations: record>, type: string, unique: bool, useable_as_grid_filter: bool, validation_regexp: string, validation_rule: string, wysiwyg_enabled: bool> {
+]: nothing -> oneof<record<allowed_extensions: list<string>, available_locales: list<string>, code: string, date_max: string, date_min: string, decimals_allowed: bool, default_metric_unit: string, default_value: bool, group: string, group_labels: record<localeCode: string>, labels: record<localeCode: string>, localizable: bool, max_characters: int, max_file_size: string, metric_family: string, negative_allowed: bool, number_max: string, number_min: string, reference_data_name: string, scopable: bool, sort_order: int, table_configuration: table<code: string, data_type: string, is_required_for_completeness: bool, labels: record, validations: record>, type: string, unique: bool, useable_as_grid_filter: bool, validation_regexp: string, validation_rule: string, wysiwyg_enabled: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -2515,9 +2508,6 @@ export def "get-attributes-code" [
 #
 # PATCH /api/rest/v1/attributes/{code}
 # operationId: patch_attributes__code_
-# --group_labels shape: {localeCode?: string}
-# --labels shape: {localeCode?: string}
-# --table_configuration item shape: {code: string, data_type: "select"|"text"|"number"|"boolean", is_required_for_completeness?: bool, labels?: record, validations?: record}
 export def "patch-attributes-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2598,7 +2588,7 @@ export def "get-app-catalogs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 100)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -2634,7 +2624,7 @@ export def "post-app-catalog" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Catalog name
-]: any -> record<enabled: bool, id: string, name: string> {
+]: any -> oneof<record<enabled: bool, id: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2708,7 +2698,7 @@ export def "get-app-catalog" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, id: string, name: string> {
+]: nothing -> oneof<record<enabled: bool, id: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2745,7 +2735,7 @@ export def "patch-app-catalog" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Catalog name
-]: any -> record<enabled: bool, id: string, name: string> {
+]: any -> oneof<record<enabled: bool, id: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2788,7 +2778,7 @@ export def "get-app-catalog-product-uuids" [
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 100)
   --updated-before: string # Filter products that have been updated BEFORE the provided date (Only available on Catalogs endpoints) (format: date)
   --updated-after: string # Filter products that have been updated AFTER the provided date (Only available on Catalogs endpoints) (format: date)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<items: list<string>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<items: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2829,7 +2819,7 @@ export def "get-app-catalog-products" [
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 100)
   --updated-before: string # Filter products that have been updated BEFORE the provided date (Only available on Catalogs endpoints) (format: date)
   --updated-after: string # Filter products that have been updated AFTER the provided date (Only available on Catalogs endpoints) (format: date)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<items: list<string>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<items: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2909,7 +2899,7 @@ export def "get-categories" [
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
   --with-position: oneof<nothing, bool> # Return information about category position into its category tree (only available since the 7.0 version)
   --with-enriched-attributes: oneof<nothing, bool> # Return attribute values of the category (only available on SaaS platforms)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar") (serialize-qp "with_position" $with_position "scalar") (serialize-qp "with_enriched_attributes" $with_enriched_attributes "scalar")] | flatten | str join "&"
@@ -2934,8 +2924,6 @@ export def "get-categories" [
 #
 # PATCH /api/rest/v1/categories
 # operationId: patch_categories
-# --labels shape: {localeCode?: string}
-# --values shape: {attributeCode|attributeUuid|channelCode|localeCode?: list}
 export def "patch-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2952,7 +2940,7 @@ export def "patch-categories" [
   --position: int # Position of the category in its level, start from 1 (only available since the 7.0 version and when query parameter "with_position" is set to "true")
   --updated: string # Date of the last update (format: dateTime)
   --values: record # Attribute values — shape: {attributeCode|attributeUuid|channelCode|localeCode?: list}
-]: any -> record<code: string, identifier: string, line: int, message: string, status_code: int> {
+]: any -> oneof<record<code: string, identifier: string, line: int, message: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2979,8 +2967,6 @@ export def "patch-categories" [
 #
 # POST /api/rest/v1/categories
 # operationId: post_categories
-# --labels shape: {localeCode?: string}
-# --values shape: {attributeCode|attributeUuid|channelCode|localeCode?: list}
 export def "post-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3037,7 +3023,7 @@ export def "get-categories-code" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-position: oneof<nothing, bool> # Return information about category position into its category tree (only available since the 7.0 version)
   --with-enriched-attributes: oneof<nothing, bool> # Return attribute values of the category (only available on SaaS platforms) [COMING SOON]
-]: nothing -> record<code: string, labels: record<localeCode: string>, parent: string, position: int, updated: string, values: record<attributeCode_attributeUuid_channelCode_localeCode: list<record>>> {
+]: nothing -> oneof<record<code: string, labels: record<localeCode: string>, parent: string, position: int, updated: string, values: record<attributeCode_attributeUuid_channelCode_localeCode: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -3063,8 +3049,6 @@ export def "get-categories-code" [
 #
 # PATCH /api/rest/v1/categories/{code}
 # operationId: patch_categories__code_
-# --labels shape: {localeCode?: string}
-# --values shape: {attributeCode|attributeUuid|channelCode|localeCode?: list}
 export def "patch-categories-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3160,7 +3144,7 @@ export def "get-channels" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -3185,8 +3169,6 @@ export def "get-channels" [
 #
 # PATCH /api/rest/v1/channels
 # operationId: several_channels_patch
-# --conversion_units shape: {attributeCode?: string}
-# --labels shape: {localeCode?: string}
 export def "several-channels-patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3203,7 +3185,7 @@ export def "several-channels-patch" [
   currencies: list<string> # Codes of activated currencies for the channel
   --labels: record # Channel labels for each locale (default: {}) — shape: {localeCode?: string}
   locales: list<string> # Codes of activated locales for the channel
-]: any -> record<code: string, identifier: string, line: int, message: string, status_code: int> {
+]: any -> oneof<record<code: string, identifier: string, line: int, message: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3230,8 +3212,6 @@ export def "several-channels-patch" [
 #
 # POST /api/rest/v1/channels
 # operationId: channels_post
-# --conversion_units shape: {attributeCode?: string}
-# --labels shape: {localeCode?: string}
 export def "channels-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3286,7 +3266,7 @@ export def "get-channels-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<category_tree: string, code: string, conversion_units: record<attributeCode: string>, currencies: list<string>, labels: record<localeCode: string>, locales: list<string>> {
+]: nothing -> oneof<record<category_tree: string, code: string, conversion_units: record<attributeCode: string>, currencies: list<string>, labels: record<localeCode: string>, locales: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -3311,8 +3291,6 @@ export def "get-channels-code" [
 #
 # PATCH /api/rest/v1/channels/{code}
 # operationId: channels_patch
-# --conversion_units shape: {attributeCode?: string}
-# --labels shape: {localeCode?: string}
 export def "channels-patch" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3372,7 +3350,7 @@ export def "currencies-get-list" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -3408,7 +3386,7 @@ export def "currencies-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, enabled: bool> {
+]: nothing -> oneof<record<code: string, enabled: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -3447,7 +3425,7 @@ export def "get-families" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -3472,8 +3450,6 @@ export def "get-families" [
 #
 # PATCH /api/rest/v1/families
 # operationId: patch_families
-# --attribute_requirements shape: {channelCode?: list<string>}
-# --labels shape: {localeCode?: string}
 export def "patch-families" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3490,7 +3466,7 @@ export def "patch-families" [
   --attributes: list<string> # Attributes codes that compose the family (default: [])
   code: string # Family code
   --labels: record # Family labels for each locale (default: {}) — shape: {localeCode?: string}
-]: any -> record<code: string, identifier: string, line: int, message: string, status_code: int> {
+]: any -> oneof<record<code: string, identifier: string, line: int, message: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3517,8 +3493,6 @@ export def "patch-families" [
 #
 # POST /api/rest/v1/families
 # operationId: post_families
-# --attribute_requirements shape: {channelCode?: list<string>}
-# --labels shape: {localeCode?: string}
 export def "post-families" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3573,7 +3547,7 @@ export def "get-families-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attribute_as_image: string, attribute_as_label: string, attribute_requirements: record<channelCode: list<string>>, attributes: list<string>, code: string, labels: record<localeCode: string>> {
+]: nothing -> oneof<record<attribute_as_image: string, attribute_as_label: string, attribute_requirements: record<channelCode: list<string>>, attributes: list<string>, code: string, labels: record<localeCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -3598,8 +3572,6 @@ export def "get-families-code" [
 #
 # PATCH /api/rest/v1/families/{code}
 # operationId: patch_families__code_
-# --attribute_requirements shape: {channelCode?: list<string>}
-# --labels shape: {localeCode?: string}
 export def "patch-families-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3660,7 +3632,7 @@ export def "get-families-family-code-variants" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($family_code | is-empty) { error make --unspanned { msg: "path parameter 'family_code' must be non-empty" } }
@@ -3686,8 +3658,6 @@ export def "get-families-family-code-variants" [
 #
 # PATCH /api/rest/v1/families/{family_code}/variants
 # operationId: patch_families__family_code__variants
-# --labels shape: {localeCode?: string}
-# --variant_attribute_sets item shape: {attributes?: list<string>, axes: list<string>, level: int}
 export def "patch-families-family-code-variants" [
   family_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3702,7 +3672,7 @@ export def "patch-families-family-code-variants" [
   code: string # Family variant code
   --labels: record # Family variant labels for each locale (default: {}) — shape: {localeCode?: string}
   variant_attribute_sets: list # Attributes distribution according to the enrichment level — item shape: {attributes?: list<string>, axes: list<string>, level: int}
-]: any -> record<code: string, identifier: string, line: int, message: string, status_code: int> {
+]: any -> oneof<record<code: string, identifier: string, line: int, message: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3730,8 +3700,6 @@ export def "patch-families-family-code-variants" [
 #
 # POST /api/rest/v1/families/{family_code}/variants
 # operationId: post_families__family_code__variants
-# --labels shape: {localeCode?: string}
-# --variant_attribute_sets item shape: {attributes?: list<string>, axes: list<string>, level: int}
 export def "post-families-family-code-variants" [
   family_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3786,7 +3754,7 @@ export def "get-families-family-code-variants-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, labels: record<localeCode: string>, variant_attribute_sets: table<attributes: list, axes: list, level: int>> {
+]: nothing -> oneof<record<code: string, labels: record<localeCode: string>, variant_attribute_sets: table<attributes: list, axes: list, level: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($family_code | is-empty) { error make --unspanned { msg: "path parameter 'family_code' must be non-empty" } }
@@ -3812,8 +3780,6 @@ export def "get-families-family-code-variants-code" [
 #
 # PATCH /api/rest/v1/families/{family_code}/variants/{code}
 # operationId: patch_families__family_code__variants__code__
-# --labels shape: {localeCode?: string}
-# --variant_attribute_sets item shape: {attributes?: list<string>, axes: list<string>, level: int}
 export def "patch-families-family-code-variants-code" [
   family_code: string
   code: string
@@ -3873,7 +3839,7 @@ export def "get-locales" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -3909,7 +3875,7 @@ export def "get-locales-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, enabled: bool> {
+]: nothing -> oneof<record<code: string, enabled: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -3944,7 +3910,7 @@ export def "measure-families-get-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/measure-families" $auth.query)
@@ -3979,7 +3945,7 @@ export def "measure-families-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, standard: string, units: table<code: string, convert: record, symbol: string>> {
+]: nothing -> oneof<record<code: string, standard: string, units: table<code: string, convert: record, symbol: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -4014,7 +3980,7 @@ export def "measurement-families-get-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, labels: record<localeCode: string>, standard_unit_code: string, units: record<unitCode: record<code: string, convert_from_standard: list, labels: record, symbol: string>>> {
+]: nothing -> oneof<record<code: string, labels: record<localeCode: string>, standard_unit_code: string, units: record<unitCode: record<code: string, convert_from_standard: list, labels: record, symbol: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/measurement-families" $auth.query)
@@ -4049,7 +4015,7 @@ export def "patch-measurement-families" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> table<code: string, errors: list<record>, message: string, status_code: int> {
+]: any -> oneof<table<code: string, errors: list<record>, message: string, status_code: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4089,7 +4055,7 @@ export def "get-media-files" [
   --page: int # Number of the page to retrieve when using the `page` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html#pagination) section (default: 1)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -4140,7 +4106,7 @@ export def "post-media-files" [
   let extra_headers = {"Content-type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -4170,7 +4136,7 @@ export def "get-media-files-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<download: record<href: string>>, code: string, extension: string, mime_type: string, original_filename: string, size: int> {
+]: nothing -> oneof<record<_links: record<download: record<href: string>>, code: string, extension: string, mime_type: string, original_filename: string, size: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -4251,7 +4217,7 @@ export def "get-product-models" [
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
   --with-quality-scores: oneof<nothing, bool> # Return product model quality scores in the response. (Only available since the 6.0 version)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "pagination_type" $pagination_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar") (serialize-qp "with_quality_scores" $with_quality_scores "scalar")] | flatten | str join "&"
@@ -4276,10 +4242,6 @@ export def "get-product-models" [
 #
 # PATCH /api/rest/v1/product-models
 # operationId: patch_product_models
-# --associations shape: {associationTypeCode?: record}
-# --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
-# --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
-# --values shape: {attributeCode?: list}
 export def "patch-product-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4302,7 +4264,7 @@ export def "patch-product-models" [
   --quantified-associations: record # Several quantified associations related to products and/or product models, grouped by quantified association types (only available since the 5.0) — shape: {quantifiedAssociationTypeCode?: record}
   --updated: string # Date of the last update (format: dateTime)
   --values: record # Product model attributes values, see Product values section for more details — shape: {attributeCode?: list}
-]: any -> record<code: string, identifier: string, line: int, message: string, status_code: int> {
+]: any -> oneof<record<code: string, identifier: string, line: int, message: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4329,10 +4291,6 @@ export def "patch-product-models" [
 #
 # POST /api/rest/v1/product-models
 # operationId: post_product_models
-# --associations shape: {associationTypeCode?: record}
-# --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
-# --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
-# --values shape: {attributeCode?: list}
 export def "post-product-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4430,7 +4388,7 @@ export def "get-product-models-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-quality-scores: oneof<nothing, bool> # Return product model quality scores in the response. (Only available since the 6.0 version)
-]: nothing -> record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, code: string, created: string, family: string, family_variant: string, metadata: record<workflow_status: string>, parent: string, quality_scores: record, quantified_associations: record<quantifiedAssociationTypeCode: record<product_models: list, products: list>>, updated: string, values: record<attributeCode: list<record>>> {
+]: nothing -> oneof<record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, code: string, created: string, family: string, family_variant: string, metadata: record<workflow_status: string>, parent: string, quality_scores: record, quantified_associations: record<quantifiedAssociationTypeCode: record<product_models: list, products: list>>, updated: string, values: record<attributeCode: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -4456,10 +4414,6 @@ export def "get-product-models-code" [
 #
 # PATCH /api/rest/v1/product-models/{code}
 # operationId: patch_product_models__code_
-# --associations shape: {associationTypeCode?: record}
-# --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
-# --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
-# --values shape: {attributeCode?: list}
 export def "patch-product-models-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4523,7 +4477,7 @@ export def "get-product-model-draft-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, code: string, created: string, family: string, family_variant: string, metadata: record<workflow_status: string>, parent: string, quality_scores: record, quantified_associations: record<quantifiedAssociationTypeCode: record<product_models: list, products: list>>, updated: string, values: record<attributeCode: list<record>>> {
+]: nothing -> oneof<record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, code: string, created: string, family: string, family_variant: string, metadata: record<workflow_status: string>, parent: string, quality_scores: record, quantified_associations: record<quantifiedAssociationTypeCode: record<product_models: list, products: list>>, updated: string, values: record<attributeCode: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -4606,7 +4560,7 @@ export def "get-products" [
   --with-attribute-options: oneof<nothing, bool> # Return labels of attribute options in the response. (Only available since the 5.0 version) (default: false)
   --with-quality-scores: oneof<nothing, bool> # Return product quality scores in the response. (Only available since the 5.0 version) (default: false)
   --with-completenesses: oneof<nothing, bool> # Return product completenesses in the response. (Only available since the 6.0 version) (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "pagination_type" $pagination_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar") (serialize-qp "with_attribute_options" $with_attribute_options "scalar") (serialize-qp "with_quality_scores" $with_quality_scores "scalar") (serialize-qp "with_completenesses" $with_completenesses "scalar")] | flatten | str join "&"
@@ -4631,11 +4585,6 @@ export def "get-products" [
 #
 # PATCH /api/rest/v1/products
 # operationId: patch_products
-# --associations shape: {associationTypeCode?: record}
-# --completenesses item shape: {data?: int, locale?: string, scope?: string}
-# --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
-# --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
-# --values shape: {attributeCode?: list}
 export def "patch-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4661,7 +4610,7 @@ export def "patch-products" [
   --updated: string # Date of the last update (format: dateTime)
   --uuid: string # Product UUID
   --values: record # Product attributes values, see Product values section for more details — shape: {attributeCode?: list}
-]: any -> record<code: string, identifier: string, line: int, message: string, status_code: int> {
+]: any -> oneof<record<code: string, identifier: string, line: int, message: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4688,11 +4637,6 @@ export def "patch-products" [
 #
 # POST /api/rest/v1/products
 # operationId: post_products
-# --associations shape: {associationTypeCode?: record}
-# --completenesses item shape: {data?: int, locale?: string, scope?: string}
-# --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
-# --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
-# --values shape: {attributeCode?: list}
 export def "post-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4767,7 +4711,7 @@ export def "get-products-uuid" [
   --with-attribute-options: oneof<nothing, bool> # Return labels of attribute options in the response. (Only available since the 5.0 version) (default: false)
   --with-quality-scores: oneof<nothing, bool> # Return product quality scores in the response. (Only available since the 5.0 version) (default: false)
   --with-completenesses: oneof<nothing, bool> # Return product completenesses in the response. (Only available since the 6.0 version) (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "pagination_type" $pagination_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar") (serialize-qp "with_attribute_options" $with_attribute_options "scalar") (serialize-qp "with_quality_scores" $with_quality_scores "scalar") (serialize-qp "with_completenesses" $with_completenesses "scalar")] | flatten | str join "&"
@@ -4792,11 +4736,6 @@ export def "get-products-uuid" [
 #
 # PATCH /api/rest/v1/products-uuid
 # operationId: patch_products_uuid
-# --associations shape: {associationTypeCode?: record}
-# --completenesses item shape: {data?: int, locale?: string, scope?: string}
-# --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
-# --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
-# --values shape: {attributeCode?: list}
 export def "patch-products-uuid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4821,7 +4760,7 @@ export def "patch-products-uuid" [
   --updated: string # Date of the last update (format: dateTime)
   uuid: string # Product uuid
   --values: record # Product attributes values, see Product values section for more details — shape: {attributeCode?: list}
-]: any -> record<line: int, message: string, status_code: int, uuid: string> {
+]: any -> oneof<record<line: int, message: string, status_code: int, uuid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4848,11 +4787,6 @@ export def "patch-products-uuid" [
 #
 # POST /api/rest/v1/products-uuid
 # operationId: post_products_uuid
-# --associations shape: {associationTypeCode?: record}
-# --completenesses item shape: {data?: int, locale?: string, scope?: string}
-# --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
-# --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
-# --values shape: {attributeCode?: list}
 export def "post-products-uuid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4954,7 +4888,7 @@ export def "get-products-uuid-uuid" [
   --with-attribute-options: oneof<nothing, bool> # Return labels of attribute options in the response. (Only available since the 5.0 version) (default: false)
   --with-quality-scores: oneof<nothing, bool> # Return product quality scores in the response. (Only available since the 5.0 version) (default: false)
   --with-completenesses: oneof<nothing, bool> # Return product completenesses in the response. (Only available since the 6.0 version) (default: false)
-]: nothing -> record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, completenesses: table<data: int, locale: string, scope: string>, created: string, enabled: bool, family: string, groups: list<string>, metadata: record<workflow_status: string>, parent: string, quality_scores: record, quantified_associations: record<quantifiedAssociationTypeCode: record<product_models: list, products: list>>, updated: string, uuid: string, values: record<attributeCode: list<record>>> {
+]: nothing -> oneof<record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, completenesses: table<data: int, locale: string, scope: string>, created: string, enabled: bool, family: string, groups: list<string>, metadata: record<workflow_status: string>, parent: string, quality_scores: record, quantified_associations: record<quantifiedAssociationTypeCode: record<product_models: list, products: list>>, updated: string, uuid: string, values: record<attributeCode: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
@@ -4980,11 +4914,6 @@ export def "get-products-uuid-uuid" [
 #
 # PATCH /api/rest/v1/products-uuid/{uuid}
 # operationId: patch_products_uuid__uuid_
-# --associations shape: {associationTypeCode?: record}
-# --completenesses item shape: {data?: int, locale?: string, scope?: string}
-# --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
-# --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
-# --values shape: {attributeCode?: list}
 export def "patch-products-uuid-uuid" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5049,7 +4978,7 @@ export def "get-draft-uuid-uuid" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, completenesses: table<data: int, locale: string, scope: string>, created: string, enabled: bool, family: string, groups: list<string>, metadata: record<workflow_status: string>, parent: string, quality_scores: record, quantified_associations: record<quantifiedAssociationTypeCode: record<product_models: list, products: list>>, updated: string, uuid: string, values: record<attributeCode: list<record>>> {
+]: nothing -> oneof<record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, completenesses: table<data: int, locale: string, scope: string>, created: string, enabled: bool, family: string, groups: list<string>, metadata: record<workflow_status: string>, parent: string, quality_scores: record, quantified_associations: record<quantifiedAssociationTypeCode: record<product_models: list, products: list>>, updated: string, uuid: string, values: record<attributeCode: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
@@ -5160,7 +5089,7 @@ export def "get-products-code" [
   --with-attribute-options: oneof<nothing, bool> # Return labels of attribute options in the response. (Only available since the 5.0 version) (default: false)
   --with-quality-scores: oneof<nothing, bool> # Return product quality scores in the response. (Only available since the 5.0 version) (default: false)
   --with-completenesses: oneof<nothing, bool> # Return product completenesses in the response. (Only available since the 6.0 version) (default: false)
-]: nothing -> record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, completenesses: table<data: int, locale: string, scope: string>, created: string, enabled: bool, family: string, groups: list<string>, identifier: string, metadata: record<workflow_status: string>, parent: string, quality_scores: record, quantified_associations: record<quantifiedAssociationTypeCode: record<product_models: list, products: list>>, updated: string, uuid: string, values: record<attributeCode: list<record>>> {
+]: nothing -> oneof<record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, completenesses: table<data: int, locale: string, scope: string>, created: string, enabled: bool, family: string, groups: list<string>, identifier: string, metadata: record<workflow_status: string>, parent: string, quality_scores: record, quantified_associations: record<quantifiedAssociationTypeCode: record<product_models: list, products: list>>, updated: string, uuid: string, values: record<attributeCode: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -5186,11 +5115,6 @@ export def "get-products-code" [
 #
 # PATCH /api/rest/v1/products/{code}
 # operationId: patch_products__code_
-# --associations shape: {associationTypeCode?: record}
-# --completenesses item shape: {data?: int, locale?: string, scope?: string}
-# --metadata shape: {workflow_status?: "read_only"|"draft_in_progress"|"proposal_waiting_for_approval"|"working_copy"}
-# --quantified_associations shape: {quantifiedAssociationTypeCode?: record}
-# --values shape: {attributeCode?: list}
 export def "patch-products-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5256,7 +5180,7 @@ export def "get-draft-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, completenesses: table<data: int, locale: string, scope: string>, created: string, enabled: bool, family: string, groups: list<string>, identifier: string, metadata: record<workflow_status: string>, parent: string, quality_scores: record, quantified_associations: record<quantifiedAssociationTypeCode: record<product_models: list, products: list>>, updated: string, uuid: string, values: record<attributeCode: list<record>>> {
+]: nothing -> oneof<record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, completenesses: table<data: int, locale: string, scope: string>, created: string, enabled: bool, family: string, groups: list<string>, identifier: string, metadata: record<workflow_status: string>, parent: string, quality_scores: record, quantified_associations: record<quantifiedAssociationTypeCode: record<product_models: list, products: list>>, updated: string, uuid: string, values: record<attributeCode: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -5336,7 +5260,7 @@ export def "get-published-products" [
   --search-after: string # Cursor when using the `search_after` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html) section (default: cursor to the first page)
   --limit: int # Number of results by page, see Pagination (/documentation/pagination.html) section (default: 10)
   --with-count: oneof<nothing, bool> # Return the count of items in the response. Be carefull with that, on a big catalog, it can decrease performance in a significative way (default: false)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, previous: record<href: string>, self: record<href: string>>, current_page: int, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "locales" $locales "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "pagination_type" $pagination_type "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "search_after" $search_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_count" $with_count "scalar")] | flatten | str join "&"
@@ -5372,7 +5296,7 @@ export def "get-published-products-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, created: string, enabled: bool, family: string, groups: list<string>, identifier: string, quantified_associations: record, updated: string, values: record<attributeCode: list<record>>> {
+]: nothing -> oneof<record<associations: record<associationTypeCode: record<groups: list, product_models: list, products: list>>, categories: list<string>, created: string, enabled: bool, family: string, groups: list<string>, identifier: string, quantified_associations: record, updated: string, values: record<attributeCode: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -5408,7 +5332,7 @@ export def "get-reference-entities" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search-after: string # Cursor when using the `search_after` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html) section (default: cursor to the first page)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search_after" $search_after "scalar")] | flatten | str join "&"
@@ -5457,7 +5381,7 @@ export def "post-reference-entity-media-files" [
   let extra_headers = {"Content-type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -5523,7 +5447,7 @@ export def "get-reference-entities-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<image_download: record<href: string>>, code: string, image: string, labels: record<localeCode: string>> {
+]: nothing -> oneof<record<_links: record<image_download: record<href: string>>, code: string, image: string, labels: record<localeCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -5548,7 +5472,6 @@ export def "get-reference-entities-code" [
 #
 # PATCH /api/rest/v1/reference-entities/{code}
 # operationId: patch_reference_entity__code_
-# --labels shape: {localeCode?: string}
 export def "patch-reference-entity-code" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5603,7 +5526,7 @@ export def "get-reference-entities-code-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<allowed_extensions: list<string>, code: string, decimals_allowed: bool, is_required_for_completeness: bool, is_rich_text_editor: bool, is_textarea: bool, labels: record<localeCode: string>, max_characters: int, max_file_size: string, max_value: string, min_value: string, reference_entity_code: string, type: string, validation_regexp: string, validation_rule: string, value_per_channel: bool, value_per_locale: bool> {
+]: nothing -> oneof<table<allowed_extensions: list<string>, code: string, decimals_allowed: bool, is_required_for_completeness: bool, is_rich_text_editor: bool, is_textarea: bool, labels: record<localeCode: string>, max_characters: int, max_file_size: string, max_value: string, min_value: string, reference_entity_code: string, type: string, validation_regexp: string, validation_rule: string, value_per_channel: bool, value_per_locale: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reference_entity_code | is-empty) { error make --unspanned { msg: "path parameter 'reference_entity_code' must be non-empty" } }
@@ -5640,7 +5563,7 @@ export def "get-reference-entity-attributes-attribute-code-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<code: string, labels: record<localeCode: string>> {
+]: nothing -> oneof<table<code: string, labels: record<localeCode: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reference_entity_code | is-empty) { error make --unspanned { msg: "path parameter 'reference_entity_code' must be non-empty" } }
@@ -5679,7 +5602,7 @@ export def "get-reference-entity-attributes-attribute-code-options-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, labels: record<localeCode: string>> {
+]: nothing -> oneof<record<code: string, labels: record<localeCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reference_entity_code | is-empty) { error make --unspanned { msg: "path parameter 'reference_entity_code' must be non-empty" } }
@@ -5706,7 +5629,6 @@ export def "get-reference-entity-attributes-attribute-code-options-code" [
 #
 # PATCH /api/rest/v1/reference-entities/{reference_entity_code}/attributes/{attribute_code}/options/{code}
 # operationId: patch_reference_entity_attributes__attribute_code__options__code_
-# --labels shape: {localeCode?: string}
 export def "patch-reference-entity-attributes-attribute-code-options-code" [
   reference_entity_code: string
   attribute_code: string
@@ -5765,7 +5687,7 @@ export def "get-reference-entity-attributes-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<allowed_extensions: list<string>, code: string, decimals_allowed: bool, is_required_for_completeness: bool, is_rich_text_editor: bool, is_textarea: bool, labels: record<localeCode: string>, max_characters: int, max_file_size: string, max_value: string, min_value: string, reference_entity_code: string, type: string, validation_regexp: string, validation_rule: string, value_per_channel: bool, value_per_locale: bool> {
+]: nothing -> oneof<record<allowed_extensions: list<string>, code: string, decimals_allowed: bool, is_required_for_completeness: bool, is_rich_text_editor: bool, is_textarea: bool, labels: record<localeCode: string>, max_characters: int, max_file_size: string, max_value: string, min_value: string, reference_entity_code: string, type: string, validation_regexp: string, validation_rule: string, value_per_channel: bool, value_per_locale: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reference_entity_code | is-empty) { error make --unspanned { msg: "path parameter 'reference_entity_code' must be non-empty" } }
@@ -5791,7 +5713,6 @@ export def "get-reference-entity-attributes-code" [
 #
 # PATCH /api/rest/v1/reference-entities/{reference_entity_code}/attributes/{code}
 # operationId: patch_reference_entity_attributes__code_
-# --labels shape: {localeCode?: string}
 export def "patch-reference-entity-attributes-code" [
   reference_entity_code: string
   code: string
@@ -5866,7 +5787,7 @@ export def "get-reference-entity-records" [
   --channel: string # Filter attribute values to return scopable attributes for the given channel as well as the non localizable/non scopable attributes, for more details see the Filter attribute values by channel (/documentation/filter.html#record-values-by-channel) section
   --locales: string # Filter attribute values to return localizable attributes for the given locales as well as the non localizable/non scopable attributes, for more details see the Filter attribute values by locale (/documentation/filter.html#record-values-by-locale) section
   --search-after: string # Cursor when using the `search_after` pagination method type. Should never be set manually, see Pagination (/documentation/pagination.html) section (default: cursor to the first page)
-]: nothing -> record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<items: list<record>>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, next: record<href: string>, self: record<href: string>>, _embedded: record<items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reference_entity_code | is-empty) { error make --unspanned { msg: "path parameter 'reference_entity_code' must be non-empty" } }
@@ -5904,7 +5825,7 @@ export def "patch-reference-entity-records" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> table<code: string, message: string, status_code: int> {
+]: any -> oneof<table<code: string, message: string, status_code: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5944,7 +5865,7 @@ export def "get-reference-entity-records-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, created: string, updated: string, values: record<attributeCode: list<record>>> {
+]: nothing -> oneof<record<code: string, created: string, updated: string, values: record<attributeCode: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reference_entity_code | is-empty) { error make --unspanned { msg: "path parameter 'reference_entity_code' must be non-empty" } }
@@ -5970,7 +5891,6 @@ export def "get-reference-entity-records-code" [
 #
 # PATCH /api/rest/v1/reference-entities/{reference_entity_code}/records/{code}
 # operationId: patch_reference_entity_records__code_
-# --values shape: {attributeCode?: list}
 export def "patch-reference-entity-records-code" [
   reference_entity_code: string
   code: string
@@ -6027,7 +5947,7 @@ export def "get-system-information" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<edition: string, version: string> {
+]: nothing -> oneof<record<edition: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/rest/v1/system-information" $auth.query)

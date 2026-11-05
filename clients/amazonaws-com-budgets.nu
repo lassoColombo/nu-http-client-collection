@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -127,9 +150,9 @@ def x-amz-target-completer-22 [] { ["AWSBudgetServiceGateway.UpdateSubscriber"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-budget" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-budget" "create-budget-action" "create-notification" "create-subscriber" "delete-budget" "delete-budget-action" "delete-notification" "delete-subscriber" "describe-budget" "describe-budget-action" "describe-budget-action-histories" "describe-budget-actions-for-account" "describe-budget-actions-for-budget" "describe-budget-notifications-for-account" "describe-budget-performance-history" "describe-budgets" "describe-notifications-for-budget" "describe-subscribers-for-notification" "execute-budget-action" "update-budget" "update-budget-action" "update-notification" "update-subscriber" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -151,8 +174,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateBudget
-# --Budget shape: {BudgetName: string, BudgetLimit?: record, PlannedBudgetLimits?: record, CostFilters?: record, CostTypes?: record, TimeUnit: "DAILY"|"MONTHLY"|"QUARTERLY"|"ANNUALLY", TimePeriod?: record, CalculatedSpend?: record, BudgetType: "USAGE"|"COST"|"RI_UTILIZATION"|"RI_COVERAGE"|"SAVINGS_PLANS_UTILIZATION"|"SAVINGS_PLANS_COVERAGE", LastUpdatedTime?: string, AutoAdjustData?: record}
-# --NotificationsWithSubscribers item shape: {Notification: record, Subscribers: list}
 export def "create-budget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,7 +195,7 @@ export def "create-budget" [
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget: record # Represents the output of the CreateBudget operation. The content consists of the detailed metadata and data file information, and the current status of the budget object. This is the Amazon Resource Name (ARN) pattern for a budget: arn:aws:budgets::AccountId:budget/budgetName — shape: {BudgetName: string, BudgetLimit?: record, PlannedBudgetLimits?: record, CostFilters?: record, CostTypes?: record, TimeUnit: "DAILY"|"MONTHLY"|"QUARTERLY"|"ANNUALLY", TimePeriod?: record, CalculatedSpend?: record, BudgetType: "USAGE"|"COST"|"RI_UTILIZATION"|"RI_COVERAGE"|"SAVINGS_PLANS_UTILIZATION"|"SAVINGS_PLANS_COVERAGE", LastUpdatedTime?: string, AutoAdjustData?: record}
   --notifications-with-subscribers: list # A list of notifications, each with a list of subscribers. — item shape: {Notification: record, Subscribers: list}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -204,9 +225,6 @@ export def "create-budget" [
 #
 # POST /
 # operationId: CreateBudgetAction
-# --ActionThreshold shape: {ActionThresholdValue: float, ActionThresholdType: "PERCENTAGE"|"ABSOLUTE_VALUE"}
-# --Definition shape: {IamActionDefinition?: record, ScpActionDefinition?: record, SsmActionDefinition?: record}
-# --Subscribers item shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 export def "create-budget-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +252,7 @@ export def "create-budget-action" [
   execution_role_arn: string # The role passed for action execution and reversion. Roles and actions must be in the same account.
   approval_model: string@approval-model-completer # This specifies if the action needs manual or automatic approval.
   subscribers: list # A list of subscribers. — item shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
-]: any -> record<AccountId: string, BudgetName: string, ActionId: string> {
+]: any -> oneof<record<AccountId: string, BudgetName: string, ActionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -264,8 +282,6 @@ export def "create-budget-action" [
 #
 # POST /
 # operationId: CreateNotification
-# --Notification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
-# --Subscribers item shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 export def "create-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,7 +304,7 @@ export def "create-notification" [
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
   notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
   subscribers: list # A list of subscribers. — item shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -318,8 +334,6 @@ export def "create-notification" [
 #
 # POST /
 # operationId: CreateSubscriber
-# --Notification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
-# --Subscriber shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 export def "create-subscriber" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +356,7 @@ export def "create-subscriber" [
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
   notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
   subscriber: record # The subscriber to a budget notification. The subscriber consists of a subscription type and either an Amazon SNS topic or an email address. For example, an email subscriber has the following parameters: A subscriptionType of EMAIL An address of example@example.com — shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -392,7 +406,7 @@ export def "delete-budget" [
   --x-amz-target: string@x-amz-target-completer-4 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -443,7 +457,7 @@ export def "delete-budget-action" [
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
   action_id: string # A system-generated universally unique identifier (UUID) for the action.
-]: any -> record<AccountId: string, BudgetName: string, Action: record<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list<record>>> {
+]: any -> oneof<record<AccountId: string, BudgetName: string, Action: record<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -473,7 +487,6 @@ export def "delete-budget-action" [
 #
 # POST /
 # operationId: DeleteNotification
-# --Notification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
 export def "delete-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -495,7 +508,7 @@ export def "delete-notification" [
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
   notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -525,8 +538,6 @@ export def "delete-notification" [
 #
 # POST /
 # operationId: DeleteSubscriber
-# --Notification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
-# --Subscriber shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 export def "delete-subscriber" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -549,7 +560,7 @@ export def "delete-subscriber" [
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
   notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
   subscriber: record # The subscriber to a budget notification. The subscriber consists of a subscription type and either an Amazon SNS topic or an email address. For example, an email subscriber has the following parameters: A subscriptionType of EMAIL An address of example@example.com — shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -599,7 +610,7 @@ export def "describe-budget" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
-]: any -> record<Budget: record<BudgetName: string, BudgetLimit: record<Amount: string, Unit: string>, PlannedBudgetLimits: record, CostFilters: record, CostTypes: record<IncludeTax: bool, IncludeSubscription: bool, UseBlended: bool, IncludeRefund: bool, IncludeCredit: bool, IncludeUpfront: bool, IncludeRecurring: bool, IncludeOtherSubscription: bool, IncludeSupport: bool, IncludeDiscount: bool, UseAmortized: bool>, TimeUnit: string, TimePeriod: record<Start: string, End: string>, CalculatedSpend: record<ActualSpend: record, ForecastedSpend: record>, BudgetType: string, LastUpdatedTime: string, AutoAdjustData: record<AutoAdjustType: string, HistoricalOptions: record, LastAutoAdjustTime: string>>> {
+]: any -> oneof<record<Budget: record<BudgetName: string, BudgetLimit: record<Amount: string, Unit: string>, PlannedBudgetLimits: record, CostFilters: record, CostTypes: record<IncludeTax: bool, IncludeSubscription: bool, UseBlended: bool, IncludeRefund: bool, IncludeCredit: bool, IncludeUpfront: bool, IncludeRecurring: bool, IncludeOtherSubscription: bool, IncludeSupport: bool, IncludeDiscount: bool, UseAmortized: bool>, TimeUnit: string, TimePeriod: record<Start: string, End: string>, CalculatedSpend: record<ActualSpend: record, ForecastedSpend: record>, BudgetType: string, LastUpdatedTime: string, AutoAdjustData: record<AutoAdjustType: string, HistoricalOptions: record, LastAutoAdjustTime: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -650,7 +661,7 @@ export def "describe-budget-action" [
   account_id: string # The account ID of the user. It's a 12-digit number.
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
   action_id: string # A system-generated universally unique identifier (UUID) for the action.
-]: any -> record<AccountId: string, BudgetName: string, Action: record<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list<record>>> {
+]: any -> oneof<record<AccountId: string, BudgetName: string, Action: record<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -680,7 +691,6 @@ export def "describe-budget-action" [
 #
 # POST /
 # operationId: DescribeBudgetActionHistories
-# --TimePeriod shape: {Start?: string, End?: string}
 export def "describe-budget-action-histories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -707,7 +717,7 @@ export def "describe-budget-action-histories" [
   --time-period: record # The period of time that's covered by a budget. The period has a start date and an end date. The start date must come before the end date. There are no restrictions on the end date. — shape: {Start?: string, End?: string}
   --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
   --next-token-body: string # A generic string. (body field)
-]: any -> record<ActionHistories: table<Timestamp: string, Status: string, EventType: string, ActionHistoryDetails: record>, NextToken: string> {
+]: any -> oneof<record<ActionHistories: table<Timestamp: string, Status: string, EventType: string, ActionHistoryDetails: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -761,7 +771,7 @@ export def "describe-budget-actions-for-account" [
   account_id: string # The account ID of the user. It's a 12-digit number.
   --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
   --next-token-body: string # A generic string. (body field)
-]: any -> record<Actions: table<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record, Definition: record, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list>, NextToken: string> {
+]: any -> oneof<record<Actions: table<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record, Definition: record, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -816,7 +826,7 @@ export def "describe-budget-actions-for-budget" [
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
   --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
   --next-token-body: string # A generic string. (body field)
-]: any -> record<Actions: table<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record, Definition: record, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list>, NextToken: string> {
+]: any -> oneof<record<Actions: table<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record, Definition: record, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -870,7 +880,7 @@ export def "describe-budget-notifications-for-account" [
   account_id: string # The account ID of the user. It's a 12-digit number.
   --max-results-body: int # An integer that shows how many budget name entries a paginated response contains. (body field)
   --next-token-body: string # A generic string. (body field)
-]: any -> record<BudgetNotificationsForAccount: table<Notifications: list, BudgetName: string>, NextToken: string> {
+]: any -> oneof<record<BudgetNotificationsForAccount: table<Notifications: list, BudgetName: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -901,7 +911,6 @@ export def "describe-budget-notifications-for-account" [
 #
 # POST /
 # operationId: DescribeBudgetPerformanceHistory
-# --TimePeriod shape: {Start?: string, End?: string}
 export def "describe-budget-performance-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -927,7 +936,7 @@ export def "describe-budget-performance-history" [
   --time-period: record # The period of time that's covered by a budget. The period has a start date and an end date. The start date must come before the end date. There are no restrictions on the end date. — shape: {Start?: string, End?: string}
   --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
   --next-token-body: string # A generic string. (body field)
-]: any -> record<BudgetPerformanceHistory: record<BudgetName: string, BudgetType: string, CostFilters: record, CostTypes: record<IncludeTax: bool, IncludeSubscription: bool, UseBlended: bool, IncludeRefund: bool, IncludeCredit: bool, IncludeUpfront: bool, IncludeRecurring: bool, IncludeOtherSubscription: bool, IncludeSupport: bool, IncludeDiscount: bool, UseAmortized: bool>, TimeUnit: string, BudgetedAndActualAmountsList: list<record>>, NextToken: string> {
+]: any -> oneof<record<BudgetPerformanceHistory: record<BudgetName: string, BudgetType: string, CostFilters: record, CostTypes: record<IncludeTax: bool, IncludeSubscription: bool, UseBlended: bool, IncludeRefund: bool, IncludeCredit: bool, IncludeUpfront: bool, IncludeRecurring: bool, IncludeOtherSubscription: bool, IncludeSupport: bool, IncludeDiscount: bool, UseAmortized: bool>, TimeUnit: string, BudgetedAndActualAmountsList: list<record>>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -981,7 +990,7 @@ export def "describe-budgets" [
   account_id: string # The account ID of the user. It's a 12-digit number.
   --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
   --next-token-body: string # A generic string. (body field)
-]: any -> record<Budgets: table<BudgetName: string, BudgetLimit: record, PlannedBudgetLimits: record, CostFilters: record, CostTypes: record, TimeUnit: string, TimePeriod: record, CalculatedSpend: record, BudgetType: string, LastUpdatedTime: string, AutoAdjustData: record>, NextToken: string> {
+]: any -> oneof<record<Budgets: table<BudgetName: string, BudgetLimit: record, PlannedBudgetLimits: record, CostFilters: record, CostTypes: record, TimeUnit: string, TimePeriod: record, CalculatedSpend: record, BudgetType: string, LastUpdatedTime: string, AutoAdjustData: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1036,7 +1045,7 @@ export def "describe-notifications-for-budget" [
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
   --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
   --next-token-body: string # A generic string. (body field)
-]: any -> record<Notifications: table<NotificationType: string, ComparisonOperator: string, Threshold: float, ThresholdType: string, NotificationState: string>, NextToken: string> {
+]: any -> oneof<record<Notifications: table<NotificationType: string, ComparisonOperator: string, Threshold: float, ThresholdType: string, NotificationState: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1067,7 +1076,6 @@ export def "describe-notifications-for-budget" [
 #
 # POST /
 # operationId: DescribeSubscribersForNotification
-# --Notification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
 export def "describe-subscribers-for-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1093,7 +1101,7 @@ export def "describe-subscribers-for-notification" [
   notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
   --max-results-body: int # An integer that represents how many entries a paginated response contains. The maximum is 100. (body field)
   --next-token-body: string # A generic string. (body field)
-]: any -> record<Subscribers: table<SubscriptionType: string, Address: string>, NextToken: string> {
+]: any -> oneof<record<Subscribers: table<SubscriptionType: string, Address: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1146,7 +1154,7 @@ export def "execute-budget-action" [
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
   action_id: string # A system-generated universally unique identifier (UUID) for the action.
   execution_type: string@execution-type-completer # The type of execution.
-]: any -> record<AccountId: string, BudgetName: string, ActionId: string, ExecutionType: string> {
+]: any -> oneof<record<AccountId: string, BudgetName: string, ActionId: string, ExecutionType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1176,7 +1184,6 @@ export def "execute-budget-action" [
 #
 # POST /
 # operationId: UpdateBudget
-# --NewBudget shape: {BudgetName: string, BudgetLimit?: record, PlannedBudgetLimits?: record, CostFilters?: record, CostTypes?: record, TimeUnit: "DAILY"|"MONTHLY"|"QUARTERLY"|"ANNUALLY", TimePeriod?: record, CalculatedSpend?: record, BudgetType: "USAGE"|"COST"|"RI_UTILIZATION"|"RI_COVERAGE"|"SAVINGS_PLANS_UTILIZATION"|"SAVINGS_PLANS_COVERAGE", LastUpdatedTime?: string, AutoAdjustData?: record}
 export def "update-budget" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1197,7 +1204,7 @@ export def "update-budget" [
   --x-amz-target: string@x-amz-target-completer-19 # required
   account_id: string # The account ID of the user. It's a 12-digit number.
   new_budget: record # Represents the output of the CreateBudget operation. The content consists of the detailed metadata and data file information, and the current status of the budget object. This is the Amazon Resource Name (ARN) pattern for a budget: arn:aws:budgets::AccountId:budget/budgetName — shape: {BudgetName: string, BudgetLimit?: record, PlannedBudgetLimits?: record, CostFilters?: record, CostTypes?: record, TimeUnit: "DAILY"|"MONTHLY"|"QUARTERLY"|"ANNUALLY", TimePeriod?: record, CalculatedSpend?: record, BudgetType: "USAGE"|"COST"|"RI_UTILIZATION"|"RI_COVERAGE"|"SAVINGS_PLANS_UTILIZATION"|"SAVINGS_PLANS_COVERAGE", LastUpdatedTime?: string, AutoAdjustData?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1227,9 +1234,6 @@ export def "update-budget" [
 #
 # POST /
 # operationId: UpdateBudgetAction
-# --ActionThreshold shape: {ActionThresholdValue: float, ActionThresholdType: "PERCENTAGE"|"ABSOLUTE_VALUE"}
-# --Definition shape: {IamActionDefinition?: record, ScpActionDefinition?: record, SsmActionDefinition?: record}
-# --Subscribers item shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 export def "update-budget-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1257,7 +1261,7 @@ export def "update-budget-action" [
   --execution-role-arn: string # The role passed for action execution and reversion. Roles and actions must be in the same account.
   --approval-model: string@approval-model-completer # This specifies if the action needs manual or automatic approval.
   --subscribers: list # A list of subscribers. — item shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
-]: any -> record<AccountId: string, BudgetName: string, OldAction: record<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list<record>>, NewAction: record<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list<record>>> {
+]: any -> oneof<record<AccountId: string, BudgetName: string, OldAction: record<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list<record>>, NewAction: record<ActionId: string, BudgetName: string, NotificationType: string, ActionType: string, ActionThreshold: record<ActionThresholdValue: float, ActionThresholdType: string>, Definition: record<IamActionDefinition: record, ScpActionDefinition: record, SsmActionDefinition: record>, ExecutionRoleArn: string, ApprovalModel: string, Status: string, Subscribers: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1287,8 +1291,6 @@ export def "update-budget-action" [
 #
 # POST /
 # operationId: UpdateNotification
-# --OldNotification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
-# --NewNotification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
 export def "update-notification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1311,7 +1313,7 @@ export def "update-notification" [
   budget_name: string # A string that represents the budget name. The ":" and "\" characters aren't allowed.
   old_notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
   new_notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1341,9 +1343,6 @@ export def "update-notification" [
 #
 # POST /
 # operationId: UpdateSubscriber
-# --Notification shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
-# --OldSubscriber shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
-# --NewSubscriber shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
 export def "update-subscriber" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1367,7 +1366,7 @@ export def "update-subscriber" [
   notification: record # A notification that's associated with a budget. A budget can have up to ten notifications. Each notification must have at least one subscriber. A notification can have one SNS subscriber and up to 10 email subscribers, for a total of 11 subscribers. For example, if you have a budget for 200 dollars and you want to be notified when you go over 160 dollars, create a notification with the following parameters: A notificationType of ACTUAL A thresholdType of PERCENTAGE A comparisonOperator of GREATER_THAN A notification threshold of 80 — shape: {NotificationType: "ACTUAL"|"FORECASTED", ComparisonOperator: "GREATER_THAN"|"LESS_THAN"|"EQUAL_TO", Threshold: float, ThresholdType?: "PERCENTAGE"|"ABSOLUTE_VALUE", NotificationState?: "OK"|"ALARM"}
   old_subscriber: record # The subscriber to a budget notification. The subscriber consists of a subscription type and either an Amazon SNS topic or an email address. For example, an email subscriber has the following parameters: A subscriptionType of EMAIL An address of example@example.com — shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
   new_subscriber: record # The subscriber to a budget notification. The subscriber consists of a subscription type and either an Amazon SNS topic or an email address. For example, an email subscriber has the following parameters: A subscriptionType of EMAIL An address of example@example.com — shape: {SubscriptionType: "SNS"|"EMAIL", Address: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

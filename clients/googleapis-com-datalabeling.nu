@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -123,9 +147,9 @@ def feature-completer-2 [] { ["CLASSIFICATION" "EVENT" "FEATURE_UNSPECIFIED" "OB
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datalabeling-projects-operations-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["datalabeling-projects-operations-delete" "datalabeling-projects-operations-get" "datalabeling-projects-evaluation-jobs-patch" "datalabeling-projects-operations-list" "datalabeling-projects-operations-cancel" "datalabeling-projects-datasets-export-data" "datalabeling-projects-datasets-import-data" "datalabeling-projects-evaluation-jobs-pause" "datalabeling-projects-evaluation-jobs-resume" "datalabeling-projects-datasets-annotated-datasets-list" "datalabeling-projects-annotation-spec-sets-list" "datalabeling-projects-annotation-spec-sets-create" "datalabeling-projects-datasets-data-items-list" "datalabeling-projects-datasets-list" "datalabeling-projects-datasets-create" "datalabeling-projects-evaluation-jobs-list" "datalabeling-projects-evaluation-jobs-create" "datalabeling-projects-evaluations-search" "datalabeling-projects-datasets-evaluations-example-comparisons-search" "datalabeling-projects-datasets-annotated-datasets-examples-list" "datalabeling-projects-datasets-annotated-datasets-feedback-threads-feedback-messages-list" "datalabeling-projects-datasets-annotated-datasets-feedback-threads-feedback-messages-create" "datalabeling-projects-datasets-annotated-datasets-feedback-threads-list" "datalabeling-projects-datasets-image-label" "datalabeling-projects-instructions-list" "datalabeling-projects-instructions-create" "datalabeling-projects-datasets-text-label" "datalabeling-projects-datasets-video-label" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -169,7 +193,7 @@ export def "datalabeling-projects-operations-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -218,7 +242,7 @@ export def "datalabeling-projects-operations-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Optional. An expression for filtering Examples. Filter by annotation_spec.display_name is supported. Format "annotation_spec.display_name = {display_name}"
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -244,8 +268,6 @@ export def "datalabeling-projects-operations-get" [
 #
 # PATCH /v1beta1/{name}
 # operationId: datalabeling.projects.evaluationJobs.patch
-# --attempts item shape: {attemptTime?: string, partialFailures?: list}
-# --evaluationJobConfig shape: {bigqueryImportKeys?: record, boundingPolyConfig?: record, evaluationConfig?: record, evaluationJobAlertConfig?: record, exampleCount?: int, exampleSamplePercentage?: float, humanAnnotationConfig?: record, imageClassificationConfig?: record, inputConfig?: record, textClassificationConfig?: record}
 export def "datalabeling-projects-evaluation-jobs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -279,7 +301,7 @@ export def "datalabeling-projects-evaluation-jobs-patch" [
   --body-name: string # Output only. After you create a job, Data Labeling Service assigns a name to the job with the following format: "projects/{project_id}/evaluationJobs/ {evaluation_job_id}"
   --schedule: string # Required. Describes the interval at which the job runs. This interval must be at least 1 day, and it is rounded to the nearest day. For example, if you specify a 50-hour interval, the job runs every 2 days. You can provide the schedule in [crontab format](/scheduler/docs/configuring/cron-job-schedules) or in an [English-like format](/appengine/docs/standard/python/config/cronref#schedule_format). Regardless of what you specify, the job will run at 10:00 AM UTC. Only the interval from this schedule is used, not the specific time of day.
   --state: string@state-completer # Output only. Describes the current state of the job.
-]: any -> record<annotationSpecSet: string, attempts: table<attemptTime: string, partialFailures: list>, createTime: string, description: string, evaluationJobConfig: record<bigqueryImportKeys: record, boundingPolyConfig: record<annotationSpecSet: string, instructionMessage: string>, evaluationConfig: record<boundingBoxEvaluationOptions: record>, evaluationJobAlertConfig: record<email: string, minAcceptableMeanAveragePrecision: float>, exampleCount: int, exampleSamplePercentage: float, humanAnnotationConfig: record<annotatedDatasetDescription: string, annotatedDatasetDisplayName: string, contributorEmails: list, instruction: string, labelGroup: string, languageCode: string, questionDuration: string, replicaCount: int, userEmailAddress: string>, imageClassificationConfig: record<allowMultiLabel: bool, annotationSpecSet: string, answerAggregationType: string>, inputConfig: record<annotationType: string, bigquerySource: record, classificationMetadata: record, dataType: string, gcsSource: record, textMetadata: record>, textClassificationConfig: record<allowMultiLabel: bool, annotationSpecSet: string, sentimentConfig: record>>, labelMissingGroundTruth: bool, modelVersion: string, name: string, schedule: string, state: string> {
+]: any -> oneof<record<annotationSpecSet: string, attempts: table<attemptTime: string, partialFailures: list>, createTime: string, description: string, evaluationJobConfig: record<bigqueryImportKeys: record, boundingPolyConfig: record<annotationSpecSet: string, instructionMessage: string>, evaluationConfig: record<boundingBoxEvaluationOptions: record>, evaluationJobAlertConfig: record<email: string, minAcceptableMeanAveragePrecision: float>, exampleCount: int, exampleSamplePercentage: float, humanAnnotationConfig: record<annotatedDatasetDescription: string, annotatedDatasetDisplayName: string, contributorEmails: list, instruction: string, labelGroup: string, languageCode: string, questionDuration: string, replicaCount: int, userEmailAddress: string>, imageClassificationConfig: record<allowMultiLabel: bool, annotationSpecSet: string, answerAggregationType: string>, inputConfig: record<annotationType: string, bigquerySource: record, classificationMetadata: record, dataType: string, gcsSource: record, textMetadata: record>, textClassificationConfig: record<allowMultiLabel: bool, annotationSpecSet: string, sentimentConfig: record>>, labelMissingGroundTruth: bool, modelVersion: string, name: string, schedule: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -333,7 +355,7 @@ export def "datalabeling-projects-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -381,7 +403,7 @@ export def "datalabeling-projects-operations-cancel" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -407,7 +429,6 @@ export def "datalabeling-projects-operations-cancel" [
 #
 # POST /v1beta1/{name}:exportData
 # operationId: datalabeling.projects.datasets.exportData
-# --outputConfig shape: {gcsDestination?: record, gcsFolderDestination?: record}
 export def "datalabeling-projects-datasets-export-data" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -434,7 +455,7 @@ export def "datalabeling-projects-datasets-export-data" [
   --filter: string # Optional. Filter is not supported at this moment.
   --output-config: record # The configuration of output data. — shape: {gcsDestination?: record, gcsFolderDestination?: record}
   --user-email-address: string # Email of the user who started the export task and should be notified by email. If empty no notification will be sent.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -463,7 +484,6 @@ export def "datalabeling-projects-datasets-export-data" [
 #
 # POST /v1beta1/{name}:importData
 # operationId: datalabeling.projects.datasets.importData
-# --inputConfig shape: {annotationType?: "ANNOTATION_TYPE_UNSPECIFIED"|"IMAGE_CLASSIFICATION_ANNOTATION"|"IMAGE_BOUNDING_BOX_ANNOTATION"|"IMAGE_ORIENTED_BOUNDING_BOX_ANNOTATION"|"IMAGE_BOUNDING_POLY_ANNOTATION"|"IMAGE_POLYLINE_ANNOTATION"|"IMAGE_SEGMENTATION_ANNOTATION"|"VIDEO_SHOTS_CLASSIFICATION_ANNOTATION"|"VIDEO_OBJECT_TRACKING_ANNOTATION"|"VIDEO_OBJECT_DETECTION_ANNOTATION"|"VIDEO_EVENT_ANNOTATION"|"TEXT_CLASSIFICATION_ANNOTATION"|"TEXT_ENTITY_EXTRACTION_ANNOTATION"|"GENERAL_CLASSIFICATION_ANNOTATION", ... (5 more fields)}
 export def "datalabeling-projects-datasets-import-data" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -488,7 +508,7 @@ export def "datalabeling-projects-datasets-import-data" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --input-config: record # The configuration of input data, including data type, location, etc. — shape: {annotationType?: "ANNOTATION_TYPE_UNSPECIFIED"|"IMAGE_CLASSIFICATION_ANNOTATION"|"IMAGE_BOUNDING_BOX_ANNOTATION"|"IMAGE_ORIENTED_BOUNDING_BOX_ANNOTATION"|"IMAGE_BOUNDING_POLY_ANNOTATION"|"IMAGE_POLYLINE_ANNOTATION"|"IMAGE_SEGMENTATION_ANNOTATION"|"VIDEO_SHOTS_CLASSIFICATION_ANNOTATION"|"VIDEO_OBJECT_TRACKING_ANNOTATION"|"VIDEO_OBJECT_DETECTION_ANNOTATION"|"VIDEO_EVENT_ANNOTATION"|"TEXT_CLASSIFICATION_ANNOTATION"|"TEXT_ENTITY_EXTRACTION_ANNOTATION"|"GENERAL_CLASSIFICATION_ANNOTATION", ... (5 more fields)}
   --user-email-address: string # Email of the user who started the import task and should be notified by email. If empty no notification will be sent.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -540,7 +560,7 @@ export def "datalabeling-projects-evaluation-jobs-pause" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -592,7 +612,7 @@ export def "datalabeling-projects-evaluation-jobs-resume" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -646,7 +666,7 @@ export def "datalabeling-projects-datasets-annotated-datasets-list" [
   --filter: string # Optional. Filter is not supported at this moment.
   --page-size: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
   --page-token: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListAnnotatedDatasetsResponse.next_page_token of the previous [DataLabelingService.ListAnnotatedDatasets] call. Return first page if empty.
-]: nothing -> record<annotatedDatasets: table<annotationSource: string, annotationType: string, blockingResources: list, completedExampleCount: string, createTime: string, description: string, displayName: string, exampleCount: string, labelStats: record, metadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<annotatedDatasets: table<annotationSource: string, annotationType: string, blockingResources: list, completedExampleCount: string, createTime: string, description: string, displayName: string, exampleCount: string, labelStats: record, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -697,7 +717,7 @@ export def "datalabeling-projects-annotation-spec-sets-list" [
   --filter: string # Optional. Filter is not supported at this moment.
   --page-size: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
   --page-token: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListAnnotationSpecSetsResponse.next_page_token of the previous [DataLabelingService.ListAnnotationSpecSets] call. Return first page if empty.
-]: nothing -> record<annotationSpecSets: table<annotationSpecs: list, blockingResources: list, description: string, displayName: string, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<annotationSpecSets: table<annotationSpecs: list, blockingResources: list, description: string, displayName: string, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -723,7 +743,6 @@ export def "datalabeling-projects-annotation-spec-sets-list" [
 #
 # POST /v1beta1/{parent}/annotationSpecSets
 # operationId: datalabeling.projects.annotationSpecSets.create
-# --annotationSpecSet shape: {annotationSpecs?: list, blockingResources?: list<string>, description?: string, displayName?: string, name?: string}
 export def "datalabeling-projects-annotation-spec-sets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -747,7 +766,7 @@ export def "datalabeling-projects-annotation-spec-sets-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --annotation-spec-set: record # An AnnotationSpecSet is a collection of label definitions. For example, in image classification tasks, you define a set of possible labels for images as an AnnotationSpecSet. An AnnotationSpecSet is immutable upon creation. — shape: {annotationSpecs?: list, blockingResources?: list<string>, description?: string, displayName?: string, name?: string}
-]: any -> record<annotationSpecs: table<description: string, displayName: string, index: int>, blockingResources: list<string>, description: string, displayName: string, name: string> {
+]: any -> oneof<record<annotationSpecs: table<description: string, displayName: string, index: int>, blockingResources: list<string>, description: string, displayName: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -801,7 +820,7 @@ export def "datalabeling-projects-datasets-data-items-list" [
   --filter: string # Optional. Filter is not supported at this moment.
   --page-size: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
   --page-token: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListDataItemsResponse.next_page_token of the previous [DataLabelingService.ListDataItems] call. Return first page if empty.
-]: nothing -> record<dataItems: table<imagePayload: record, name: string, textPayload: record, videoPayload: record>, nextPageToken: string> {
+]: nothing -> oneof<record<dataItems: table<imagePayload: record, name: string, textPayload: record, videoPayload: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -852,7 +871,7 @@ export def "datalabeling-projects-datasets-list" [
   --filter: string # Optional. Filter on dataset is not supported at this moment.
   --page-size: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
   --page-token: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListDatasetsResponse.next_page_token of the previous [DataLabelingService.ListDatasets] call. Returns the first page if empty.
-]: nothing -> record<datasets: table<blockingResources: list, createTime: string, dataItemCount: string, description: string, displayName: string, inputConfigs: list, lastMigrateTime: string, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<datasets: table<blockingResources: list, createTime: string, dataItemCount: string, description: string, displayName: string, inputConfigs: list, lastMigrateTime: string, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -878,7 +897,6 @@ export def "datalabeling-projects-datasets-list" [
 #
 # POST /v1beta1/{parent}/datasets
 # operationId: datalabeling.projects.datasets.create
-# --dataset shape: {blockingResources?: list<string>, createTime?: string, dataItemCount?: string, description?: string, displayName?: string, inputConfigs?: list, lastMigrateTime?: string, name?: string}
 export def "datalabeling-projects-datasets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -902,7 +920,7 @@ export def "datalabeling-projects-datasets-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --dataset: record # Dataset is the resource to hold your data. You can request multiple labeling tasks for a dataset while each one will generate an AnnotatedDataset. — shape: {blockingResources?: list<string>, createTime?: string, dataItemCount?: string, description?: string, displayName?: string, inputConfigs?: list, lastMigrateTime?: string, name?: string}
-]: any -> record<blockingResources: list<string>, createTime: string, dataItemCount: string, description: string, displayName: string, inputConfigs: table<annotationType: string, bigquerySource: record, classificationMetadata: record, dataType: string, gcsSource: record, textMetadata: record>, lastMigrateTime: string, name: string> {
+]: any -> oneof<record<blockingResources: list<string>, createTime: string, dataItemCount: string, description: string, displayName: string, inputConfigs: table<annotationType: string, bigquerySource: record, classificationMetadata: record, dataType: string, gcsSource: record, textMetadata: record>, lastMigrateTime: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -956,7 +974,7 @@ export def "datalabeling-projects-evaluation-jobs-list" [
   --filter: string # Optional. You can filter the jobs to list by model_id (also known as model_name, as described in EvaluationJob.modelVersion) or by evaluation job state (as described in EvaluationJob.state). To filter by both criteria, use the `AND` operator or the `OR` operator. For example, you can use the following string for your filter: "evaluation_job.model_id = {model_name} AND evaluation_job.state = {evaluation_job_state}"
   --page-size: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
   --page-token: string # Optional. A token identifying a page of results for the server to return. Typically obtained by the nextPageToken in the response to the previous request. The request returns the first page if this is empty.
-]: nothing -> record<evaluationJobs: table<annotationSpecSet: string, attempts: list, createTime: string, description: string, evaluationJobConfig: record, labelMissingGroundTruth: bool, modelVersion: string, name: string, schedule: string, state: string>, nextPageToken: string> {
+]: nothing -> oneof<record<evaluationJobs: table<annotationSpecSet: string, attempts: list, createTime: string, description: string, evaluationJobConfig: record, labelMissingGroundTruth: bool, modelVersion: string, name: string, schedule: string, state: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -982,7 +1000,6 @@ export def "datalabeling-projects-evaluation-jobs-list" [
 #
 # POST /v1beta1/{parent}/evaluationJobs
 # operationId: datalabeling.projects.evaluationJobs.create
-# --job shape: {annotationSpecSet?: string, attempts?: list, createTime?: string, description?: string, evaluationJobConfig?: record, labelMissingGroundTruth?: bool, modelVersion?: string, name?: string, schedule?: string, state?: "STATE_UNSPECIFIED"|"SCHEDULED"|"RUNNING"|"PAUSED"|"STOPPED"}
 export def "datalabeling-projects-evaluation-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1006,7 +1023,7 @@ export def "datalabeling-projects-evaluation-jobs-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --job: record # Defines an evaluation job that runs periodically to generate Evaluations. [Creating an evaluation job](/ml-engine/docs/continuous-evaluation/create-job) is the starting point for using continuous evaluation. — shape: {annotationSpecSet?: string, attempts?: list, createTime?: string, description?: string, evaluationJobConfig?: record, labelMissingGroundTruth?: bool, modelVersion?: string, name?: string, schedule?: string, state?: "STATE_UNSPECIFIED"|"SCHEDULED"|"RUNNING"|"PAUSED"|"STOPPED"}
-]: any -> record<annotationSpecSet: string, attempts: table<attemptTime: string, partialFailures: list>, createTime: string, description: string, evaluationJobConfig: record<bigqueryImportKeys: record, boundingPolyConfig: record<annotationSpecSet: string, instructionMessage: string>, evaluationConfig: record<boundingBoxEvaluationOptions: record>, evaluationJobAlertConfig: record<email: string, minAcceptableMeanAveragePrecision: float>, exampleCount: int, exampleSamplePercentage: float, humanAnnotationConfig: record<annotatedDatasetDescription: string, annotatedDatasetDisplayName: string, contributorEmails: list, instruction: string, labelGroup: string, languageCode: string, questionDuration: string, replicaCount: int, userEmailAddress: string>, imageClassificationConfig: record<allowMultiLabel: bool, annotationSpecSet: string, answerAggregationType: string>, inputConfig: record<annotationType: string, bigquerySource: record, classificationMetadata: record, dataType: string, gcsSource: record, textMetadata: record>, textClassificationConfig: record<allowMultiLabel: bool, annotationSpecSet: string, sentimentConfig: record>>, labelMissingGroundTruth: bool, modelVersion: string, name: string, schedule: string, state: string> {
+]: any -> oneof<record<annotationSpecSet: string, attempts: table<attemptTime: string, partialFailures: list>, createTime: string, description: string, evaluationJobConfig: record<bigqueryImportKeys: record, boundingPolyConfig: record<annotationSpecSet: string, instructionMessage: string>, evaluationConfig: record<boundingBoxEvaluationOptions: record>, evaluationJobAlertConfig: record<email: string, minAcceptableMeanAveragePrecision: float>, exampleCount: int, exampleSamplePercentage: float, humanAnnotationConfig: record<annotatedDatasetDescription: string, annotatedDatasetDisplayName: string, contributorEmails: list, instruction: string, labelGroup: string, languageCode: string, questionDuration: string, replicaCount: int, userEmailAddress: string>, imageClassificationConfig: record<allowMultiLabel: bool, annotationSpecSet: string, answerAggregationType: string>, inputConfig: record<annotationType: string, bigquerySource: record, classificationMetadata: record, dataType: string, gcsSource: record, textMetadata: record>, textClassificationConfig: record<allowMultiLabel: bool, annotationSpecSet: string, sentimentConfig: record>>, labelMissingGroundTruth: bool, modelVersion: string, name: string, schedule: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1060,7 +1077,7 @@ export def "datalabeling-projects-evaluations-search" [
   --filter: string # Optional. To search evaluations, you can filter by the following: * evaluation_job.evaluation_job_id (the last part of EvaluationJob.name) * evaluation_job.model_id (the {model_name} portion of EvaluationJob.modelVersion) * evaluation_job.evaluation_job_run_time_start (Minimum threshold for the evaluationJobRunTime that created the evaluation) * evaluation_job.evaluation_job_run_time_end (Maximum threshold for the evaluationJobRunTime that created the evaluation) * evaluation_job.job_state (EvaluationJob.state) * annotation_spec.display_name (the Evaluation contains a metric for the annotation spec with this displayName) To filter by multiple critiera, use the `AND` operator or the `OR` operator. The following examples shows a string that filters by several critiera: "evaluation_job.evaluation_job_id = {evaluation_job_id} AND evaluation_job.model_id = {model_name} AND evaluation_job.evaluation_job_run_time_start = {timestamp_1} AND evaluation_job.evaluation_job_run_time_end = {timestamp_2} AND annotation_spec.display_name = {display_name}"
   --page-size: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
   --page-token: string # Optional. A token identifying a page of results for the server to return. Typically obtained by the nextPageToken of the response to a previous search request. If you don't specify this field, the API call requests the first page of the search.
-]: nothing -> record<evaluations: table<annotationType: string, config: record, createTime: string, evaluatedItemCount: string, evaluationJobRunTime: string, evaluationMetrics: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<evaluations: table<annotationType: string, config: record, createTime: string, evaluatedItemCount: string, evaluationJobRunTime: string, evaluationMetrics: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1110,7 +1127,7 @@ export def "datalabeling-projects-datasets-evaluations-example-comparisons-searc
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100. (format: int32)
   --page-token: string # Optional. A token identifying a page of results for the server to return. Typically obtained by the nextPageToken of the response to a previous search rquest. If you don't specify this field, the API call requests the first page of the search.
-]: any -> record<exampleComparisons: table<groundTruthExample: record, modelCreatedExamples: list>, nextPageToken: string> {
+]: any -> oneof<record<exampleComparisons: table<groundTruthExample: record, modelCreatedExamples: list>, nextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1164,7 +1181,7 @@ export def "datalabeling-projects-datasets-annotated-datasets-examples-list" [
   --filter: string # Optional. An expression for filtering Examples. For annotated datasets that have annotation spec set, filter by annotation_spec.display_name is supported. Format "annotation_spec.display_name = {display_name}"
   --page-size: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
   --page-token: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListExamplesResponse.next_page_token of the previous [DataLabelingService.ListExamples] call. Return first page if empty.
-]: nothing -> record<examples: table<annotations: list, imagePayload: record, name: string, textPayload: record, videoPayload: record>, nextPageToken: string> {
+]: nothing -> oneof<record<examples: table<annotations: list, imagePayload: record, name: string, textPayload: record, videoPayload: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1214,7 +1231,7 @@ export def "datalabeling-projects-datasets-annotated-datasets-feedback-threads-f
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
   --page-token: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListFeedbackMessages.next_page_token of the previous [DataLabelingService.ListFeedbackMessages] call. Return first page if empty.
-]: nothing -> record<feedbackMessages: table<body: string, createTime: string, image: string, name: string, operatorFeedbackMetadata: record, requesterFeedbackMetadata: record>, nextPageToken: string> {
+]: nothing -> oneof<record<feedbackMessages: table<body: string, createTime: string, image: string, name: string, operatorFeedbackMetadata: record, requesterFeedbackMetadata: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1268,7 +1285,7 @@ export def "datalabeling-projects-datasets-annotated-datasets-feedback-threads-f
   --name: string # Name of the feedback message in a feedback thread. Format: 'project/{project_id}/datasets/{dataset_id}/annotatedDatasets/{annotated_dataset_id}/feedbackThreads/{feedback_thread_id}/feedbackMessage/{feedback_message_id}'
   --operator-feedback-metadata: record # Metadata describing the feedback from the operator.
   --requester-feedback-metadata: record # Metadata describing the feedback from the labeling task requester.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1321,7 +1338,7 @@ export def "datalabeling-projects-datasets-annotated-datasets-feedback-threads-l
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
   --page-token: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListFeedbackThreads.next_page_token of the previous [DataLabelingService.ListFeedbackThreads] call. Return first page if empty.
-]: nothing -> record<feedbackThreads: table<feedbackThreadMetadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<feedbackThreads: table<feedbackThreadMetadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1347,11 +1364,6 @@ export def "datalabeling-projects-datasets-annotated-datasets-feedback-threads-l
 #
 # POST /v1beta1/{parent}/image:label
 # operationId: datalabeling.projects.datasets.image.label
-# --basicConfig shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list<string>, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
-# --boundingPolyConfig shape: {annotationSpecSet?: string, instructionMessage?: string}
-# --imageClassificationConfig shape: {allowMultiLabel?: bool, annotationSpecSet?: string, answerAggregationType?: "STRING_AGGREGATION_TYPE_UNSPECIFIED"|"MAJORITY_VOTE"|"UNANIMOUS_VOTE"|"NO_AGGREGATION"}
-# --polylineConfig shape: {annotationSpecSet?: string, instructionMessage?: string}
-# --segmentationConfig shape: {annotationSpecSet?: string, instructionMessage?: string}
 export def "datalabeling-projects-datasets-image-label" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1380,7 +1392,7 @@ export def "datalabeling-projects-datasets-image-label" [
   --image-classification-config: record # Config for image classification human labeling task. — shape: {allowMultiLabel?: bool, annotationSpecSet?: string, answerAggregationType?: "STRING_AGGREGATION_TYPE_UNSPECIFIED"|"MAJORITY_VOTE"|"UNANIMOUS_VOTE"|"NO_AGGREGATION"}
   --polyline-config: record # Config for image polyline human labeling task. — shape: {annotationSpecSet?: string, instructionMessage?: string}
   --segmentation-config: record # Config for image segmentation — shape: {annotationSpecSet?: string, instructionMessage?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1434,7 +1446,7 @@ export def "datalabeling-projects-instructions-list" [
   --filter: string # Optional. Filter is not supported at this moment.
   --page-size: int # Optional. Requested page size. Server may return fewer results than requested. Default value is 100.
   --page-token: string # Optional. A token identifying a page of results for the server to return. Typically obtained by ListInstructionsResponse.next_page_token of the previous [DataLabelingService.ListInstructions] call. Return first page if empty.
-]: nothing -> record<instructions: table<blockingResources: list, createTime: string, csvInstruction: record, dataType: string, description: string, displayName: string, name: string, pdfInstruction: record, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<instructions: table<blockingResources: list, createTime: string, csvInstruction: record, dataType: string, description: string, displayName: string, name: string, pdfInstruction: record, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1460,7 +1472,6 @@ export def "datalabeling-projects-instructions-list" [
 #
 # POST /v1beta1/{parent}/instructions
 # operationId: datalabeling.projects.instructions.create
-# --instruction shape: {blockingResources?: list<string>, createTime?: string, csvInstruction?: record, dataType?: "DATA_TYPE_UNSPECIFIED"|"IMAGE"|"VIDEO"|"TEXT"|"GENERAL_DATA", description?: string, displayName?: string, name?: string, pdfInstruction?: record, updateTime?: string}
 export def "datalabeling-projects-instructions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1484,7 +1495,7 @@ export def "datalabeling-projects-instructions-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --instruction: record # Instruction of how to perform the labeling task for human operators. Currently only PDF instruction is supported. — shape: {blockingResources?: list<string>, createTime?: string, csvInstruction?: record, dataType?: "DATA_TYPE_UNSPECIFIED"|"IMAGE"|"VIDEO"|"TEXT"|"GENERAL_DATA", description?: string, displayName?: string, name?: string, pdfInstruction?: record, updateTime?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1513,9 +1524,6 @@ export def "datalabeling-projects-instructions-create" [
 #
 # POST /v1beta1/{parent}/text:label
 # operationId: datalabeling.projects.datasets.text.label
-# --basicConfig shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list<string>, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
-# --textClassificationConfig shape: {allowMultiLabel?: bool, annotationSpecSet?: string, sentimentConfig?: record}
-# --textEntityExtractionConfig shape: {annotationSpecSet?: string}
 export def "datalabeling-projects-datasets-text-label" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1542,7 +1550,7 @@ export def "datalabeling-projects-datasets-text-label" [
   --feature: string@feature-completer-1 # Required. The type of text labeling task.
   --text-classification-config: record # Config for text classification human labeling task. — shape: {allowMultiLabel?: bool, annotationSpecSet?: string, sentimentConfig?: record}
   --text-entity-extraction-config: record # Config for text entity extraction human labeling task. — shape: {annotationSpecSet?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1571,11 +1579,6 @@ export def "datalabeling-projects-datasets-text-label" [
 #
 # POST /v1beta1/{parent}/video:label
 # operationId: datalabeling.projects.datasets.video.label
-# --basicConfig shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list<string>, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
-# --eventConfig shape: {annotationSpecSets?: list<string>, clipLength?: int, overlapLength?: int}
-# --objectDetectionConfig shape: {annotationSpecSet?: string, extractionFrameRate?: float}
-# --objectTrackingConfig shape: {annotationSpecSet?: string, clipLength?: int, overlapLength?: int}
-# --videoClassificationConfig shape: {annotationSpecSetConfigs?: list, applyShotDetection?: bool}
 export def "datalabeling-projects-datasets-video-label" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1604,7 +1607,7 @@ export def "datalabeling-projects-datasets-video-label" [
   --object-detection-config: record # Config for video object detection human labeling task. Object detection will be conducted on the images extracted from the video, and those objects will be labeled with bounding boxes. User need to specify the number of images to be extracted per second as the extraction frame rate. — shape: {annotationSpecSet?: string, extractionFrameRate?: float}
   --object-tracking-config: record # Config for video object tracking human labeling task. — shape: {annotationSpecSet?: string, clipLength?: int, overlapLength?: int}
   --video-classification-config: record # Config for video classification human labeling task. Currently two types of video classification are supported: 1. Assign labels on the entire video. 2. Split the video into multiple video clips based on camera shot, and assign labels on each video clip. — shape: {annotationSpecSetConfigs?: list, applyShotDetection?: bool}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

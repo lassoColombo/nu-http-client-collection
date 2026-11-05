@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -127,9 +151,9 @@ def mode-completer [] { ["DEFAULT" "GET_ONLY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-certificate" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-certificate" "cancel-job" "get-job" "create-job" "list-jobs" "create-job-template" "list-job-templates" "create-preset" "list-presets" "create-queue" "list-queues" "delete-job-template" "get-job-template" "update-job-template" "delete-policy" "get-policy" "put-policy" "delete-preset" "get-preset" "update-preset" "delete-queue" "get-queue" "update-queue" "describe-endpoints" "disassociate-certificate" "list-tags-for-resource" "untag-resource" "tag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -169,7 +193,7 @@ export def "associate-certificate" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arn: string # The ARN of the ACM certificate that you want to associate with your MediaConvert resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -216,7 +240,7 @@ export def "cancel-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -261,7 +285,7 @@ export def "get-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Job: record<AccelerationSettings: record<Mode: string>, AccelerationStatus: string, Arn: string, BillingTagsSource: string, ClientRequestToken: string, CreatedAt: string, CurrentPhase: string, ErrorCode: int, ErrorMessage: string, HopDestinations: list<record>, Id: string, JobPercentComplete: int, JobTemplate: string, Messages: record<Info: list, Warning: list>, OutputGroupDetails: list<record>, Priority: int, Queue: string, QueueTransitions: list<record>, RetryCount: int, Role: string, Settings: record<AdAvailOffset: int, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: list, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: list, TimecodeConfig: record, TimedMetadataInsertion: record>, SimulateReservedQueue: string, Status: string, StatusUpdateInterval: string, Timing: record<FinishTime: string, StartTime: string, SubmitTime: string>, UserMetadata: record, Warnings: list<record>>> {
+]: nothing -> oneof<record<Job: record<AccelerationSettings: record<Mode: string>, AccelerationStatus: string, Arn: string, BillingTagsSource: string, ClientRequestToken: string, CreatedAt: string, CurrentPhase: string, ErrorCode: int, ErrorMessage: string, HopDestinations: list<record>, Id: string, JobPercentComplete: int, JobTemplate: string, Messages: record<Info: list, Warning: list>, OutputGroupDetails: list<record>, Priority: int, Queue: string, QueueTransitions: list<record>, RetryCount: int, Role: string, Settings: record<AdAvailOffset: int, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: list, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: list, TimecodeConfig: record, TimedMetadataInsertion: record>, SimulateReservedQueue: string, Status: string, StatusUpdateInterval: string, Timing: record<FinishTime: string, StartTime: string, SubmitTime: string>, UserMetadata: record, Warnings: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -288,9 +312,6 @@ export def "get-job" [
 #
 # POST /2017-08-29/jobs
 # operationId: CreateJob
-# --accelerationSettings shape: {Mode?: "DISABLED"|"ENABLED"|"PREFERRED"}
-# --hopDestinations item shape: {Priority?: int, Queue?: string, WaitMinutes?: int}
-# --settings shape: {AdAvailOffset?: int, AvailBlanking?: record, Esam?: record, ExtendedDataServices?: record, Inputs?: list, KantarWatermark?: record, MotionImageInserter?: record, NielsenConfiguration?: record, NielsenNonLinearWatermark?: record, OutputGroups?: list, TimecodeConfig?: record, TimedMetadataInsertion?: record}
 export def "create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,7 +342,7 @@ export def "create-job" [
   --status-update-interval: string@status-update-interval-completer # Specify how often MediaConvert sends STATUS_UPDATE events to Amazon CloudWatch Events. Set the interval, in seconds, between status updates. MediaConvert sends an update at this interval from the time the service begins processing your job to the time it completes the transcode or encounters an error.
   --tags: record # Optional. The tags that you want to add to the resource. You can tag resources with a key-value pair or with only a key. Use standard AWS tags on your job for automatic integration with AWS services and for custom integrations and workflows.
   --user-metadata: record # Optional. User-defined metadata that you want to associate with an MediaConvert job. You specify metadata in key/value pairs. Use only for existing integrations or workflows that rely on job metadata tags. Otherwise, we recommend that you use standard AWS tags.
-]: any -> record<Job: record<AccelerationSettings: record<Mode: string>, AccelerationStatus: string, Arn: string, BillingTagsSource: string, ClientRequestToken: string, CreatedAt: string, CurrentPhase: string, ErrorCode: int, ErrorMessage: string, HopDestinations: list<record>, Id: string, JobPercentComplete: int, JobTemplate: string, Messages: record<Info: list, Warning: list>, OutputGroupDetails: list<record>, Priority: int, Queue: string, QueueTransitions: list<record>, RetryCount: int, Role: string, Settings: record<AdAvailOffset: int, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: list, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: list, TimecodeConfig: record, TimedMetadataInsertion: record>, SimulateReservedQueue: string, Status: string, StatusUpdateInterval: string, Timing: record<FinishTime: string, StartTime: string, SubmitTime: string>, UserMetadata: record, Warnings: list<record>>> {
+]: any -> oneof<record<Job: record<AccelerationSettings: record<Mode: string>, AccelerationStatus: string, Arn: string, BillingTagsSource: string, ClientRequestToken: string, CreatedAt: string, CurrentPhase: string, ErrorCode: int, ErrorMessage: string, HopDestinations: list<record>, Id: string, JobPercentComplete: int, JobTemplate: string, Messages: record<Info: list, Warning: list>, OutputGroupDetails: list<record>, Priority: int, Queue: string, QueueTransitions: list<record>, RetryCount: int, Role: string, Settings: record<AdAvailOffset: int, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: list, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: list, TimecodeConfig: record, TimedMetadataInsertion: record>, SimulateReservedQueue: string, Status: string, StatusUpdateInterval: string, Timing: record<FinishTime: string, StartTime: string, SubmitTime: string>, UserMetadata: record, Warnings: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -374,7 +395,7 @@ export def "list-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Jobs: table<AccelerationSettings: record, AccelerationStatus: string, Arn: string, BillingTagsSource: string, ClientRequestToken: string, CreatedAt: string, CurrentPhase: string, ErrorCode: int, ErrorMessage: string, HopDestinations: list, Id: string, JobPercentComplete: int, JobTemplate: string, Messages: record, OutputGroupDetails: list, Priority: int, Queue: string, QueueTransitions: list, RetryCount: int, Role: string, Settings: record, SimulateReservedQueue: string, Status: string, StatusUpdateInterval: string, Timing: record, UserMetadata: record, Warnings: list>, NextToken: string> {
+]: nothing -> oneof<record<Jobs: table<AccelerationSettings: record, AccelerationStatus: string, Arn: string, BillingTagsSource: string, ClientRequestToken: string, CreatedAt: string, CurrentPhase: string, ErrorCode: int, ErrorMessage: string, HopDestinations: list, Id: string, JobPercentComplete: int, JobTemplate: string, Messages: record, OutputGroupDetails: list, Priority: int, Queue: string, QueueTransitions: list, RetryCount: int, Role: string, Settings: record, SimulateReservedQueue: string, Status: string, StatusUpdateInterval: string, Timing: record, UserMetadata: record, Warnings: list>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "queue" $queue "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -401,9 +422,6 @@ export def "list-jobs" [
 #
 # POST /2017-08-29/jobTemplates
 # operationId: CreateJobTemplate
-# --accelerationSettings shape: {Mode?: "DISABLED"|"ENABLED"|"PREFERRED"}
-# --hopDestinations item shape: {Priority?: int, Queue?: string, WaitMinutes?: int}
-# --settings shape: {AdAvailOffset?: int, AvailBlanking?: record, Esam?: record, ExtendedDataServices?: record, Inputs?: list, KantarWatermark?: record, MotionImageInserter?: record, NielsenConfiguration?: record, NielsenNonLinearWatermark?: record, OutputGroups?: list, TimecodeConfig?: record, TimedMetadataInsertion?: record}
 export def "create-job-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,7 +449,7 @@ export def "create-job-template" [
   settings: record # JobTemplateSettings contains all the transcode settings saved in the template that will be applied to jobs created from it. — shape: {AdAvailOffset?: int, AvailBlanking?: record, Esam?: record, ExtendedDataServices?: record, Inputs?: list, KantarWatermark?: record, MotionImageInserter?: record, NielsenConfiguration?: record, NielsenNonLinearWatermark?: record, OutputGroups?: list, TimecodeConfig?: record, TimedMetadataInsertion?: record}
   --status-update-interval: string@status-update-interval-completer # Specify how often MediaConvert sends STATUS_UPDATE events to Amazon CloudWatch Events. Set the interval, in seconds, between status updates. MediaConvert sends an update at this interval from the time the service begins processing your job to the time it completes the transcode or encounters an error.
   --tags: record # The tags that you want to add to the resource. You can tag resources with a key-value pair or with only a key.
-]: any -> record<JobTemplate: record<AccelerationSettings: record<Mode: string>, Arn: string, Category: string, CreatedAt: string, Description: string, HopDestinations: list<record>, LastUpdated: string, Name: string, Priority: int, Queue: string, Settings: record<AdAvailOffset: int, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: list, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: list, TimecodeConfig: record, TimedMetadataInsertion: record>, StatusUpdateInterval: string, Type: string>> {
+]: any -> oneof<record<JobTemplate: record<AccelerationSettings: record<Mode: string>, Arn: string, Category: string, CreatedAt: string, Description: string, HopDestinations: list<record>, LastUpdated: string, Name: string, Priority: int, Queue: string, Settings: record<AdAvailOffset: int, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: list, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: list, TimecodeConfig: record, TimedMetadataInsertion: record>, StatusUpdateInterval: string, Type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -484,7 +502,7 @@ export def "list-job-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<JobTemplates: table<AccelerationSettings: record, Arn: string, Category: string, CreatedAt: string, Description: string, HopDestinations: list, LastUpdated: string, Name: string, Priority: int, Queue: string, Settings: record, StatusUpdateInterval: string, Type: string>, NextToken: string> {
+]: nothing -> oneof<record<JobTemplates: table<AccelerationSettings: record, Arn: string, Category: string, CreatedAt: string, Description: string, HopDestinations: list, LastUpdated: string, Name: string, Priority: int, Queue: string, Settings: record, StatusUpdateInterval: string, Type: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "listBy" $list_by "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -511,7 +529,6 @@ export def "list-job-templates" [
 #
 # POST /2017-08-29/presets
 # operationId: CreatePreset
-# --settings shape: {AudioDescriptions?: list, CaptionDescriptions?: list, ContainerSettings?: record, VideoDescription?: record}
 export def "create-preset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -534,7 +551,7 @@ export def "create-preset" [
   name: string # The name of the preset you are creating.
   settings: record # Settings for preset — shape: {AudioDescriptions?: list, CaptionDescriptions?: list, ContainerSettings?: record, VideoDescription?: record}
   --tags: record # The tags that you want to add to the resource. You can tag resources with a key-value pair or with only a key.
-]: any -> record<Preset: record<Arn: string, Category: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, Settings: record<AudioDescriptions: list, CaptionDescriptions: list, ContainerSettings: record, VideoDescription: record>, Type: string>> {
+]: any -> oneof<record<Preset: record<Arn: string, Category: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, Settings: record<AudioDescriptions: list, CaptionDescriptions: list, ContainerSettings: record, VideoDescription: record>, Type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -587,7 +604,7 @@ export def "list-presets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Presets: table<Arn: string, Category: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, Settings: record, Type: string>> {
+]: nothing -> oneof<record<NextToken: string, Presets: table<Arn: string, Category: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, Settings: record, Type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category" $category "scalar") (serialize-qp "listBy" $list_by "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -614,7 +631,6 @@ export def "list-presets" [
 #
 # POST /2017-08-29/queues
 # operationId: CreateQueue
-# --reservationPlanSettings shape: {Commitment?: "ONE_YEAR", RenewalType?: "AUTO_RENEW"|"EXPIRE", ReservedSlots?: int}
 export def "create-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -638,7 +654,7 @@ export def "create-queue" [
   --reservation-plan-settings: record # Details about the pricing plan for your reserved queue. Required for reserved queues and not applicable to on-demand queues. — shape: {Commitment?: "ONE_YEAR", RenewalType?: "AUTO_RENEW"|"EXPIRE", ReservedSlots?: int}
   --status: string@status-completer-1 # Queues can be ACTIVE or PAUSED. If you pause a queue, jobs in that queue won't begin. Jobs that are running when you pause a queue continue to run until they finish or result in an error.
   --tags: record # The tags that you want to add to the resource. You can tag resources with a key-value pair or with only a key.
-]: any -> record<Queue: record<Arn: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, PricingPlan: string, ProgressingJobsCount: int, ReservationPlan: record<Commitment: string, ExpiresAt: string, PurchasedAt: string, RenewalType: string, ReservedSlots: int, Status: string>, Status: string, SubmittedJobsCount: int, Type: string>> {
+]: any -> oneof<record<Queue: record<Arn: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, PricingPlan: string, ProgressingJobsCount: int, ReservationPlan: record<Commitment: string, ExpiresAt: string, PurchasedAt: string, RenewalType: string, ReservedSlots: int, Status: string>, Status: string, SubmittedJobsCount: int, Type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -690,7 +706,7 @@ export def "list-queues" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, Queues: table<Arn: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, PricingPlan: string, ProgressingJobsCount: int, ReservationPlan: record, Status: string, SubmittedJobsCount: int, Type: string>> {
+]: nothing -> oneof<record<NextToken: string, Queues: table<Arn: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, PricingPlan: string, ProgressingJobsCount: int, ReservationPlan: record, Status: string, SubmittedJobsCount: int, Type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "listBy" $list_by "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -735,7 +751,7 @@ export def "delete-job-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -780,7 +796,7 @@ export def "get-job-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<JobTemplate: record<AccelerationSettings: record<Mode: string>, Arn: string, Category: string, CreatedAt: string, Description: string, HopDestinations: list<record>, LastUpdated: string, Name: string, Priority: int, Queue: string, Settings: record<AdAvailOffset: int, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: list, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: list, TimecodeConfig: record, TimedMetadataInsertion: record>, StatusUpdateInterval: string, Type: string>> {
+]: nothing -> oneof<record<JobTemplate: record<AccelerationSettings: record<Mode: string>, Arn: string, Category: string, CreatedAt: string, Description: string, HopDestinations: list<record>, LastUpdated: string, Name: string, Priority: int, Queue: string, Settings: record<AdAvailOffset: int, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: list, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: list, TimecodeConfig: record, TimedMetadataInsertion: record>, StatusUpdateInterval: string, Type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -807,9 +823,6 @@ export def "get-job-template" [
 #
 # PUT /2017-08-29/jobTemplates/{name}
 # operationId: UpdateJobTemplate
-# --accelerationSettings shape: {Mode?: "DISABLED"|"ENABLED"|"PREFERRED"}
-# --hopDestinations item shape: {Priority?: int, Queue?: string, WaitMinutes?: int}
-# --settings shape: {AdAvailOffset?: int, AvailBlanking?: record, Esam?: record, ExtendedDataServices?: record, Inputs?: list, KantarWatermark?: record, MotionImageInserter?: record, NielsenConfiguration?: record, NielsenNonLinearWatermark?: record, OutputGroups?: list, TimecodeConfig?: record, TimedMetadataInsertion?: record}
 export def "update-job-template" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -836,7 +849,7 @@ export def "update-job-template" [
   --queue: string # The new queue for the job template, if you are changing it.
   --settings: record # JobTemplateSettings contains all the transcode settings saved in the template that will be applied to jobs created from it. — shape: {AdAvailOffset?: int, AvailBlanking?: record, Esam?: record, ExtendedDataServices?: record, Inputs?: list, KantarWatermark?: record, MotionImageInserter?: record, NielsenConfiguration?: record, NielsenNonLinearWatermark?: record, OutputGroups?: list, TimecodeConfig?: record, TimedMetadataInsertion?: record}
   --status-update-interval: string@status-update-interval-completer # Specify how often MediaConvert sends STATUS_UPDATE events to Amazon CloudWatch Events. Set the interval, in seconds, between status updates. MediaConvert sends an update at this interval from the time the service begins processing your job to the time it completes the transcode or encounters an error.
-]: any -> record<JobTemplate: record<AccelerationSettings: record<Mode: string>, Arn: string, Category: string, CreatedAt: string, Description: string, HopDestinations: list<record>, LastUpdated: string, Name: string, Priority: int, Queue: string, Settings: record<AdAvailOffset: int, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: list, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: list, TimecodeConfig: record, TimedMetadataInsertion: record>, StatusUpdateInterval: string, Type: string>> {
+]: any -> oneof<record<JobTemplate: record<AccelerationSettings: record<Mode: string>, Arn: string, Category: string, CreatedAt: string, Description: string, HopDestinations: list<record>, LastUpdated: string, Name: string, Priority: int, Queue: string, Settings: record<AdAvailOffset: int, AvailBlanking: record, Esam: record, ExtendedDataServices: record, Inputs: list, KantarWatermark: record, MotionImageInserter: record, NielsenConfiguration: record, NielsenNonLinearWatermark: record, OutputGroups: list, TimecodeConfig: record, TimedMetadataInsertion: record>, StatusUpdateInterval: string, Type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -883,7 +896,7 @@ export def "delete-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2017-08-29/policy" $auth.query)
@@ -926,7 +939,7 @@ export def "get-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Policy: record<HttpInputs: string, HttpsInputs: string, S3Inputs: string>> {
+]: nothing -> oneof<record<Policy: record<HttpInputs: string, HttpsInputs: string, S3Inputs: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2017-08-29/policy" $auth.query)
@@ -952,7 +965,6 @@ export def "get-policy" [
 #
 # PUT /2017-08-29/policy
 # operationId: PutPolicy
-# --policy shape: {HttpInputs?: "ALLOWED"|"DISALLOWED", HttpsInputs?: "ALLOWED"|"DISALLOWED", S3Inputs?: "ALLOWED"|"DISALLOWED"}
 export def "put-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -971,7 +983,7 @@ export def "put-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   policy: record # A policy configures behavior that you allow or disallow for your account. For information about MediaConvert policies, see the user guide at http://docs.aws.amazon.com/mediaconvert/latest/ug/what-is.html — shape: {HttpInputs?: "ALLOWED"|"DISALLOWED", HttpsInputs?: "ALLOWED"|"DISALLOWED", S3Inputs?: "ALLOWED"|"DISALLOWED"}
-]: any -> record<Policy: record<HttpInputs: string, HttpsInputs: string, S3Inputs: string>> {
+]: any -> oneof<record<Policy: record<HttpInputs: string, HttpsInputs: string, S3Inputs: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1018,7 +1030,7 @@ export def "delete-preset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1063,7 +1075,7 @@ export def "get-preset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Preset: record<Arn: string, Category: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, Settings: record<AudioDescriptions: list, CaptionDescriptions: list, ContainerSettings: record, VideoDescription: record>, Type: string>> {
+]: nothing -> oneof<record<Preset: record<Arn: string, Category: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, Settings: record<AudioDescriptions: list, CaptionDescriptions: list, ContainerSettings: record, VideoDescription: record>, Type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1090,7 +1102,6 @@ export def "get-preset" [
 #
 # PUT /2017-08-29/presets/{name}
 # operationId: UpdatePreset
-# --settings shape: {AudioDescriptions?: list, CaptionDescriptions?: list, ContainerSettings?: record, VideoDescription?: record}
 export def "update-preset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1112,7 +1123,7 @@ export def "update-preset" [
   --category: string # The new category for the preset, if you are changing it.
   --description: string # The new description for the preset, if you are changing it.
   --settings: record # Settings for preset — shape: {AudioDescriptions?: list, CaptionDescriptions?: list, ContainerSettings?: record, VideoDescription?: record}
-]: any -> record<Preset: record<Arn: string, Category: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, Settings: record<AudioDescriptions: list, CaptionDescriptions: list, ContainerSettings: record, VideoDescription: record>, Type: string>> {
+]: any -> oneof<record<Preset: record<Arn: string, Category: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, Settings: record<AudioDescriptions: list, CaptionDescriptions: list, ContainerSettings: record, VideoDescription: record>, Type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1160,7 +1171,7 @@ export def "delete-queue" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1205,7 +1216,7 @@ export def "get-queue" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Queue: record<Arn: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, PricingPlan: string, ProgressingJobsCount: int, ReservationPlan: record<Commitment: string, ExpiresAt: string, PurchasedAt: string, RenewalType: string, ReservedSlots: int, Status: string>, Status: string, SubmittedJobsCount: int, Type: string>> {
+]: nothing -> oneof<record<Queue: record<Arn: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, PricingPlan: string, ProgressingJobsCount: int, ReservationPlan: record<Commitment: string, ExpiresAt: string, PurchasedAt: string, RenewalType: string, ReservedSlots: int, Status: string>, Status: string, SubmittedJobsCount: int, Type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1232,7 +1243,6 @@ export def "get-queue" [
 #
 # PUT /2017-08-29/queues/{name}
 # operationId: UpdateQueue
-# --reservationPlanSettings shape: {Commitment?: "ONE_YEAR", RenewalType?: "AUTO_RENEW"|"EXPIRE", ReservedSlots?: int}
 export def "update-queue" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1254,7 +1264,7 @@ export def "update-queue" [
   --description: string # The new description for the queue, if you are changing it.
   --reservation-plan-settings: record # Details about the pricing plan for your reserved queue. Required for reserved queues and not applicable to on-demand queues. — shape: {Commitment?: "ONE_YEAR", RenewalType?: "AUTO_RENEW"|"EXPIRE", ReservedSlots?: int}
   --status: string@status-completer-1 # Queues can be ACTIVE or PAUSED. If you pause a queue, jobs in that queue won't begin. Jobs that are running when you pause a queue continue to run until they finish or result in an error.
-]: any -> record<Queue: record<Arn: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, PricingPlan: string, ProgressingJobsCount: int, ReservationPlan: record<Commitment: string, ExpiresAt: string, PurchasedAt: string, RenewalType: string, ReservedSlots: int, Status: string>, Status: string, SubmittedJobsCount: int, Type: string>> {
+]: any -> oneof<record<Queue: record<Arn: string, CreatedAt: string, Description: string, LastUpdated: string, Name: string, PricingPlan: string, ProgressingJobsCount: int, ReservationPlan: record<Commitment: string, ExpiresAt: string, PurchasedAt: string, RenewalType: string, ReservedSlots: int, Status: string>, Status: string, SubmittedJobsCount: int, Type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1306,7 +1316,7 @@ export def "describe-endpoints" [
   --max-results-body: int # Optional. Max number of endpoints, up to twenty, that will be returned at one time. (body field)
   --mode: string@mode-completer # Optional field, defaults to DEFAULT. Specify DEFAULT for this operation to return your endpoints if any exist, or to create an endpoint for you and return it if one doesn't already exist. Specify GET_ONLY to return your endpoints if any exist, or an empty list if none exist.
   --next-token-body: string # Use this string, provided with the response to a previous request, to request the next batch of endpoints. (body field)
-]: any -> record<Endpoints: table<Url: string>, NextToken: string> {
+]: any -> oneof<record<Endpoints: table<Url: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1354,7 +1364,7 @@ export def "disassociate-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'arn' must be non-empty" } }
@@ -1399,7 +1409,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ResourceTags: record<Arn: string, Tags: record>> {
+]: nothing -> oneof<record<ResourceTags: record<Arn: string, Tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'arn' must be non-empty" } }
@@ -1445,7 +1455,7 @@ export def "untag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --tag-keys: list<string> # The keys of the tags that you want to remove from the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1494,7 +1504,7 @@ export def "tag-resource" [
   --x-amz-signed-headers: string
   arn: string # The Amazon Resource Name (ARN) of the resource that you want to tag. To get the ARN, send a GET request with the resource name.
   tags: record # The tags that you want to add to the resource. You can tag resources with a key-value pair or with only a key.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

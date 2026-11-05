@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-api-key" => { {scheme: $scheme, headers: {"x-api-key": $token_val}, query: "", location: "header"} }
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def payment-type-completer [] { ["API"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-bookings" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-bookings" "create-booking" "cancel-booking" "retrieve-booking" "update-booking" "update-booking-contact" "list-hotels" "retrieve-hotel" "list-rate-plans-for-hotel" "list-rate-plan-for-hotel-for-rate-plan-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -160,7 +184,7 @@ export def "list-bookings" [
   --size: float # Pagination size. Defaults to 100 if omitted. (format: int32, default: 100)
   --offset: float # Pagination offset. Defaults to 0 if omitted. (format: int32, default: 0)
   --sort-by: string # Order in which the results should be sorted. Currently allows you to sort by `createdAt` and `updatedAt`. Specify multiple paramaters by separating with commas (default: createdAt:asc, e.g. createdAt:desc,updatedAt:asc)
-]: nothing -> record<data: table<bookedRooms: list, bookingId: string, cancellation: record, contact: record, createdAt: string, end: string, hotel: record, hotelConfirmationCode: string, notes: record, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string>, pagination: record<count: float, next: string, prev: string, total: float>> {
+]: nothing -> oneof<record<data: table<bookedRooms: list, bookingId: string, cancellation: record, contact: record, createdAt: string, end: string, hotel: record, hotelConfirmationCode: string, notes: record, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string>, pagination: record<count: float, next: string, prev: string, total: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "deepObject") (serialize-qp "end" $end "deepObject") (serialize-qp "created" $created "deepObject") (serialize-qp "updated" $updated "deepObject") (serialize-qp "size" $size "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sortBy" $sort_by "scalar")] | flatten | str join "&"
@@ -185,9 +209,6 @@ export def "list-bookings" [
 #
 # POST /bookings
 # operationId: createBooking
-# --bookingContact shape: {email: string, firstName: string, lastName: string}
-# --notes shape: {fromGuest?: string, fromSeller?: string}
-# --rooms item shape: {adults: float, notes?: record, rateId: string}
 export def "create-booking" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -204,7 +225,7 @@ export def "create-booking" [
   --payment-type: string@payment-type-completer # How will the guest make payment for this booking?
   rooms: list # List of room type identifiers to be booked. — item shape: {adults: float, notes?: record, rateId: string}
   start: string # The first day of the desired stay range in ISO 8601 format YYYY-MM-DD. (format: date)
-]: any -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record<email: string, firstName: string, lastName: string, contactId: string>, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
+]: any -> oneof<record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record<email: string, firstName: string, lastName: string, contactId: string>, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -242,7 +263,7 @@ export def "cancel-booking" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record<email: string, firstName: string, lastName: string, contactId: string>, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
+]: nothing -> oneof<record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record<email: string, firstName: string, lastName: string, contactId: string>, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($booking_id | is-empty) { error make --unspanned { msg: "path parameter 'bookingId' must be non-empty" } }
@@ -278,7 +299,7 @@ export def "retrieve-booking" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record<email: string, firstName: string, lastName: string, contactId: string>, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
+]: nothing -> oneof<record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record<email: string, firstName: string, lastName: string, contactId: string>, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($booking_id | is-empty) { error make --unspanned { msg: "path parameter 'bookingId' must be non-empty" } }
@@ -303,9 +324,6 @@ export def "retrieve-booking" [
 #
 # PUT /bookings/{bookingId}
 # operationId: updateBooking
-# --bookingContact shape: {email: string, firstName: string, lastName: string}
-# --notes shape: {fromGuest?: string, fromSeller?: string}
-# --rooms item shape: {adults: float, notes?: record, rateId: string}
 export def "update-booking" [
   booking_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -324,7 +342,7 @@ export def "update-booking" [
   rooms: list # List of room type identifiers to be booked. — item shape: {adults: float, notes?: record, rateId: string}
   start: string # The first day of the desired stay range in ISO 8601 format YYYY-MM-DD. (format: date)
   update_booking_version_at_timestamp: string # The timestamp of when the booking was last updated (format: date-time, e.g. 2020-12-20T11:01:30.745Z)
-]: any -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record<email: string, firstName: string, lastName: string, contactId: string>, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
+]: any -> oneof<record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record<email: string, firstName: string, lastName: string, contactId: string>, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -352,7 +370,6 @@ export def "update-booking" [
 #
 # PUT /bookings/{bookingId}/booking-contact
 # operationId: updateBookingContact
-# --bookingContact shape: {email: string, firstName: string, lastName: string}
 export def "update-booking-contact" [
   booking_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -366,7 +383,7 @@ export def "update-booking-contact" [
   --dry-run(-n) # Return the request that would be sent without executing it
   booking_contact: record # Information on a person and their contact details. — shape: {email: string, firstName: string, lastName: string}
   update_booking_version_at_timestamp: string # The timestamp of when the booking was last updated (format: date-time, e.g. 2020-12-20T11:01:30.745Z)
-]: any -> record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record<email: string, firstName: string, lastName: string, contactId: string>, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string> {
+]: any -> oneof<record<bookedRooms: table<adults: float, notes: record, rate: record, roomType: record, sellerToImpalaPayment: record>, bookingId: string, cancellation: record<fee: record<count: float, price: record, type: string>>, contact: record<email: string, firstName: string, lastName: string, contactId: string>, createdAt: string, end: string, hotel: record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, emails: list<string>, hotelId: string, href: string, images: list<record>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, starRating: float, timezone: string>, hotelConfirmationCode: string, notes: record<fromGuest: string, fromSeller: string>, paymentBearerToken: string, paymentClientSecret: string, start: string, status: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -418,7 +435,7 @@ export def "list-hotels" [
   --size: float # Number of hotels returned on a given page (pagination). (format: int32, default: 25, e.g. 40)
   --offset: float # Offset from the first hotel in the result (for pagination). (format: int32, default: 0, e.g. 25)
   --sort-by: string # Order in which the results should be sorted. Currently allows you to sort by `name` (alphabetical), star `rating`, and `distance_m` in meters from the specified latitude/longitude. Allows for a comma-separated list of of arguments with modifiers for `:asc` (ascending) and `:desc` (descending) ordering. (default: createdAt:desc, e.g. name:asc,distance_m:desc)
-]: nothing -> record<data: table<address: record, amenities: list, checkIn: record, checkOut: record, contractable: bool, createdAt: string, currency: string, description: record, emails: list, externalUrls: list, hotelId: string, images: list, location: record, name: string, phoneNumbers: list, roomCount: float, roomTypes: list, starRating: float, termsAndConditions: string, timezone: string, updatedAt: string, websiteUrl: string>, pagination: record<count: float, next: string, prev: string, total: float>> {
+]: nothing -> oneof<record<data: table<address: record, amenities: list, checkIn: record, checkOut: record, contractable: bool, createdAt: string, currency: string, description: record, emails: list, externalUrls: list, hotelId: string, images: list, location: record, name: string, phoneNumbers: list, roomCount: float, roomTypes: list, starRating: float, termsAndConditions: string, timezone: string, updatedAt: string, websiteUrl: string>, pagination: record<count: float, next: string, prev: string, total: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "deepObject") (serialize-qp "starRating" $star_rating "deepObject") (serialize-qp "country" $country "deepObject") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar") (serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "radius" $radius "scalar") (serialize-qp "hotelIds" $hotel_ids "csv") (serialize-qp "created" $created "deepObject") (serialize-qp "updated" $updated "deepObject") (serialize-qp "size" $size "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sortBy" $sort_by "scalar")] | flatten | str join "&"
@@ -456,7 +473,7 @@ export def "retrieve-hotel" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: string # The arrival day of the desired stay range in ISO 8601 format (`YYYY-MM-DD`). (e.g. 2021-05-20)
   --end: string # The departure day of the desired stay range in ISO 8601 format (`YYYY-MM-DD`). (e.g. 2021-05-22)
-]: nothing -> record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, amenities: table<code: float, formatted: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, contractable: bool, createdAt: string, currency: string, description: record<short: string>, emails: list<string>, externalUrls: table<name: any, url: string>, hotelId: string, images: table<altText: string, height: float, url: string, width: float>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, roomCount: float, roomTypes: table<amenities: list, description: string, images: list, maxOccupancy: int, name: string, rates: list, roomTypeId: string>, starRating: float, termsAndConditions: string, timezone: string, updatedAt: string, websiteUrl: string> {
+]: nothing -> oneof<record<address: record<city: string, country: string, countryName: string, line1: string, line2: string, postalCode: string, region: string>, amenities: table<code: float, formatted: string>, checkIn: record<from: string, to: string>, checkOut: record<from: string, to: string>, contractable: bool, createdAt: string, currency: string, description: record<short: string>, emails: list<string>, externalUrls: table<name: any, url: string>, hotelId: string, images: table<altText: string, height: float, url: string, width: float>, location: record<latitude: float, longitude: float>, name: string, phoneNumbers: list<string>, roomCount: float, roomTypes: table<amenities: list, description: string, images: list, maxOccupancy: int, name: string, rates: list, roomTypeId: string>, starRating: float, termsAndConditions: string, timezone: string, updatedAt: string, websiteUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -499,7 +516,7 @@ export def "list-rate-plans-for-hotel" [
   --start: string # Start date of the considered time window for the returned rate plan. (e.g. 2022-05-12)
   --end: string # Start date of the considered time window for the returned rate plan. (e.g. 2022-05-12)
   --room-id: string # The UUID of room for which rate plans are being fetched. (format: uuid, e.g. 6d3a255d-3b22-48a4-8076-3ae3d0ade3d7)
-]: nothing -> record<data: table<adjustments: list, components: list, conditions: record, description: string, hotelId: string, ratePlanId: float, restrictions: record, roomTypes: list>, pagination: record<count: float, next: string, prev: string, total: float>> {
+]: nothing -> oneof<record<data: table<adjustments: list, components: list, conditions: record, description: string, hotelId: string, ratePlanId: float, restrictions: record, roomTypes: list>, pagination: record<count: float, next: string, prev: string, total: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }
@@ -543,7 +560,7 @@ export def "list-rate-plan-for-hotel-for-rate-plan-id" [
   --start: string # Start date of the considered time window for the returned rate plan. (e.g. 2022-05-12)
   --end: string # Start date of the considered time window for the returned rate plan. (e.g. 2022-05-12)
   --room-type-id: string # The uuid of room for which rate plans are being fetched. (format: uuid, e.g. 6d3a255d-3b22-48a4-8076-3ae3d0ade3d7)
-]: nothing -> record<adjustments: table<adjustmentId: string, amount: float, conditions: list, type: string>, components: table<formatted: string, includedInRate: bool, type: string>, conditions: record<cancellationDeadline: float, cancellationPolicy: string>, description: string, hotelId: string, ratePlanId: float, restrictions: record<lengthOfStay: record<max: float, min: float>>, roomTypes: table<dates: list, maxOccupancy: float, name: string, roomTypeId: string>> {
+]: nothing -> oneof<record<adjustments: table<adjustmentId: string, amount: float, conditions: list, type: string>, components: table<formatted: string, includedInRate: bool, type: string>, conditions: record<cancellationDeadline: float, cancellationPolicy: string>, description: string, hotelId: string, ratePlanId: float, restrictions: record<lengthOfStay: record<max: float, min: float>>, roomTypes: table<dates: list, maxOccupancy: float, name: string, roomTypeId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($hotel_id | is-empty) { error make --unspanned { msg: "path parameter 'hotelId' must be non-empty" } }

@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "x-aio-key" => { {scheme: $scheme, headers: {"X-AIO-Key": $token_val}, query: "", location: "header"} }
     "x-aio-signature" => { {scheme: $scheme, headers: {"X-AIO-Signature": $token_val}, query: "", location: "header"} }
     "query-X-AIO-Key" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "X-AIO-Key")=(encode-path-segment $token_val)", location: "query"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -90,7 +113,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -128,9 +152,9 @@ def scope-completer [] { ["organization" "public" "secret" "user"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "current-user" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["current-user" "create-webhook-feed-data" "create-raw-webhook-feed-data" "destroy-activities" "all-activities" "get-activity" "all-dashboards" "create-dashboard" "all-blocks" "create-block" "destroy-block" "get-block" "update-block" "replace-block" "destroy-dashboard" "get-dashboard" "update-dashboard" "replace-dashboard" "all-feeds" "create-feed" "destroy-feed" "get-feed" "update-feed" "replace-feed" "all-data" "create-data" "batch-create-data" "chart-data" "first-data" "last-data" "next-data" "previous-data" "retain-data" "destroy-data" "get-data" "update-data" "replace-data" "get-feed-details" "all-groups" "create-group" "destroy-group" "get-group" "update-group" "replace-group" "add-feed-to-group" "create-group-data" "all-group-feeds" "create-group-feed" "all-group-feed-data" "create-group-feed-data" "batch-create-group-feed-data" "remove-feed-from-group" "get-current-user-throttle" "all-tokens" "create-token" "destroy-token" "get-token" "update-token" "replace-token" "all-triggers" "create-trigger" "destroy-trigger" "get-trigger" "update-trigger" "replace-trigger" "all-permissions" "create-permission" "destroy-permission" "get-permission" "update-permission" "replace-permission" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -163,7 +187,7 @@ export def "current-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<color: string, created_at: string, id: float, name: string, time_zone: string, updated_at: string, username: string> {
+]: nothing -> oneof<record<color: string, created_at: string, id: float, name: string, time_zone: string, updated_at: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user" $auth.query)
@@ -199,7 +223,7 @@ export def "create-webhook-feed-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --value: string
-]: any -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: any -> oneof<record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -237,7 +261,7 @@ export def "create-raw-webhook-feed-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: nothing -> oneof<record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhooks/feed/:token/raw" $auth.query)
@@ -313,7 +337,7 @@ export def "all-activities" [
   --start-time: string # Start time for filtering, returns records created after given time. (format: date-time)
   --end-time: string # End time for filtering, returns records created before give time. (format: date-time)
   --limit: int # Limit the number of records returned.
-]: nothing -> table<action: string, created_at: string, data: record, id: float, model: string, updated_at: string, user_id: float> {
+]: nothing -> oneof<table<action: string, created_at: string, data: record, id: float, model: string, updated_at: string, user_id: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -355,7 +379,7 @@ export def "get-activity" [
   --start-time: string # Start time for filtering, returns records created after given time. (format: date-time)
   --end-time: string # End time for filtering, returns records created before give time. (format: date-time)
   --limit: int # Limit the number of records returned.
-]: nothing -> table<action: string, created_at: string, data: record, id: float, model: string, updated_at: string, user_id: float> {
+]: nothing -> oneof<table<action: string, created_at: string, data: record, id: float, model: string, updated_at: string, user_id: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -394,7 +418,7 @@ export def "all-dashboards" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<blocks: list<record>, description: string, key: string, name: string> {
+]: nothing -> oneof<table<blocks: list<record>, description: string, key: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -434,7 +458,7 @@ export def "create-dashboard" [
   --description: string
   --key: string
   --name: string
-]: any -> record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string> {
+]: any -> oneof<record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -475,7 +499,7 @@ export def "all-blocks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<block_feeds: list<record>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string> {
+]: nothing -> oneof<table<block_feeds: list<record>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -501,7 +525,6 @@ export def "all-blocks" [
 #
 # POST /{username}/dashboards/{dashboard_id}/blocks
 # operationId: createBlock
-# --block_feeds item shape: {feed_id?: string, group_id?: string}
 export def "create-block" [
   username: string
   dashboard_id: string
@@ -526,7 +549,7 @@ export def "create-block" [
   --size-x: float
   --size-y: float
   --visual-type: string
-]: any -> record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string> {
+]: any -> oneof<record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -610,7 +633,7 @@ export def "get-block" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string> {
+]: nothing -> oneof<record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -637,7 +660,6 @@ export def "get-block" [
 #
 # PATCH /{username}/dashboards/{dashboard_id}/blocks/{id}
 # operationId: updateBlock
-# --block_feeds item shape: {feed_id?: string, group_id?: string}
 export def "update-block" [
   username: string
   dashboard_id: string
@@ -663,7 +685,7 @@ export def "update-block" [
   --size-x: float
   --size-y: float
   --visual-type: string
-]: any -> record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string> {
+]: any -> oneof<record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -693,7 +715,6 @@ export def "update-block" [
 #
 # PUT /{username}/dashboards/{dashboard_id}/blocks/{id}
 # operationId: replaceBlock
-# --block_feeds item shape: {feed_id?: string, group_id?: string}
 export def "replace-block" [
   username: string
   dashboard_id: string
@@ -719,7 +740,7 @@ export def "replace-block" [
   --size-x: float
   --size-y: float
   --visual-type: string
-]: any -> record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string> {
+]: any -> oneof<record<block_feeds: table<feed: record, group: record, id: string>, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -801,7 +822,7 @@ export def "get-dashboard" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string> {
+]: nothing -> oneof<record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -843,7 +864,7 @@ export def "update-dashboard" [
   --description: string
   --key: string
   --name: string
-]: any -> record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string> {
+]: any -> oneof<record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -888,7 +909,7 @@ export def "replace-dashboard" [
   --description: string
   --key: string
   --name: string
-]: any -> record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string> {
+]: any -> oneof<record<blocks: table<block_feeds: list, column: float, description: string, key: string, name: string, row: float, size_x: float, size_y: float, visual_type: string>, description: string, key: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -929,7 +950,7 @@ export def "all-feeds" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<created_at: string, description: string, details: record<data: record, shared_with: list>, enabled: bool, group: record, groups: list<record>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
+]: nothing -> oneof<table<created_at: string, description: string, details: record<data: record, shared_with: list>, enabled: bool, group: record, groups: list<record>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -971,7 +992,7 @@ export def "create-feed" [
   --key: string
   --license: string
   --name: string
-]: any -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
+]: any -> oneof<record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1052,7 +1073,7 @@ export def "get-feed" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
+]: nothing -> oneof<record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -1095,7 +1116,7 @@ export def "update-feed" [
   --key: string
   --license: string
   --name: string
-]: any -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
+]: any -> oneof<record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1141,7 +1162,7 @@ export def "replace-feed" [
   --key: string
   --license: string
   --name: string
-]: any -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
+]: any -> oneof<record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1187,7 +1208,7 @@ export def "all-data" [
   --end-time: string # End time for filtering, returns records created before give time. (format: date-time)
   --limit: int # Limit the number of records returned.
   --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`.
-]: nothing -> table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: nothing -> oneof<table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -1233,7 +1254,7 @@ export def "create-data" [
   --lat: string
   --lon: string
   --value: string
-]: any -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: any -> oneof<record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1276,7 +1297,7 @@ export def "batch-create-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body: list
-]: any -> table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: any -> oneof<table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1322,7 +1343,7 @@ export def "chart-data" [
   --end-time: string # End time for filtering, returns records created before give time. (format: date-time)
   --resolution: int # A resolution size in minutes. By giving a resolution value you will get back grouped data points aggregated over resolution-sized intervals. NOTE: time span is preferred over resolution, so if you request a span of time that includes more than max limit points you may get a larger resolution than you requested. Valid resolutions are 1, 5, 10, 30, 60, and 120. (format: int32)
   --hours: int # The number of hours the chart should cover. (format: int32)
-]: nothing -> record<columns: list<string>, data: list<list<string>>, feed: record<id: int, key: string, name: string>, parameters: record> {
+]: nothing -> oneof<record<columns: list<string>, data: list<list<string>>, feed: record<id: int, key: string, name: string>, parameters: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -1363,7 +1384,7 @@ export def "first-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`.
-]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: nothing -> oneof<record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -1404,7 +1425,7 @@ export def "last-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`.
-]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: nothing -> oneof<record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -1445,7 +1466,7 @@ export def "next-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`.
-]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: nothing -> oneof<record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -1486,7 +1507,7 @@ export def "previous-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`.
-]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: nothing -> oneof<record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -1607,7 +1628,7 @@ export def "get-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --include: string # List of Data record fields to include in response as comma separated list. Acceptable values are: `value`, `lat`, `lon`, `ele`, `id`, and `created_at`.
-]: nothing -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: nothing -> oneof<record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -1655,7 +1676,7 @@ export def "update-data" [
   --lat: string
   --lon: string
   --value: string
-]: any -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: any -> oneof<record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1705,7 +1726,7 @@ export def "replace-data" [
   --lat: string
   --lon: string
   --value: string
-]: any -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: any -> oneof<record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1748,7 +1769,7 @@ export def "get-feed-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
+]: nothing -> oneof<record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -1786,7 +1807,7 @@ export def "all-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<created_at: string, description: string, feeds: list<record>, id: float, name: string, updated_at: string> {
+]: nothing -> oneof<table<created_at: string, description: string, feeds: list<record>, id: float, name: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -1826,7 +1847,7 @@ export def "create-group" [
   --description: string
   --key: string
   --name: string
-]: any -> record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string> {
+]: any -> oneof<record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1906,7 +1927,7 @@ export def "get-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -1948,7 +1969,7 @@ export def "update-group" [
   --description: string
   --key: string
   --name: string
-]: any -> record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string> {
+]: any -> oneof<record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1993,7 +2014,7 @@ export def "replace-group" [
   --description: string
   --key: string
   --name: string
-]: any -> record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string> {
+]: any -> oneof<record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2036,7 +2057,7 @@ export def "add-feed-to-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --feed-key: string
-]: nothing -> record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2063,8 +2084,6 @@ export def "add-feed-to-group" [
 #
 # POST /{username}/groups/{group_key}/data
 # operationId: createGroupData
-# --feeds item shape: {key: string, value: string}
-# --location shape: {ele?: float, lat: float, lon: float}
 export def "create-group-data" [
   username: string
   group_key: string
@@ -2081,7 +2100,7 @@ export def "create-group-data" [
   --created-at: string # Optional created_at timestamp which will be applied to all feed values created.
   feeds: list # An array of feed data records with `key` and `value` properties. — item shape: {key: string, value: string}
   --location: record # A location record with `lat`, `lon`, and [optional] `ele` properties. — shape: {ele?: float, lat: float, lon: float}
-]: any -> table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: any -> oneof<table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2123,7 +2142,7 @@ export def "all-group-feeds" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<created_at: string, description: string, details: record<data: record, shared_with: list>, enabled: bool, group: record, groups: list<record>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
+]: nothing -> oneof<table<created_at: string, description: string, details: record<data: record, shared_with: list>, enabled: bool, group: record, groups: list<record>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2166,7 +2185,7 @@ export def "create-group-feed" [
   --key: string
   --license: string
   --name: string
-]: any -> record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string> {
+]: any -> oneof<record<created_at: string, description: string, details: record<data: record<count: int, first: record, last: record>, shared_with: list<record>>, enabled: bool, group: record, groups: table<created_at: string, description: string, id: float, name: string, updated_at: string>, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2212,7 +2231,7 @@ export def "all-group-feed-data" [
   --start-time: string # Start time for filtering data. Returns data created after given time. (format: date-time)
   --end-time: string # End time for filtering data. Returns data created before give time. (format: date-time)
   --limit: int # Limit the number of records returned.
-]: nothing -> table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: nothing -> oneof<table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2260,7 +2279,7 @@ export def "create-group-feed-data" [
   --lat: string
   --lon: string
   --value: string
-]: any -> record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: any -> oneof<record<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2305,7 +2324,7 @@ export def "batch-create-group-feed-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body: list
-]: any -> table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string> {
+]: any -> oneof<table<completed_at: string, created_at: string, created_epoch: float, ele: float, expiration: string, feed_id: float, group_id: float, id: string, lat: float, lon: float, updated_at: string, value: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2349,7 +2368,7 @@ export def "remove-feed-from-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --feed-key: string
-]: nothing -> record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, description: string, feeds: table<created_at: string, description: string, details: record, enabled: bool, group: record, groups: list, history: bool, id: float, key: string, last_value: string, license: string, name: string, status: string, status_notify: bool, status_timeout: int, unit_symbol: string, unit_type: string, updated_at: string, visibility: string>, id: float, name: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2388,7 +2407,7 @@ export def "get-current-user-throttle" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<active_data_rate: int, data_rate_limit: int> {
+]: nothing -> oneof<record<active_data_rate: int, data_rate_limit: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2425,7 +2444,7 @@ export def "all-tokens" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<token: string> {
+]: nothing -> oneof<table<token: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2463,7 +2482,7 @@ export def "create-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body-token: string
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2543,7 +2562,7 @@ export def "get-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<token: string> {
+]: nothing -> oneof<record<token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2583,7 +2602,7 @@ export def "update-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body-token: string
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2626,7 +2645,7 @@ export def "replace-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body-token: string
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2667,7 +2686,7 @@ export def "all-triggers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<name: string> {
+]: nothing -> oneof<table<name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2705,7 +2724,7 @@ export def "create-trigger" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string
-]: any -> record<name: string> {
+]: any -> oneof<record<name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2785,7 +2804,7 @@ export def "get-trigger" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<name: string> {
+]: nothing -> oneof<record<name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2825,7 +2844,7 @@ export def "update-trigger" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string
-]: any -> record<name: string> {
+]: any -> oneof<record<name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2868,7 +2887,7 @@ export def "replace-trigger" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string
-]: any -> record<name: string> {
+]: any -> oneof<record<name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2911,7 +2930,7 @@ export def "all-permissions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float> {
+]: nothing -> oneof<table<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2955,7 +2974,7 @@ export def "create-permission" [
   --mode: string@mode-completer # default: r
   --scope: string@scope-completer # default: public
   --scope-value: string
-]: any -> record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float> {
+]: any -> oneof<record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3043,7 +3062,7 @@ export def "get-permission" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float> {
+]: nothing -> oneof<record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -3089,7 +3108,7 @@ export def "update-permission" [
   --mode: string@mode-completer # default: r
   --scope: string@scope-completer # default: public
   --scope-value: string
-]: any -> record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float> {
+]: any -> oneof<record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3138,7 +3157,7 @@ export def "replace-permission" [
   --mode: string@mode-completer # default: r
   --scope: string@scope-completer # default: public
   --scope-value: string
-]: any -> record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float> {
+]: any -> oneof<record<created_at: string, id: float, model: string, object_id: float, scope: string, scope_value: string, updated_at: string, user_id: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-aio-key"))
   let base = ($base_url | default $BASE_URL)

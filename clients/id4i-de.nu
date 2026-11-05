@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -156,9 +180,9 @@ def alias-type-completer [] { ["article" "eclass" "gtin" "item" "mapp" "material
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "request-password-reset" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["request-password-reset" "verify-password-reset" "register-user" "complete-registration" "verify-user-registration" "list-all-api-keys-of-organization" "create-new-api-key" "list-all-api-key-privileges" "delete-api-key" "get-api-key" "update-api-key" "remove-api-key-privilege" "list-api-key-privileges" "add-api-key-privilege" "remove-api-key-privilege-for-id4ns" "list-id4ns" "add-api-key-privilege-for-id4ns" "get-sum-for-organization" "get-positions-for-organization" "list-organization-change-log" "create-collection" "delete-collection" "find-collection" "update-collection" "remove-elements-from-collection" "list-elements-of-collection" "add-elements-to-collection" "list-countries" "list-all-documents" "list-documents" "create-document" "put-document" "delete-document" "read-document" "get-document" "update-document-metadata" "create-guid" "get-guids-without-collection" "get-guid" "update-guid" "filtered-list" "add-item" "list" "retrieve-item" "update-item" "update-item-visibility" "get-id4n" "get-guid-aliases" "remove-guid-alias" "add-guid-alias" "get-collections" "delete-properties" "get-properties" "patch-properties" "import-gs1-codes" "application-info" "read-from-microstorage" "write-to-microstorage" "get-multiple-properties" "create-organization" "delete-organization" "find-organization" "update-organization" "delete-organization-billing-address" "find-organization-billing-address" "update-organization-billing-address" "find-organization-address" "update-organization-address" "get-all-collections-of-organization" "delete-organization-logo" "set-organization-logo" "get-default-queue" "patch-default-queue" "enqueue-custom-message" "remove-partner-organization" "get-partner-organizations" "add-partner-organization" "get-organization-privileges" "get-all-organization-roles" "get-users-of-organization" "invite-users" "remove-user-roles" "get-user-roles" "add-user-roles" "list-all-public-documents" "read-public-document" "get-public-document" "list-public-history" "resolve-image-using-get" "read-organization-info" "get-routes" "list-all-roles" "get-routing-file" "update-routing-file" "get-route" "get-all-routes" "search-by-alias" "get-guid-alias-types" "receive" "get-send-info" "prepare" "get-organizations-of-user" "find-users" "find-user-by-username" "go" "login" "resolve-who-is-entry" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -192,7 +216,7 @@ export def "request-password-reset" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   username: string
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -232,7 +256,7 @@ export def "verify-password-reset" [
   --accept: string@accept-completer # Response content type
   password: string
   --body-token: string
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -274,7 +298,7 @@ export def "register-user" [
   email: string
   password: string
   username: string
-]: any -> record<email: string, id: int, message: string, username: string> {
+]: any -> oneof<record<email: string, id: int, message: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -394,7 +418,7 @@ export def "list-all-api-keys-of-organization" [
   --organization-id: string # The namespace of the organization to search in.
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<active: bool, createdAt: int, createdBy: string, key: string, label: string, organizationId: string>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<active: bool, createdAt: int, createdBy: string, key: string, label: string, organizationId: string>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "organizationId" $organization_id "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -433,7 +457,7 @@ export def "create-new-api-key" [
   label: string
   organization_id: string # e.g. de.acme
   secret: string
-]: any -> record<active: bool, createdAt: int, createdBy: string, key: string, label: string, organizationId: string> {
+]: any -> oneof<record<active: bool, createdAt: int, createdBy: string, key: string, label: string, organizationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -474,7 +498,7 @@ export def "list-all-api-key-privileges" [
   --id4n-concerning: oneof<nothing, bool> # id4nConcerning
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<allowsBillableOperations: bool, helpText: string, id4nAssociated: bool, name: string>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<allowsBillableOperations: bool, helpText: string, id4nAssociated: bool, name: string>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id4nConcerning" $id4n_concerning "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -547,7 +571,7 @@ export def "get-api-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<active: bool, createdAt: int, createdBy: string, key: string, label: string, organizationId: string> {
+]: nothing -> oneof<record<active: bool, createdAt: int, createdBy: string, key: string, label: string, organizationId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -667,7 +691,7 @@ export def "list-api-key-privileges" [
   --accept: string@accept-completer # Response content type
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<id4nAssociated: bool, privilege: string>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<id4nAssociated: bool, privilege: string>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -790,7 +814,7 @@ export def "list-id4ns" [
   --accept: string@accept-completer # Response content type
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, label: string, ownerOrganizationId: string, properties: record, type: string>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, label: string, ownerOrganizationId: string, properties: record, type: string>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -873,7 +897,7 @@ export def "get-sum-for-organization" [
   --accept: string@accept-completer # Response content type
   --from-date: string # Billing start date (format: date-time)
   --to-date: string # Billing end date (format: date-time)
-]: nothing -> record<listing: record> {
+]: nothing -> oneof<record<listing: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -913,7 +937,7 @@ export def "get-positions-for-organization" [
   --accept: string@accept-completer # Response content type
   --from-date: string # Billing start date (format: date-time)
   --to-date: string # Billing end date (format: date-time)
-]: nothing -> table<amount: int, count: float, description: string, service: string, singlePrice: float, sum: float, unit: string> {
+]: nothing -> oneof<table<amount: int, count: float, description: string, service: string, singlePrice: float, sum: float, unit: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -956,7 +980,7 @@ export def "list-organization-change-log" [
   --to-date: string # To date time as UTC Date-Time format (format: date-time)
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<id: string, message: string, messageProperties: record, timestamp: int>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<id: string, message: string, messageProperties: record, timestamp: int>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -997,7 +1021,7 @@ export def "create-collection" [
   length: int # format: int32
   organization_id: string # e.g. de.acme
   type: string@type-completer
-]: any -> record<id4n: string> {
+]: any -> oneof<record<id4n: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1072,7 +1096,7 @@ export def "find-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<createdTimestamp: int, holderOrganizationId: string, id4n: string, label: string, ownerOrganizationId: string, physicalState: string, type: string> {
+]: nothing -> oneof<record<createdTimestamp: int, holderOrganizationId: string, id4n: string, label: string, ownerOrganizationId: string, physicalState: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -1112,7 +1136,7 @@ export def "update-collection" [
   --holder-organization-id: string # Organization namespace of the holder of the collection
   --label: string
   --physical-state: string@physical-state-completer # Physical attachment state of the collection
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1195,7 +1219,7 @@ export def "list-elements-of-collection" [
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
   --organization-id: string # The organization namespace.
-]: nothing -> record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, ownerOrganizationId: string, physicalState: string, properties: record>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, ownerOrganizationId: string, physicalState: string, properties: record>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -1274,7 +1298,7 @@ export def "list-countries" [
   --accept: string@accept-completer # Response content type
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<code: string, name: string>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<code: string, name: string>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -1314,7 +1338,7 @@ export def "list-all-documents" [
   --owner: string # Filter by owner organization
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -1356,7 +1380,7 @@ export def "list-documents" [
   --owner: string # Filter by owner organization
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -1397,7 +1421,7 @@ export def "create-document" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   content: string # content (format: binary)
-]: any -> record<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+]: any -> oneof<record<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1442,7 +1466,7 @@ export def "put-document" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   content: string # content (format: binary)
-]: any -> record<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+]: any -> oneof<record<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1568,7 +1592,7 @@ export def "get-document" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+]: nothing -> oneof<record<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -1595,7 +1619,6 @@ export def "get-document" [
 #
 # PATCH /api/v1/documents/{id4n}/{organizationId}/{fileName}/metadata
 # operationId: updateDocumentMetadata
-# --visibility shape: {public?: bool, sharedWithOrganizationIds?: list<string>}
 export def "update-document-metadata" [
   id4n: string
   organization_id: string
@@ -1613,7 +1636,7 @@ export def "update-document-metadata" [
   --filename: string # File Name (e.g. publicInfo.pdf)
   --mime-type: string # Mime Type (e.g. text/plain)
   --visibility: record # shape: {public?: bool, sharedWithOrganizationIds?: list<string>}
-]: any -> record<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+]: any -> oneof<record<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1657,7 +1680,7 @@ export def "create-guid" [
   count: int # The total number of GUIDs to create (format: int32, e.g. 1)
   length: int # The charactersequence length of the GUID (format: int32, e.g. 40)
   organization_id: string # The namespace of the organization where the generated GUIDs should be assigned. (e.g. de.acme)
-]: any -> record<id4ns: list<string>> {
+]: any -> oneof<record<id4ns: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1698,7 +1721,7 @@ export def "get-guids-without-collection" [
   --organization-id: string # The namespace of the organization to search GUIDs for (required)
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, ownerOrganizationId: string, physicalState: string, properties: record>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, ownerOrganizationId: string, physicalState: string, properties: record>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id == null) { error make --unspanned { msg: "required query parameter 'organizationId' missing: pass --organization-id" } }
@@ -1737,7 +1760,7 @@ export def "get-guid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --organization-id: string # The organization namespace to resolve.
-]: nothing -> record<createdTimestamp: int, holderOrganizationId: string, id4n: string, ownerOrganizationId: string, physicalState: string, properties: record> {
+]: nothing -> oneof<record<createdTimestamp: int, holderOrganizationId: string, id4n: string, ownerOrganizationId: string, physicalState: string, properties: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -1776,7 +1799,7 @@ export def "update-guid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --physical-state: string@physical-state-completer # Physical attachment state of the GUID
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1824,7 +1847,7 @@ export def "filtered-list" [
   --to-date: string # To date time as UTC Date-Time format (format: date-time)
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -1850,7 +1873,6 @@ export def "filtered-list" [
 #
 # POST /api/v1/history/{id4n}
 # operationId: addItem
-# --visibility shape: {public?: bool, sharedOrganizationIds?: list<string>}
 export def "add-item" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1912,7 +1934,7 @@ export def "list" [
   --include-private: oneof<nothing, bool> # Also return private history entries (default: true)
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -1953,7 +1975,7 @@ export def "retrieve-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+]: nothing -> oneof<record<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -1980,7 +2002,6 @@ export def "retrieve-item" [
 #
 # PATCH /api/v1/history/{id4n}/{organizationId}/{sequenceId}
 # operationId: updateItem
-# --visibility shape: {public?: bool, sharedOrganizationIds?: list<string>}
 export def "update-item" [
   id4n: string
   organization_id: string
@@ -1997,7 +2018,7 @@ export def "update-item" [
   --accept: string@accept-completer # Response content type
   --body-organization-id: string # New organization id displayed for this item. If given, must match the holder of GUID and the organization the history item is found under. (e.g. de.acme)
   --visibility: record # shape: {public?: bool, sharedOrganizationIds?: list<string>}
-]: any -> record<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+]: any -> oneof<record<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2043,7 +2064,7 @@ export def "update-item-visibility" [
   --accept: string@accept-completer # Response content type
   --public: oneof<nothing, bool> # Document is publicly readable (if ID4N is owned by the same organization) (e.g. true)
   --shared-organization-ids: list<string> # Document is readable by these organizations (independend of ID4N ownership) (e.g. [de.acme, com.porsche, de.bluerain])
-]: any -> record<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+]: any -> oneof<record<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2086,7 +2107,7 @@ export def "get-id4n" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --organization-id: string # The organization namespace to resolve.
-]: nothing -> record<createdTimestamp: int, holderOrganizationId: string, id4n: string, label: string, ownerOrganizationId: string, properties: record, type: string> {
+]: nothing -> oneof<record<createdTimestamp: int, holderOrganizationId: string, id4n: string, label: string, ownerOrganizationId: string, properties: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -2124,7 +2145,7 @@ export def "get-guid-aliases" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -2244,7 +2265,7 @@ export def "get-collections" [
   --organization-id: string # The organization holding the collections.
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, label: string, ownerOrganizationId: string, physicalState: string, type: string>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, label: string, ownerOrganizationId: string, physicalState: string, type: string>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -2326,7 +2347,7 @@ export def "get-properties" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --organization-id: string # The organization namespace.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -2395,7 +2416,6 @@ export def "patch-properties" [
 #
 # POST /api/v1/import/gs1
 # operationId: importGS1Codes
-# --listOfGS1s shape: {codes?: list<string>}
 export def "import-gs1-codes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2446,7 +2466,7 @@ export def "application-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<branch: string, commitTime: string, name: string, productionMode: bool, revision: string, version: string> {
+]: nothing -> oneof<record<branch: string, commitTime: string, name: string, productionMode: bool, revision: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/info" $auth.query)
@@ -2525,7 +2545,7 @@ export def "write-to-microstorage" [
   --content-type: string # Content-Type
   --content-length: int # Content-Length (format: int64)
   --body: string
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2539,7 +2559,7 @@ export def "write-to-microstorage" [
   let extra_headers = {"Content-Type": $content_type, "Content-Length": $content_length} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -2571,7 +2591,7 @@ export def "get-multiple-properties" [
   --accept: string@accept-completer # Response content type
   --id4ns: list<string> # The list of ID4ns to resolve. (required)
   --organization-id: string # The organization namespace.
-]: nothing -> record<list: table<id4n: string, properties: record>> {
+]: nothing -> oneof<record<list: table<id4n: string, properties: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4ns == null) { error make --unspanned { msg: "required query parameter 'id4ns' missing: pass --id4ns" } }
@@ -2610,7 +2630,7 @@ export def "create-organization" [
   --accept: string@accept-completer # Response content type
   name: string # The name of the organization (e.g. ACME Inc.)
   namespace: string # The namespace of the organization (e.g. de.acme)
-]: any -> record<id: int, logoURL: string, name: string, namespace: string> {
+]: any -> oneof<record<id: int, logoURL: string, name: string, namespace: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2685,7 +2705,7 @@ export def "find-organization" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, logoURL: string, name: string, namespace: string> {
+]: nothing -> oneof<record<id: int, logoURL: string, name: string, namespace: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -2723,7 +2743,7 @@ export def "update-organization" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --name: string # The name of the organization (e.g. ACME Inc.)
-]: any -> record<id: int, logoURL: string, name: string, namespace: string> {
+]: any -> oneof<record<id: int, logoURL: string, name: string, namespace: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2799,7 +2819,7 @@ export def "find-organization-billing-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<city: string, companyName: string, countryCode: string, countryName: string, firstname: string, lastname: string, postCode: string, street: string, telephone: string> {
+]: nothing -> oneof<record<city: string, companyName: string, countryCode: string, countryName: string, firstname: string, lastname: string, postCode: string, street: string, telephone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -2844,7 +2864,7 @@ export def "update-organization-billing-address" [
   post_code: string # e.g. 12345
   street: string # e.g. Examplestreet 1
   --telephone: string # The telephone number e.g. (e.g. +49 8088 12345)
-]: any -> record<city: string, companyName: string, countryCode: string, countryName: string, firstname: string, lastname: string, postCode: string, street: string, telephone: string> {
+]: any -> oneof<record<city: string, companyName: string, countryCode: string, countryName: string, firstname: string, lastname: string, postCode: string, street: string, telephone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2884,7 +2904,7 @@ export def "find-organization-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<city: string, companyName: string, countryCode: string, countryName: string, firstname: string, lastname: string, postCode: string, street: string, telephone: string> {
+]: nothing -> oneof<record<city: string, companyName: string, countryCode: string, countryName: string, firstname: string, lastname: string, postCode: string, street: string, telephone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -2929,7 +2949,7 @@ export def "update-organization-address" [
   post_code: string # e.g. 12345
   street: string # e.g. Examplestreet 1
   --telephone: string # The telephone number e.g. (e.g. +49 8088 12345)
-]: any -> record<city: string, companyName: string, countryCode: string, countryName: string, firstname: string, lastname: string, postCode: string, street: string, telephone: string> {
+]: any -> oneof<record<city: string, companyName: string, countryCode: string, countryName: string, firstname: string, lastname: string, postCode: string, street: string, telephone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2975,7 +2995,7 @@ export def "get-all-collections-of-organization" [
   --label: string # Filter by this label
   --label-prefix: string # Filter by this label prefix
   --property: list<string> # List of i4dn property filter. e.g. "com.myorga.state:IN:waiting|processing" or "com.myorga.orderId:EQ:SAP001"
-]: nothing -> record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, label: string, ownerOrganizationId: string, physicalState: string, type: string>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, label: string, ownerOrganizationId: string, physicalState: string, type: string>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -3050,7 +3070,7 @@ export def "set-organization-logo" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   file: string # An image containing the new logo. (format: binary)
-]: any -> record<uri: string> {
+]: any -> oneof<record<uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3091,7 +3111,7 @@ export def "get-default-queue" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<active: bool, id: string, waitingMessages: int> {
+]: nothing -> oneof<record<active: bool, id: string, waitingMessages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -3253,7 +3273,7 @@ export def "get-partner-organizations" [
   --accept: string@accept-completer # Response content type
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<logoURL: string, name: string, namespace: string>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<logoURL: string, name: string, namespace: string>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -3332,7 +3352,7 @@ export def "get-organization-privileges" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -3371,7 +3391,7 @@ export def "get-all-organization-roles" [
   --accept: string@accept-completer # Response content type
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<roles: list, user: record>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<roles: list, user: record>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -3411,7 +3431,7 @@ export def "get-users-of-organization" [
   --accept: string@accept-completer # Response content type
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<id: string, name: string>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<id: string, name: string>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -3437,7 +3457,6 @@ export def "get-users-of-organization" [
 #
 # POST /api/v1/organizations/{organizationId}/users/invite
 # operationId: inviteUsers
-# --invitations item shape: {email?: string, roles: list<string>, userName?: string}
 export def "invite-users" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3535,7 +3554,7 @@ export def "get-user-roles" [
   --accept: string@accept-completer # Response content type
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: list<string>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: list<string>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -3620,7 +3639,7 @@ export def "list-all-public-documents" [
   --owner: string # Filter by owner organization
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -3701,7 +3720,7 @@ export def "get-public-document" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>> {
+]: nothing -> oneof<record<filename: string, mimeType: string, ownerOrganizationId: string, visibility: record<public: bool, sharedOrganizationIds: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -3742,7 +3761,7 @@ export def "list-public-history" [
   --accept: string@accept-completer # Response content type
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<additionalProperties: record, organizationId: string, ownerOrganizationId: string, sequenceId: int, timestamp: int, type: string, visibility: record>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -3817,7 +3836,7 @@ export def "read-organization-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, logoURL: string, name: string, namespace: string> {
+]: nothing -> oneof<record<id: int, logoURL: string, name: string, namespace: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationId' must be non-empty" } }
@@ -3856,7 +3875,7 @@ export def "get-routes" [
   --accept: string@accept-completer # Response content type
   --type: string # type (required, default: web)
   --interpolate: oneof<nothing, bool> # interpolate (default: true)
-]: nothing -> table<params: record, priority: int, public: bool, type: string, validUntil: int> {
+]: nothing -> oneof<table<params: record, priority: int, public: bool, type: string, validUntil: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -3897,7 +3916,7 @@ export def "list-all-roles" [
   --privilege: string # If specified the roles will be filtered containing that privilege.
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<name: string, privileges: list>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<name: string, privileges: list>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "privilege" $privilege "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -3935,7 +3954,7 @@ export def "get-routing-file" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --organization-id: string # organizationId
-]: nothing -> record<options: record<deleteOutdatedRoutes: bool>, routes: table<params: record, priority: int, public: bool, type: string, validUntil: int>> {
+]: nothing -> oneof<record<options: record<deleteOutdatedRoutes: bool>, routes: table<params: record, priority: int, public: bool, type: string, validUntil: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -3961,7 +3980,6 @@ export def "get-routing-file" [
 #
 # PUT /api/v1/routingfiles/{id4n}
 # operationId: updateRoutingFile
-# --routing shape: {options?: record, routes: list}
 export def "update-routing-file" [
   id4n: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4019,7 +4037,7 @@ export def "get-route" [
   --private-routes: oneof<nothing, bool> # privateRoutes (default: true)
   --public-routes: oneof<nothing, bool> # publicRoutes (default: true)
   --interpolate: oneof<nothing, bool> # interpolate (default: true)
-]: nothing -> record<params: record, priority: int, public: bool, type: string, validUntil: int> {
+]: nothing -> oneof<record<params: record, priority: int, public: bool, type: string, validUntil: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -4061,7 +4079,7 @@ export def "get-all-routes" [
   --accept: string@accept-completer # Response content type
   --organization-id: string # organizationId
   --interpolate: oneof<nothing, bool> # interpolate (default: true)
-]: nothing -> table<params: record, priority: int, public: bool, type: string, validUntil: int> {
+]: nothing -> oneof<table<params: record, priority: int, public: bool, type: string, validUntil: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -4103,7 +4121,7 @@ export def "search-by-alias" [
   --alias-type: string@alias-type-completer # Alias type type to search for (required)
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, ownerOrganizationId: string, physicalState: string, properties: record>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<createdTimestamp: int, holderOrganizationId: string, id4n: string, ownerOrganizationId: string, physicalState: string, properties: record>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($alias == null) { error make --unspanned { msg: "required query parameter 'alias' missing: pass --alias" } }
@@ -4141,7 +4159,7 @@ export def "get-guid-alias-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/search/guids/aliases/types" $auth.query)
@@ -4217,7 +4235,7 @@ export def "get-send-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<holderOrganizationId: string, keepOwnership: bool, openForClaims: bool, ownerOrganizationId: string, recipientOrganizationIds: list<string>> {
+]: nothing -> oneof<record<holderOrganizationId: string, keepOwnership: bool, openForClaims: bool, ownerOrganizationId: string, recipientOrganizationIds: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }
@@ -4257,7 +4275,7 @@ export def "prepare" [
   --keep-ownership: oneof<nothing, bool> # Keep the public ownership while transferring the object (e.g. true)
   --open-for-claims: oneof<nothing, bool> # Allow anyone who knows (or can scan) the ID4N to claim ownership of this object (e.g. false)
   recipient_organization_ids: list<string> # Allow only these organizations to obtain this object (e.g. [de.acme, com.porsche, de.bluerain])
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4301,7 +4319,7 @@ export def "get-organizations-of-user" [
   --role: string # role
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<id: int, logoURL: string, name: string, namespace: string>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<id: int, logoURL: string, name: string, namespace: string>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "role" $role "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -4340,7 +4358,7 @@ export def "find-users" [
   --username-prefix: string
   --offset: int # Start with the n-th element (format: int32)
   --limit: int # The maximum count of returned elements (format: int32)
-]: nothing -> record<elements: table<id: string, name: string>, limit: int, offset: int, total: int> {
+]: nothing -> oneof<record<elements: table<id: string, name: string>, limit: int, offset: int, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "usernamePrefix" $username_prefix "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -4377,7 +4395,7 @@ export def "find-user-by-username" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, name: string> {
+]: nothing -> oneof<record<id: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -4489,7 +4507,7 @@ export def "resolve-who-is-entry" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<aliases: record, organization: record<id: int, logoURL: string, name: string, namespace: string>, organizationAddress: record<city: string, companyName: string, countryCode: string, countryName: string, firstname: string, lastname: string, postCode: string, street: string, telephone: string>> {
+]: nothing -> oneof<record<aliases: record, organization: record<id: int, logoURL: string, name: string, namespace: string>, organizationAddress: record<city: string, companyName: string, countryCode: string, countryName: string, firstname: string, lastname: string, postCode: string, street: string, telephone: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id4n | is-empty) { error make --unspanned { msg: "path parameter 'id4n' must be non-empty" } }

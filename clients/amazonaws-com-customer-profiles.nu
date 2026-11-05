@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def logical-operator-completer [] { ["AND" "OR"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-profile-key" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-profile-key" "create-domain" "delete-domain" "get-domain" "update-domain" "create-integration-workflow" "create-profile" "update-profile" "delete-integration" "delete-profile" "delete-profile-key" "delete-profile-object" "delete-profile-object-type" "get-profile-object-type" "put-profile-object-type" "delete-workflow" "get-workflow" "get-auto-merging-preview" "get-identity-resolution-job" "get-integration" "list-integrations" "put-integration" "get-matches" "get-profile-object-type-template" "get-workflow-steps" "list-account-integrations" "list-domains" "list-identity-resolution-jobs" "list-profile-object-type-templates" "list-profile-object-types" "list-profile-objects" "put-profile-object" "list-tags-for-resource" "tag-resource" "list-workflows" "merge-profiles" "search-profiles" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "add-profile-key" [
   profile_id: string # The unique identifier of a customer profile.
   key_name: string # A searchable identifier of a customer profile. The predefined keys you can use include: _account, _profileId, _assetId, _caseId, _orderId, _fullName, _phone, _email, _ctrContactId, _marketoLeadId, _salesforceAccountId, _salesforceContactId, _salesforceAssetId, _zendeskUserId, _zendeskExternalId, _zendeskTicketId, _serviceNowSystemId, _serviceNowIncidentId, _segmentUserId, _shopifyCustomerId, _shopifyOrderId.
   values: list<string> # A list of key values.
-]: any -> record<KeyName: string, Values: list<string>> {
+]: any -> oneof<record<KeyName: string, Values: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -197,7 +221,6 @@ export def "add-profile-key" [
 #
 # POST /domains/{DomainName}
 # operationId: CreateDomain
-# --Matching shape: {Enabled?: bool, JobSchedule?: record, AutoMerging?: record, ExportingConfig?: record}
 export def "create-domain" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -221,7 +244,7 @@ export def "create-domain" [
   --dead-letter-queue-url: string # The URL of the SQS dead letter queue, which is used for reporting errors associated with ingesting data from third party applications. You must set up a policy on the DeadLetterQueue for the SendMessage operation to enable Amazon Connect Customer Profiles to send messages to the DeadLetterQueue.
   --matching: record # The flag that enables the matching process of duplicate profiles. — shape: {Enabled?: bool, JobSchedule?: record, AutoMerging?: record, ExportingConfig?: record}
   --tags: record # The tags used to organize, track, or control access for this resource.
-]: any -> record<DomainName: string, DefaultExpirationDays: int, DefaultEncryptionKey: string, DeadLetterQueueUrl: string, Matching: record<Enabled: bool, JobSchedule: record<DayOfTheWeek: string, Time: string>, AutoMerging: record<Enabled: bool, Consolidation: record, ConflictResolution: record, MinAllowedConfidenceScoreForMerging: float>, ExportingConfig: record<S3Exporting: record>>, CreatedAt: string, LastUpdatedAt: string, Tags: record> {
+]: any -> oneof<record<DomainName: string, DefaultExpirationDays: int, DefaultEncryptionKey: string, DeadLetterQueueUrl: string, Matching: record<Enabled: bool, JobSchedule: record<DayOfTheWeek: string, Time: string>, AutoMerging: record<Enabled: bool, Consolidation: record, ConflictResolution: record, MinAllowedConfidenceScoreForMerging: float>, ExportingConfig: record<S3Exporting: record>>, CreatedAt: string, LastUpdatedAt: string, Tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -269,7 +292,7 @@ export def "delete-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Message: string> {
+]: nothing -> oneof<record<Message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -314,7 +337,7 @@ export def "get-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainName: string, DefaultExpirationDays: int, DefaultEncryptionKey: string, DeadLetterQueueUrl: string, Stats: record<ProfileCount: int, MeteringProfileCount: int, ObjectCount: int, TotalSize: int>, Matching: record<Enabled: bool, JobSchedule: record<DayOfTheWeek: string, Time: string>, AutoMerging: record<Enabled: bool, Consolidation: record, ConflictResolution: record, MinAllowedConfidenceScoreForMerging: float>, ExportingConfig: record<S3Exporting: record>>, CreatedAt: string, LastUpdatedAt: string, Tags: record> {
+]: nothing -> oneof<record<DomainName: string, DefaultExpirationDays: int, DefaultEncryptionKey: string, DeadLetterQueueUrl: string, Stats: record<ProfileCount: int, MeteringProfileCount: int, ObjectCount: int, TotalSize: int>, Matching: record<Enabled: bool, JobSchedule: record<DayOfTheWeek: string, Time: string>, AutoMerging: record<Enabled: bool, Consolidation: record, ConflictResolution: record, MinAllowedConfidenceScoreForMerging: float>, ExportingConfig: record<S3Exporting: record>>, CreatedAt: string, LastUpdatedAt: string, Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -341,7 +364,6 @@ export def "get-domain" [
 #
 # PUT /domains/{DomainName}
 # operationId: UpdateDomain
-# --Matching shape: {Enabled?: bool, JobSchedule?: record, AutoMerging?: record, ExportingConfig?: record}
 export def "update-domain" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -365,7 +387,7 @@ export def "update-domain" [
   --dead-letter-queue-url: string # The URL of the SQS dead letter queue, which is used for reporting errors associated with ingesting data from third party applications. If specified as an empty string, it will clear any existing value. You must set up a policy on the DeadLetterQueue for the SendMessage operation to enable Amazon Connect Customer Profiles to send messages to the DeadLetterQueue.
   --matching: record # The flag that enables the matching process of duplicate profiles. — shape: {Enabled?: bool, JobSchedule?: record, AutoMerging?: record, ExportingConfig?: record}
   --tags: record # The tags used to organize, track, or control access for this resource.
-]: any -> record<DomainName: string, DefaultExpirationDays: int, DefaultEncryptionKey: string, DeadLetterQueueUrl: string, Matching: record<Enabled: bool, JobSchedule: record<DayOfTheWeek: string, Time: string>, AutoMerging: record<Enabled: bool, Consolidation: record, ConflictResolution: record, MinAllowedConfidenceScoreForMerging: float>, ExportingConfig: record<S3Exporting: record>>, CreatedAt: string, LastUpdatedAt: string, Tags: record> {
+]: any -> oneof<record<DomainName: string, DefaultExpirationDays: int, DefaultEncryptionKey: string, DeadLetterQueueUrl: string, Matching: record<Enabled: bool, JobSchedule: record<DayOfTheWeek: string, Time: string>, AutoMerging: record<Enabled: bool, Consolidation: record, ConflictResolution: record, MinAllowedConfidenceScoreForMerging: float>, ExportingConfig: record<S3Exporting: record>>, CreatedAt: string, LastUpdatedAt: string, Tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -395,7 +417,6 @@ export def "update-domain" [
 #
 # POST /domains/{DomainName}/workflows/integrations
 # operationId: CreateIntegrationWorkflow
-# --IntegrationConfig shape: {AppflowIntegration?: record}
 export def "create-integration-workflow" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -419,7 +440,7 @@ export def "create-integration-workflow" [
   object_type_name: string # The name of the profile object type.
   role_arn: string # The Amazon Resource Name (ARN) of the IAM role. Customer Profiles assumes this role to create resources on your behalf as part of workflow execution.
   --tags: record # The tags used to organize, track, or control access for this resource.
-]: any -> record<WorkflowId: string, Message: string> {
+]: any -> oneof<record<WorkflowId: string, Message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -449,10 +470,6 @@ export def "create-integration-workflow" [
 #
 # POST /domains/{DomainName}/profiles
 # operationId: CreateProfile
-# --Address shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
-# --ShippingAddress shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
-# --MailingAddress shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
-# --BillingAddress shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
 @deprecated --flag party-type
 @deprecated --flag gender
 export def "create-profile" [
@@ -496,7 +513,7 @@ export def "create-profile" [
   --attributes: record # A key value pair of attributes of a customer profile.
   --party-type-string: string # An alternative to PartyType which accepts any string as input.
   --gender-string: string # An alternative to Gender which accepts any string as input.
-]: any -> record<ProfileId: string> {
+]: any -> oneof<record<ProfileId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -526,10 +543,6 @@ export def "create-profile" [
 #
 # PUT /domains/{DomainName}/profiles
 # operationId: UpdateProfile
-# --Address shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
-# --ShippingAddress shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
-# --MailingAddress shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
-# --BillingAddress shape: {Address1?: string, Address2?: string, Address3?: string, Address4?: string, City?: string, County?: string, State?: string, Province?: string, Country?: string, PostalCode?: string}
 @deprecated --flag party-type
 @deprecated --flag gender
 export def "update-profile" [
@@ -574,7 +587,7 @@ export def "update-profile" [
   --attributes: record # A key value pair of attributes of a customer profile.
   --party-type-string: string # An alternative to PartyType which accepts any string as input.
   --gender-string: string # An alternative to Gender which accepts any string as input.
-]: any -> record<ProfileId: string> {
+]: any -> oneof<record<ProfileId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -623,7 +636,7 @@ export def "delete-integration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   uri: string # The URI of the S3 bucket or any other type of data source.
-]: any -> record<Message: string> {
+]: any -> oneof<record<Message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -672,7 +685,7 @@ export def "delete-profile" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   profile_id: string # The unique identifier of a customer profile.
-]: any -> record<Message: string> {
+]: any -> oneof<record<Message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -723,7 +736,7 @@ export def "delete-profile-key" [
   profile_id: string # The unique identifier of a customer profile.
   key_name: string # A searchable identifier of a customer profile.
   values: list<string> # A list of key values.
-]: any -> record<Message: string> {
+]: any -> oneof<record<Message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -774,7 +787,7 @@ export def "delete-profile-object" [
   profile_id: string # The unique identifier of a customer profile.
   profile_object_unique_key: string # The unique identifier of the profile object generated by the service.
   object_type_name: string # The name of the profile object type.
-]: any -> record<Message: string> {
+]: any -> oneof<record<Message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -823,7 +836,7 @@ export def "delete-profile-object-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Message: string> {
+]: nothing -> oneof<record<Message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -870,7 +883,7 @@ export def "get-profile-object-type" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ObjectTypeName: string, Description: string, TemplateId: string, ExpirationDays: int, EncryptionKey: string, AllowProfileCreation: bool, SourceLastUpdatedTimestampFormat: string, Fields: record, Keys: record, CreatedAt: string, LastUpdatedAt: string, Tags: record> {
+]: nothing -> oneof<record<ObjectTypeName: string, Description: string, TemplateId: string, ExpirationDays: int, EncryptionKey: string, AllowProfileCreation: bool, SourceLastUpdatedTimestampFormat: string, Fields: record, Keys: record, CreatedAt: string, LastUpdatedAt: string, Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -926,7 +939,7 @@ export def "put-profile-object-type" [
   --fields: record # A map of the name and ObjectType field.
   --keys: record # A list of unique keys that can be used to map data to the profile.
   --tags: record # The tags used to organize, track, or control access for this resource.
-]: any -> record<ObjectTypeName: string, Description: string, TemplateId: string, ExpirationDays: int, EncryptionKey: string, AllowProfileCreation: bool, SourceLastUpdatedTimestampFormat: string, Fields: record, Keys: record, CreatedAt: string, LastUpdatedAt: string, Tags: record> {
+]: any -> oneof<record<ObjectTypeName: string, Description: string, TemplateId: string, ExpirationDays: int, EncryptionKey: string, AllowProfileCreation: bool, SourceLastUpdatedTimestampFormat: string, Fields: record, Keys: record, CreatedAt: string, LastUpdatedAt: string, Tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -976,7 +989,7 @@ export def "delete-workflow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1023,7 +1036,7 @@ export def "get-workflow" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WorkflowId: string, WorkflowType: string, Status: string, ErrorDescription: string, StartDate: string, LastUpdatedAt: string, Attributes: record<AppflowIntegration: record<SourceConnectorType: string, ConnectorProfileName: string, RoleArn: string>>, Metrics: record<AppflowIntegration: record<RecordsProcessed: int, StepsCompleted: int, TotalSteps: int>>> {
+]: nothing -> oneof<record<WorkflowId: string, WorkflowType: string, Status: string, ErrorDescription: string, StartDate: string, LastUpdatedAt: string, Attributes: record<AppflowIntegration: record<SourceConnectorType: string, ConnectorProfileName: string, RoleArn: string>>, Metrics: record<AppflowIntegration: record<RecordsProcessed: int, StepsCompleted: int, TotalSteps: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1051,8 +1064,6 @@ export def "get-workflow" [
 #
 # POST /domains/{DomainName}/identity-resolution-jobs/auto-merging-preview
 # operationId: GetAutoMergingPreview
-# --Consolidation shape: {MatchingAttributesList?: list}
-# --ConflictResolution shape: {ConflictResolvingModel?: "RECENCY"|"SOURCE", SourceName?: string}
 export def "get-auto-merging-preview" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1074,7 +1085,7 @@ export def "get-auto-merging-preview" [
   consolidation: record # The matching criteria to be used during the auto-merging process. — shape: {MatchingAttributesList?: list}
   conflict_resolution: record # How the auto-merging process should resolve conflicts between different profiles. — shape: {ConflictResolvingModel?: "RECENCY"|"SOURCE", SourceName?: string}
   --min-allowed-confidence-score-for-merging: float # Minimum confidence score required for profiles within a matching group to be merged during the auto-merge process. (format: double)
-]: any -> record<DomainName: string, NumberOfMatchesInSample: int, NumberOfProfilesInSample: int, NumberOfProfilesWillBeMerged: int> {
+]: any -> oneof<record<DomainName: string, NumberOfMatchesInSample: int, NumberOfProfilesInSample: int, NumberOfProfilesWillBeMerged: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1123,7 +1134,7 @@ export def "get-identity-resolution-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DomainName: string, JobId: string, Status: string, Message: string, JobStartTime: string, JobEndTime: string, LastUpdatedAt: string, JobExpirationTime: string, AutoMerging: record<Enabled: bool, Consolidation: record<MatchingAttributesList: list>, ConflictResolution: record<ConflictResolvingModel: string, SourceName: string>, MinAllowedConfidenceScoreForMerging: float>, ExportingLocation: record<S3Exporting: record<S3BucketName: string, S3KeyName: string>>, JobStats: record<NumberOfProfilesReviewed: int, NumberOfMatchesFound: int, NumberOfMergesDone: int>> {
+]: nothing -> oneof<record<DomainName: string, JobId: string, Status: string, Message: string, JobStartTime: string, JobEndTime: string, LastUpdatedAt: string, JobExpirationTime: string, AutoMerging: record<Enabled: bool, Consolidation: record<MatchingAttributesList: list>, ConflictResolution: record<ConflictResolvingModel: string, SourceName: string>, MinAllowedConfidenceScoreForMerging: float>, ExportingLocation: record<S3Exporting: record<S3BucketName: string, S3KeyName: string>>, JobStats: record<NumberOfProfilesReviewed: int, NumberOfMatchesFound: int, NumberOfMergesDone: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1170,7 +1181,7 @@ export def "get-integration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   uri: string # The URI of the S3 bucket or any other type of data source.
-]: any -> record<DomainName: string, Uri: string, ObjectTypeName: string, CreatedAt: string, LastUpdatedAt: string, Tags: record, ObjectTypeNames: record, WorkflowId: string, IsUnstructured: bool> {
+]: any -> oneof<record<DomainName: string, Uri: string, ObjectTypeName: string, CreatedAt: string, LastUpdatedAt: string, Tags: record, ObjectTypeNames: record, WorkflowId: string, IsUnstructured: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1221,7 +1232,7 @@ export def "list-integrations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<DomainName: string, Uri: string, ObjectTypeName: string, CreatedAt: string, LastUpdatedAt: string, Tags: record, ObjectTypeNames: record, WorkflowId: string, IsUnstructured: bool>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<DomainName: string, Uri: string, ObjectTypeName: string, CreatedAt: string, LastUpdatedAt: string, Tags: record, ObjectTypeNames: record, WorkflowId: string, IsUnstructured: bool>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1249,7 +1260,6 @@ export def "list-integrations" [
 #
 # PUT /domains/{DomainName}/integrations
 # operationId: PutIntegration
-# --FlowDefinition shape: {Description?: string, FlowName?: string, KmsArn?: string, SourceFlowConfig?: record, Tasks?: list, TriggerConfig?: record}
 export def "put-integration" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1273,7 +1283,7 @@ export def "put-integration" [
   --tags: record # The tags used to organize, track, or control access for this resource.
   --flow-definition: record # The configurations that control how Customer Profiles retrieves data from the source, Amazon AppFlow. Customer Profiles uses this information to create an AppFlow flow on behalf of customers. — shape: {Description?: string, FlowName?: string, KmsArn?: string, SourceFlowConfig?: record, Tasks?: list, TriggerConfig?: record}
   --object-type-names: record # A map in which each key is an event type from an external application such as Segment or Shopify, and each value is an ObjectTypeName (template) used to ingest the event. It supports the following event types: SegmentIdentify, ShopifyCreateCustomers, ShopifyUpdateCustomers, ShopifyCreateDraftOrders, ShopifyUpdateDraftOrders, ShopifyCreateOrders, and ShopifyUpdatedOrders.
-]: any -> record<DomainName: string, Uri: string, ObjectTypeName: string, CreatedAt: string, LastUpdatedAt: string, Tags: record, ObjectTypeNames: record, WorkflowId: string, IsUnstructured: bool> {
+]: any -> oneof<record<DomainName: string, Uri: string, ObjectTypeName: string, CreatedAt: string, LastUpdatedAt: string, Tags: record, ObjectTypeNames: record, WorkflowId: string, IsUnstructured: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1323,7 +1333,7 @@ export def "get-matches" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: string, MatchGenerationDate: string, PotentialMatches: int, Matches: table<MatchId: string, ProfileIds: list, ConfidenceScore: float>> {
+]: nothing -> oneof<record<NextToken: string, MatchGenerationDate: string, PotentialMatches: int, Matches: table<MatchId: string, ProfileIds: list, ConfidenceScore: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1369,7 +1379,7 @@ export def "get-profile-object-type-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TemplateId: string, SourceName: string, SourceObject: string, AllowProfileCreation: bool, SourceLastUpdatedTimestampFormat: string, Fields: record, Keys: record> {
+]: nothing -> oneof<record<TemplateId: string, SourceName: string, SourceObject: string, AllowProfileCreation: bool, SourceLastUpdatedTimestampFormat: string, Fields: record, Keys: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'TemplateId' must be non-empty" } }
@@ -1417,7 +1427,7 @@ export def "get-workflow-steps" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WorkflowId: string, WorkflowType: string, Items: table<AppflowIntegration: record>, NextToken: string> {
+]: nothing -> oneof<record<WorkflowId: string, WorkflowType: string, Items: table<AppflowIntegration: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1467,7 +1477,7 @@ export def "list-account-integrations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   uri: string # The URI of the S3 bucket or any other type of data source.
-]: any -> record<Items: table<DomainName: string, Uri: string, ObjectTypeName: string, CreatedAt: string, LastUpdatedAt: string, Tags: record, ObjectTypeNames: record, WorkflowId: string, IsUnstructured: bool>, NextToken: string> {
+]: any -> oneof<record<Items: table<DomainName: string, Uri: string, ObjectTypeName: string, CreatedAt: string, LastUpdatedAt: string, Tags: record, ObjectTypeNames: record, WorkflowId: string, IsUnstructured: bool>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1516,7 +1526,7 @@ export def "list-domains" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<DomainName: string, CreatedAt: string, LastUpdatedAt: string, Tags: record>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<DomainName: string, CreatedAt: string, LastUpdatedAt: string, Tags: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
@@ -1563,7 +1573,7 @@ export def "list-identity-resolution-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<IdentityResolutionJobsList: table<DomainName: string, JobId: string, Status: string, JobStartTime: string, JobEndTime: string, JobStats: record, ExportingLocation: record, Message: string>, NextToken: string> {
+]: nothing -> oneof<record<IdentityResolutionJobsList: table<DomainName: string, JobId: string, Status: string, JobStartTime: string, JobEndTime: string, JobStats: record, ExportingLocation: record, Message: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1610,7 +1620,7 @@ export def "list-profile-object-type-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<TemplateId: string, SourceName: string, SourceObject: string>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<TemplateId: string, SourceName: string, SourceObject: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "next-token" $next_token "scalar") (serialize-qp "max-results" $max_results "scalar")] | flatten | str join "&"
@@ -1657,7 +1667,7 @@ export def "list-profile-object-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<ObjectTypeName: string, Description: string, CreatedAt: string, LastUpdatedAt: string, Tags: record>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<ObjectTypeName: string, Description: string, CreatedAt: string, LastUpdatedAt: string, Tags: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'DomainName' must be non-empty" } }
@@ -1685,7 +1695,6 @@ export def "list-profile-object-types" [
 #
 # POST /domains/{DomainName}/profiles/objects
 # operationId: ListProfileObjects
-# --ObjectFilter shape: {KeyName?: string, Values?: list<string>}
 export def "list-profile-objects" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1709,7 +1718,7 @@ export def "list-profile-objects" [
   object_type_name: string # The name of the profile object type.
   profile_id: string # The unique identifier of a customer profile.
   --object-filter: record # The filter applied to ListProfileObjects response to include profile objects with the specified index values. This filter is only supported for ObjectTypeName _asset, _case and _order. — shape: {KeyName?: string, Values?: list<string>}
-]: any -> record<Items: table<ObjectTypeName: string, ProfileObjectUniqueKey: string, Object: string>, NextToken: string> {
+]: any -> oneof<record<Items: table<ObjectTypeName: string, ProfileObjectUniqueKey: string, Object: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1760,7 +1769,7 @@ export def "put-profile-object" [
   --x-amz-signed-headers: string
   object_type_name: string # The name of the profile object type.
   object: string # A string that is serialized from a JSON object.
-]: any -> record<ProfileObjectUniqueKey: string> {
+]: any -> oneof<record<ProfileObjectUniqueKey: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1808,7 +1817,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> oneof<record<tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1854,7 +1863,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # The tags used to organize, track, or control access for this resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1908,7 +1917,7 @@ export def "list-workflows" [
   --status: string@status-completer # Status of workflow execution.
   --query-start-date: string # Retrieve workflows started after timestamp. (format: date-time)
   --query-end-date: string # Retrieve workflows ended after timestamp. (format: date-time)
-]: any -> record<Items: table<WorkflowType: string, WorkflowId: string, Status: string, StatusDescription: string, CreatedAt: string, LastUpdatedAt: string>, NextToken: string> {
+]: any -> oneof<record<Items: table<WorkflowType: string, WorkflowId: string, Status: string, StatusDescription: string, CreatedAt: string, LastUpdatedAt: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1939,7 +1948,6 @@ export def "list-workflows" [
 #
 # POST /domains/{DomainName}/profiles/objects/merge
 # operationId: MergeProfiles
-# --FieldSourceProfileIds shape: {AccountNumber?: string, AdditionalInformation?: string, PartyType?: string, BusinessName?: string, FirstName?: string, MiddleName?: string, LastName?: string, BirthDate?: string, Gender?: string, PhoneNumber?: string, MobilePhoneNumber?: string, HomePhoneNumber?: string, BusinessPhoneNumber?: string, EmailAddress?: string, PersonalEmailAddress?: string, BusinessEmailAddress?: string, Address?: string, ShippingAddress?: string, MailingAddress?: string, BillingAddress?: string, Attributes?: record}
 export def "merge-profiles" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1961,7 +1969,7 @@ export def "merge-profiles" [
   main_profile_id: string # The identifier of the profile to be taken.
   profile_ids_to_be_merged: list<string> # The identifier of the profile to be merged into MainProfileId.
   --field-source-profile-ids: record # A duplicate customer profile that is to be merged into a main profile. — shape: {AccountNumber?: string, AdditionalInformation?: string, PartyType?: string, BusinessName?: string, FirstName?: string, MiddleName?: string, LastName?: string, BirthDate?: string, Gender?: string, PhoneNumber?: string, MobilePhoneNumber?: string, HomePhoneNumber?: string, BusinessPhoneNumber?: string, EmailAddress?: string, PersonalEmailAddress?: string, BusinessEmailAddress?: string, Address?: string, ShippingAddress?: string, MailingAddress?: string, BillingAddress?: string, Attributes?: record}
-]: any -> record<Message: string> {
+]: any -> oneof<record<Message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1991,7 +1999,6 @@ export def "merge-profiles" [
 #
 # POST /domains/{DomainName}/profiles/search
 # operationId: SearchProfiles
-# --AdditionalSearchKeys item shape: {KeyName: string, Values: list<string>}
 export def "search-profiles" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2016,7 +2023,7 @@ export def "search-profiles" [
   values: list<string> # A list of key values.
   --additional-search-keys: list # A list of AdditionalSearchKey objects that are each searchable identifiers of a profile. Each AdditionalSearchKey object contains a KeyName and a list of Values associated with that specific key (i.e., a key-value(s) pair). These additional search keys will be used in conjunction with the LogicalOperator and the required KeyName and Values parameters to search for profiles that satisfy the search criteria. — item shape: {KeyName: string, Values: list<string>}
   --logical-operator: string@logical-operator-completer # Relationship between all specified search keys that will be used to search for profiles. This includes the required KeyName and Values parameters as well as any key-value(s) pairs specified in the AdditionalSearchKeys list. This parameter influences which profiles will be returned in the response in the following manner: AND - The response only includes profiles that match all of the search keys. OR - The response includes profiles that match at least one of the search keys. The OR relationship is the default behavior if this parameter is not included in the request.
-]: any -> record<Items: table<ProfileId: string, AccountNumber: string, AdditionalInformation: string, PartyType: string, BusinessName: string, FirstName: string, MiddleName: string, LastName: string, BirthDate: string, Gender: string, PhoneNumber: string, MobilePhoneNumber: string, HomePhoneNumber: string, BusinessPhoneNumber: string, EmailAddress: string, PersonalEmailAddress: string, BusinessEmailAddress: string, Address: record, ShippingAddress: record, MailingAddress: record, BillingAddress: record, Attributes: record, FoundByItems: list, PartyTypeString: string, GenderString: string>, NextToken: string> {
+]: any -> oneof<record<Items: table<ProfileId: string, AccountNumber: string, AdditionalInformation: string, PartyType: string, BusinessName: string, FirstName: string, MiddleName: string, LastName: string, BirthDate: string, Gender: string, PhoneNumber: string, MobilePhoneNumber: string, HomePhoneNumber: string, BusinessPhoneNumber: string, EmailAddress: string, PersonalEmailAddress: string, BusinessEmailAddress: string, Address: record, ShippingAddress: record, MailingAddress: record, BillingAddress: record, Attributes: record, FoundByItems: list, PartyTypeString: string, GenderString: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2066,7 +2073,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }

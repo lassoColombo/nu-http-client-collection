@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -156,9 +180,9 @@ def upload-type-completer [] { ["avatar" "card_background" "composer" "custom_em
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-backups" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-backups" "create-backup" "download-backup" "send-download-backup-email" "admin-list-badges" "create-badge" "delete-badge" "update-badge" "create-group" "delete-group" "admin-list-users" "delete-user" "admin-get-user" "anonymize-user" "log-out-user" "silence-user" "suspend-user" "get-category" "list-category-topics" "list-categories" "create-category" "update-category" "list-users-public" "list-groups" "get-group" "update-group" "remove-group-members" "list-group-members" "add-group-members" "create-invite" "list-latest-topics" "get-notifications" "mark-notifications-as-read" "perform-post-action" "list-posts" "create-topic-post-pm" "delete-post" "get-post" "update-post" "lock-post" "post-replies" "search" "send-password-reset-email" "get-site" "update-topic" "get-topic-by-external-id" "remove-topic" "get-topic" "bookmark-topic" "update-topic-timestamp" "invite-to-topic" "set-notification-level" "get-specific-posts-from-topic" "update-topic-status" "create-topic-timer" "get-tag" "list-tag-groups" "create-tag-group" "get-tag-group" "update-tag-group" "list-tags" "list-top-topics" "get-user-sent-private-messages" "list-user-private-messages" "get-user-external-id" "get-user-identiy-provider-external-id" "get-user" "update-user" "get-user-emails" "update-avatar" "update-email" "update-username" "create-upload" "abort-multipart" "batch-presign-multipart-parts" "complete-external-upload" "complete-multipart" "create-multipart-upload" "generate-presigned-put" "list-user-badges" "list-user-actions" "refresh-gravatar" "create-user" "change-password" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -190,7 +214,7 @@ export def "get-backups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<filename: string, last_modified: string, size: int> {
+]: nothing -> oneof<table<filename: string, last_modified: string, size: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/backups.json" $auth.query)
@@ -225,7 +249,7 @@ export def "create-backup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-uploads: oneof<nothing, bool>
-]: any -> record<success: string> {
+]: any -> oneof<record<success: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -338,7 +362,7 @@ export def "admin-list-badges" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<admin_badges: record<badge_grouping_ids: list<any>, badge_ids: list<any>, badge_type_ids: list<any>, protected_system_fields: list<any>, triggers: record<none: int, post_action: int, post_revision: int, trust_level_change: int, user_change: int>>, badge_groupings: table<description: string, id: int, name: string, position: int, system: bool>, badge_types: table<id: int, name: string, sort_order: int>, badges: table<allow_title: bool, auto_revoke: bool, badge_grouping_id: int, badge_type_id: int, description: string, enabled: bool, grant_count: int, i18n_name: string, icon: string, id: int, image_url: string, listable: bool, long_description: string, manually_grantable: bool, multiple_grant: bool, name: string, query: string, show_posts: bool, slug: string, system: bool, target_posts: bool, trigger: int>> {
+]: nothing -> oneof<record<admin_badges: record<badge_grouping_ids: list<any>, badge_ids: list<any>, badge_type_ids: list<any>, protected_system_fields: list<any>, triggers: record<none: int, post_action: int, post_revision: int, trust_level_change: int, user_change: int>>, badge_groupings: table<description: string, id: int, name: string, position: int, system: bool>, badge_types: table<id: int, name: string, sort_order: int>, badges: table<allow_title: bool, auto_revoke: bool, badge_grouping_id: int, badge_type_id: int, description: string, enabled: bool, grant_count: int, i18n_name: string, icon: string, id: int, image_url: string, listable: bool, long_description: string, manually_grantable: bool, multiple_grant: bool, name: string, query: string, show_posts: bool, slug: string, system: bool, target_posts: bool, trigger: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/badges.json" $auth.query)
@@ -374,7 +398,7 @@ export def "create-badge" [
   --dry-run(-n) # Return the request that would be sent without executing it
   badge_type_id: int # The ID for the badge type. 1 for Gold, 2 for Silver, 3 for Bronze.
   name: string # The name for the new badge.
-]: any -> record<badge: record<allow_title: bool, auto_revoke: bool, badge_grouping_id: int, badge_type_id: int, description: string, enabled: bool, grant_count: int, icon: string, id: int, image_url: string, listable: bool, long_description: string, manually_grantable: bool, multiple_grant: bool, name: string, query: string, show_posts: bool, slug: string, system: bool, target_posts: bool, trigger: string>, badge_types: table<id: int, name: string, sort_order: int>> {
+]: any -> oneof<record<badge: record<allow_title: bool, auto_revoke: bool, badge_grouping_id: int, badge_type_id: int, description: string, enabled: bool, grant_count: int, icon: string, id: int, image_url: string, listable: bool, long_description: string, manually_grantable: bool, multiple_grant: bool, name: string, query: string, show_posts: bool, slug: string, system: bool, target_posts: bool, trigger: string>, badge_types: table<id: int, name: string, sort_order: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -450,7 +474,7 @@ export def "update-badge" [
   --dry-run(-n) # Return the request that would be sent without executing it
   badge_type_id: int # The ID for the badge type. 1 for Gold, 2 for Silver, 3 for Bronze.
   name: string # The name for the new badge.
-]: any -> record<badge: record<allow_title: bool, auto_revoke: bool, badge_grouping_id: int, badge_type_id: int, description: string, enabled: bool, grant_count: int, icon: string, id: int, image_url: string, listable: bool, long_description: string, manually_grantable: bool, multiple_grant: bool, name: string, query: string, show_posts: bool, slug: string, system: bool, target_posts: bool, trigger: string>, badge_types: table<id: int, name: string, sort_order: int>> {
+]: any -> oneof<record<badge: record<allow_title: bool, auto_revoke: bool, badge_grouping_id: int, badge_type_id: int, description: string, enabled: bool, grant_count: int, icon: string, id: int, image_url: string, listable: bool, long_description: string, manually_grantable: bool, multiple_grant: bool, name: string, query: string, show_posts: bool, slug: string, system: bool, target_posts: bool, trigger: string>, badge_types: table<id: int, name: string, sort_order: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -478,7 +502,6 @@ export def "update-badge" [
 #
 # POST /admin/groups.json
 # operationId: createGroup
-# --group shape: {automatic_membership_email_domains?: string, bio_raw?: string, default_notification_level?: int, flair_bg_color?: string, flair_icon?: string, flair_upload_id?: int, full_name?: string, muted_category_ids?: list<int>, name: string, owner_usernames?: string, primary_group?: bool, public_admission?: bool, public_exit?: bool, regular_category_ids?: list<int>, tracking_category_ids?: list<int>, usernames?: string, visibility_level?: int, watching_category_ids?: list<int>, ... (1 more fields)}
 export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -490,7 +513,7 @@ export def "create-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   group: record # shape: {automatic_membership_email_domains?: string, bio_raw?: string, default_notification_level?: int, flair_bg_color?: string, flair_icon?: string, flair_upload_id?: int, full_name?: string, muted_category_ids?: list<int>, name: string, owner_usernames?: string, primary_group?: bool, public_admission?: bool, public_exit?: bool, regular_category_ids?: list<int>, tracking_category_ids?: list<int>, usernames?: string, visibility_level?: int, watching_category_ids?: list<int>, ... (1 more fields)}
-]: any -> record<basic_group: record<allow_membership_requests: bool, automatic: bool, bio_cooked: string, bio_excerpt: string, bio_raw: string, can_admin_group: bool, can_edit_group: bool, can_see_members: bool, default_notification_level: int, flair_bg_color: string, flair_color: string, flair_url: string, full_name: string, grant_trust_level: string, has_messages: bool, id: int, incoming_email: string, members_visibility_level: int, membership_request_template: string, mentionable_level: int, messageable_level: int, name: string, primary_group: bool, public_admission: bool, public_exit: bool, publish_read_state: bool, title: string, user_count: int, visibility_level: int>> {
+]: any -> oneof<record<basic_group: record<allow_membership_requests: bool, automatic: bool, bio_cooked: string, bio_excerpt: string, bio_raw: string, can_admin_group: bool, can_edit_group: bool, can_see_members: bool, default_notification_level: int, flair_bg_color: string, flair_color: string, flair_url: string, full_name: string, grant_trust_level: string, has_messages: bool, id: int, incoming_email: string, members_visibility_level: int, membership_request_template: string, mentionable_level: int, messageable_level: int, name: string, primary_group: bool, public_admission: bool, public_exit: bool, publish_read_state: bool, title: string, user_count: int, visibility_level: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -528,7 +551,7 @@ export def "delete-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<success: string> {
+]: nothing -> oneof<record<success: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -568,7 +591,7 @@ export def "admin-list-users" [
   --asc: string@asc-completer
   --page: int
   --show-emails: oneof<nothing, bool>
-]: nothing -> table<active: bool, admin: bool, avatar_template: string, created_at: string, created_at_age: float, days_visited: int, email: string, flag_level: int, id: int, last_emailed_age: float, last_emailed_at: string, last_seen_age: float, last_seen_at: string, manual_locked_trust_level: string, moderator: bool, name: string, post_count: int, posts_read_count: int, secondary_emails: list<any>, staged: bool, time_read: int, title: string, topics_entered: int, trust_level: int, username: string> {
+]: nothing -> oneof<table<active: bool, admin: bool, avatar_template: string, created_at: string, created_at_age: float, days_visited: int, email: string, flag_level: int, id: int, last_emailed_age: float, last_emailed_at: string, last_seen_age: float, last_seen_at: string, manual_locked_trust_level: string, moderator: bool, name: string, post_count: int, posts_read_count: int, secondary_emails: list<any>, staged: bool, time_read: int, title: string, topics_entered: int, trust_level: int, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($flag | is-empty) { error make --unspanned { msg: "path parameter 'flag' must be non-empty" } }
@@ -609,7 +632,7 @@ export def "delete-user" [
   --block-ip: oneof<nothing, bool>
   --block-urls: oneof<nothing, bool>
   --delete-posts: oneof<nothing, bool>
-]: any -> record<deleted: bool> {
+]: any -> oneof<record<deleted: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -648,7 +671,7 @@ export def "admin-get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active: bool, admin: bool, api_key_count: int, approved_by: record<avatar_template: string, id: int, name: string, username: string>, associated_accounts: list<any>, avatar_template: string, badge_count: int, bounce_score: int, can_activate: bool, can_be_anonymized: bool, can_be_deleted: bool, can_be_merged: bool, can_deactivate: bool, can_delete_all_posts: bool, can_delete_sso_record: bool, can_disable_second_factor: bool, can_grant_admin: bool, can_grant_moderation: bool, can_impersonate: bool, can_revoke_admin: bool, can_revoke_moderation: bool, can_send_activation_email: bool, can_view_action_logs: bool, created_at: string, created_at_age: float, days_visited: int, external_ids: record, flag_level: int, flags_given_count: int, flags_received_count: int, full_suspend_reason: string, groups: table<allow_membership_requests: bool, automatic: bool, bio_cooked: string, bio_excerpt: string, bio_raw: string, can_admin_group: bool, can_see_members: bool, default_notification_level: int, display_name: string, flair_bg_color: string, flair_color: string, flair_url: string, full_name: string, grant_trust_level: string, has_messages: bool, id: int, incoming_email: string, members_visibility_level: int, membership_request_template: string, mentionable_level: int, messageable_level: int, name: string, primary_group: bool, public_admission: bool, public_exit: bool, publish_read_state: bool, title: string, user_count: int, visibility_level: int>, id: int, ip_address: string, last_emailed_age: float, last_emailed_at: string, last_seen_age: float, last_seen_at: string, like_count: int, like_given_count: int, manual_locked_trust_level: string, moderator: bool, name: string, next_penalty: string, penalty_counts: record<silenced: int, suspended: int>, post_count: int, post_edits_count: int, posts_read_count: int, primary_group_id: string, private_topics_count: int, registration_ip_address: string, reset_bounce_score_after: string, silence_reason: string, silenced_by: string, single_sign_on_record: string, staged: bool, suspended_by: string, time_read: int, title: string, tl3_requirements: record<days_visited: int, max_flagged_by_users: int, max_flagged_posts: int, min_days_visited: int, min_likes_given: int, min_likes_received: int, min_likes_received_days: int, min_likes_received_users: int, min_posts_read: int, min_posts_read_all_time: int, min_topics_replied_to: int, min_topics_viewed: int, min_topics_viewed_all_time: int, num_flagged_by_users: int, num_flagged_posts: int, num_likes_given: int, num_likes_received: int, num_likes_received_days: int, num_likes_received_users: int, num_topics_replied_to: int, on_grace_period: bool, penalty_counts: record<silenced: int, suspended: int, total: int>, posts_read: int, posts_read_all_time: int, requirements_lost: bool, requirements_met: bool, time_period: int, topics_viewed: int, topics_viewed_all_time: int, trust_level_locked: bool>, topic_count: int, topics_entered: int, trust_level: int, username: string, warnings_received_count: int> {
+]: nothing -> oneof<record<active: bool, admin: bool, api_key_count: int, approved_by: record<avatar_template: string, id: int, name: string, username: string>, associated_accounts: list<any>, avatar_template: string, badge_count: int, bounce_score: int, can_activate: bool, can_be_anonymized: bool, can_be_deleted: bool, can_be_merged: bool, can_deactivate: bool, can_delete_all_posts: bool, can_delete_sso_record: bool, can_disable_second_factor: bool, can_grant_admin: bool, can_grant_moderation: bool, can_impersonate: bool, can_revoke_admin: bool, can_revoke_moderation: bool, can_send_activation_email: bool, can_view_action_logs: bool, created_at: string, created_at_age: float, days_visited: int, external_ids: record, flag_level: int, flags_given_count: int, flags_received_count: int, full_suspend_reason: string, groups: table<allow_membership_requests: bool, automatic: bool, bio_cooked: string, bio_excerpt: string, bio_raw: string, can_admin_group: bool, can_see_members: bool, default_notification_level: int, display_name: string, flair_bg_color: string, flair_color: string, flair_url: string, full_name: string, grant_trust_level: string, has_messages: bool, id: int, incoming_email: string, members_visibility_level: int, membership_request_template: string, mentionable_level: int, messageable_level: int, name: string, primary_group: bool, public_admission: bool, public_exit: bool, publish_read_state: bool, title: string, user_count: int, visibility_level: int>, id: int, ip_address: string, last_emailed_age: float, last_emailed_at: string, last_seen_age: float, last_seen_at: string, like_count: int, like_given_count: int, manual_locked_trust_level: string, moderator: bool, name: string, next_penalty: string, penalty_counts: record<silenced: int, suspended: int>, post_count: int, post_edits_count: int, posts_read_count: int, primary_group_id: string, private_topics_count: int, registration_ip_address: string, reset_bounce_score_after: string, silence_reason: string, silenced_by: string, single_sign_on_record: string, staged: bool, suspended_by: string, time_read: int, title: string, tl3_requirements: record<days_visited: int, max_flagged_by_users: int, max_flagged_posts: int, min_days_visited: int, min_likes_given: int, min_likes_received: int, min_likes_received_days: int, min_likes_received_users: int, min_posts_read: int, min_posts_read_all_time: int, min_topics_replied_to: int, min_topics_viewed: int, min_topics_viewed_all_time: int, num_flagged_by_users: int, num_flagged_posts: int, num_likes_given: int, num_likes_received: int, num_likes_received_days: int, num_likes_received_users: int, num_topics_replied_to: int, on_grace_period: bool, penalty_counts: record<silenced: int, suspended: int, total: int>, posts_read: int, posts_read_all_time: int, requirements_lost: bool, requirements_met: bool, time_period: int, topics_viewed: int, topics_viewed_all_time: int, trust_level_locked: bool>, topic_count: int, topics_entered: int, trust_level: int, username: string, warnings_received_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -684,7 +707,7 @@ export def "anonymize-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<success: string, username: string> {
+]: nothing -> oneof<record<success: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -720,7 +743,7 @@ export def "log-out-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<success: string> {
+]: nothing -> oneof<record<success: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -760,7 +783,7 @@ export def "silence-user" [
   --post-action: string
   --reason: string
   --silenced-till: string
-]: any -> record<silence: record<silence_reason: string, silenced: bool, silenced_at: string, silenced_by: record<avatar_template: string, id: int, name: string, username: string>, silenced_till: string>> {
+]: any -> oneof<record<silence: record<silence_reason: string, silenced: bool, silenced_at: string, silenced_by: record<avatar_template: string, id: int, name: string, username: string>, silenced_till: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -803,7 +826,7 @@ export def "suspend-user" [
   --post-action: string
   reason: string
   suspend_until: string
-]: any -> record<suspension: record<full_suspend_reason: string, suspend_reason: string, suspended_at: string, suspended_by: record<avatar_template: string, id: int, name: string, username: string>, suspended_till: string>> {
+]: any -> oneof<record<suspension: record<full_suspend_reason: string, suspend_reason: string, suspended_at: string, suspended_by: record<avatar_template: string, id: int, name: string, username: string>, suspended_till: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -842,7 +865,7 @@ export def "get-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<category: record<all_topics_wiki: bool, allow_badges: bool, allow_global_tags: bool, allow_unlimited_owner_edits_on_first_post: bool, allowed_tag_groups: list<any>, allowed_tags: list<any>, auto_close_based_on_last_post: bool, auto_close_hours: string, available_groups: list<any>, can_delete: bool, can_edit: bool, color: string, custom_fields: record, default_list_filter: string, default_slow_mode_seconds: string, default_top_period: string, default_view: string, description: string, description_excerpt: string, description_text: string, email_in: string, email_in_allow_strangers: bool, form_template_ids: list<any>, group_permissions: list<record>, has_children: string, id: int, mailinglist_mirror: bool, minimum_required_tags: int, name: string, navigate_to_first_post_after_read: bool, notification_level: int, num_featured_topics: int, permission: int, position: int, post_count: int, read_only_banner: string, read_restricted: bool, required_tag_groups: list<record>, search_priority: int, show_subcategory_list: bool, slug: string, sort_ascending: string, sort_order: string, subcategory_list_style: string, text_color: string, topic_count: int, topic_featured_link_allowed: bool, topic_template: string, topic_url: string, uploaded_background: string, uploaded_logo: string, uploaded_logo_dark: string>> {
+]: nothing -> oneof<record<category: record<all_topics_wiki: bool, allow_badges: bool, allow_global_tags: bool, allow_unlimited_owner_edits_on_first_post: bool, allowed_tag_groups: list<any>, allowed_tags: list<any>, auto_close_based_on_last_post: bool, auto_close_hours: string, available_groups: list<any>, can_delete: bool, can_edit: bool, color: string, custom_fields: record, default_list_filter: string, default_slow_mode_seconds: string, default_top_period: string, default_view: string, description: string, description_excerpt: string, description_text: string, email_in: string, email_in_allow_strangers: bool, form_template_ids: list<any>, group_permissions: list<record>, has_children: string, id: int, mailinglist_mirror: bool, minimum_required_tags: int, name: string, navigate_to_first_post_after_read: bool, notification_level: int, num_featured_topics: int, permission: int, position: int, post_count: int, read_only_banner: string, read_restricted: bool, required_tag_groups: list<record>, search_priority: int, show_subcategory_list: bool, slug: string, sort_ascending: string, sort_order: string, subcategory_list_style: string, text_color: string, topic_count: int, topic_featured_link_allowed: bool, topic_template: string, topic_url: string, uploaded_background: string, uploaded_logo: string, uploaded_logo_dark: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -879,7 +902,7 @@ export def "list-category-topics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<primary_groups: list<any>, topic_list: record<can_create_topic: bool, per_page: int, top_tags: list<any>, topics: list<record>>, users: table<avatar_template: string, id: int, name: string, username: string>> {
+]: nothing -> oneof<record<primary_groups: list<any>, topic_list: record<can_create_topic: bool, per_page: int, top_tags: list<any>, topics: list<record>>, users: table<avatar_template: string, id: int, name: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
@@ -916,7 +939,7 @@ export def "list-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-subcategories: oneof<nothing, bool>
-]: nothing -> record<category_list: record<can_create_category: bool, can_create_topic: bool, categories: list<record>>> {
+]: nothing -> oneof<record<category_list: record<can_create_category: bool, can_create_topic: bool, categories: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_subcategories" $include_subcategories "scalar")] | flatten | str join "&"
@@ -941,7 +964,6 @@ export def "list-categories" [
 #
 # POST /categories.json
 # operationId: createCategory
-# --permissions shape: {everyone?: int, staff?: int}
 export def "create-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -962,7 +984,7 @@ export def "create-category" [
   --slug: string
   --text-color: string
   --topic-featured-links-allowed: oneof<nothing, bool>
-]: any -> record<category: record<all_topics_wiki: bool, allow_badges: bool, allow_global_tags: bool, allow_unlimited_owner_edits_on_first_post: bool, allowed_tag_groups: list<any>, allowed_tags: list<any>, auto_close_based_on_last_post: bool, auto_close_hours: string, available_groups: list<any>, can_delete: bool, can_edit: bool, color: string, custom_fields: record, default_list_filter: string, default_slow_mode_seconds: string, default_top_period: string, default_view: string, description: string, description_excerpt: string, description_text: string, email_in: string, email_in_allow_strangers: bool, form_template_ids: list<any>, group_permissions: list<record>, has_children: string, id: int, mailinglist_mirror: bool, minimum_required_tags: int, name: string, navigate_to_first_post_after_read: bool, notification_level: int, num_featured_topics: int, permission: int, position: int, post_count: int, read_only_banner: string, read_restricted: bool, required_tag_groups: list<record>, search_priority: int, show_subcategory_list: bool, slug: string, sort_ascending: string, sort_order: string, subcategory_list_style: string, text_color: string, topic_count: int, topic_featured_link_allowed: bool, topic_template: string, topic_url: string, uploaded_background: string, uploaded_logo: string, uploaded_logo_dark: string>> {
+]: any -> oneof<record<category: record<all_topics_wiki: bool, allow_badges: bool, allow_global_tags: bool, allow_unlimited_owner_edits_on_first_post: bool, allowed_tag_groups: list<any>, allowed_tags: list<any>, auto_close_based_on_last_post: bool, auto_close_hours: string, available_groups: list<any>, can_delete: bool, can_edit: bool, color: string, custom_fields: record, default_list_filter: string, default_slow_mode_seconds: string, default_top_period: string, default_view: string, description: string, description_excerpt: string, description_text: string, email_in: string, email_in_allow_strangers: bool, form_template_ids: list<any>, group_permissions: list<record>, has_children: string, id: int, mailinglist_mirror: bool, minimum_required_tags: int, name: string, navigate_to_first_post_after_read: bool, notification_level: int, num_featured_topics: int, permission: int, position: int, post_count: int, read_only_banner: string, read_restricted: bool, required_tag_groups: list<record>, search_priority: int, show_subcategory_list: bool, slug: string, sort_ascending: string, sort_order: string, subcategory_list_style: string, text_color: string, topic_count: int, topic_featured_link_allowed: bool, topic_template: string, topic_url: string, uploaded_background: string, uploaded_logo: string, uploaded_logo_dark: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -989,7 +1011,6 @@ export def "create-category" [
 #
 # PUT /categories/{id}.json
 # operationId: updateCategory
-# --permissions shape: {everyone?: int, staff?: int}
 export def "update-category" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1011,7 +1032,7 @@ export def "update-category" [
   --slug: string
   --text-color: string
   --topic-featured-links-allowed: oneof<nothing, bool>
-]: any -> record<category: record<all_topics_wiki: bool, allow_badges: bool, allow_global_tags: bool, allow_unlimited_owner_edits_on_first_post: bool, allowed_tag_groups: list<any>, allowed_tags: list<any>, auto_close_based_on_last_post: bool, auto_close_hours: string, available_groups: list<any>, can_delete: bool, can_edit: bool, color: string, custom_fields: record, default_list_filter: string, default_slow_mode_seconds: string, default_top_period: string, default_view: string, description: string, description_excerpt: string, description_text: string, email_in: string, email_in_allow_strangers: bool, form_template_ids: list<any>, group_permissions: list<record>, has_children: string, id: int, mailinglist_mirror: bool, minimum_required_tags: int, name: string, navigate_to_first_post_after_read: bool, notification_level: int, num_featured_topics: int, permission: string, position: int, post_count: int, read_only_banner: string, read_restricted: bool, required_tag_groups: list<record>, search_priority: int, show_subcategory_list: bool, slug: string, sort_ascending: string, sort_order: string, subcategory_list_style: string, text_color: string, topic_count: int, topic_featured_link_allowed: bool, topic_template: string, topic_url: string, uploaded_background: string, uploaded_logo: string, uploaded_logo_dark: string>, success: string> {
+]: any -> oneof<record<category: record<all_topics_wiki: bool, allow_badges: bool, allow_global_tags: bool, allow_unlimited_owner_edits_on_first_post: bool, allowed_tag_groups: list<any>, allowed_tags: list<any>, auto_close_based_on_last_post: bool, auto_close_hours: string, available_groups: list<any>, can_delete: bool, can_edit: bool, color: string, custom_fields: record, default_list_filter: string, default_slow_mode_seconds: string, default_top_period: string, default_view: string, description: string, description_excerpt: string, description_text: string, email_in: string, email_in_allow_strangers: bool, form_template_ids: list<any>, group_permissions: list<record>, has_children: string, id: int, mailinglist_mirror: bool, minimum_required_tags: int, name: string, navigate_to_first_post_after_read: bool, notification_level: int, num_featured_topics: int, permission: string, position: int, post_count: int, read_only_banner: string, read_restricted: bool, required_tag_groups: list<record>, search_priority: int, show_subcategory_list: bool, slug: string, sort_ascending: string, sort_order: string, subcategory_list_style: string, text_color: string, topic_count: int, topic_featured_link_allowed: bool, topic_template: string, topic_url: string, uploaded_background: string, uploaded_logo: string, uploaded_logo_dark: string>, success: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1053,7 +1074,7 @@ export def "list-users-public" [
   --order: string@order-completer-1 # required
   --asc: string@asc-completer
   --page: int
-]: nothing -> record<directory_items: table<days_visited: int, id: int, likes_given: int, likes_received: int, post_count: int, posts_read: int, topic_count: int, topics_entered: int, user: record>, meta: record<last_updated_at: string, load_more_directory_items: string, total_rows_directory_items: int>> {
+]: nothing -> oneof<record<directory_items: table<days_visited: int, id: int, likes_given: int, likes_received: int, post_count: int, posts_read: int, topic_count: int, topics_entered: int, user: record>, meta: record<last_updated_at: string, load_more_directory_items: string, total_rows_directory_items: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($period == null) { error make --unspanned { msg: "required query parameter 'period' missing: pass --period" } }
@@ -1090,7 +1111,7 @@ export def "list-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<extras: record<type_filters: list<any>>, groups: table<allow_membership_requests: bool, automatic: bool, bio_cooked: string, bio_excerpt: string, bio_raw: string, can_admin_group: bool, can_edit_group: bool, can_see_members: bool, default_notification_level: int, display_name: string, flair_bg_color: string, flair_color: string, flair_url: string, full_name: string, grant_trust_level: string, has_messages: bool, id: int, incoming_email: string, is_group_owner: bool, is_group_user: bool, members_visibility_level: int, membership_request_template: string, mentionable_level: int, messageable_level: int, name: string, primary_group: bool, public_admission: bool, public_exit: bool, publish_read_state: bool, title: string, user_count: int, visibility_level: int>, load_more_groups: string, total_rows_groups: int> {
+]: nothing -> oneof<record<extras: record<type_filters: list<any>>, groups: table<allow_membership_requests: bool, automatic: bool, bio_cooked: string, bio_excerpt: string, bio_raw: string, can_admin_group: bool, can_edit_group: bool, can_see_members: bool, default_notification_level: int, display_name: string, flair_bg_color: string, flair_color: string, flair_url: string, full_name: string, grant_trust_level: string, has_messages: bool, id: int, incoming_email: string, is_group_owner: bool, is_group_user: bool, members_visibility_level: int, membership_request_template: string, mentionable_level: int, messageable_level: int, name: string, primary_group: bool, public_admission: bool, public_exit: bool, publish_read_state: bool, title: string, user_count: int, visibility_level: int>, load_more_groups: string, total_rows_groups: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/groups.json" $auth.query)
@@ -1125,7 +1146,7 @@ export def "get-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<extras: record<visible_group_names: list<any>>, group: record<allow_membership_requests: bool, allow_unknown_sender_topic_replies: bool, associated_group_ids: list<any>, automatic: bool, automatic_membership_email_domains: string, bio_cooked: string, bio_excerpt: string, bio_raw: string, can_admin_group: bool, can_edit_group: bool, can_see_members: bool, default_notification_level: int, email_from_alias: string, email_password: string, email_username: string, flair_bg_color: string, flair_color: string, flair_url: string, full_name: string, grant_trust_level: string, has_messages: bool, id: int, imap_enabled: bool, imap_last_error: string, imap_mailbox_name: string, imap_mailboxes: list<any>, imap_new_emails: string, imap_old_emails: string, imap_port: string, imap_server: string, imap_ssl: string, imap_updated_at: string, imap_updated_by: record, incoming_email: string, is_group_owner_display: bool, is_group_user: bool, members_visibility_level: int, membership_request_template: string, mentionable: bool, mentionable_level: int, message_count: int, messageable: bool, messageable_level: int, muted_category_ids: list<any>, muted_tags: list<any>, name: string, primary_group: bool, public_admission: bool, public_exit: bool, publish_read_state: bool, regular_category_ids: list<any>, regular_tags: list<any>, smtp_enabled: bool, smtp_port: string, smtp_server: string, smtp_ssl: string, smtp_updated_at: string, smtp_updated_by: record, title: string, tracking_category_ids: list<any>, tracking_tags: list<any>, user_count: int, visibility_level: int, watching_category_ids: list<any>, watching_first_post_category_ids: list<any>, watching_first_post_tags: list<any>, watching_tags: list<any>>> {
+]: nothing -> oneof<record<extras: record<visible_group_names: list<any>>, group: record<allow_membership_requests: bool, allow_unknown_sender_topic_replies: bool, associated_group_ids: list<any>, automatic: bool, automatic_membership_email_domains: string, bio_cooked: string, bio_excerpt: string, bio_raw: string, can_admin_group: bool, can_edit_group: bool, can_see_members: bool, default_notification_level: int, email_from_alias: string, email_password: string, email_username: string, flair_bg_color: string, flair_color: string, flair_url: string, full_name: string, grant_trust_level: string, has_messages: bool, id: int, imap_enabled: bool, imap_last_error: string, imap_mailbox_name: string, imap_mailboxes: list<any>, imap_new_emails: string, imap_old_emails: string, imap_port: string, imap_server: string, imap_ssl: string, imap_updated_at: string, imap_updated_by: record, incoming_email: string, is_group_owner_display: bool, is_group_user: bool, members_visibility_level: int, membership_request_template: string, mentionable: bool, mentionable_level: int, message_count: int, messageable: bool, messageable_level: int, muted_category_ids: list<any>, muted_tags: list<any>, name: string, primary_group: bool, public_admission: bool, public_exit: bool, publish_read_state: bool, regular_category_ids: list<any>, regular_tags: list<any>, smtp_enabled: bool, smtp_port: string, smtp_server: string, smtp_ssl: string, smtp_updated_at: string, smtp_updated_by: record, title: string, tracking_category_ids: list<any>, tracking_tags: list<any>, user_count: int, visibility_level: int, watching_category_ids: list<any>, watching_first_post_category_ids: list<any>, watching_first_post_tags: list<any>, watching_tags: list<any>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1150,7 +1171,6 @@ export def "get-group" [
 #
 # PUT /groups/{id}.json
 # operationId: updateGroup
-# --group shape: {automatic_membership_email_domains?: string, bio_raw?: string, default_notification_level?: int, flair_bg_color?: string, flair_icon?: string, flair_upload_id?: int, full_name?: string, muted_category_ids?: list<int>, name: string, owner_usernames?: string, primary_group?: bool, public_admission?: bool, public_exit?: bool, regular_category_ids?: list<int>, tracking_category_ids?: list<int>, usernames?: string, visibility_level?: int, watching_category_ids?: list<int>, ... (1 more fields)}
 export def "update-group" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1163,7 +1183,7 @@ export def "update-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   group: record # shape: {automatic_membership_email_domains?: string, bio_raw?: string, default_notification_level?: int, flair_bg_color?: string, flair_icon?: string, flair_upload_id?: int, full_name?: string, muted_category_ids?: list<int>, name: string, owner_usernames?: string, primary_group?: bool, public_admission?: bool, public_exit?: bool, regular_category_ids?: list<int>, tracking_category_ids?: list<int>, usernames?: string, visibility_level?: int, watching_category_ids?: list<int>, ... (1 more fields)}
-]: any -> record<success: string> {
+]: any -> oneof<record<success: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1203,7 +1223,7 @@ export def "remove-group-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --usernames: string # comma separated list
-]: any -> record<skipped_usernames: list<any>, success: string, usernames: list<any>> {
+]: any -> oneof<record<skipped_usernames: list<any>, success: string, usernames: list<any>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1242,7 +1262,7 @@ export def "list-group-members" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<members: table<added_at: string, avatar_template: string, id: int, last_posted_at: string, last_seen_at: string, name: string, timezone: string, title: string, username: string>, meta: record<limit: int, offset: int, total: int>, owners: table<added_at: string, avatar_template: string, id: int, last_posted_at: string, last_seen_at: string, name: string, timezone: string, title: string, username: string>> {
+]: nothing -> oneof<record<members: table<added_at: string, avatar_template: string, id: int, last_posted_at: string, last_seen_at: string, name: string, timezone: string, title: string, username: string>, meta: record<limit: int, offset: int, total: int>, owners: table<added_at: string, avatar_template: string, id: int, last_posted_at: string, last_seen_at: string, name: string, timezone: string, title: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1279,7 +1299,7 @@ export def "add-group-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --usernames: string # comma separated list
-]: any -> record<emails: list<any>, success: string, usernames: list<any>> {
+]: any -> oneof<record<emails: list<any>, success: string, usernames: list<any>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1327,7 +1347,7 @@ export def "create-invite" [
   --max-redemptions-allowed: int # optional, for link invites (default: 1)
   --skip-email: oneof<nothing, bool> # default: false
   --topic-id: int
-]: any -> record<created_at: string, custom_message: string, email: string, emailed: bool, expired: bool, expires_at: string, groups: list<any>, id: int, link: string, topics: list<any>, updated_at: string> {
+]: any -> oneof<record<created_at: string, custom_message: string, email: string, emailed: bool, expired: bool, expires_at: string, groups: list<any>, id: int, link: string, topics: list<any>, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1372,7 +1392,7 @@ export def "list-latest-topics" [
   --ascending: string # Defaults to `desc`, add `ascending=true` to sort asc
   --api-key: string # required
   --api-username: string # required
-]: nothing -> record<primary_groups: list<any>, topic_list: record<can_create_topic: bool, draft: string, draft_key: string, draft_sequence: int, per_page: int, topics: list<record>>, users: table<avatar_template: string, id: int, name: string, username: string>> {
+]: nothing -> oneof<record<primary_groups: list<any>, topic_list: record<can_create_topic: bool, draft: string, draft_key: string, draft_sequence: int, per_page: int, topics: list<record>>, users: table<avatar_template: string, id: int, name: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
@@ -1411,7 +1431,7 @@ export def "get-notifications" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<load_more_notifications: string, notifications: table<created_at: string, data: record, id: int, notification_type: int, post_number: string, read: bool, slug: string, topic_id: int, user_id: int>, seen_notification_id: int, total_rows_notifications: int> {
+]: nothing -> oneof<record<load_more_notifications: string, notifications: table<created_at: string, data: record, id: int, notification_type: int, post_number: string, read: bool, slug: string, topic_id: int, user_id: int>, seen_notification_id: int, total_rows_notifications: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/notifications.json" $auth.query)
@@ -1446,7 +1466,7 @@ export def "mark-notifications-as-read" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # (optional) Leave off to mark all notifications as read
-]: any -> record<success: string> {
+]: any -> oneof<record<success: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1488,7 +1508,7 @@ export def "perform-post-action" [
   --flag-topic: oneof<nothing, bool>
   id: int
   post_action_type_id: int
-]: any -> record<actions_summary: table<acted: bool, can_undo: bool, count: int, id: int>, admin: bool, avatar_template: string, can_delete: bool, can_edit: bool, can_recover: bool, can_view_edit_history: bool, can_wiki: bool, cooked: string, created_at: string, deleted_at: string, display_username: string, edit_reason: string, flair_bg_color: string, flair_color: string, flair_name: string, flair_url: string, hidden: bool, id: int, incoming_link_count: int, moderator: bool, name: string, notice: record, post_number: int, post_type: int, primary_group_name: string, quote_count: int, readers_count: int, reads: int, reply_count: int, reply_to_post_number: string, reviewable_id: string, reviewable_score_count: int, reviewable_score_pending_count: int, score: float, staff: bool, topic_id: int, topic_slug: string, trust_level: int, updated_at: string, user_deleted: bool, user_id: int, user_title: string, username: string, version: int, wiki: bool, yours: bool> {
+]: any -> oneof<record<actions_summary: table<acted: bool, can_undo: bool, count: int, id: int>, admin: bool, avatar_template: string, can_delete: bool, can_edit: bool, can_recover: bool, can_view_edit_history: bool, can_wiki: bool, cooked: string, created_at: string, deleted_at: string, display_username: string, edit_reason: string, flair_bg_color: string, flair_color: string, flair_name: string, flair_url: string, hidden: bool, id: int, incoming_link_count: int, moderator: bool, name: string, notice: record, post_number: int, post_type: int, primary_group_name: string, quote_count: int, readers_count: int, reads: int, reply_count: int, reply_to_post_number: string, reviewable_id: string, reviewable_score_count: int, reviewable_score_pending_count: int, score: float, staff: bool, topic_id: int, topic_slug: string, trust_level: int, updated_at: string, user_deleted: bool, user_id: int, user_title: string, username: string, version: int, wiki: bool, yours: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1532,7 +1552,7 @@ export def "list-posts" [
   --before: string # Load posts with an id lower than this value. Useful for pagination.
   --api-key: string # required
   --api-username: string # required
-]: nothing -> record<latest_posts: table<actions_summary: list, admin: bool, avatar_template: string, can_delete: bool, can_edit: bool, can_recover: bool, can_view_edit_history: bool, can_wiki: bool, category_id: int, cooked: string, created_at: string, deleted_at: string, display_username: string, edit_reason: string, flair_bg_color: string, flair_color: string, flair_name: string, flair_url: string, hidden: bool, id: int, incoming_link_count: int, moderator: bool, name: string, post_number: int, post_type: int, primary_group_name: string, quote_count: int, raw: string, readers_count: int, reads: int, reply_count: int, reply_to_post_number: string, reviewable_id: string, reviewable_score_count: int, reviewable_score_pending_count: int, score: float, staff: bool, topic_html_title: string, topic_id: int, topic_slug: string, topic_title: string, trust_level: int, updated_at: string, user_deleted: bool, user_id: int, user_title: string, username: string, version: int, wiki: bool, yours: bool>> {
+]: nothing -> oneof<record<latest_posts: table<actions_summary: list, admin: bool, avatar_template: string, can_delete: bool, can_edit: bool, can_recover: bool, can_view_edit_history: bool, can_wiki: bool, category_id: int, cooked: string, created_at: string, deleted_at: string, display_username: string, edit_reason: string, flair_bg_color: string, flair_color: string, flair_name: string, flair_url: string, hidden: bool, id: int, incoming_link_count: int, moderator: bool, name: string, post_number: int, post_type: int, primary_group_name: string, quote_count: int, raw: string, readers_count: int, reads: int, reply_count: int, reply_to_post_number: string, reviewable_id: string, reviewable_score_count: int, reviewable_score_pending_count: int, score: float, staff: bool, topic_html_title: string, topic_id: int, topic_slug: string, topic_title: string, trust_level: int, updated_at: string, user_deleted: bool, user_id: int, user_title: string, username: string, version: int, wiki: bool, yours: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
@@ -1582,7 +1602,7 @@ export def "create-topic-post-pm" [
   --target-usernames: string # Deprecated. Use target_recipients instead. (DEPRECATED)
   --title: string # Required if creating a new topic or new private message.
   --topic-id: int # Required if creating a new post.
-]: any -> record<actions_summary: table<can_act: bool, id: int>, admin: bool, avatar_template: string, bookmarked: bool, can_delete: bool, can_edit: bool, can_recover: bool, can_view_edit_history: bool, can_wiki: bool, cooked: string, created_at: string, deleted_at: string, display_username: string, draft_sequence: int, edit_reason: string, flair_bg_color: string, flair_color: string, flair_name: string, flair_url: string, hidden: bool, id: int, incoming_link_count: int, mentioned_users: list<any>, moderator: bool, name: string, post_number: int, post_type: int, primary_group_name: string, quote_count: int, raw: string, readers_count: int, reads: int, reply_count: int, reply_to_post_number: string, reviewable_id: string, reviewable_score_count: int, reviewable_score_pending_count: int, score: int, staff: bool, topic_id: int, topic_slug: string, trust_level: int, updated_at: string, user_deleted: bool, user_id: int, user_title: string, username: string, version: int, wiki: bool, yours: bool> {
+]: any -> oneof<record<actions_summary: table<can_act: bool, id: int>, admin: bool, avatar_template: string, bookmarked: bool, can_delete: bool, can_edit: bool, can_recover: bool, can_view_edit_history: bool, can_wiki: bool, cooked: string, created_at: string, deleted_at: string, display_username: string, draft_sequence: int, edit_reason: string, flair_bg_color: string, flair_color: string, flair_name: string, flair_url: string, hidden: bool, id: int, incoming_link_count: int, mentioned_users: list<any>, moderator: bool, name: string, post_number: int, post_type: int, primary_group_name: string, quote_count: int, raw: string, readers_count: int, reads: int, reply_count: int, reply_to_post_number: string, reviewable_id: string, reviewable_score_count: int, reviewable_score_pending_count: int, score: int, staff: bool, topic_id: int, topic_slug: string, trust_level: int, updated_at: string, user_deleted: bool, user_id: int, user_title: string, username: string, version: int, wiki: bool, yours: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1663,7 +1683,7 @@ export def "get-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # required
   --api-username: string # required
-]: nothing -> record<actions_summary: table<can_act: bool, id: int>, admin: bool, avatar_template: string, can_delete: bool, can_edit: bool, can_recover: bool, can_view_edit_history: bool, can_wiki: bool, cooked: string, created_at: string, deleted_at: string, display_username: string, edit_reason: string, flair_bg_color: string, flair_color: string, flair_name: string, flair_url: string, hidden: bool, id: int, incoming_link_count: int, moderator: bool, name: string, post_number: int, post_type: int, primary_group_name: string, quote_count: int, raw: string, readers_count: int, reads: int, reply_count: int, reply_to_post_number: string, reviewable_id: string, reviewable_score_count: int, reviewable_score_pending_count: int, score: int, staff: bool, topic_id: int, topic_slug: string, trust_level: int, updated_at: string, user_deleted: bool, user_id: int, user_title: string, username: string, version: int, wiki: bool, yours: bool> {
+]: nothing -> oneof<record<actions_summary: table<can_act: bool, id: int>, admin: bool, avatar_template: string, can_delete: bool, can_edit: bool, can_recover: bool, can_view_edit_history: bool, can_wiki: bool, cooked: string, created_at: string, deleted_at: string, display_username: string, edit_reason: string, flair_bg_color: string, flair_color: string, flair_name: string, flair_url: string, hidden: bool, id: int, incoming_link_count: int, moderator: bool, name: string, post_number: int, post_type: int, primary_group_name: string, quote_count: int, raw: string, readers_count: int, reads: int, reply_count: int, reply_to_post_number: string, reviewable_id: string, reviewable_score_count: int, reviewable_score_pending_count: int, score: int, staff: bool, topic_id: int, topic_slug: string, trust_level: int, updated_at: string, user_deleted: bool, user_id: int, user_title: string, username: string, version: int, wiki: bool, yours: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1692,7 +1712,6 @@ export def "get-post" [
 #
 # PUT /posts/{id}.json
 # operationId: updatePost
-# --post shape: {edit_reason?: string, raw: string}
 export def "update-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1707,7 +1726,7 @@ export def "update-post" [
   --api-key: string # required
   --api-username: string # required
   --post: record # shape: {edit_reason?: string, raw: string}
-]: any -> record<post: record<actions_summary: list<record>, admin: bool, avatar_template: string, can_delete: bool, can_edit: bool, can_recover: bool, can_view_edit_history: bool, can_wiki: bool, cooked: string, created_at: string, deleted_at: string, display_username: string, draft_sequence: int, edit_reason: string, flair_bg_color: string, flair_color: string, flair_url: string, hidden: bool, id: int, incoming_link_count: int, moderator: bool, name: string, post_number: int, post_type: int, primary_group_name: string, quote_count: int, readers_count: int, reads: int, reply_count: int, reply_to_post_number: string, reviewable_id: string, reviewable_score_count: int, reviewable_score_pending_count: int, score: float, staff: bool, topic_id: int, topic_slug: string, trust_level: int, updated_at: string, user_deleted: bool, user_id: int, user_title: string, username: string, version: int, wiki: bool, yours: bool>> {
+]: any -> oneof<record<post: record<actions_summary: list<record>, admin: bool, avatar_template: string, can_delete: bool, can_edit: bool, can_recover: bool, can_view_edit_history: bool, can_wiki: bool, cooked: string, created_at: string, deleted_at: string, display_username: string, draft_sequence: int, edit_reason: string, flair_bg_color: string, flair_color: string, flair_url: string, hidden: bool, id: int, incoming_link_count: int, moderator: bool, name: string, post_number: int, post_type: int, primary_group_name: string, quote_count: int, readers_count: int, reads: int, reply_count: int, reply_to_post_number: string, reviewable_id: string, reviewable_score_count: int, reviewable_score_pending_count: int, score: float, staff: bool, topic_id: int, topic_slug: string, trust_level: int, updated_at: string, user_deleted: bool, user_id: int, user_title: string, username: string, version: int, wiki: bool, yours: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1753,7 +1772,7 @@ export def "lock-post" [
   --api-key: string # required
   --api-username: string # required
   locked: string
-]: any -> record<locked: bool> {
+]: any -> oneof<record<locked: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1796,7 +1815,7 @@ export def "post-replies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<actions_summary: list<record>, admin: bool, avatar_template: string, bookmarked: bool, can_delete: bool, can_edit: bool, can_recover: bool, can_view_edit_history: bool, can_wiki: bool, cooked: string, created_at: string, deleted_at: string, display_username: string, edit_reason: string, flair_bg_color: string, flair_color: string, flair_name: string, flair_url: string, hidden: bool, id: int, incoming_link_count: int, moderator: bool, name: string, post_number: int, post_type: int, primary_group_name: string, quote_count: int, readers_count: int, reads: int, reply_count: int, reply_to_post_number: int, reply_to_user: record<avatar_template: string, name: string, username: string>, reviewable_id: string, reviewable_score_count: int, reviewable_score_pending_count: int, score: int, staff: bool, topic_id: int, topic_slug: string, trust_level: int, updated_at: string, user_deleted: bool, user_id: int, user_title: string, username: string, version: int, wiki: bool, yours: bool> {
+]: nothing -> oneof<table<actions_summary: list<record>, admin: bool, avatar_template: string, bookmarked: bool, can_delete: bool, can_edit: bool, can_recover: bool, can_view_edit_history: bool, can_wiki: bool, cooked: string, created_at: string, deleted_at: string, display_username: string, edit_reason: string, flair_bg_color: string, flair_color: string, flair_name: string, flair_url: string, hidden: bool, id: int, incoming_link_count: int, moderator: bool, name: string, post_number: int, post_type: int, primary_group_name: string, quote_count: int, readers_count: int, reads: int, reply_count: int, reply_to_post_number: int, reply_to_user: record<avatar_template: string, name: string, username: string>, reviewable_id: string, reviewable_score_count: int, reviewable_score_pending_count: int, score: int, staff: bool, topic_id: int, topic_slug: string, trust_level: int, updated_at: string, user_deleted: bool, user_id: int, user_title: string, username: string, version: int, wiki: bool, yours: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1833,7 +1852,7 @@ export def "search" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string # The query string needs to be url encoded and is made up of the following options: - Search term. This is just a string. Usually it would be the first item in the query. - `@`: Use the `@` followed by the username to specify posts by this user. - `#`: Use the `#` followed by the category slug to search within this category. - `tags:`: `api,solved` or for posts that have all the specified tags `api+solved`. - `before:`: `yyyy-mm-dd` - `after:`: `yyyy-mm-dd` - `order:`: `latest`, `likes`, `views`, `latest_topic` - `assigned:`: username (without `@`) - `in:`: `title`, `likes`, `personal`, `messages`, `seen`, `unseen`, `posted`, `created`, `watching`, `tracking`, `bookmarks`, `assigned`, `unassigned`, `first`, `pinned`, `wiki` - `with:`: `images` - `status:`: `open`, `closed`, `public`, `archived`, `noreplies`, `single_user`, `solved`, `unsolved` - `group:`: group_name or group_id - `group_messages:`: group_name or group_id - `min_posts:`: 1 - `max_posts:`: 10 - `min_views:`: 1 - `max_views:`: 10 If you are using cURL you can use the `-G` and the `--data-urlencode` flags to encode the query: ``` curl -i -sS -X GET -G "http://localhost:4200/search.json" \ --data-urlencode 'q=wordpress @scossar #fun after:2020-01-01' ``` (e.g. api @blake #support tags:api after:2021-06-04 in:unseen in:open order:latest_topic)
   --page: int # e.g. 1
-]: nothing -> record<categories: list<any>, grouped_search_result: record<can_create_topic: bool, category_ids: list<any>, error: string, group_ids: list<any>, more_categories: string, more_full_page_results: string, more_posts: string, more_users: string, post_ids: list<any>, search_log_id: int, tag_ids: list<any>, term: string, user_ids: list<any>>, groups: list<any>, posts: list<any>, tags: list<any>, users: list<any>> {
+]: nothing -> oneof<record<categories: list<any>, grouped_search_result: record<can_create_topic: bool, category_ids: list<any>, error: string, group_ids: list<any>, more_categories: string, more_full_page_results: string, more_posts: string, more_users: string, post_ids: list<any>, search_log_id: int, tag_ids: list<any>, term: string, user_ids: list<any>>, groups: list<any>, posts: list<any>, tags: list<any>, users: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
@@ -1869,7 +1888,7 @@ export def "send-password-reset-email" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   login: string
-]: any -> record<success: string, user_found: bool> {
+]: any -> oneof<record<success: string, user_found: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1906,7 +1925,7 @@ export def "get-site" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<anonymous_top_menu_items: list<any>, archetypes: table<id: string, name: string, options: list>, auth_providers: list<any>, can_associate_groups: bool, can_create_tag: bool, can_tag_pms: bool, can_tag_topics: bool, categories: table<allow_global_tags: bool, allowed_tag_groups: list, allowed_tags: list, can_edit: bool, color: string, custom_fields: record, default_list_filter: string, default_top_period: string, default_view: string, description: string, description_excerpt: string, description_text: string, form_template_ids: list, has_children: bool, id: int, minimum_required_tags: int, name: string, navigate_to_first_post_after_read: bool, notification_level: int, num_featured_topics: int, parent_category_id: int, permission: int, position: int, post_count: int, read_only_banner: string, read_restricted: bool, required_tag_groups: list, show_subcategory_list: bool, slug: string, sort_ascending: string, sort_order: string, subcategory_list_style: string, text_color: string, topic_count: int, topic_template: string, topic_url: string, uploaded_background: string, uploaded_logo: string, uploaded_logo_dark: string>, censored_regexp: list<record>, custom_emoji_translation: record, default_archetype: string, default_dark_color_scheme: record, displayed_about_plugin_stat_groups: list<any>, filters: list<any>, groups: table<flair_bg_color: string, flair_color: string, flair_url: string, id: int, name: string>, hashtag_configurations: record, hashtag_icons: list<any>, markdown_additional_options: record, notification_types: record<assigned: int, bookmark_reminder: int, chat_group_mention: int, chat_invitation: int, chat_mention: int, chat_message: int, chat_quoted: int, circles_activity: int, code_review_commit_approved: int, custom: int, edited: int, event_invitation: int, event_reminder: int, following: int, following_created_topic: int, following_replied: int, granted_badge: int, group_mentioned: int, group_message_summary: int, invited_to_private_message: int, invited_to_topic: int, invitee_accepted: int, liked: int, liked_consolidated: int, linked: int, membership_request_accepted: int, membership_request_consolidated: int, mentioned: int, moved_post: int, new_features: int, post_approved: int, posted: int, private_message: int, question_answer_user_commented: int, quoted: int, reaction: int, replied: int, topic_reminder: int, votes_released: int, watching_category_or_tag: int, watching_first_post: int>, periods: list<any>, post_action_types: table<description: string, id: int, is_custom_flag: bool, is_flag: bool, name: string, name_key: string, short_description: string>, post_types: record<moderator_action: int, regular: int, small_action: int, whisper: int>, show_welcome_topic_banner: bool, tags_filter_regexp: string, top_menu_items: list<any>, top_tags: list<any>, topic_featured_link_allowed_category_ids: list<any>, topic_flag_types: table<description: string, id: int, is_custom_flag: bool, is_flag: bool, name: string, name_key: string, short_description: string>, trust_levels: record<basic: int, leader: int, member: int, newuser: int, regular: int>, uncategorized_category_id: int, user_color_schemes: table<id: int, is_dark: bool, name: string>, user_field_max_length: int, user_fields: list<any>, user_themes: table<color_scheme_id: int, default: bool, name: string, theme_id: int>, watched_words_link: string, watched_words_replace: string, whispers_allowed_groups_names: list<any>, wizard_required: bool> {
+]: nothing -> oneof<record<anonymous_top_menu_items: list<any>, archetypes: table<id: string, name: string, options: list>, auth_providers: list<any>, can_associate_groups: bool, can_create_tag: bool, can_tag_pms: bool, can_tag_topics: bool, categories: table<allow_global_tags: bool, allowed_tag_groups: list, allowed_tags: list, can_edit: bool, color: string, custom_fields: record, default_list_filter: string, default_top_period: string, default_view: string, description: string, description_excerpt: string, description_text: string, form_template_ids: list, has_children: bool, id: int, minimum_required_tags: int, name: string, navigate_to_first_post_after_read: bool, notification_level: int, num_featured_topics: int, parent_category_id: int, permission: int, position: int, post_count: int, read_only_banner: string, read_restricted: bool, required_tag_groups: list, show_subcategory_list: bool, slug: string, sort_ascending: string, sort_order: string, subcategory_list_style: string, text_color: string, topic_count: int, topic_template: string, topic_url: string, uploaded_background: string, uploaded_logo: string, uploaded_logo_dark: string>, censored_regexp: list<record>, custom_emoji_translation: record, default_archetype: string, default_dark_color_scheme: record, displayed_about_plugin_stat_groups: list<any>, filters: list<any>, groups: table<flair_bg_color: string, flair_color: string, flair_url: string, id: int, name: string>, hashtag_configurations: record, hashtag_icons: list<any>, markdown_additional_options: record, notification_types: record<assigned: int, bookmark_reminder: int, chat_group_mention: int, chat_invitation: int, chat_mention: int, chat_message: int, chat_quoted: int, circles_activity: int, code_review_commit_approved: int, custom: int, edited: int, event_invitation: int, event_reminder: int, following: int, following_created_topic: int, following_replied: int, granted_badge: int, group_mentioned: int, group_message_summary: int, invited_to_private_message: int, invited_to_topic: int, invitee_accepted: int, liked: int, liked_consolidated: int, linked: int, membership_request_accepted: int, membership_request_consolidated: int, mentioned: int, moved_post: int, new_features: int, post_approved: int, posted: int, private_message: int, question_answer_user_commented: int, quoted: int, reaction: int, replied: int, topic_reminder: int, votes_released: int, watching_category_or_tag: int, watching_first_post: int>, periods: list<any>, post_action_types: table<description: string, id: int, is_custom_flag: bool, is_flag: bool, name: string, name_key: string, short_description: string>, post_types: record<moderator_action: int, regular: int, small_action: int, whisper: int>, show_welcome_topic_banner: bool, tags_filter_regexp: string, top_menu_items: list<any>, top_tags: list<any>, topic_featured_link_allowed_category_ids: list<any>, topic_flag_types: table<description: string, id: int, is_custom_flag: bool, is_flag: bool, name: string, name_key: string, short_description: string>, trust_levels: record<basic: int, leader: int, member: int, newuser: int, regular: int>, uncategorized_category_id: int, user_color_schemes: table<id: int, is_dark: bool, name: string>, user_field_max_length: int, user_fields: list<any>, user_themes: table<color_scheme_id: int, default: bool, name: string, theme_id: int>, watched_words_link: string, watched_words_replace: string, whispers_allowed_groups_names: list<any>, wizard_required: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/site.json" $auth.query)
@@ -1930,7 +1949,6 @@ export def "get-site" [
 #
 # PUT /t/-/{id}.json
 # operationId: updateTopic
-# --topic shape: {category_id?: int, title?: string}
 export def "update-topic" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1945,7 +1963,7 @@ export def "update-topic" [
   --api-key: string # required
   --api-username: string # required
   --topic: record # shape: {category_id?: int, title?: string}
-]: any -> record<basic_topic: record<fancy_title: string, id: int, posts_count: int, slug: string, title: string>> {
+]: any -> oneof<record<basic_topic: record<fancy_title: string, id: int, posts_count: int, slug: string, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2068,7 +2086,7 @@ export def "get-topic" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # required
   --api-username: string # required
-]: nothing -> record<actions_summary: table<can_act: bool, count: int, hidden: bool, id: int>, archetype: string, archived: bool, bookmarked: bool, bookmarks: list<any>, category_id: int, chunk_size: int, closed: bool, created_at: string, current_post_number: int, deleted_at: string, deleted_by: string, details: record<can_archive_topic: bool, can_close_topic: bool, can_convert_topic: bool, can_create_post: bool, can_delete: bool, can_edit: bool, can_edit_staff_notes: bool, can_flag_topic: bool, can_invite_to: bool, can_invite_via_email: bool, can_moderate_category: bool, can_move_posts: bool, can_pin_unpin_topic: bool, can_remove_allowed_users: bool, can_remove_self_id: int, can_reply_as_new_topic: bool, can_review_topic: bool, can_split_merge_topic: bool, can_toggle_topic_visibility: bool, created_by: record<avatar_template: string, id: int, name: string, username: string>, last_poster: record<avatar_template: string, id: int, name: string, username: string>, notification_level: int, participants: list<record>>, draft: string, draft_key: string, draft_sequence: int, fancy_title: string, featured_link: string, has_deleted: bool, has_summary: bool, highest_post_number: int, id: int, image_url: string, last_posted_at: string, like_count: int, message_bus_last_id: int, participant_count: int, pinned: bool, pinned_at: string, pinned_globally: bool, pinned_until: string, post_stream: record<posts: list<record>, stream: list<any>>, posts_count: int, reply_count: int, show_read_indicator: bool, slow_mode_enabled_until: string, slow_mode_seconds: int, slug: string, suggested_topics: table<archetype: string, archived: bool, bookmarked: string, bumped: bool, bumped_at: string, category_id: int, closed: bool, created_at: string, excerpt: string, fancy_title: string, featured_link: string, highest_post_number: int, id: int, image_url: string, last_posted_at: string, like_count: int, liked: string, pinned: bool, posters: list, posts_count: int, reply_count: int, slug: string, tags: list, tags_descriptions: record, title: string, unpinned: string, unseen: bool, views: int, visible: bool>, tags: list<any>, tags_descriptions: record, thumbnails: string, timeline_lookup: list<any>, title: string, topic_timer: string, unpinned: string, user_id: int, views: int, visible: bool, word_count: int> {
+]: nothing -> oneof<record<actions_summary: table<can_act: bool, count: int, hidden: bool, id: int>, archetype: string, archived: bool, bookmarked: bool, bookmarks: list<any>, category_id: int, chunk_size: int, closed: bool, created_at: string, current_post_number: int, deleted_at: string, deleted_by: string, details: record<can_archive_topic: bool, can_close_topic: bool, can_convert_topic: bool, can_create_post: bool, can_delete: bool, can_edit: bool, can_edit_staff_notes: bool, can_flag_topic: bool, can_invite_to: bool, can_invite_via_email: bool, can_moderate_category: bool, can_move_posts: bool, can_pin_unpin_topic: bool, can_remove_allowed_users: bool, can_remove_self_id: int, can_reply_as_new_topic: bool, can_review_topic: bool, can_split_merge_topic: bool, can_toggle_topic_visibility: bool, created_by: record<avatar_template: string, id: int, name: string, username: string>, last_poster: record<avatar_template: string, id: int, name: string, username: string>, notification_level: int, participants: list<record>>, draft: string, draft_key: string, draft_sequence: int, fancy_title: string, featured_link: string, has_deleted: bool, has_summary: bool, highest_post_number: int, id: int, image_url: string, last_posted_at: string, like_count: int, message_bus_last_id: int, participant_count: int, pinned: bool, pinned_at: string, pinned_globally: bool, pinned_until: string, post_stream: record<posts: list<record>, stream: list<any>>, posts_count: int, reply_count: int, show_read_indicator: bool, slow_mode_enabled_until: string, slow_mode_seconds: int, slug: string, suggested_topics: table<archetype: string, archived: bool, bookmarked: string, bumped: bool, bumped_at: string, category_id: int, closed: bool, created_at: string, excerpt: string, fancy_title: string, featured_link: string, highest_post_number: int, id: int, image_url: string, last_posted_at: string, like_count: int, liked: string, pinned: bool, posters: list, posts_count: int, reply_count: int, slug: string, tags: list, tags_descriptions: record, title: string, unpinned: string, unseen: bool, views: int, visible: bool>, tags: list<any>, tags_descriptions: record, thumbnails: string, timeline_lookup: list<any>, title: string, topic_timer: string, unpinned: string, user_id: int, views: int, visible: bool, word_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2153,7 +2171,7 @@ export def "update-topic-timestamp" [
   --api-key: string # required
   --api-username: string # required
   timestamp: string
-]: any -> record<success: string> {
+]: any -> oneof<record<success: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2200,7 +2218,7 @@ export def "invite-to-topic" [
   --api-username: string # required
   --email: string
   --user: string
-]: any -> record<user: record<avatar_template: string, id: int, name: string, username: string>> {
+]: any -> oneof<record<user: record<avatar_template: string, id: int, name: string, username: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2246,7 +2264,7 @@ export def "set-notification-level" [
   --api-key: string # required
   --api-username: string # required
   notification_level: string@notification-level-completer
-]: any -> record<success: string> {
+]: any -> oneof<record<success: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2291,7 +2309,7 @@ export def "get-specific-posts-from-topic" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # required
   --api-username: string # required
-]: nothing -> record<id: int, post_stream: record<posts: list<record>>> {
+]: nothing -> oneof<record<id: int, post_stream: record<posts: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2336,7 +2354,7 @@ export def "update-topic-status" [
   enabled: string@enabled-completer
   status: string@status-completer
   --until: string # Only required for `pinned` and `pinned_globally`
-]: any -> record<success: string, topic_status_update: string> {
+]: any -> oneof<record<success: string, topic_status_update: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2385,7 +2403,7 @@ export def "create-topic-timer" [
   --category-id: int
   --status-type: string
   --time: string
-]: any -> record<based_on_last_post: bool, category_id: string, closed: bool, duration: string, execute_at: string, success: string> {
+]: any -> oneof<record<based_on_last_post: bool, category_id: string, closed: bool, duration: string, execute_at: string, success: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2428,7 +2446,7 @@ export def "get-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<primary_groups: list<any>, topic_list: record<can_create_topic: bool, draft: string, draft_key: string, draft_sequence: int, per_page: int, tags: list<record>, topics: list<record>>, users: table<avatar_template: string, id: int, name: string, username: string>> {
+]: nothing -> oneof<record<primary_groups: list<any>, topic_list: record<can_create_topic: bool, draft: string, draft_key: string, draft_sequence: int, per_page: int, tags: list<record>, topics: list<record>>, users: table<avatar_template: string, id: int, name: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2463,7 +2481,7 @@ export def "list-tag-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<tag_groups: table<id: int, name: string, one_per_topic: bool, parent_tag_name: list, permissions: record, tag_names: list>> {
+]: nothing -> oneof<record<tag_groups: table<id: int, name: string, one_per_topic: bool, parent_tag_name: list, permissions: record, tag_names: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tag_groups.json" $auth.query)
@@ -2498,7 +2516,7 @@ export def "create-tag-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string
-]: any -> record<tag_group: record<id: int, name: string, one_per_topic: bool, parent_tag_name: list<any>, permissions: record, tag_names: list<any>>> {
+]: any -> oneof<record<tag_group: record<id: int, name: string, one_per_topic: bool, parent_tag_name: list<any>, permissions: record, tag_names: list<any>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2536,7 +2554,7 @@ export def "get-tag-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<tag_group: record<id: int, name: string, one_per_topic: bool, parent_tag_name: list<any>, permissions: record<everyone: int>, tag_names: list<any>>> {
+]: nothing -> oneof<record<tag_group: record<id: int, name: string, one_per_topic: bool, parent_tag_name: list<any>, permissions: record<everyone: int>, tag_names: list<any>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2573,7 +2591,7 @@ export def "update-tag-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
-]: any -> record<success: string, tag_group: record<id: int, name: string, one_per_topic: bool, parent_tag_name: list<any>, permissions: record<everyone: int>, tag_names: list<any>>> {
+]: any -> oneof<record<success: string, tag_group: record<id: int, name: string, one_per_topic: bool, parent_tag_name: list<any>, permissions: record<everyone: int>, tag_names: list<any>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2611,7 +2629,7 @@ export def "list-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<extras: record<categories: list<any>>, tags: table<count: int, id: string, pm_count: int, target_tag: string, text: string>> {
+]: nothing -> oneof<record<extras: record<categories: list<any>>, tags: table<count: int, id: string, pm_count: int, target_tag: string, text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags.json" $auth.query)
@@ -2648,7 +2666,7 @@ export def "list-top-topics" [
   --period: string # Enum: `all`, `yearly`, `quarterly`, `monthly`, `weekly`, `daily`
   --api-key: string # required
   --api-username: string # required
-]: nothing -> record<primary_groups: list<any>, topic_list: record<can_create_topic: bool, draft: string, draft_key: string, draft_sequence: int, for_period: string, per_page: int, topics: list<record>>, users: table<avatar_template: string, id: int, name: string, username: string>> {
+]: nothing -> oneof<record<primary_groups: list<any>, topic_list: record<can_create_topic: bool, draft: string, draft_key: string, draft_sequence: int, for_period: string, per_page: int, topics: list<record>>, users: table<avatar_template: string, id: int, name: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required header parameter 'Api-Key' missing: pass --api-key" } }
@@ -2688,7 +2706,7 @@ export def "get-user-sent-private-messages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<primary_groups: list<any>, topic_list: record<can_create_topic: bool, draft: string, draft_key: string, draft_sequence: int, per_page: int, topics: list<record>>, users: table<avatar_template: string, id: int, name: string, username: string>> {
+]: nothing -> oneof<record<primary_groups: list<any>, topic_list: record<can_create_topic: bool, draft: string, draft_key: string, draft_sequence: int, per_page: int, topics: list<record>>, users: table<avatar_template: string, id: int, name: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2724,7 +2742,7 @@ export def "list-user-private-messages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<primary_groups: list<any>, topic_list: record<can_create_topic: bool, draft: string, draft_key: string, draft_sequence: int, per_page: int, topics: list<record>>, users: table<avatar_template: string, id: int, name: string, username: string>> {
+]: nothing -> oneof<record<primary_groups: list<any>, topic_list: record<can_create_topic: bool, draft: string, draft_key: string, draft_sequence: int, per_page: int, topics: list<record>>, users: table<avatar_template: string, id: int, name: string, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2762,7 +2780,7 @@ export def "get-user-external-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # required
   --api-username: string # required
-]: nothing -> record<user: record<admin: bool, allowed_pm_usernames: list<any>, avatar_template: string, badge_count: int, can_be_deleted: bool, can_change_bio: bool, can_change_location: bool, can_change_tracking_preferences: bool, can_change_website: bool, can_delete_all_posts: bool, can_edit: bool, can_edit_email: bool, can_edit_name: bool, can_edit_username: bool, can_ignore_user: bool, can_mute_user: bool, can_send_private_message_to_user: bool, can_send_private_messages: bool, can_upload_profile_header: bool, can_upload_user_card_background: bool, created_at: string, custom_fields: record<first_name: string>, featured_topic: string, featured_user_badge_ids: list<any>, flair_bg_color: string, flair_color: string, flair_group_id: string, flair_name: string, flair_url: string, group_users: list<record>, groups: list<record>, has_title_badges: bool, id: int, ignored: bool, ignored_usernames: list<any>, invited_by: string, last_posted_at: string, last_seen_at: string, locale: string, mailing_list_posts_per_day: int, moderator: bool, muted: bool, muted_category_ids: list<any>, muted_tags: list<any>, muted_usernames: list<any>, name: string, pending_count: int, pending_posts_count: int, post_count: int, primary_group_id: string, primary_group_name: string, profile_view_count: int, recent_time_read: int, regular_category_ids: list<any>, second_factor_backup_enabled: bool, second_factor_enabled: bool, staged: bool, system_avatar_template: string, system_avatar_upload_id: string, time_read: int, title: string, tracked_category_ids: list<any>, tracked_tags: list<any>, trust_level: int, uploaded_avatar_id: string, use_logo_small_as_avatar: bool, user_api_keys: string, user_auth_tokens: list<record>, user_fields: record<1: string, 2: string>, user_notification_schedule: record<day_0_end_time: int, day_0_start_time: int, day_1_end_time: int, day_1_start_time: int, day_2_end_time: int, day_2_start_time: int, day_3_end_time: int, day_3_start_time: int, day_4_end_time: int, day_4_start_time: int, day_5_end_time: int, day_5_start_time: int, day_6_end_time: int, day_6_start_time: int, enabled: bool>, user_option: record<allow_private_messages: bool, auto_track_topics_after_msecs: int, automatically_unpin_topics: bool, bookmark_auto_delete_preference: int, color_scheme_id: string, dark_scheme_id: string, default_calendar: string, digest_after_minutes: int, dynamic_favicon: bool, email_digests: bool, email_in_reply_to: bool, email_level: int, email_messages_level: int, email_previous_replies: int, enable_allowed_pm_users: bool, enable_defer: bool, enable_quoting: bool, external_links_in_new_tab: bool, hide_profile_and_presence: bool, homepage_id: string, include_tl0_in_digests: bool, like_notification_frequency: int, mailing_list_mode: bool, mailing_list_mode_frequency: int, new_topic_duration_minutes: int, notification_level_when_replying: int, oldest_search_log_date: string, seen_popups: list, sidebar_list_destination: string, skip_new_user_tips: bool, text_size: string, text_size_seq: int, theme_ids: list, theme_key_seq: int, timezone: string, title_count_mode: string, user_id: int>, username: string, watched_category_ids: list<any>, watched_first_post_category_ids: list<any>, watched_tags: list<any>, watching_first_post_tags: list<any>>, user_badges: list<any>> {
+]: nothing -> oneof<record<user: record<admin: bool, allowed_pm_usernames: list<any>, avatar_template: string, badge_count: int, can_be_deleted: bool, can_change_bio: bool, can_change_location: bool, can_change_tracking_preferences: bool, can_change_website: bool, can_delete_all_posts: bool, can_edit: bool, can_edit_email: bool, can_edit_name: bool, can_edit_username: bool, can_ignore_user: bool, can_mute_user: bool, can_send_private_message_to_user: bool, can_send_private_messages: bool, can_upload_profile_header: bool, can_upload_user_card_background: bool, created_at: string, custom_fields: record<first_name: string>, featured_topic: string, featured_user_badge_ids: list<any>, flair_bg_color: string, flair_color: string, flair_group_id: string, flair_name: string, flair_url: string, group_users: list<record>, groups: list<record>, has_title_badges: bool, id: int, ignored: bool, ignored_usernames: list<any>, invited_by: string, last_posted_at: string, last_seen_at: string, locale: string, mailing_list_posts_per_day: int, moderator: bool, muted: bool, muted_category_ids: list<any>, muted_tags: list<any>, muted_usernames: list<any>, name: string, pending_count: int, pending_posts_count: int, post_count: int, primary_group_id: string, primary_group_name: string, profile_view_count: int, recent_time_read: int, regular_category_ids: list<any>, second_factor_backup_enabled: bool, second_factor_enabled: bool, staged: bool, system_avatar_template: string, system_avatar_upload_id: string, time_read: int, title: string, tracked_category_ids: list<any>, tracked_tags: list<any>, trust_level: int, uploaded_avatar_id: string, use_logo_small_as_avatar: bool, user_api_keys: string, user_auth_tokens: list<record>, user_fields: record<1: string, 2: string>, user_notification_schedule: record<day_0_end_time: int, day_0_start_time: int, day_1_end_time: int, day_1_start_time: int, day_2_end_time: int, day_2_start_time: int, day_3_end_time: int, day_3_start_time: int, day_4_end_time: int, day_4_start_time: int, day_5_end_time: int, day_5_start_time: int, day_6_end_time: int, day_6_start_time: int, enabled: bool>, user_option: record<allow_private_messages: bool, auto_track_topics_after_msecs: int, automatically_unpin_topics: bool, bookmark_auto_delete_preference: int, color_scheme_id: string, dark_scheme_id: string, default_calendar: string, digest_after_minutes: int, dynamic_favicon: bool, email_digests: bool, email_in_reply_to: bool, email_level: int, email_messages_level: int, email_previous_replies: int, enable_allowed_pm_users: bool, enable_defer: bool, enable_quoting: bool, external_links_in_new_tab: bool, hide_profile_and_presence: bool, homepage_id: string, include_tl0_in_digests: bool, like_notification_frequency: int, mailing_list_mode: bool, mailing_list_mode_frequency: int, new_topic_duration_minutes: int, notification_level_when_replying: int, oldest_search_log_date: string, seen_popups: list, sidebar_list_destination: string, skip_new_user_tips: bool, text_size: string, text_size_seq: int, theme_ids: list, theme_key_seq: int, timezone: string, title_count_mode: string, user_id: int>, username: string, watched_category_ids: list<any>, watched_first_post_category_ids: list<any>, watched_tags: list<any>, watching_first_post_tags: list<any>>, user_badges: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($external_id | is-empty) { error make --unspanned { msg: "path parameter 'external_id' must be non-empty" } }
@@ -2805,7 +2823,7 @@ export def "get-user-identiy-provider-external-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # required
   --api-username: string # required
-]: nothing -> record<user: record<admin: bool, allowed_pm_usernames: list<any>, avatar_template: string, badge_count: int, can_be_deleted: bool, can_change_bio: bool, can_change_location: bool, can_change_tracking_preferences: bool, can_change_website: bool, can_delete_all_posts: bool, can_edit: bool, can_edit_email: bool, can_edit_name: bool, can_edit_username: bool, can_ignore_user: bool, can_mute_user: bool, can_send_private_message_to_user: bool, can_send_private_messages: bool, can_upload_profile_header: bool, can_upload_user_card_background: bool, created_at: string, custom_fields: record<first_name: string>, featured_topic: string, featured_user_badge_ids: list<any>, flair_bg_color: string, flair_color: string, flair_group_id: string, flair_name: string, flair_url: string, group_users: list<record>, groups: list<record>, has_title_badges: bool, id: int, ignored: bool, ignored_usernames: list<any>, invited_by: string, last_posted_at: string, last_seen_at: string, locale: string, mailing_list_posts_per_day: int, moderator: bool, muted: bool, muted_category_ids: list<any>, muted_tags: list<any>, muted_usernames: list<any>, name: string, pending_count: int, pending_posts_count: int, post_count: int, primary_group_id: string, primary_group_name: string, profile_view_count: int, recent_time_read: int, regular_category_ids: list<any>, second_factor_backup_enabled: bool, second_factor_enabled: bool, staged: bool, system_avatar_template: string, system_avatar_upload_id: string, time_read: int, title: string, tracked_category_ids: list<any>, tracked_tags: list<any>, trust_level: int, uploaded_avatar_id: string, use_logo_small_as_avatar: bool, user_api_keys: string, user_auth_tokens: list<record>, user_fields: record<1: string, 2: string>, user_notification_schedule: record<day_0_end_time: int, day_0_start_time: int, day_1_end_time: int, day_1_start_time: int, day_2_end_time: int, day_2_start_time: int, day_3_end_time: int, day_3_start_time: int, day_4_end_time: int, day_4_start_time: int, day_5_end_time: int, day_5_start_time: int, day_6_end_time: int, day_6_start_time: int, enabled: bool>, user_option: record<allow_private_messages: bool, auto_track_topics_after_msecs: int, automatically_unpin_topics: bool, bookmark_auto_delete_preference: int, color_scheme_id: string, dark_scheme_id: string, default_calendar: string, digest_after_minutes: int, dynamic_favicon: bool, email_digests: bool, email_in_reply_to: bool, email_level: int, email_messages_level: int, email_previous_replies: int, enable_allowed_pm_users: bool, enable_defer: bool, enable_quoting: bool, external_links_in_new_tab: bool, hide_profile_and_presence: bool, homepage_id: string, include_tl0_in_digests: bool, like_notification_frequency: int, mailing_list_mode: bool, mailing_list_mode_frequency: int, new_topic_duration_minutes: int, notification_level_when_replying: int, oldest_search_log_date: string, seen_popups: list, sidebar_list_destination: string, skip_new_user_tips: bool, text_size: string, text_size_seq: int, theme_ids: list, theme_key_seq: int, timezone: string, title_count_mode: string, user_id: int>, username: string, watched_category_ids: list<any>, watched_first_post_category_ids: list<any>, watched_tags: list<any>, watching_first_post_tags: list<any>>, user_badges: list<any>> {
+]: nothing -> oneof<record<user: record<admin: bool, allowed_pm_usernames: list<any>, avatar_template: string, badge_count: int, can_be_deleted: bool, can_change_bio: bool, can_change_location: bool, can_change_tracking_preferences: bool, can_change_website: bool, can_delete_all_posts: bool, can_edit: bool, can_edit_email: bool, can_edit_name: bool, can_edit_username: bool, can_ignore_user: bool, can_mute_user: bool, can_send_private_message_to_user: bool, can_send_private_messages: bool, can_upload_profile_header: bool, can_upload_user_card_background: bool, created_at: string, custom_fields: record<first_name: string>, featured_topic: string, featured_user_badge_ids: list<any>, flair_bg_color: string, flair_color: string, flair_group_id: string, flair_name: string, flair_url: string, group_users: list<record>, groups: list<record>, has_title_badges: bool, id: int, ignored: bool, ignored_usernames: list<any>, invited_by: string, last_posted_at: string, last_seen_at: string, locale: string, mailing_list_posts_per_day: int, moderator: bool, muted: bool, muted_category_ids: list<any>, muted_tags: list<any>, muted_usernames: list<any>, name: string, pending_count: int, pending_posts_count: int, post_count: int, primary_group_id: string, primary_group_name: string, profile_view_count: int, recent_time_read: int, regular_category_ids: list<any>, second_factor_backup_enabled: bool, second_factor_enabled: bool, staged: bool, system_avatar_template: string, system_avatar_upload_id: string, time_read: int, title: string, tracked_category_ids: list<any>, tracked_tags: list<any>, trust_level: int, uploaded_avatar_id: string, use_logo_small_as_avatar: bool, user_api_keys: string, user_auth_tokens: list<record>, user_fields: record<1: string, 2: string>, user_notification_schedule: record<day_0_end_time: int, day_0_start_time: int, day_1_end_time: int, day_1_start_time: int, day_2_end_time: int, day_2_start_time: int, day_3_end_time: int, day_3_start_time: int, day_4_end_time: int, day_4_start_time: int, day_5_end_time: int, day_5_start_time: int, day_6_end_time: int, day_6_start_time: int, enabled: bool>, user_option: record<allow_private_messages: bool, auto_track_topics_after_msecs: int, automatically_unpin_topics: bool, bookmark_auto_delete_preference: int, color_scheme_id: string, dark_scheme_id: string, default_calendar: string, digest_after_minutes: int, dynamic_favicon: bool, email_digests: bool, email_in_reply_to: bool, email_level: int, email_messages_level: int, email_previous_replies: int, enable_allowed_pm_users: bool, enable_defer: bool, enable_quoting: bool, external_links_in_new_tab: bool, hide_profile_and_presence: bool, homepage_id: string, include_tl0_in_digests: bool, like_notification_frequency: int, mailing_list_mode: bool, mailing_list_mode_frequency: int, new_topic_duration_minutes: int, notification_level_when_replying: int, oldest_search_log_date: string, seen_popups: list, sidebar_list_destination: string, skip_new_user_tips: bool, text_size: string, text_size_seq: int, theme_ids: list, theme_key_seq: int, timezone: string, title_count_mode: string, user_id: int>, username: string, watched_category_ids: list<any>, watched_first_post_category_ids: list<any>, watched_tags: list<any>, watching_first_post_tags: list<any>>, user_badges: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider | is-empty) { error make --unspanned { msg: "path parameter 'provider' must be non-empty" } }
@@ -2848,7 +2866,7 @@ export def "get-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # required
   --api-username: string # required
-]: nothing -> record<user: record<admin: bool, allowed_pm_usernames: list<any>, avatar_template: string, badge_count: int, can_be_deleted: bool, can_change_bio: bool, can_change_location: bool, can_change_tracking_preferences: bool, can_change_website: bool, can_delete_all_posts: bool, can_edit: bool, can_edit_email: bool, can_edit_name: bool, can_edit_username: bool, can_ignore_user: bool, can_mute_user: bool, can_send_private_message_to_user: bool, can_send_private_messages: bool, can_upload_profile_header: bool, can_upload_user_card_background: bool, created_at: string, custom_fields: record<first_name: string>, featured_topic: string, featured_user_badge_ids: list<any>, flair_bg_color: string, flair_color: string, flair_group_id: string, flair_name: string, flair_url: string, group_users: list<record>, groups: list<record>, has_title_badges: bool, id: int, ignored: bool, ignored_usernames: list<any>, invited_by: string, last_posted_at: string, last_seen_at: string, locale: string, mailing_list_posts_per_day: int, moderator: bool, muted: bool, muted_category_ids: list<any>, muted_tags: list<any>, muted_usernames: list<any>, name: string, pending_count: int, pending_posts_count: int, post_count: int, primary_group_id: string, primary_group_name: string, profile_view_count: int, recent_time_read: int, regular_category_ids: list<any>, second_factor_backup_enabled: bool, second_factor_enabled: bool, staged: bool, system_avatar_template: string, system_avatar_upload_id: string, time_read: int, title: string, tracked_category_ids: list<any>, tracked_tags: list<any>, trust_level: int, uploaded_avatar_id: string, use_logo_small_as_avatar: bool, user_api_keys: string, user_auth_tokens: list<record>, user_fields: record<1: string, 2: string>, user_notification_schedule: record<day_0_end_time: int, day_0_start_time: int, day_1_end_time: int, day_1_start_time: int, day_2_end_time: int, day_2_start_time: int, day_3_end_time: int, day_3_start_time: int, day_4_end_time: int, day_4_start_time: int, day_5_end_time: int, day_5_start_time: int, day_6_end_time: int, day_6_start_time: int, enabled: bool>, user_option: record<allow_private_messages: bool, auto_track_topics_after_msecs: int, automatically_unpin_topics: bool, bookmark_auto_delete_preference: int, color_scheme_id: string, dark_scheme_id: string, default_calendar: string, digest_after_minutes: int, dynamic_favicon: bool, email_digests: bool, email_in_reply_to: bool, email_level: int, email_messages_level: int, email_previous_replies: int, enable_allowed_pm_users: bool, enable_defer: bool, enable_quoting: bool, external_links_in_new_tab: bool, hide_profile_and_presence: bool, homepage_id: string, include_tl0_in_digests: bool, like_notification_frequency: int, mailing_list_mode: bool, mailing_list_mode_frequency: int, new_topic_duration_minutes: int, notification_level_when_replying: int, oldest_search_log_date: string, seen_popups: list, sidebar_list_destination: string, skip_new_user_tips: bool, text_size: string, text_size_seq: int, theme_ids: list, theme_key_seq: int, timezone: string, title_count_mode: string, user_id: int>, username: string, watched_category_ids: list<any>, watched_first_post_category_ids: list<any>, watched_tags: list<any>, watching_first_post_tags: list<any>>, user_badges: list<any>> {
+]: nothing -> oneof<record<user: record<admin: bool, allowed_pm_usernames: list<any>, avatar_template: string, badge_count: int, can_be_deleted: bool, can_change_bio: bool, can_change_location: bool, can_change_tracking_preferences: bool, can_change_website: bool, can_delete_all_posts: bool, can_edit: bool, can_edit_email: bool, can_edit_name: bool, can_edit_username: bool, can_ignore_user: bool, can_mute_user: bool, can_send_private_message_to_user: bool, can_send_private_messages: bool, can_upload_profile_header: bool, can_upload_user_card_background: bool, created_at: string, custom_fields: record<first_name: string>, featured_topic: string, featured_user_badge_ids: list<any>, flair_bg_color: string, flair_color: string, flair_group_id: string, flair_name: string, flair_url: string, group_users: list<record>, groups: list<record>, has_title_badges: bool, id: int, ignored: bool, ignored_usernames: list<any>, invited_by: string, last_posted_at: string, last_seen_at: string, locale: string, mailing_list_posts_per_day: int, moderator: bool, muted: bool, muted_category_ids: list<any>, muted_tags: list<any>, muted_usernames: list<any>, name: string, pending_count: int, pending_posts_count: int, post_count: int, primary_group_id: string, primary_group_name: string, profile_view_count: int, recent_time_read: int, regular_category_ids: list<any>, second_factor_backup_enabled: bool, second_factor_enabled: bool, staged: bool, system_avatar_template: string, system_avatar_upload_id: string, time_read: int, title: string, tracked_category_ids: list<any>, tracked_tags: list<any>, trust_level: int, uploaded_avatar_id: string, use_logo_small_as_avatar: bool, user_api_keys: string, user_auth_tokens: list<record>, user_fields: record<1: string, 2: string>, user_notification_schedule: record<day_0_end_time: int, day_0_start_time: int, day_1_end_time: int, day_1_start_time: int, day_2_end_time: int, day_2_start_time: int, day_3_end_time: int, day_3_start_time: int, day_4_end_time: int, day_4_start_time: int, day_5_end_time: int, day_5_start_time: int, day_6_end_time: int, day_6_start_time: int, enabled: bool>, user_option: record<allow_private_messages: bool, auto_track_topics_after_msecs: int, automatically_unpin_topics: bool, bookmark_auto_delete_preference: int, color_scheme_id: string, dark_scheme_id: string, default_calendar: string, digest_after_minutes: int, dynamic_favicon: bool, email_digests: bool, email_in_reply_to: bool, email_level: int, email_messages_level: int, email_previous_replies: int, enable_allowed_pm_users: bool, enable_defer: bool, enable_quoting: bool, external_links_in_new_tab: bool, hide_profile_and_presence: bool, homepage_id: string, include_tl0_in_digests: bool, like_notification_frequency: int, mailing_list_mode: bool, mailing_list_mode_frequency: int, new_topic_duration_minutes: int, notification_level_when_replying: int, oldest_search_log_date: string, seen_popups: list, sidebar_list_destination: string, skip_new_user_tips: bool, text_size: string, text_size_seq: int, theme_ids: list, theme_key_seq: int, timezone: string, title_count_mode: string, user_id: int>, username: string, watched_category_ids: list<any>, watched_first_post_category_ids: list<any>, watched_tags: list<any>, watching_first_post_tags: list<any>>, user_badges: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2894,7 +2912,7 @@ export def "update-user" [
   --external-ids: record
   --name: string
   --password: string
-]: any -> record<success: string, user: record> {
+]: any -> oneof<record<success: string, user: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2937,7 +2955,7 @@ export def "get-user-emails" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<associated_accounts: list<any>, email: string, secondary_emails: list<any>, unconfirmed_emails: list<any>> {
+]: nothing -> oneof<record<associated_accounts: list<any>, email: string, secondary_emails: list<any>, unconfirmed_emails: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -2975,7 +2993,7 @@ export def "update-avatar" [
   --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer
   upload_id: int
-]: any -> record<success: string> {
+]: any -> oneof<record<success: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3097,7 +3115,7 @@ export def "create-upload" [
   --synchronous: oneof<nothing, bool> # Use this flag to return an id and url
   type: string@type-completer-1
   --user-id: int # required if uploading an avatar
-]: any -> record<dominant_color: string, extension: string, filesize: int, height: int, human_filesize: string, id: int, original_filename: string, retain_hours: string, short_path: string, short_url: string, thumbnail_height: int, thumbnail_width: int, url: string, width: int> {
+]: any -> oneof<record<dominant_color: string, extension: string, filesize: int, height: int, human_filesize: string, id: int, original_filename: string, retain_hours: string, short_path: string, short_url: string, thumbnail_height: int, thumbnail_width: int, url: string, width: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3137,7 +3155,7 @@ export def "abort-multipart" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   external_upload_identifier: string # The identifier of the multipart upload in the external storage provider. This is the multipart upload_id in AWS S3.
-]: any -> record<success: string> {
+]: any -> oneof<record<success: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3176,7 +3194,7 @@ export def "batch-presign-multipart-parts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   part_numbers: list # The part numbers to generate the presigned URLs for, must be between 1 and 10000.
   unique_identifier: string # The unique identifier returned in the original /create-multipart request.
-]: any -> record<presigned_urls: record> {
+]: any -> oneof<record<presigned_urls: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3217,7 +3235,7 @@ export def "complete-external-upload" [
   --for-site-setting: string # Optionally set this to true if the upload is for a site setting.
   --pasted: string # Optionally set this to true if the upload was pasted into the upload area. This will convert PNG files to JPEG.
   unique_identifier: string # The unique identifier returned in the original /generate-presigned-put request.
-]: any -> record<dominant_color: string, extension: string, filesize: int, height: int, human_filesize: string, id: int, original_filename: string, retain_hours: string, short_path: string, short_url: string, thumbnail_height: int, thumbnail_width: int, url: string, width: int> {
+]: any -> oneof<record<dominant_color: string, extension: string, filesize: int, height: int, human_filesize: string, id: int, original_filename: string, retain_hours: string, short_path: string, short_url: string, thumbnail_height: int, thumbnail_width: int, url: string, width: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3256,7 +3274,7 @@ export def "complete-multipart" [
   --dry-run(-n) # Return the request that would be sent without executing it
   parts: list # All of the part numbers and their corresponding ETags that have been uploaded must be provided.
   unique_identifier: string # The unique identifier returned in the original /create-multipart request.
-]: any -> record<dominant_color: string, extension: string, filesize: int, height: int, human_filesize: string, id: int, original_filename: string, retain_hours: string, short_path: string, short_url: string, thumbnail_height: int, thumbnail_width: int, url: string, width: int> {
+]: any -> oneof<record<dominant_color: string, extension: string, filesize: int, height: int, human_filesize: string, id: int, original_filename: string, retain_hours: string, short_path: string, short_url: string, thumbnail_height: int, thumbnail_width: int, url: string, width: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3283,7 +3301,6 @@ export def "complete-multipart" [
 #
 # POST /uploads/create-multipart.json
 # operationId: createMultipartUpload
-# --metadata shape: {sha1-checksum?: string}
 export def "create-multipart-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3298,7 +3315,7 @@ export def "create-multipart-upload" [
   file_size: int # File size should be represented in bytes.
   --metadata: record # shape: {sha1-checksum?: string}
   upload_type: string@upload-type-completer
-]: any -> record<external_upload_identifier: string, key: string, unique_identifier: string> {
+]: any -> oneof<record<external_upload_identifier: string, key: string, unique_identifier: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3325,7 +3342,6 @@ export def "create-multipart-upload" [
 #
 # POST /uploads/generate-presigned-put.json
 # operationId: generatePresignedPut
-# --metadata shape: {sha1-checksum?: string}
 export def "generate-presigned-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3340,7 +3356,7 @@ export def "generate-presigned-put" [
   file_size: int # File size should be represented in bytes.
   --metadata: record # shape: {sha1-checksum?: string}
   type: string@type-completer-1
-]: any -> record<key: string, unique_identifier: string, url: string> {
+]: any -> oneof<record<key: string, unique_identifier: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3378,7 +3394,7 @@ export def "list-user-badges" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<badge_types: table<id: int, name: string, sort_order: int>, badges: table<allow_title: bool, badge_grouping_id: int, badge_type_id: int, description: string, enabled: bool, grant_count: int, icon: string, id: int, image_url: string, listable: bool, manually_grantable: bool, multiple_grant: bool, name: string, slug: string, system: bool>, granted_bies: table<admin: bool, avatar_template: string, flair_name: string, id: int, moderator: bool, name: string, trust_level: int, username: string>, user_badges: table<badge_id: int, can_favorite: bool, granted_at: string, granted_by_id: int, grouping_position: int, id: int, is_favorite: string>> {
+]: nothing -> oneof<record<badge_types: table<id: int, name: string, sort_order: int>, badges: table<allow_title: bool, badge_grouping_id: int, badge_type_id: int, description: string, enabled: bool, grant_count: int, icon: string, id: int, image_url: string, listable: bool, manually_grantable: bool, multiple_grant: bool, name: string, slug: string, system: bool>, granted_bies: table<admin: bool, avatar_template: string, flair_name: string, id: int, moderator: bool, name: string, trust_level: int, username: string>, user_badges: table<badge_id: int, can_favorite: bool, granted_at: string, granted_by_id: int, grouping_position: int, id: int, is_favorite: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -3416,7 +3432,7 @@ export def "list-user-actions" [
   --offset: int # required
   --username: string # required
   --filter: string # required
-]: nothing -> record<user_actions: table<acting_avatar_template: string, acting_name: string, acting_user_id: int, acting_username: string, action_code: string, action_type: int, archived: bool, avatar_template: string, category_id: int, closed: bool, created_at: string, deleted: bool, excerpt: string, hidden: string, name: string, post_id: string, post_number: int, post_type: string, slug: string, target_name: string, target_user_id: int, target_username: string, title: string, topic_id: int, user_id: int, username: string>> {
+]: nothing -> oneof<record<user_actions: table<acting_avatar_template: string, acting_name: string, acting_user_id: int, acting_username: string, action_code: string, action_type: int, archived: bool, avatar_template: string, category_id: int, closed: bool, created_at: string, deleted: bool, excerpt: string, hidden: string, name: string, post_id: string, post_number: int, post_type: string, slug: string, target_name: string, target_user_id: int, target_username: string, title: string, topic_id: int, user_id: int, username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offset == null) { error make --unspanned { msg: "required query parameter 'offset' missing: pass --offset" } }
@@ -3455,7 +3471,7 @@ export def "refresh-gravatar" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<gravatar_avatar_template: string, gravatar_upload_id: int> {
+]: nothing -> oneof<record<gravatar_avatar_template: string, gravatar_upload_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -3500,7 +3516,7 @@ export def "create-user" [
   password: string
   --user-fields-1: oneof<nothing, bool>
   username: string
-]: any -> record<active: bool, message: string, success: bool, user_id: int> {
+]: any -> oneof<record<active: bool, message: string, success: bool, user_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

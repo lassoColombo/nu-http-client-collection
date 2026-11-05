@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def protocol-completer [] { ["http" "http2" "http_auto" "tcp"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-admin-user-self" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-admin-user-self" "delete-admin-user-self-access-token-access-token-key" "get-admin-user-self-access-tokens" "post-admin-user-self-access-tokens" "get-changelog-adhoc" "get-changelog-cluster-graph-cluster-key" "get-changelog-domain-graph-domain-key" "get-changelog-route-graph-route-key" "get-changelog-shared-rules-graph-shared-rules-key" "get-changelog-zone-zone-key" "get-cluster" "post-cluster" "delete-cluster-cluster-key" "get-cluster-cluster-key" "put-cluster-cluster-key" "post-cluster-cluster-key-instances" "delete-cluster-cluster-key-instances-instance-identifier" "get-domain" "post-domain" "delete-domain-domain-key" "get-domain-domain-key" "get-listener" "post-listener" "delete-listener-listener-key" "get-listener-listener-key" "put-listener-listener-key" "get-proxy" "post-proxy" "delete-proxy-proxy-key" "get-proxy-proxy-key" "get-route" "post-route" "delete-route-route-key" "get-route-route-key" "put-route-route-key" "get-shared-rules" "post-shared-rules" "delete-shared-rules-shared-rules-key" "get-shared-rules-shared-rules-key" "put-shared-rules-shared-rules-key" "get-zone" "post-zone" "delete-zone-zone-key" "get-zone-zone-key" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -152,7 +176,7 @@ export def "get-admin-user-self" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<checksum: string, deleted_at: string, login_email: string, user_key: string> {
+]: nothing -> oneof<record<checksum: string, deleted_at: string, login_email: string, user_key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/user/self" $auth.query)
@@ -223,7 +247,7 @@ export def "get-admin-user-self-access-tokens" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: table<access_token_key: string, checksum: string, created_at: string, description: string, signed_token: string, user_key: string>> {
+]: nothing -> oneof<record<result: table<access_token_key: string, checksum: string, created_at: string, description: string, signed_token: string, user_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/user/self/access_tokens" $auth.query)
@@ -257,7 +281,7 @@ export def "post-admin-user-self-access-tokens" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   description: string
-]: any -> record<access_token_key: string, checksum: string, created_at: string, description: string, signed_token: string, user_key: string> {
+]: any -> oneof<record<access_token_key: string, checksum: string, created_at: string, description: string, signed_token: string, user_key: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -294,7 +318,7 @@ export def "get-changelog-adhoc" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Encoded FilterSums representing the query you would like to execute. See object definition for details.
-]: nothing -> record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>> {
+]: nothing -> oneof<record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
@@ -334,7 +358,7 @@ export def "get-changelog-cluster-graph-cluster-key" [
   --max-results: float # Determines how many ChangeDescription object should be returned to the calling code. (format: int64)
   --ref-id: string # When paginating a Changelog request start on the entry that comes immediately before or after this ID (as determined by the direction argument).
   --direction: string@direction-completer # If set to "before" then changes will be returned that occurred before reference ID. If "after" then changes will be returned that have occurred since the reference ID.
-]: nothing -> record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>> {
+]: nothing -> oneof<record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_key | is-empty) { error make --unspanned { msg: "path parameter 'clusterKey' must be non-empty" } }
@@ -375,7 +399,7 @@ export def "get-changelog-domain-graph-domain-key" [
   --max-results: float # Determines how many ChangeDescription object should be returned to the calling code. (format: int64)
   --ref-id: string # When paginating a Changelog request start on the entry that comes immediately before or after this ID (as determined by the direction argument).
   --direction: string@direction-completer # If set to "before" then changes will be returned that occurred before reference ID. If "after" then changes will be returned that have occurred since the reference ID.
-]: nothing -> record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>> {
+]: nothing -> oneof<record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_key | is-empty) { error make --unspanned { msg: "path parameter 'domainKey' must be non-empty" } }
@@ -416,7 +440,7 @@ export def "get-changelog-route-graph-route-key" [
   --max-results: float # Determines how many ChangeDescription object should be returned to the calling code. (format: int64)
   --ref-id: string # When paginating a Changelog request start on the entry that comes immediately before or after this ID (as determined by the direction argument).
   --direction: string@direction-completer # If set to "before" then changes will be returned that occurred before reference ID. If "after" then changes will be returned that have occurred since the reference ID.
-]: nothing -> record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>> {
+]: nothing -> oneof<record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($route_key | is-empty) { error make --unspanned { msg: "path parameter 'routeKey' must be non-empty" } }
@@ -457,7 +481,7 @@ export def "get-changelog-shared-rules-graph-shared-rules-key" [
   --max-results: float # Determines how many ChangeDescription object should be returned to the calling code. (format: int64)
   --ref-id: string # When paginating a Changelog request start on the entry that comes immediately before or after this ID (as determined by the direction argument).
   --direction: string@direction-completer # If set to "before" then changes will be returned that occurred before reference ID. If "after" then changes will be returned that have occurred since the reference ID.
-]: nothing -> record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>> {
+]: nothing -> oneof<record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shared_rules_key | is-empty) { error make --unspanned { msg: "path parameter 'sharedRulesKey' must be non-empty" } }
@@ -498,7 +522,7 @@ export def "get-changelog-zone-zone-key" [
   --max-results: float # Determines how many ChangeDescription object should be returned to the calling code. (format: int64)
   --ref-id: string # When paginating a Changelog request start on the entry that comes immediately before or after this ID (as determined by the direction argument).
   --direction: string@direction-completer # If set to "before" then changes will be returned that occurred before reference ID. If "after" then changes will be returned that have occurred since the reference ID.
-]: nothing -> record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>> {
+]: nothing -> oneof<record<details: record<pagination: record<direction: string, has_more: bool, ref_id: string, total_entries: int>>, result: table<actor_key: string, at: float, comment: string, diffs: list, txn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($zone_key | is-empty) { error make --unspanned { msg: "path parameter 'zoneKey' must be non-empty" } }
@@ -534,7 +558,7 @@ export def "get-cluster" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # A JSON encoded array of ClusterFilter objects. The filter is taken as a union of intersections. In other words an object that matches every constraint in any ClusterFilter will be included.
-]: nothing -> record<result: table<circuit_breakers: record, health_checks: list, instances: list, name: string, outlier_detection: record, require_tls: bool, zone_key: string, checksum: string, cluster_key: string>> {
+]: nothing -> oneof<record<result: table<circuit_breakers: record, health_checks: list, instances: list, name: string, outlier_detection: record, require_tls: bool, zone_key: string, checksum: string, cluster_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -558,10 +582,6 @@ export def "get-cluster" [
 # create cluster
 #
 # POST /cluster
-# --circuit_breakers shape: {max_connections?: int, max_pending_requests?: int, max_requests?: int, max_retries?: int}
-# --health_checks item shape: {health_checker: record, healthy_edge_interval_msec?: int, healthy_threshold: int, interval_jitter_msec?: int, interval_msec: int, no_traffic_interval_msec?: int, reuse_connection?: bool, timeout_msec: int, unhealthy_edge_interval_msec?: int, unhealthy_interval_msec?: int, unhealthy_threshold: int}
-# --instances item shape: {host?: string, metadata?: list, port?: int}
-# --outlier_detection shape: {base_ejection_time_msec?: int, consecutive_5xx?: int, consecutive_gateway_failure?: int, enforcing_consecutive_5xx?: int, enforcing_consecutive_gateway_failure?: int, enforcing_success_rate?: int, interval_msec?: int, max_ejection_percent?: int, success_rate_minimum_hosts?: int, success_rate_request_volume?: int, success_rate_stdev_factor?: int}
 export def "post-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -579,7 +599,7 @@ export def "post-cluster" [
   --outlier-detection: record # A form of passive health checking that dynamically determines whether instances in a cluster are performing unlike others and preemptively removes them from a load balancing set. — shape: {base_ejection_time_msec?: int, consecutive_5xx?: int, consecutive_gateway_failure?: int, enforcing_consecutive_5xx?: int, enforcing_consecutive_gateway_failure?: int, enforcing_success_rate?: int, interval_msec?: int, max_ejection_percent?: int, success_rate_minimum_hosts?: int, success_rate_request_volume?: int, success_rate_stdev_factor?: int}
   --require-tls: oneof<nothing, bool> # If set, requests to this collection of hosts will be made via HTTPS. At this time neither certificate validation and certificate pinning are supported for proxy clients of this cluster.
   zone_key: string
-]: any -> record<result: record<circuit_breakers: record<max_connections: int, max_pending_requests: int, max_requests: int, max_retries: int>, health_checks: list<record>, instances: list<record>, name: string, outlier_detection: record<base_ejection_time_msec: int, consecutive_5xx: int, consecutive_gateway_failure: int, enforcing_consecutive_5xx: int, enforcing_consecutive_gateway_failure: int, enforcing_success_rate: int, interval_msec: int, max_ejection_percent: int, success_rate_minimum_hosts: int, success_rate_request_volume: int, success_rate_stdev_factor: int>, require_tls: bool, zone_key: string, checksum: string, cluster_key: string>> {
+]: any -> oneof<record<result: record<circuit_breakers: record<max_connections: int, max_pending_requests: int, max_requests: int, max_retries: int>, health_checks: list<record>, instances: list<record>, name: string, outlier_detection: record<base_ejection_time_msec: int, consecutive_5xx: int, consecutive_gateway_failure: int, enforcing_consecutive_5xx: int, enforcing_consecutive_gateway_failure: int, enforcing_success_rate: int, interval_msec: int, max_ejection_percent: int, success_rate_minimum_hosts: int, success_rate_request_volume: int, success_rate_stdev_factor: int>, require_tls: bool, zone_key: string, checksum: string, cluster_key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -617,7 +637,7 @@ export def "delete-cluster-cluster-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --checksum: string # the current checksum of the cluster to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_key | is-empty) { error make --unspanned { msg: "path parameter 'clusterKey' must be non-empty" } }
@@ -654,7 +674,7 @@ export def "get-cluster-cluster-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<circuit_breakers: record<max_connections: int, max_pending_requests: int, max_requests: int, max_retries: int>, health_checks: list<record>, instances: list<record>, name: string, outlier_detection: record<base_ejection_time_msec: int, consecutive_5xx: int, consecutive_gateway_failure: int, enforcing_consecutive_5xx: int, enforcing_consecutive_gateway_failure: int, enforcing_success_rate: int, interval_msec: int, max_ejection_percent: int, success_rate_minimum_hosts: int, success_rate_request_volume: int, success_rate_stdev_factor: int>, require_tls: bool, zone_key: string, checksum: string, cluster_key: string>> {
+]: nothing -> oneof<record<result: record<circuit_breakers: record<max_connections: int, max_pending_requests: int, max_requests: int, max_retries: int>, health_checks: list<record>, instances: list<record>, name: string, outlier_detection: record<base_ejection_time_msec: int, consecutive_5xx: int, consecutive_gateway_failure: int, enforcing_consecutive_5xx: int, enforcing_consecutive_gateway_failure: int, enforcing_success_rate: int, interval_msec: int, max_ejection_percent: int, success_rate_minimum_hosts: int, success_rate_request_volume: int, success_rate_stdev_factor: int>, require_tls: bool, zone_key: string, checksum: string, cluster_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_key | is-empty) { error make --unspanned { msg: "path parameter 'clusterKey' must be non-empty" } }
@@ -678,10 +698,6 @@ export def "get-cluster-cluster-key" [
 # modify cluster
 #
 # PUT /cluster/{clusterKey}
-# --circuit_breakers shape: {max_connections?: int, max_pending_requests?: int, max_requests?: int, max_retries?: int}
-# --health_checks item shape: {health_checker: record, healthy_edge_interval_msec?: int, healthy_threshold: int, interval_jitter_msec?: int, interval_msec: int, no_traffic_interval_msec?: int, reuse_connection?: bool, timeout_msec: int, unhealthy_edge_interval_msec?: int, unhealthy_interval_msec?: int, unhealthy_threshold: int}
-# --instances item shape: {host?: string, metadata?: list, port?: int}
-# --outlier_detection shape: {base_ejection_time_msec?: int, consecutive_5xx?: int, consecutive_gateway_failure?: int, enforcing_consecutive_5xx?: int, enforcing_consecutive_gateway_failure?: int, enforcing_success_rate?: int, interval_msec?: int, max_ejection_percent?: int, success_rate_minimum_hosts?: int, success_rate_request_volume?: int, success_rate_stdev_factor?: int}
 export def "put-cluster-cluster-key" [
   cluster_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -702,7 +718,7 @@ export def "put-cluster-cluster-key" [
   zone_key: string
   checksum: string
   --body-cluster-key: string
-]: any -> record<result: record<circuit_breakers: record<max_connections: int, max_pending_requests: int, max_requests: int, max_retries: int>, health_checks: list<record>, instances: list<record>, name: string, outlier_detection: record<base_ejection_time_msec: int, consecutive_5xx: int, consecutive_gateway_failure: int, enforcing_consecutive_5xx: int, enforcing_consecutive_gateway_failure: int, enforcing_success_rate: int, interval_msec: int, max_ejection_percent: int, success_rate_minimum_hosts: int, success_rate_request_volume: int, success_rate_stdev_factor: int>, require_tls: bool, zone_key: string, checksum: string, cluster_key: string>> {
+]: any -> oneof<record<result: record<circuit_breakers: record<max_connections: int, max_pending_requests: int, max_requests: int, max_retries: int>, health_checks: list<record>, instances: list<record>, name: string, outlier_detection: record<base_ejection_time_msec: int, consecutive_5xx: int, consecutive_gateway_failure: int, enforcing_consecutive_5xx: int, enforcing_consecutive_gateway_failure: int, enforcing_success_rate: int, interval_msec: int, max_ejection_percent: int, success_rate_minimum_hosts: int, success_rate_request_volume: int, success_rate_stdev_factor: int>, require_tls: bool, zone_key: string, checksum: string, cluster_key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -730,7 +746,6 @@ export def "put-cluster-cluster-key" [
 # add instance
 #
 # POST /cluster/{clusterKey}/instances
-# --metadata item shape: {key?: string, value?: string}
 export def "post-cluster-cluster-key-instances" [
   cluster_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -745,7 +760,7 @@ export def "post-cluster-cluster-key-instances" [
   --host: string
   --metadata: list # item shape: {key?: string, value?: string}
   --port: int
-]: any -> record<result: record<host: string, metadata: list<record>, port: int>> {
+]: any -> oneof<record<result: record<host: string, metadata: list<record>, port: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -785,7 +800,7 @@ export def "delete-cluster-cluster-key-instances-instance-identifier" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --checksum: string # the current checksum of the instance to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cluster_key | is-empty) { error make --unspanned { msg: "path parameter 'clusterKey' must be non-empty" } }
@@ -823,7 +838,7 @@ export def "get-domain" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # A JSON encoded array of DomainFilter objects. The filter is taken as a union of intersections. In other words an object that matches every constraint in any DomainFilter will be included.
-]: nothing -> record<result: table<aliases: list, checksum: string, cors_config: record, domain_key: string, force_https: bool, gzip_enabled: bool, name: string, port: int, redirects: list, ssl_config: record, zone_key: string>> {
+]: nothing -> oneof<record<result: table<aliases: list, checksum: string, cors_config: record, domain_key: string, force_https: bool, gzip_enabled: bool, name: string, port: int, redirects: list, ssl_config: record, zone_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -847,9 +862,6 @@ export def "get-domain" [
 # create domain
 #
 # POST /domain
-# --cors_config shape: {allow_credentials?: bool, allowed_headers?: list<string>, allowed_methods: list<string>, allowed_origins: list<string>, exposed_headers?: list<string>, max_age?: int}
-# --redirects item shape: {from: string, header_constraints?: list, name: string, redirect_type: "permanent"|"temporary", to: string}
-# --ssl_config shape: {cert_key_pairs: list, cipher_filter?: string, protocols?: list<string>}
 export def "post-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -871,7 +883,7 @@ export def "post-domain" [
   --redirects: list # item shape: {from: string, header_constraints?: list, name: string, redirect_type: "permanent"|"temporary", to: string}
   --ssl-config: record # Experimental: Specifies whether a domain should support SSL/TLS connections from clients. If not set the proxy will expect unencrypted HTTP traffic. — shape: {cert_key_pairs: list, cipher_filter?: string, protocols?: list<string>}
   zone_key: string
-]: any -> record<result: record<aliases: list<string>, checksum: string, cors_config: record<allow_credentials: bool, allowed_headers: list, allowed_methods: list, allowed_origins: list, exposed_headers: list, max_age: int>, domain_key: string, force_https: bool, gzip_enabled: bool, name: string, port: int, redirects: list<record>, ssl_config: record<cert_key_pairs: list, cipher_filter: string, protocols: list>, zone_key: string>> {
+]: any -> oneof<record<result: record<aliases: list<string>, checksum: string, cors_config: record<allow_credentials: bool, allowed_headers: list, allowed_methods: list, allowed_origins: list, exposed_headers: list, max_age: int>, domain_key: string, force_https: bool, gzip_enabled: bool, name: string, port: int, redirects: list<record>, ssl_config: record<cert_key_pairs: list, cipher_filter: string, protocols: list>, zone_key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -909,7 +921,7 @@ export def "delete-domain-domain-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --checksum: string # the current checksum of the domain to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_key | is-empty) { error make --unspanned { msg: "path parameter 'domainKey' must be non-empty" } }
@@ -946,7 +958,7 @@ export def "get-domain-domain-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<aliases: list<string>, checksum: string, cors_config: record<allow_credentials: bool, allowed_headers: list, allowed_methods: list, allowed_origins: list, exposed_headers: list, max_age: int>, domain_key: string, force_https: bool, gzip_enabled: bool, name: string, port: int, redirects: list<record>, ssl_config: record<cert_key_pairs: list, cipher_filter: string, protocols: list>, zone_key: string>> {
+]: nothing -> oneof<record<result: record<aliases: list<string>, checksum: string, cors_config: record<allow_credentials: bool, allowed_headers: list, allowed_methods: list, allowed_origins: list, exposed_headers: list, max_age: int>, domain_key: string, force_https: bool, gzip_enabled: bool, name: string, port: int, redirects: list<record>, ssl_config: record<cert_key_pairs: list, cipher_filter: string, protocols: list>, zone_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_key | is-empty) { error make --unspanned { msg: "path parameter 'domainKey' must be non-empty" } }
@@ -981,7 +993,7 @@ export def "get-listener" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # A JSON encoded array of ListenerFilter objects. The filter is taken as a union of intersections. In other words an object that matches every constraint in any ListenerFilter will be included.
-]: nothing -> record<result: table<domain_keys: list, ip: string, name: string, port: int, protocol: string, tracing_config: record, zone_key: string, checksum: string, listener_key: string>> {
+]: nothing -> oneof<record<result: table<domain_keys: list, ip: string, name: string, port: int, protocol: string, tracing_config: record, zone_key: string, checksum: string, listener_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -1005,7 +1017,6 @@ export def "get-listener" [
 # create listener
 #
 # POST /listener
-# --tracing_config shape: {ingress?: bool, request_headers_for_tags?: list<string>}
 export def "post-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1023,7 +1034,7 @@ export def "post-listener" [
   protocol: string@protocol-completer # the protocol this listener will handle. http and http2 configure the listener to only process requests of that type. http_auto will adapt to HTTP/1.1 and HTTP/2 as needed. tcp configures the listener to be a tcp proxy
   --tracing-config: record # Configures tracing operations to be performed on the given listener — shape: {ingress?: bool, request_headers_for_tags?: list<string>}
   --zone-key: string
-]: any -> record<result: record<domain_keys: list<string>, ip: string, name: string, port: int, protocol: string, tracing_config: record<ingress: bool, request_headers_for_tags: list>, zone_key: string, checksum: string, listener_key: string>> {
+]: any -> oneof<record<result: record<domain_keys: list<string>, ip: string, name: string, port: int, protocol: string, tracing_config: record<ingress: bool, request_headers_for_tags: list>, zone_key: string, checksum: string, listener_key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1061,7 +1072,7 @@ export def "delete-listener-listener-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --checksum: string # the current checksum of the listener to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
-]: nothing -> record<domain_keys: list<string>, ip: string, name: string, port: int, protocol: string, tracing_config: record<ingress: bool, request_headers_for_tags: list<string>>, zone_key: string, checksum: string, listener_key: string> {
+]: nothing -> oneof<record<domain_keys: list<string>, ip: string, name: string, port: int, protocol: string, tracing_config: record<ingress: bool, request_headers_for_tags: list<string>>, zone_key: string, checksum: string, listener_key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($listener_key | is-empty) { error make --unspanned { msg: "path parameter 'listenerKey' must be non-empty" } }
@@ -1098,7 +1109,7 @@ export def "get-listener-listener-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<domain_keys: list<string>, ip: string, name: string, port: int, protocol: string, tracing_config: record<ingress: bool, request_headers_for_tags: list>, zone_key: string, checksum: string, listener_key: string>> {
+]: nothing -> oneof<record<result: record<domain_keys: list<string>, ip: string, name: string, port: int, protocol: string, tracing_config: record<ingress: bool, request_headers_for_tags: list>, zone_key: string, checksum: string, listener_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($listener_key | is-empty) { error make --unspanned { msg: "path parameter 'listenerKey' must be non-empty" } }
@@ -1122,7 +1133,6 @@ export def "get-listener-listener-key" [
 # modify listener
 #
 # PUT /listener/{listenerKey}
-# --tracing_config shape: {ingress?: bool, request_headers_for_tags?: list<string>}
 export def "put-listener-listener-key" [
   listener_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1143,7 +1153,7 @@ export def "put-listener-listener-key" [
   zone_key: string
   checksum: string
   --body-listener-key: string
-]: any -> record<result: record<domain_keys: list<string>, ip: string, name: string, port: int, protocol: string, tracing_config: record<ingress: bool, request_headers_for_tags: list>, zone_key: string, checksum: string, listener_key: string>> {
+]: any -> oneof<record<result: record<domain_keys: list<string>, ip: string, name: string, port: int, protocol: string, tracing_config: record<ingress: bool, request_headers_for_tags: list>, zone_key: string, checksum: string, listener_key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1182,7 +1192,7 @@ export def "get-proxy" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # A JSON encoded array of ProxyFilter objects. The filter is taken as a union of intersections. In other words an object that matches every constraint in any ProxyFilter will be included.
-]: nothing -> record<result: table<domain_keys: list, listener_keys: list, name: string, zone_key: string, checksum: string, proxy_key: string>> {
+]: nothing -> oneof<record<result: table<domain_keys: list, listener_keys: list, name: string, zone_key: string, checksum: string, proxy_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -1220,7 +1230,7 @@ export def "post-proxy" [
   --listener-keys: list<string>
   name: string
   zone_key: string
-]: any -> record<result: record<domain_keys: list<string>, listener_keys: list<string>, name: string, zone_key: string, checksum: string, proxy_key: string>> {
+]: any -> oneof<record<result: record<domain_keys: list<string>, listener_keys: list<string>, name: string, zone_key: string, checksum: string, proxy_key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1258,7 +1268,7 @@ export def "delete-proxy-proxy-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --checksum: string # the current checksum of the proxy to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
-]: nothing -> record<domain_keys: list<string>, listener_keys: list<string>, name: string, zone_key: string, checksum: string, proxy_key: string> {
+]: nothing -> oneof<record<domain_keys: list<string>, listener_keys: list<string>, name: string, zone_key: string, checksum: string, proxy_key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($proxy_key | is-empty) { error make --unspanned { msg: "path parameter 'proxyKey' must be non-empty" } }
@@ -1295,7 +1305,7 @@ export def "get-proxy-proxy-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<domain_keys: list<string>, listener_keys: list<string>, name: string, zone_key: string, checksum: string, proxy_key: string>> {
+]: nothing -> oneof<record<result: record<domain_keys: list<string>, listener_keys: list<string>, name: string, zone_key: string, checksum: string, proxy_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($proxy_key | is-empty) { error make --unspanned { msg: "path parameter 'proxyKey' must be non-empty" } }
@@ -1330,7 +1340,7 @@ export def "get-route" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # A JSON encoded array of RouteFilter objects. The filter is taken as a union of intersections. In other words an object that matches every constraint in any RouteFilter will be included.
-]: nothing -> record<result: table<checksum: string, cohort_seed: record, domain_key: string, path: string, response_data: record, retry_policy: record, route_key: string, rules: list, shared_rules_key: string, zone_key: string>> {
+]: nothing -> oneof<record<result: table<checksum: string, cohort_seed: record, domain_key: string, path: string, response_data: record, retry_policy: record, route_key: string, rules: list, shared_rules_key: string, zone_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -1354,10 +1364,6 @@ export def "get-route" [
 # create route
 #
 # POST /route
-# --cohort_seed shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
-# --response_data shape: {cookies?: list, headers?: list}
-# --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
-# --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
 export def "post-route" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1378,7 +1384,7 @@ export def "post-route" [
   --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
   shared_rules_key: string
   zone_key: string
-]: any -> record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, domain_key: string, path: string, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, route_key: string, rules: list<record>, shared_rules_key: string, zone_key: string>> {
+]: any -> oneof<record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, domain_key: string, path: string, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, route_key: string, rules: list<record>, shared_rules_key: string, zone_key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1416,7 +1422,7 @@ export def "delete-route-route-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --checksum: string # the current checksum of the route to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($route_key | is-empty) { error make --unspanned { msg: "path parameter 'routeKey' must be non-empty" } }
@@ -1453,7 +1459,7 @@ export def "get-route-route-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, domain_key: string, path: string, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, route_key: string, rules: list<record>, shared_rules_key: string, zone_key: string>> {
+]: nothing -> oneof<record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, domain_key: string, path: string, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, route_key: string, rules: list<record>, shared_rules_key: string, zone_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($route_key | is-empty) { error make --unspanned { msg: "path parameter 'routeKey' must be non-empty" } }
@@ -1477,10 +1483,6 @@ export def "get-route-route-key" [
 # modify route
 #
 # PUT /route/{routeKey}
-# --cohort_seed shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
-# --response_data shape: {cookies?: list, headers?: list}
-# --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
-# --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
 export def "put-route-route-key" [
   route_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1502,7 +1504,7 @@ export def "put-route-route-key" [
   --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
   shared_rules_key: string
   zone_key: string
-]: any -> record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, domain_key: string, path: string, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, route_key: string, rules: list<record>, shared_rules_key: string, zone_key: string>> {
+]: any -> oneof<record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, domain_key: string, path: string, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, route_key: string, rules: list<record>, shared_rules_key: string, zone_key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1541,7 +1543,7 @@ export def "get-shared-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # A JSON encoded array of SharedRulesFilter objects. The filter is taken as a union of intersections. In other words an object that matches every constraint in any SharedRulesFilter will be included.
-]: nothing -> record<result: table<checksum: string, cohort_seed: record, default: record, properties: list, response_data: record, retry_policy: record, rules: list, shared_rules_key: string, zone_key: string>> {
+]: nothing -> oneof<record<result: table<checksum: string, cohort_seed: record, default: record, properties: list, response_data: record, retry_policy: record, rules: list, shared_rules_key: string, zone_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -1565,12 +1567,6 @@ export def "get-shared-rules" [
 # create shared_rules
 #
 # POST /shared_rules
-# --cohort_seed shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
-# --default shape: {dark?: list, light: list, tap?: list}
-# --properties item shape: {key?: string, value?: string}
-# --response_data shape: {cookies?: list, headers?: list}
-# --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
-# --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
 export def "post-shared-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1590,7 +1586,7 @@ export def "post-shared-rules" [
   --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
   --shared-rules-key: string
   zone_key: string
-]: any -> record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, default: record<dark: list, light: list, tap: list>, properties: list<record>, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, rules: list<record>, shared_rules_key: string, zone_key: string>> {
+]: any -> oneof<record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, default: record<dark: list, light: list, tap: list>, properties: list<record>, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, rules: list<record>, shared_rules_key: string, zone_key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1628,7 +1624,7 @@ export def "delete-shared-rules-shared-rules-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --checksum: string # the current checksum of the shared_rules to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shared_rules_key | is-empty) { error make --unspanned { msg: "path parameter 'sharedRulesKey' must be non-empty" } }
@@ -1665,7 +1661,7 @@ export def "get-shared-rules-shared-rules-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, default: record<dark: list, light: list, tap: list>, properties: list<record>, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, rules: list<record>, shared_rules_key: string, zone_key: string>> {
+]: nothing -> oneof<record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, default: record<dark: list, light: list, tap: list>, properties: list<record>, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, rules: list<record>, shared_rules_key: string, zone_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shared_rules_key | is-empty) { error make --unspanned { msg: "path parameter 'sharedRulesKey' must be non-empty" } }
@@ -1689,12 +1685,6 @@ export def "get-shared-rules-shared-rules-key" [
 # modify shared_rules object
 #
 # PUT /shared_rules/{sharedRulesKey}
-# --cohort_seed shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
-# --default shape: {dark?: list, light: list, tap?: list}
-# --properties item shape: {key?: string, value?: string}
-# --response_data shape: {cookies?: list, headers?: list}
-# --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
-# --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
 export def "put-shared-rules-shared-rules-key" [
   shared_rules_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1715,7 +1705,7 @@ export def "put-shared-rules-shared-rules-key" [
   --rules: list # item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
   --body-shared-rules-key: string
   zone_key: string
-]: any -> record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, default: record<dark: list, light: list, tap: list>, properties: list<record>, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, rules: list<record>, shared_rules_key: string, zone_key: string>> {
+]: any -> oneof<record<result: record<checksum: string, cohort_seed: record<name: string, type: string, use_zero_value_seed: bool>, default: record<dark: list, light: list, tap: list>, properties: list<record>, response_data: record<cookies: list, headers: list>, retry_policy: record<num_retries: int, per_try_timeout_msec: int, timeout_msec: int>, rules: list<record>, shared_rules_key: string, zone_key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1754,7 +1744,7 @@ export def "get-zone" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: string # A JSON encoded array of ZoneFilter objects. The filter is taken as a union of intersections. In other words an object that matches every constraint in any ZoneFilter will be included.
-]: nothing -> record<result: table<checksum: string, name: string, zone_key: string>> {
+]: nothing -> oneof<record<result: table<checksum: string, name: string, zone_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -1789,7 +1779,7 @@ export def "post-zone" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string
-]: any -> record<result: record<checksum: string, name: string, zone_key: string>> {
+]: any -> oneof<record<result: record<checksum: string, name: string, zone_key: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1827,7 +1817,7 @@ export def "delete-zone-zone-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --checksum: string # the current checksum of the zone to be deleted (required, e.g. 9cd24183-f848-48f8-6f55-0f07240700b9)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($zone_key | is-empty) { error make --unspanned { msg: "path parameter 'zoneKey' must be non-empty" } }
@@ -1864,7 +1854,7 @@ export def "get-zone-zone-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<checksum: string, name: string, zone_key: string>> {
+]: nothing -> oneof<record<result: record<checksum: string, name: string, zone_key: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($zone_key | is-empty) { error make --unspanned { msg: "path parameter 'zoneKey' must be non-empty" } }

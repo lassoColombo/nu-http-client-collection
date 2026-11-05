@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def replicate-to-completer [] { ["NONE" "SSM_DOCUMENT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-application" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-application" "list-applications" "create-configuration-profile" "list-configuration-profiles" "create-deployment-strategy" "list-deployment-strategies" "create-environment" "list-environments" "create-extension" "list-extensions" "create-extension-association" "list-extension-associations" "create-hosted-configuration-version" "delete-application" "get-application" "update-application" "delete-configuration-profile" "get-configuration-profile" "update-configuration-profile" "delete-deployment-strategy" "delete-environment" "get-environment" "update-environment" "delete-extension" "get-extension" "update-extension" "delete-extension-association" "get-extension-association" "update-extension-association" "delete-hosted-configuration-version" "get-hosted-configuration-version" "get-configuration" "get-deployment" "stop-deployment" "get-deployment-strategy" "update-deployment-strategy" "list-deployments" "start-deployment" "list-hosted-configuration-versions" "list-tags-for-resource" "tag-resource" "untag-resource" "validate-configuration" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -163,7 +187,7 @@ export def "create-application" [
   name: string # A name for the application.
   --description: string # A description of the application.
   --tags: record # Metadata to assign to the application. Tags help organize and categorize your AppConfig resources. Each tag consists of a key and an optional value, both of which you define.
-]: any -> record<Id: string, Name: string, Description: string> {
+]: any -> oneof<record<Id: string, Name: string, Description: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -213,7 +237,7 @@ export def "list-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<Id: string, Name: string, Description: string>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<Id: string, Name: string, Description: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -240,7 +264,6 @@ export def "list-applications" [
 #
 # POST /applications/{ApplicationId}/configurationprofiles
 # operationId: CreateConfigurationProfile
-# --Validators item shape: {Type: "JSON_SCHEMA"|"LAMBDA", Content: string}
 export def "create-configuration-profile" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -266,7 +289,7 @@ export def "create-configuration-profile" [
   --validators: list # A list of methods for validating the configuration. — item shape: {Type: "JSON_SCHEMA"|"LAMBDA", Content: string}
   --tags: record # Metadata to assign to the configuration profile. Tags help organize and categorize your AppConfig resources. Each tag consists of a key and an optional value, both of which you define.
   --type: string # The type of configurations contained in the profile. AppConfig supports feature flags and freeform configurations. We recommend you create feature flag configurations to enable or disable new features and freeform configurations to distribute configurations to an application. When calling this API, enter one of the following values for Type: AWS.AppConfig.FeatureFlags AWS.Freeform
-]: any -> record<ApplicationId: string, Id: string, Name: string, Description: string, LocationUri: string, RetrievalRoleArn: string, Validators: table<Type: string, Content: string>, Type: string> {
+]: any -> oneof<record<ApplicationId: string, Id: string, Name: string, Description: string, LocationUri: string, RetrievalRoleArn: string, Validators: table<Type: string, Content: string>, Type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -319,7 +342,7 @@ export def "list-configuration-profiles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<ApplicationId: string, Id: string, Name: string, LocationUri: string, ValidatorTypes: list, Type: string>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<ApplicationId: string, Id: string, Name: string, LocationUri: string, ValidatorTypes: list, Type: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
@@ -372,7 +395,7 @@ export def "create-deployment-strategy" [
   --growth-type: string@growth-type-completer # The algorithm used to define how percentage grows over time. AppConfig supports the following growth types: Linear: For this type, AppConfig processes the deployment by dividing the total number of targets by the value specified for Step percentage. For example, a linear deployment that uses a Step percentage of 10 deploys the configuration to 10 percent of the hosts. After those deployments are complete, the system deploys the configuration to the next 10 percent. This continues until 100% of the targets have successfully received the configuration. Exponential: For this type, AppConfig processes the deployment exponentially using the following formula: G*(2^N). In this formula, G is the growth factor specified by the user and N is the number of steps until the configuration is deployed to all targets. For example, if you specify a growth factor of 2, then the system rolls out the configuration as follows: 2*(2^0) 2*(2^1) 2*(2^2) Expressed numerically, the deployment rolls out as follows: 2% of the targets, 4% of the targets, 8% of the targets, and continues until the configuration has been deployed to all targets.
   --replicate-to: string@replicate-to-completer # Save the deployment strategy to a Systems Manager (SSM) document.
   --tags: record # Metadata to assign to the deployment strategy. Tags help organize and categorize your AppConfig resources. Each tag consists of a key and an optional value, both of which you define.
-]: any -> record<Id: string, Name: string, Description: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, ReplicateTo: string> {
+]: any -> oneof<record<Id: string, Name: string, Description: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, ReplicateTo: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -422,7 +445,7 @@ export def "list-deployment-strategies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<Id: string, Name: string, Description: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, ReplicateTo: string>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<Id: string, Name: string, Description: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, ReplicateTo: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -449,7 +472,6 @@ export def "list-deployment-strategies" [
 #
 # POST /applications/{ApplicationId}/environments
 # operationId: CreateEnvironment
-# --Monitors item shape: {AlarmArn: string, AlarmRoleArn?: string}
 export def "create-environment" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -472,7 +494,7 @@ export def "create-environment" [
   --description: string # A description of the environment.
   --monitors: list # Amazon CloudWatch alarms to monitor during the deployment process. — item shape: {AlarmArn: string, AlarmRoleArn?: string}
   --tags: record # Metadata to assign to the environment. Tags help organize and categorize your AppConfig resources. Each tag consists of a key and an optional value, both of which you define.
-]: any -> record<ApplicationId: string, Id: string, Name: string, Description: string, State: string, Monitors: table<AlarmArn: string, AlarmRoleArn: string>> {
+]: any -> oneof<record<ApplicationId: string, Id: string, Name: string, Description: string, State: string, Monitors: table<AlarmArn: string, AlarmRoleArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -524,7 +546,7 @@ export def "list-environments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<ApplicationId: string, Id: string, Name: string, Description: string, State: string, Monitors: list>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<ApplicationId: string, Id: string, Name: string, Description: string, State: string, Monitors: list>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
@@ -575,7 +597,7 @@ export def "create-extension" [
   actions: record # The actions defined in the extension.
   --parameters: record # The parameters accepted by the extension. You specify parameter values when you associate the extension to an AppConfig resource by using the CreateExtensionAssociation API action. For Lambda extension actions, these parameters are included in the Lambda request object.
   --tags: record # Adds one or more tags for the specified extension. Tags are metadata that help you categorize resources in different ways, for example, by purpose, owner, or environment. Each tag consists of a key and an optional value, both of which you define.
-]: any -> record<Id: string, Name: string, VersionNumber: int, Arn: string, Description: string, Actions: record, Parameters: record> {
+]: any -> oneof<record<Id: string, Name: string, VersionNumber: int, Arn: string, Description: string, Actions: record, Parameters: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -626,7 +648,7 @@ export def "list-extensions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<Id: string, Name: string, VersionNumber: int, Arn: string, Description: string>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<Id: string, Name: string, VersionNumber: int, Arn: string, Description: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -675,7 +697,7 @@ export def "create-extension-association" [
   resource_identifier: string # The ARN of an application, configuration profile, or environment.
   --parameters: record # The parameter names and values defined in the extensions. Extension parameters marked Required must be entered for this field.
   --tags: record # Adds one or more tags for the specified extension association. Tags are metadata that help you categorize resources in different ways, for example, by purpose, owner, or environment. Each tag consists of a key and an optional value, both of which you define.
-]: any -> record<Id: string, ExtensionArn: string, ResourceArn: string, Arn: string, Parameters: record, ExtensionVersionNumber: int> {
+]: any -> oneof<record<Id: string, ExtensionArn: string, ResourceArn: string, Arn: string, Parameters: record, ExtensionVersionNumber: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -728,7 +750,7 @@ export def "list-extension-associations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<Id: string, ExtensionArn: string, ResourceArn: string>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<Id: string, ExtensionArn: string, ResourceArn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resource_identifier" $resource_identifier "scalar") (serialize-qp "extension_identifier" $extension_identifier "scalar") (serialize-qp "extension_version_number" $extension_version_number "scalar") (serialize-qp "max_results" $max_results "scalar") (serialize-qp "next_token" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -779,7 +801,7 @@ export def "create-hosted-configuration-version" [
   --latest-version-number: int # An optional locking token used to prevent race conditions from overwriting configuration updates when creating a new version. To ensure your data is not overwritten when creating multiple hosted configuration versions in rapid succession, specify the version number of the latest hosted configuration version.
   --version-label: string # An optional, user-defined label for the AppConfig hosted configuration version. This value must contain at least one non-numeric character. For example, "v2.2.0".
   content: string # The content of the configuration or the configuration data. (format: password)
-]: any -> record<Content: string> {
+]: any -> oneof<record<Content: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -793,7 +815,7 @@ export def "create-hosted-configuration-version" [
   let extra_headers = {"X-Amz-Content-Sha256": $x_amz_content_sha256, "X-Amz-Date": $x_amz_date, "X-Amz-Algorithm": $x_amz_algorithm, "X-Amz-Credential": $x_amz_credential, "X-Amz-Security-Token": $x_amz_security_token, "X-Amz-Signature": $x_amz_signature, "X-Amz-SignedHeaders": $x_amz_signed_headers, "Description": $description, "Content-Type": $content_type, "Latest-Version-Number": $latest_version_number, "VersionLabel": $version_label} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -875,7 +897,7 @@ export def "get-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Id: string, Name: string, Description: string> {
+]: nothing -> oneof<record<Id: string, Name: string, Description: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
@@ -922,7 +944,7 @@ export def "update-application" [
   --x-amz-signed-headers: string
   --name: string # The name of the application.
   --description: string # A description of the application.
-]: any -> record<Id: string, Name: string, Description: string> {
+]: any -> oneof<record<Id: string, Name: string, Description: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1018,7 +1040,7 @@ export def "get-configuration-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApplicationId: string, Id: string, Name: string, Description: string, LocationUri: string, RetrievalRoleArn: string, Validators: table<Type: string, Content: string>, Type: string> {
+]: nothing -> oneof<record<ApplicationId: string, Id: string, Name: string, Description: string, LocationUri: string, RetrievalRoleArn: string, Validators: table<Type: string, Content: string>, Type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
@@ -1046,7 +1068,6 @@ export def "get-configuration-profile" [
 #
 # PATCH /applications/{ApplicationId}/configurationprofiles/{ConfigurationProfileId}
 # operationId: UpdateConfigurationProfile
-# --Validators item shape: {Type: "JSON_SCHEMA"|"LAMBDA", Content: string}
 export def "update-configuration-profile" [
   application_id: string
   configuration_profile_id: string
@@ -1070,7 +1091,7 @@ export def "update-configuration-profile" [
   --description: string # A description of the configuration profile.
   --retrieval-role-arn: string # The ARN of an IAM role with permission to access the configuration at the specified LocationUri.
   --validators: list # A list of methods for validating the configuration. — item shape: {Type: "JSON_SCHEMA"|"LAMBDA", Content: string}
-]: any -> record<ApplicationId: string, Id: string, Name: string, Description: string, LocationUri: string, RetrievalRoleArn: string, Validators: table<Type: string, Content: string>, Type: string> {
+]: any -> oneof<record<ApplicationId: string, Id: string, Name: string, Description: string, LocationUri: string, RetrievalRoleArn: string, Validators: table<Type: string, Content: string>, Type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1212,7 +1233,7 @@ export def "get-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApplicationId: string, Id: string, Name: string, Description: string, State: string, Monitors: table<AlarmArn: string, AlarmRoleArn: string>> {
+]: nothing -> oneof<record<ApplicationId: string, Id: string, Name: string, Description: string, State: string, Monitors: table<AlarmArn: string, AlarmRoleArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
@@ -1240,7 +1261,6 @@ export def "get-environment" [
 #
 # PATCH /applications/{ApplicationId}/environments/{EnvironmentId}
 # operationId: UpdateEnvironment
-# --Monitors item shape: {AlarmArn: string, AlarmRoleArn?: string}
 export def "update-environment" [
   application_id: string
   environment_id: string
@@ -1263,7 +1283,7 @@ export def "update-environment" [
   --name: string # The name of the environment.
   --description: string # A description of the environment.
   --monitors: list # Amazon CloudWatch alarms to monitor during the deployment process. — item shape: {AlarmArn: string, AlarmRoleArn?: string}
-]: any -> record<ApplicationId: string, Id: string, Name: string, Description: string, State: string, Monitors: table<AlarmArn: string, AlarmRoleArn: string>> {
+]: any -> oneof<record<ApplicationId: string, Id: string, Name: string, Description: string, State: string, Monitors: table<AlarmArn: string, AlarmRoleArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1360,7 +1380,7 @@ export def "get-extension" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Id: string, Name: string, VersionNumber: int, Arn: string, Description: string, Actions: record, Parameters: record> {
+]: nothing -> oneof<record<Id: string, Name: string, VersionNumber: int, Arn: string, Description: string, Actions: record, Parameters: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($extension_identifier | is-empty) { error make --unspanned { msg: "path parameter 'ExtensionIdentifier' must be non-empty" } }
@@ -1410,7 +1430,7 @@ export def "update-extension" [
   --actions: record # The actions defined in the extension.
   --parameters: record # One or more parameters for the actions called by the extension.
   --version-number: int # The extension version number.
-]: any -> record<Id: string, Name: string, VersionNumber: int, Arn: string, Description: string, Actions: record, Parameters: record> {
+]: any -> oneof<record<Id: string, Name: string, VersionNumber: int, Arn: string, Description: string, Actions: record, Parameters: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1503,7 +1523,7 @@ export def "get-extension-association" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Id: string, ExtensionArn: string, ResourceArn: string, Arn: string, Parameters: record, ExtensionVersionNumber: int> {
+]: nothing -> oneof<record<Id: string, ExtensionArn: string, ResourceArn: string, Arn: string, Parameters: record, ExtensionVersionNumber: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($extension_association_id | is-empty) { error make --unspanned { msg: "path parameter 'ExtensionAssociationId' must be non-empty" } }
@@ -1549,7 +1569,7 @@ export def "update-extension-association" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --parameters: record # The parameter names and values defined in the extension.
-]: any -> record<Id: string, ExtensionArn: string, ResourceArn: string, Arn: string, Parameters: record, ExtensionVersionNumber: int> {
+]: any -> oneof<record<Id: string, ExtensionArn: string, ResourceArn: string, Arn: string, Parameters: record, ExtensionVersionNumber: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1648,7 +1668,7 @@ export def "get-hosted-configuration-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Content: string> {
+]: nothing -> oneof<record<Content: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
@@ -1701,7 +1721,7 @@ export def "get-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Content: string> {
+]: nothing -> oneof<record<Content: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application | is-empty) { error make --unspanned { msg: "path parameter 'Application' must be non-empty" } }
@@ -1752,7 +1772,7 @@ export def "get-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApplicationId: string, EnvironmentId: string, DeploymentStrategyId: string, ConfigurationProfileId: string, DeploymentNumber: int, ConfigurationName: string, ConfigurationLocationUri: string, ConfigurationVersion: string, Description: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, State: string, EventLog: table<EventType: string, TriggeredBy: string, Description: string, ActionInvocations: list, OccurredAt: string>, PercentageComplete: float, StartedAt: string, CompletedAt: string, AppliedExtensions: table<ExtensionId: string, ExtensionAssociationId: string, VersionNumber: int, Parameters: record>, KmsKeyArn: string, KmsKeyIdentifier: string> {
+]: nothing -> oneof<record<ApplicationId: string, EnvironmentId: string, DeploymentStrategyId: string, ConfigurationProfileId: string, DeploymentNumber: int, ConfigurationName: string, ConfigurationLocationUri: string, ConfigurationVersion: string, Description: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, State: string, EventLog: table<EventType: string, TriggeredBy: string, Description: string, ActionInvocations: list, OccurredAt: string>, PercentageComplete: float, StartedAt: string, CompletedAt: string, AppliedExtensions: table<ExtensionId: string, ExtensionAssociationId: string, VersionNumber: int, Parameters: record>, KmsKeyArn: string, KmsKeyIdentifier: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
@@ -1801,7 +1821,7 @@ export def "stop-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ApplicationId: string, EnvironmentId: string, DeploymentStrategyId: string, ConfigurationProfileId: string, DeploymentNumber: int, ConfigurationName: string, ConfigurationLocationUri: string, ConfigurationVersion: string, Description: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, State: string, EventLog: table<EventType: string, TriggeredBy: string, Description: string, ActionInvocations: list, OccurredAt: string>, PercentageComplete: float, StartedAt: string, CompletedAt: string, AppliedExtensions: table<ExtensionId: string, ExtensionAssociationId: string, VersionNumber: int, Parameters: record>, KmsKeyArn: string, KmsKeyIdentifier: string> {
+]: nothing -> oneof<record<ApplicationId: string, EnvironmentId: string, DeploymentStrategyId: string, ConfigurationProfileId: string, DeploymentNumber: int, ConfigurationName: string, ConfigurationLocationUri: string, ConfigurationVersion: string, Description: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, State: string, EventLog: table<EventType: string, TriggeredBy: string, Description: string, ActionInvocations: list, OccurredAt: string>, PercentageComplete: float, StartedAt: string, CompletedAt: string, AppliedExtensions: table<ExtensionId: string, ExtensionAssociationId: string, VersionNumber: int, Parameters: record>, KmsKeyArn: string, KmsKeyIdentifier: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
@@ -1848,7 +1868,7 @@ export def "get-deployment-strategy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Id: string, Name: string, Description: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, ReplicateTo: string> {
+]: nothing -> oneof<record<Id: string, Name: string, Description: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, ReplicateTo: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_strategy_id | is-empty) { error make --unspanned { msg: "path parameter 'DeploymentStrategyId' must be non-empty" } }
@@ -1898,7 +1918,7 @@ export def "update-deployment-strategy" [
   --final-bake-time-in-minutes: int # The amount of time that AppConfig monitors for alarms before considering the deployment to be complete and no longer eligible for automatic rollback.
   --growth-factor: float # The percentage of targets to receive a deployed configuration during each interval. (format: float)
   --growth-type: string@growth-type-completer # The algorithm used to define how percentage grows over time. AppConfig supports the following growth types: Linear: For this type, AppConfig processes the deployment by increments of the growth factor evenly distributed over the deployment time. For example, a linear deployment that uses a growth factor of 20 initially makes the configuration available to 20 percent of the targets. After 1/5th of the deployment time has passed, the system updates the percentage to 40 percent. This continues until 100% of the targets are set to receive the deployed configuration. Exponential: For this type, AppConfig processes the deployment exponentially using the following formula: G*(2^N). In this formula, G is the growth factor specified by the user and N is the number of steps until the configuration is deployed to all targets. For example, if you specify a growth factor of 2, then the system rolls out the configuration as follows: 2*(2^0) 2*(2^1) 2*(2^2) Expressed numerically, the deployment rolls out as follows: 2% of the targets, 4% of the targets, 8% of the targets, and continues until the configuration has been deployed to all targets.
-]: any -> record<Id: string, Name: string, Description: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, ReplicateTo: string> {
+]: any -> oneof<record<Id: string, Name: string, Description: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, ReplicateTo: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1951,7 +1971,7 @@ export def "list-deployments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<DeploymentNumber: int, ConfigurationName: string, ConfigurationVersion: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, State: string, PercentageComplete: float, StartedAt: string, CompletedAt: string>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<DeploymentNumber: int, ConfigurationName: string, ConfigurationVersion: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, State: string, PercentageComplete: float, StartedAt: string, CompletedAt: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
@@ -2005,7 +2025,7 @@ export def "start-deployment" [
   --description: string # A description of the deployment.
   --tags: record # Metadata to assign to the deployment. Tags help organize and categorize your AppConfig resources. Each tag consists of a key and an optional value, both of which you define.
   --kms-key-identifier: string # The KMS key identifier (key ID, key alias, or key ARN). AppConfig uses this ID to encrypt the configuration data using a customer managed key.
-]: any -> record<ApplicationId: string, EnvironmentId: string, DeploymentStrategyId: string, ConfigurationProfileId: string, DeploymentNumber: int, ConfigurationName: string, ConfigurationLocationUri: string, ConfigurationVersion: string, Description: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, State: string, EventLog: table<EventType: string, TriggeredBy: string, Description: string, ActionInvocations: list, OccurredAt: string>, PercentageComplete: float, StartedAt: string, CompletedAt: string, AppliedExtensions: table<ExtensionId: string, ExtensionAssociationId: string, VersionNumber: int, Parameters: record>, KmsKeyArn: string, KmsKeyIdentifier: string> {
+]: any -> oneof<record<ApplicationId: string, EnvironmentId: string, DeploymentStrategyId: string, ConfigurationProfileId: string, DeploymentNumber: int, ConfigurationName: string, ConfigurationLocationUri: string, ConfigurationVersion: string, Description: string, DeploymentDurationInMinutes: int, GrowthType: string, GrowthFactor: float, FinalBakeTimeInMinutes: int, State: string, EventLog: table<EventType: string, TriggeredBy: string, Description: string, ActionInvocations: list, OccurredAt: string>, PercentageComplete: float, StartedAt: string, CompletedAt: string, AppliedExtensions: table<ExtensionId: string, ExtensionAssociationId: string, VersionNumber: int, Parameters: record>, KmsKeyArn: string, KmsKeyIdentifier: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2060,7 +2080,7 @@ export def "list-hosted-configuration-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Items: table<ApplicationId: string, ConfigurationProfileId: string, VersionNumber: int, Description: string, ContentType: string, VersionLabel: string>, NextToken: string> {
+]: nothing -> oneof<record<Items: table<ApplicationId: string, ConfigurationProfileId: string, VersionNumber: int, Description: string, ContentType: string, VersionLabel: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'ApplicationId' must be non-empty" } }
@@ -2107,7 +2127,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'ResourceArn' must be non-empty" } }

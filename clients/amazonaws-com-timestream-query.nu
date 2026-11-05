@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -114,9 +137,9 @@ def x-amz-target-completer-12 [] { ["Timestream_20181101.UpdateScheduledQuery"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-query" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["cancel-query" "create-scheduled-query" "delete-scheduled-query" "describe-endpoints" "describe-scheduled-query" "execute-scheduled-query" "list-scheduled-queries" "list-tags-for-resource" "prepare-query" "query" "tag-resource" "untag-resource" "update-scheduled-query" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -157,7 +180,7 @@ export def "cancel-query" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer # required
   query_id: string # The ID of the query that needs to be cancelled. QueryID is returned as part of the query result.
-]: any -> record<CancellationMessage: string> {
+]: any -> oneof<record<CancellationMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -187,11 +210,6 @@ export def "cancel-query" [
 #
 # POST /
 # operationId: CreateScheduledQuery
-# --ScheduleConfiguration shape: {ScheduleExpression: string}
-# --NotificationConfiguration shape: {SnsConfiguration: record}
-# --TargetConfiguration shape: {TimestreamConfiguration: record}
-# --Tags item shape: {Key: string, Value: string}
-# --ErrorReportConfiguration shape: {S3Configuration: record}
 export def "create-scheduled-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +238,7 @@ export def "create-scheduled-query" [
   --tags: list # A list of key-value pairs to label the scheduled query. — item shape: {Key: string, Value: string}
   --kms-key-id: string # The Amazon KMS key used to encrypt the scheduled query resource, at-rest. If the Amazon KMS key is not specified, the scheduled query resource will be encrypted with a Timestream owned Amazon KMS key. To specify a KMS key, use the key ID, key ARN, alias name, or alias ARN. When using an alias name, prefix the name with alias/ If ErrorReportConfiguration uses SSE_KMS as encryption type, the same KmsKeyId is used to encrypt the error report at rest.
   error_report_configuration: record # Configuration required for error reporting. — shape: {S3Configuration: record}
-]: any -> record<Arn: string> {
+]: any -> oneof<record<Arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -318,7 +336,7 @@ export def "describe-endpoints" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   --body: record
-]: any -> record<Endpoints: table<Address: string, CachePeriodInMinutes: int>> {
+]: any -> oneof<record<Endpoints: table<Address: string, CachePeriodInMinutes: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -367,7 +385,7 @@ export def "describe-scheduled-query" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   scheduled_query_arn: string # The ARN of the scheduled query.
-]: any -> record<ScheduledQuery: record<Arn: string, Name: string, QueryString: string, CreationTime: string, State: string, PreviousInvocationTime: string, NextInvocationTime: string, ScheduleConfiguration: record<ScheduleExpression: string>, NotificationConfiguration: record<SnsConfiguration: record>, TargetConfiguration: record<TimestreamConfiguration: record>, ScheduledQueryExecutionRoleArn: string, KmsKeyId: string, ErrorReportConfiguration: record<S3Configuration: record>, LastRunSummary: record<InvocationTime: string, TriggerTime: string, RunStatus: string, ExecutionStats: record, ErrorReportLocation: record, FailureReason: string>, RecentlyFailedRuns: list<record>>> {
+]: any -> oneof<record<ScheduledQuery: record<Arn: string, Name: string, QueryString: string, CreationTime: string, State: string, PreviousInvocationTime: string, NextInvocationTime: string, ScheduleConfiguration: record<ScheduleExpression: string>, NotificationConfiguration: record<SnsConfiguration: record>, TargetConfiguration: record<TimestreamConfiguration: record>, ScheduledQueryExecutionRoleArn: string, KmsKeyId: string, ErrorReportConfiguration: record<S3Configuration: record>, LastRunSummary: record<InvocationTime: string, TriggerTime: string, RunStatus: string, ExecutionStats: record, ErrorReportLocation: record, FailureReason: string>, RecentlyFailedRuns: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -470,7 +488,7 @@ export def "list-scheduled-queries" [
   --x-amz-target: string@x-amz-target-completer-6 # required
   --max-results-body: int # The maximum number of items to return in the output. If the total number of items available is more than the value specified, a NextToken is provided in the output. To resume pagination, provide the NextToken value as the argument to the subsequent call to ListScheduledQueriesRequest. (body field)
   --next-token-body: string # A pagination token to resume pagination. (body field)
-]: any -> record<ScheduledQueries: table<Arn: string, Name: string, CreationTime: string, State: string, PreviousInvocationTime: string, NextInvocationTime: string, ErrorReportConfiguration: record, TargetDestination: record, LastRunStatus: string>, NextToken: string> {
+]: any -> oneof<record<ScheduledQueries: table<Arn: string, Name: string, CreationTime: string, State: string, PreviousInvocationTime: string, NextInvocationTime: string, ErrorReportConfiguration: record, TargetDestination: record, LastRunStatus: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -524,7 +542,7 @@ export def "list-tags-for-resource" [
   resource_arn: string # The Timestream resource with tags to be listed. This value is an Amazon Resource Name (ARN).
   --max-results-body: int # The maximum number of tags to return. (body field)
   --next-token-body: string # A pagination token to resume pagination. (body field)
-]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -575,7 +593,7 @@ export def "prepare-query" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   query_string: string # The Timestream query string that you want to use as a prepared statement. Parameter names can be specified in the query string @ character followed by an identifier. (format: password)
   --validate-only: oneof<nothing, bool> # By setting this value to true, Timestream will only validate that the query string is a valid Timestream query, and not store the prepared query for later use.
-]: any -> record<QueryString: string, Columns: table<Name: string, Type: record, DatabaseName: string, TableName: string, Aliased: bool>, Parameters: table<Name: string, Type: record>> {
+]: any -> oneof<record<QueryString: string, Columns: table<Name: string, Type: record, DatabaseName: string, TableName: string, Aliased: bool>, Parameters: table<Name: string, Type: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -629,7 +647,7 @@ export def "query" [
   --client-token: string # Unique, case-sensitive string of up to 64 ASCII characters specified when a Query request is made. Providing a ClientToken makes the call to Query idempotent. This means that running the same query repeatedly will produce the same result. In other words, making multiple identical Query requests has the same effect as making a single request. When using ClientToken in a query, note the following: If the Query API is instantiated without a ClientToken, the Query SDK generates a ClientToken on your behalf. If the Query invocation only contains the ClientToken but does not include a NextToken, that invocation of Query is assumed to be a new query run. If the invocation contains NextToken, that particular invocation is assumed to be a subsequent invocation of a prior call to the Query API, and a result set is returned. After 4 hours, any request with the same ClientToken is treated as a new request. (format: password)
   --next-token-body: string # A pagination token used to return a set of results. When the Query API is invoked using NextToken, that particular invocation is assumed to be a subsequent invocation of a prior call to Query, and a result set is returned. However, if the Query invocation only contains the ClientToken, that invocation of Query is assumed to be a new query run. Note the following when using NextToken in a query: A pagination token can be used for up to five Query invocations, OR for a duration of up to 1 hour – whichever comes first. Using the same NextToken will return the same set of records. To keep paginating through the result set, you must to use the most recent nextToken. Suppose a Query invocation returns two NextToken values, TokenA and TokenB. If TokenB is used in a subsequent Query invocation, then TokenA is invalidated and cannot be reused. To request a previous result set from a query after pagination has begun, you must re-invoke the Query API. The latest NextToken should be used to paginate until null is returned, at which point a new NextToken should be used. If the IAM principal of the query initiator and the result reader are not the same and/or the query initiator and the result reader do not have the same query string in the query requests, the query will fail with an Invalid pagination token error. (body field)
   --max-rows-body: int # The total number of rows to be returned in the Query output. The initial run of Query with a MaxRows value specified will return the result set of the query in two cases: The size of the result is less than 1MB. The number of rows in the result set is less than the value of maxRows. Otherwise, the initial invocation of Query only returns a NextToken, which can then be used in subsequent calls to fetch the result set. To resume pagination, provide the NextToken value in the subsequent command. If the row size is large (e.g. a row has many columns), Timestream may return fewer rows to keep the response size from exceeding the 1 MB limit. If MaxRows is not provided, Timestream will send the necessary number of rows to meet the 1 MB limit. (body field)
-]: any -> record<QueryId: string, NextToken: string, Rows: table<Data: list>, ColumnInfo: table<Name: string, Type: record>, QueryStatus: record<ProgressPercentage: float, CumulativeBytesScanned: int, CumulativeBytesMetered: int>> {
+]: any -> oneof<record<QueryId: string, NextToken: string, Rows: table<Data: list>, ColumnInfo: table<Name: string, Type: record>, QueryStatus: record<ProgressPercentage: float, CumulativeBytesScanned: int, CumulativeBytesMetered: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -660,7 +678,6 @@ export def "query" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -681,7 +698,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-10 # required
   resource_arn: string # Identifies the Timestream resource to which tags should be added. This value is an Amazon Resource Name (ARN).
   tags: list # The tags to be assigned to the Timestream resource. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -731,7 +748,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-11 # required
   resource_arn: string # The Timestream resource that the tags will be removed from. This value is an Amazon Resource Name (ARN).
   tag_keys: list<string> # A list of tags keys. Existing tags of the resource whose keys are members of this list will be removed from the Timestream resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

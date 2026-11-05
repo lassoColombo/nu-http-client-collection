@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def key-name-completer [] { ["authKey1" "authKey2"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["operations-list" "factories-list" "factories-configure-factory-repo" "exposure-control-get-feature-value" "factories-list-by-resource-group" "factories-delete" "factories-get" "factories-update" "factories-create-or-update" "data-flow-debug-session-add-data-flow" "data-flow-debug-session-create" "data-flows-list-by-factory" "data-flows-delete" "data-flows-get" "data-flows-create-or-update" "datasets-list-by-factory" "datasets-delete" "datasets-get" "datasets-create-or-update" "data-flow-debug-session-delete" "data-flow-debug-session-execute-command" "factories-get-data-plane-access" "exposure-control-get-feature-value-by-factory" "factories-get-git-hub-access-token" "integration-runtimes-list-by-factory" "integration-runtimes-delete" "integration-runtimes-get" "integration-runtimes-update" "integration-runtimes-create-or-update" "integration-runtimes-get-connection-info" "integration-runtime-object-metadata-get" "integration-runtimes-get-status" "integration-runtimes-create-linked-integration-runtime" "integration-runtimes-list-auth-keys" "integration-runtimes-get-monitoring-data" "integration-runtime-nodes-delete" "integration-runtime-nodes-get" "integration-runtime-nodes-update" "integration-runtime-nodes-get-ip-address" "integration-runtime-object-metadata-refresh" "integration-runtimes-regenerate-auth-key" "integration-runtimes-remove-links" "integration-runtimes-start" "integration-runtimes-stop" "integration-runtimes-sync-credentials" "integration-runtimes-upgrade" "linked-services-list-by-factory" "linked-services-delete" "linked-services-get" "linked-services-create-or-update" "pipeline-runs-get" "pipeline-runs-cancel" "activity-runs-query-by-pipeline-run" "pipelines-list-by-factory" "pipelines-delete" "pipelines-get" "pipelines-create-or-update" "pipelines-create-run" "data-flow-debug-session-query-by-factory" "pipeline-runs-query-by-factory" "trigger-runs-query-by-factory" "triggers-list-by-factory" "triggers-delete" "triggers-get" "triggers-create-or-update" "triggers-get-event-subscription-status" "rerun-triggers-list-by-trigger" "rerun-triggers-create" "rerun-triggers-cancel" "rerun-triggers-start" "rerun-triggers-stop" "triggers-start" "triggers-stop" "triggers-subscribe-to-events" "trigger-runs-rerun" "triggers-unsubscribe-from-events" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +185,7 @@ export def "operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -199,7 +223,7 @@ export def "factories-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, eTag: string, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, properties: record, eTag: string, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -226,7 +250,6 @@ export def "factories-list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataFactory/locations/{locationId}/configureFactoryRepo
 # operationId: Factories_ConfigureFactoryRepo
-# --repoConfiguration shape: {accountName: string, collaborationBranch: string, lastCommitId?: string, repositoryName: string, rootFolder: string, type: string}
 export def "factories-configure-factory-repo" [
   subscription_id: string
   location_id: string
@@ -242,7 +265,7 @@ export def "factories-configure-factory-repo" [
   --api-version: string # The API version. (required)
   --factory-resource-id: string # The factory resource id.
   --repo-configuration: record # Factory's git repo information. — shape: {accountName: string, collaborationBranch: string, lastCommitId?: string, repositoryName: string, rootFolder: string, type: string}
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>, eTag: string, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>, eTag: string, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -288,7 +311,7 @@ export def "exposure-control-get-feature-value" [
   --api-version: string # The API version. (required)
   --feature-name: string # The feature name.
   --feature-type: string # The feature type.
-]: any -> record<featureName: string, value: string> {
+]: any -> oneof<record<featureName: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -332,7 +355,7 @@ export def "factories-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<nextLink: string, value: table<identity: record, properties: record, eTag: string, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<identity: record, properties: record, eTag: string, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -418,7 +441,7 @@ export def "factories-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
   --if-none-match: string # ETag of the factory entity. Should only be specified for get. If the ETag matches the existing entity tag, or if * was provided, then no content will be returned.
-]: nothing -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>, eTag: string, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>, eTag: string, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -449,7 +472,6 @@ export def "factories-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}
 # operationId: Factories_Update
-# --identity shape: {type: "SystemAssigned"}
 export def "factories-update" [
   subscription_id: string
   resource_group_name: string
@@ -466,7 +488,7 @@ export def "factories-update" [
   --api-version: string # The API version. (required)
   --identity: any # Identity properties of the factory resource. — shape: {type: "SystemAssigned"}
   --tags: record # The resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>, eTag: string, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>, eTag: string, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -498,8 +520,6 @@ export def "factories-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}
 # operationId: Factories_CreateOrUpdate
-# --identity shape: {type: "SystemAssigned"}
-# --properties shape: {repoConfiguration?: record}
 export def "factories-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -519,7 +539,7 @@ export def "factories-create-or-update" [
   --properties: any # Factory resource properties. — shape: {repoConfiguration?: record}
   --location: string # The resource location.
   --tags: record # The resource tags.
-]: any -> record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>, eTag: string, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<identity: record<principalId: string, tenantId: string, type: string>, properties: record<createTime: string, provisioningState: string, repoConfiguration: record<accountName: string, collaborationBranch: string, lastCommitId: string, repositoryName: string, rootFolder: string, type: string>, version: string>, eTag: string, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -553,11 +573,6 @@ export def "factories-create-or-update" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/addDataFlowToDebugSession
 # operationId: DataFlowDebugSession_AddDataFlow
-# --dataFlow shape: {properties: record, name?: string}
-# --datasets item shape: {properties: record, name?: string}
-# --debugSettings shape: {datasetParameters?: record, parameters?: record, sourceSettings?: list}
-# --linkedServices item shape: {properties: record, name?: string}
-# --staging shape: {folderPath?: string, linkedService?: any}
 export def "data-flow-debug-session-add-data-flow" [
   subscription_id: string
   resource_group_name: string
@@ -578,7 +593,7 @@ export def "data-flow-debug-session-add-data-flow" [
   --linked-services: list # List of linked services. — item shape: {properties: record, name?: string}
   --session-id: string # The ID of data flow debug session.
   --staging: any # Staging info for execute data flow activity. — shape: {folderPath?: string, linkedService?: any}
-]: any -> record<jobVersion: string> {
+]: any -> oneof<record<jobVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -610,7 +625,6 @@ export def "data-flow-debug-session-add-data-flow" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/createDataFlowDebugSession
 # operationId: DataFlowDebugSession_Create
-# --integrationRuntime shape: {properties: record, name?: string}
 export def "data-flow-debug-session-create" [
   subscription_id: string
   resource_group_name: string
@@ -629,7 +643,7 @@ export def "data-flow-debug-session-create" [
   --core-count: int # Core count of the cluster. The value will be overwritten by the same setting in integration runtime if provided.
   --integration-runtime: any # Integration runtime debug resource. — shape: {properties: record, name?: string}
   --time-to-live: int # Time to live setting of the cluster in minutes.
-]: any -> record<sessionId: string, status: string> {
+]: any -> oneof<record<sessionId: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -675,7 +689,7 @@ export def "data-flows-list-by-factory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -765,7 +779,7 @@ export def "data-flows-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
   --if-none-match: string # ETag of the data flow entity. Should only be specified for get. If the ETag matches the existing entity tag, or if * was provided, then no content will be returned.
-]: nothing -> record<properties: record<annotations: list<record>, description: string, folder: record<name: string>, type: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<annotations: list<record>, description: string, folder: record<name: string>, type: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -797,7 +811,6 @@ export def "data-flows-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/dataflows/{dataFlowName}
 # operationId: DataFlows_CreateOrUpdate
-# --properties shape: {annotations?: list, description?: string, folder?: record, type: string}
 export def "data-flows-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -815,7 +828,7 @@ export def "data-flows-create-or-update" [
   --api-version: string # The API version. (required)
   --if-match: string # ETag of the data flow entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # Azure Data Factory nested object which contains a flow with data movements and transformations. — shape: {annotations?: list, description?: string, folder?: record, type: string}
-]: any -> record<properties: record<annotations: list<record>, description: string, folder: record<name: string>, type: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<annotations: list<record>, description: string, folder: record<name: string>, type: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -864,7 +877,7 @@ export def "datasets-list-by-factory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -954,7 +967,7 @@ export def "datasets-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
   --if-none-match: string # ETag of the dataset entity. Should only be specified for get. If the ETag matches the existing entity tag, or if * was provided, then no content will be returned.
-]: nothing -> record<properties: record<annotations: list<record>, description: string, folder: record<name: string>, linkedServiceName: record<parameters: record, referenceName: string, type: string>, parameters: record, schema: record, structure: record, type: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<annotations: list<record>, description: string, folder: record<name: string>, linkedServiceName: record<parameters: record, referenceName: string, type: string>, parameters: record, schema: record, structure: record, type: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -986,7 +999,6 @@ export def "datasets-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/datasets/{datasetName}
 # operationId: Datasets_CreateOrUpdate
-# --properties shape: {annotations?: list, description?: string, folder?: record, linkedServiceName: any, parameters?: record, schema?: record, structure?: record, type: string}
 export def "datasets-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1004,7 +1016,7 @@ export def "datasets-create-or-update" [
   --api-version: string # The API version. (required)
   --if-match: string # ETag of the dataset entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # The Azure Data Factory nested object which identifies data within different data stores, such as tables, files, folders, and documents. — shape: {annotations?: list, description?: string, folder?: record, linkedServiceName: any, parameters?: record, schema?: record, structure?: record, type: string}
-]: any -> record<properties: record<annotations: list<record>, description: string, folder: record<name: string>, linkedServiceName: record<parameters: record, referenceName: string, type: string>, parameters: record, schema: record, structure: record, type: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<annotations: list<record>, description: string, folder: record<name: string>, linkedServiceName: record<parameters: record, referenceName: string, type: string>, parameters: record, schema: record, structure: record, type: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1086,7 +1098,6 @@ export def "data-flow-debug-session-delete" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/executeDataFlowDebugCommand
 # operationId: DataFlowDebugSession_ExecuteCommand
-# --commandPayload shape: {columns?: list<string>, expression?: string, rowLimits?: int, streamName: string}
 export def "data-flow-debug-session-execute-command" [
   subscription_id: string
   resource_group_name: string
@@ -1104,7 +1115,7 @@ export def "data-flow-debug-session-execute-command" [
   --command: string@command-completer # The command type.
   --command-payload: record # Structure of command payload. — shape: {columns?: list<string>, expression?: string, rowLimits?: int, streamName: string}
   --session-id: string # The ID of data flow debug session.
-]: any -> record<data: string, status: string> {
+]: any -> oneof<record<data: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1155,7 +1166,7 @@ export def "factories-get-data-plane-access" [
   --permissions: string # The string with permissions for Data Plane access. Currently only 'r' is supported which grants read only access.
   --profile-name: string # The name of the profile. Currently only the default is supported. The default value is DefaultProfile.
   --start-time: string # Start time for the token. If not specified the current time will be used.
-]: any -> record<accessToken: string, dataPlaneUrl: string, policy: record<accessResourcePath: string, expireTime: string, permissions: string, profileName: string, startTime: string>> {
+]: any -> oneof<record<accessToken: string, dataPlaneUrl: string, policy: record<accessResourcePath: string, expireTime: string, permissions: string, profileName: string, startTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1203,7 +1214,7 @@ export def "exposure-control-get-feature-value-by-factory" [
   --api-version: string # The API version. (required)
   --feature-name: string # The feature name.
   --feature-type: string # The feature type.
-]: any -> record<featureName: string, value: string> {
+]: any -> oneof<record<featureName: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1252,7 +1263,7 @@ export def "factories-get-git-hub-access-token" [
   git_hub_access_code: string # GitHub access code.
   git_hub_access_token_base_url: string # GitHub access token base URL.
   --git-hub-client-id: string # GitHub application client ID.
-]: any -> record<gitHubAccessToken: string> {
+]: any -> oneof<record<gitHubAccessToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1298,7 +1309,7 @@ export def "integration-runtimes-list-by-factory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1388,7 +1399,7 @@ export def "integration-runtimes-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
   --if-none-match: string # ETag of the integration runtime entity. Should only be specified for get. If the ETag matches the existing entity tag, or if * was provided, then no content will be returned.
-]: nothing -> record<properties: record<description: string, type: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<description: string, type: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1437,7 +1448,7 @@ export def "integration-runtimes-update" [
   --api-version: string # The API version. (required)
   --auto-update: string@auto-update-completer # The state of integration runtime auto update.
   --update-delay-offset: string # The time offset (in hours) in the day, e.g., PT03H is 3 hours. The integration runtime auto update will happen on that time.
-]: any -> record<properties: record<description: string, type: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<description: string, type: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1470,7 +1481,6 @@ export def "integration-runtimes-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/integrationRuntimes/{integrationRuntimeName}
 # operationId: IntegrationRuntimes_CreateOrUpdate
-# --properties shape: {description?: string, type: "Managed"|"SelfHosted"}
 export def "integration-runtimes-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1488,7 +1498,7 @@ export def "integration-runtimes-create-or-update" [
   --api-version: string # The API version. (required)
   --if-match: string # ETag of the integration runtime entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # Azure Data Factory nested object which serves as a compute resource for activities. — shape: {description?: string, type: "Managed"|"SelfHosted"}
-]: any -> record<properties: record<description: string, type: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<description: string, type: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1538,7 +1548,7 @@ export def "integration-runtimes-get-connection-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<hostServiceUri: string, identityCertThumbprint: string, isIdentityCertExprired: bool, publicKey: string, serviceToken: string, version: string> {
+]: nothing -> oneof<record<hostServiceUri: string, identityCertThumbprint: string, isIdentityCertExprired: bool, publicKey: string, serviceToken: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1584,7 +1594,7 @@ export def "integration-runtime-object-metadata-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
   --metadata-path: string # Metadata path.
-]: any -> record<nextLink: string, value: table<description: string, id: int, name: string, type: string>> {
+]: any -> oneof<record<nextLink: string, value: table<description: string, id: int, name: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1632,7 +1642,7 @@ export def "integration-runtimes-get-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<name: string, properties: record<dataFactoryName: string, state: string, type: string>> {
+]: nothing -> oneof<record<name: string, properties: record<dataFactoryName: string, state: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1681,7 +1691,7 @@ export def "integration-runtimes-create-linked-integration-runtime" [
   --data-factory-name: string # The name of the data factory that the linked integration runtime belongs to.
   --name: string # The name of the linked integration runtime.
   --body-subscription-id: string # The ID of the subscription that the linked integration runtime belongs to.
-]: any -> record<name: string, properties: record<dataFactoryName: string, state: string, type: string>> {
+]: any -> oneof<record<name: string, properties: record<dataFactoryName: string, state: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1729,7 +1739,7 @@ export def "integration-runtimes-list-auth-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<authKey1: string, authKey2: string> {
+]: nothing -> oneof<record<authKey1: string, authKey2: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1774,7 +1784,7 @@ export def "integration-runtimes-get-monitoring-data" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<name: string, nodes: table<availableMemoryInMB: int, concurrentJobsLimit: int, concurrentJobsRunning: int, cpuUtilization: int, maxConcurrentJobs: int, nodeName: string, receivedBytes: float, sentBytes: float>> {
+]: nothing -> oneof<record<name: string, nodes: table<availableMemoryInMB: int, concurrentJobsLimit: int, concurrentJobsRunning: int, cpuUtilization: int, maxConcurrentJobs: int, nodeName: string, receivedBytes: float, sentBytes: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1867,7 +1877,7 @@ export def "integration-runtime-nodes-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<capabilities: record, concurrentJobsLimit: int, expiryTime: string, hostServiceUri: string, isActiveDispatcher: bool, lastConnectTime: string, lastEndUpdateTime: string, lastStartTime: string, lastStartUpdateTime: string, lastStopTime: string, lastUpdateResult: string, machineName: string, maxConcurrentJobs: int, nodeName: string, registerTime: string, status: string, version: string, versionStatus: string> {
+]: nothing -> oneof<record<capabilities: record, concurrentJobsLimit: int, expiryTime: string, hostServiceUri: string, isActiveDispatcher: bool, lastConnectTime: string, lastEndUpdateTime: string, lastStartTime: string, lastStartUpdateTime: string, lastStopTime: string, lastUpdateResult: string, machineName: string, maxConcurrentJobs: int, nodeName: string, registerTime: string, status: string, version: string, versionStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1915,7 +1925,7 @@ export def "integration-runtime-nodes-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
   --concurrent-jobs-limit: int # The number of concurrent jobs permitted to run on the integration runtime node. Values between 1 and maxConcurrentJobs(inclusive) are allowed.
-]: any -> record<capabilities: record, concurrentJobsLimit: int, expiryTime: string, hostServiceUri: string, isActiveDispatcher: bool, lastConnectTime: string, lastEndUpdateTime: string, lastStartTime: string, lastStartUpdateTime: string, lastStopTime: string, lastUpdateResult: string, machineName: string, maxConcurrentJobs: int, nodeName: string, registerTime: string, status: string, version: string, versionStatus: string> {
+]: any -> oneof<record<capabilities: record, concurrentJobsLimit: int, expiryTime: string, hostServiceUri: string, isActiveDispatcher: bool, lastConnectTime: string, lastEndUpdateTime: string, lastStartTime: string, lastStartUpdateTime: string, lastStopTime: string, lastUpdateResult: string, machineName: string, maxConcurrentJobs: int, nodeName: string, registerTime: string, status: string, version: string, versionStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1965,7 +1975,7 @@ export def "integration-runtime-nodes-get-ip-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<ipAddress: string> {
+]: nothing -> oneof<record<ipAddress: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2011,7 +2021,7 @@ export def "integration-runtime-object-metadata-refresh" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<error: string, name: string, properties: string, status: string> {
+]: nothing -> oneof<record<error: string, name: string, properties: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2057,7 +2067,7 @@ export def "integration-runtimes-regenerate-auth-key" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
   --key-name: string@key-name-completer # The name of the authentication key to regenerate.
-]: any -> record<authKey1: string, authKey2: string> {
+]: any -> oneof<record<authKey1: string, authKey2: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2155,7 +2165,7 @@ export def "integration-runtimes-start" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<name: string, properties: record<dataFactoryName: string, state: string, type: string>> {
+]: nothing -> oneof<record<name: string, properties: record<dataFactoryName: string, state: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2334,7 +2344,7 @@ export def "linked-services-list-by-factory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2424,7 +2434,7 @@ export def "linked-services-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
   --if-none-match: string # ETag of the linked service entity. Should only be specified for get. If the ETag matches the existing entity tag, or if * was provided, then no content will be returned.
-]: nothing -> record<properties: record<annotations: list<record>, connectVia: record<parameters: record, referenceName: string, type: string>, description: string, parameters: record, type: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<annotations: list<record>, connectVia: record<parameters: record, referenceName: string, type: string>, description: string, parameters: record, type: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2456,7 +2466,6 @@ export def "linked-services-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/linkedservices/{linkedServiceName}
 # operationId: LinkedServices_CreateOrUpdate
-# --properties shape: {annotations?: list, connectVia?: any, description?: string, parameters?: record, type: string}
 export def "linked-services-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2474,7 +2483,7 @@ export def "linked-services-create-or-update" [
   --api-version: string # The API version. (required)
   --if-match: string # ETag of the linkedService entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # The Azure Data Factory nested object which contains the information and credential which can be used to connect with related store or compute resource. — shape: {annotations?: list, connectVia?: any, description?: string, parameters?: record, type: string}
-]: any -> record<properties: record<annotations: list<record>, connectVia: record<parameters: record, referenceName: string, type: string>, description: string, parameters: record, type: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<annotations: list<record>, connectVia: record<parameters: record, referenceName: string, type: string>, description: string, parameters: record, type: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2524,7 +2533,7 @@ export def "pipeline-runs-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<durationInMs: int, invokedBy: record<id: string, invokedByType: string, name: string>, isLatest: bool, lastUpdated: string, message: string, parameters: record, pipelineName: string, runDimensions: record, runEnd: string, runGroupId: string, runId: string, runStart: string, status: string> {
+]: nothing -> oneof<record<durationInMs: int, invokedBy: record<id: string, invokedByType: string, name: string>, isLatest: bool, lastUpdated: string, message: string, parameters: record, pipelineName: string, runDimensions: record, runEnd: string, runGroupId: string, runId: string, runStart: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2600,8 +2609,6 @@ export def "pipeline-runs-cancel" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/pipelineruns/{runId}/queryActivityruns
 # operationId: ActivityRuns_QueryByPipelineRun
-# --filters item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list<string>}
-# --orderBy item shape: {order: "ASC"|"DESC", orderBy: "RunStart"|"RunEnd"|"PipelineName"|"Status"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"TriggerName"|"TriggerRunTimestamp"}
 export def "activity-runs-query-by-pipeline-run" [
   subscription_id: string
   resource_group_name: string
@@ -2622,7 +2629,7 @@ export def "activity-runs-query-by-pipeline-run" [
   last_updated_after: string # The time at or after which the run event was updated in 'ISO 8601' format. (format: date-time)
   last_updated_before: string # The time at or before which the run event was updated in 'ISO 8601' format. (format: date-time)
   --order-by: list # List of OrderBy option. — item shape: {order: "ASC"|"DESC", orderBy: "RunStart"|"RunEnd"|"PipelineName"|"Status"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"TriggerName"|"TriggerRunTimestamp"}
-]: any -> record<continuationToken: string, value: table<activityName: string, activityRunEnd: string, activityRunId: string, activityRunStart: string, activityType: string, durationInMs: int, error: record, input: record, linkedServiceName: string, output: record, pipelineName: string, pipelineRunId: string, status: string>> {
+]: any -> oneof<record<continuationToken: string, value: table<activityName: string, activityRunEnd: string, activityRunId: string, activityRunStart: string, activityType: string, durationInMs: int, error: record, input: record, linkedServiceName: string, output: record, pipelineName: string, pipelineRunId: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2669,7 +2676,7 @@ export def "pipelines-list-by-factory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2759,7 +2766,7 @@ export def "pipelines-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
   --if-none-match: string # ETag of the pipeline entity. Should only be specified for get. If the ETag matches the existing entity tag, or if * was provided, then no content will be returned.
-]: nothing -> record<properties: record<activities: list<record>, annotations: list<record>, concurrency: int, description: string, folder: record<name: string>, parameters: record, runDimensions: record, variables: record>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<activities: list<record>, annotations: list<record>, concurrency: int, description: string, folder: record<name: string>, parameters: record, runDimensions: record, variables: record>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2791,7 +2798,6 @@ export def "pipelines-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/pipelines/{pipelineName}
 # operationId: Pipelines_CreateOrUpdate
-# --properties shape: {activities?: list, annotations?: list, concurrency?: int, description?: string, folder?: record, parameters?: record, runDimensions?: record, variables?: record}
 export def "pipelines-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2809,7 +2815,7 @@ export def "pipelines-create-or-update" [
   --api-version: string # The API version. (required)
   --if-match: string # ETag of the pipeline entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # A data factory pipeline. — shape: {activities?: list, annotations?: list, concurrency?: int, description?: string, folder?: record, parameters?: record, runDimensions?: record, variables?: record}
-]: any -> record<properties: record<activities: list<record>, annotations: list<record>, concurrency: int, description: string, folder: record<name: string>, parameters: record, runDimensions: record, variables: record>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<activities: list<record>, annotations: list<record>, concurrency: int, description: string, folder: record<name: string>, parameters: record, runDimensions: record, variables: record>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2863,7 +2869,7 @@ export def "pipelines-create-run" [
   --is-recovery: oneof<nothing, bool> # Recovery mode flag. If recovery mode is set to true, the specified referenced pipeline run and the new run will be grouped under the same groupId.
   --start-activity-name: string # In recovery mode, the rerun will start from this activity. If not specified, all activities will run.
   --body: record
-]: any -> record<runId: string> {
+]: any -> oneof<record<runId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2910,7 +2916,7 @@ export def "data-flow-debug-session-query-by-factory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<nextLink: string, value: table<computeType: string, coreCount: int, dataFlowName: string, integrationRuntimeName: string, lastActivityTime: string, nodeCount: int, sessionId: string, startTime: string, timeToLiveInMinutes: int>> {
+]: nothing -> oneof<record<nextLink: string, value: table<computeType: string, coreCount: int, dataFlowName: string, integrationRuntimeName: string, lastActivityTime: string, nodeCount: int, sessionId: string, startTime: string, timeToLiveInMinutes: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2939,8 +2945,6 @@ export def "data-flow-debug-session-query-by-factory" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/queryPipelineRuns
 # operationId: PipelineRuns_QueryByFactory
-# --filters item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list<string>}
-# --orderBy item shape: {order: "ASC"|"DESC", orderBy: "RunStart"|"RunEnd"|"PipelineName"|"Status"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"TriggerName"|"TriggerRunTimestamp"}
 export def "pipeline-runs-query-by-factory" [
   subscription_id: string
   resource_group_name: string
@@ -2960,7 +2964,7 @@ export def "pipeline-runs-query-by-factory" [
   last_updated_after: string # The time at or after which the run event was updated in 'ISO 8601' format. (format: date-time)
   last_updated_before: string # The time at or before which the run event was updated in 'ISO 8601' format. (format: date-time)
   --order-by: list # List of OrderBy option. — item shape: {order: "ASC"|"DESC", orderBy: "RunStart"|"RunEnd"|"PipelineName"|"Status"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"TriggerName"|"TriggerRunTimestamp"}
-]: any -> record<continuationToken: string, value: table<durationInMs: int, invokedBy: record, isLatest: bool, lastUpdated: string, message: string, parameters: record, pipelineName: string, runDimensions: record, runEnd: string, runGroupId: string, runId: string, runStart: string, status: string>> {
+]: any -> oneof<record<continuationToken: string, value: table<durationInMs: int, invokedBy: record, isLatest: bool, lastUpdated: string, message: string, parameters: record, pipelineName: string, runDimensions: record, runEnd: string, runGroupId: string, runId: string, runStart: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2992,8 +2996,6 @@ export def "pipeline-runs-query-by-factory" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/queryTriggerRuns
 # operationId: TriggerRuns_QueryByFactory
-# --filters item shape: {operand: "PipelineName"|"Status"|"RunStart"|"RunEnd"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"ActivityType"|"TriggerName"|"TriggerRunTimestamp"|"RunGroupId"|"LatestOnly", operator: "Equals"|"NotEquals"|"In"|"NotIn", values: list<string>}
-# --orderBy item shape: {order: "ASC"|"DESC", orderBy: "RunStart"|"RunEnd"|"PipelineName"|"Status"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"TriggerName"|"TriggerRunTimestamp"}
 export def "trigger-runs-query-by-factory" [
   subscription_id: string
   resource_group_name: string
@@ -3013,7 +3015,7 @@ export def "trigger-runs-query-by-factory" [
   last_updated_after: string # The time at or after which the run event was updated in 'ISO 8601' format. (format: date-time)
   last_updated_before: string # The time at or before which the run event was updated in 'ISO 8601' format. (format: date-time)
   --order-by: list # List of OrderBy option. — item shape: {order: "ASC"|"DESC", orderBy: "RunStart"|"RunEnd"|"PipelineName"|"Status"|"ActivityName"|"ActivityRunStart"|"ActivityRunEnd"|"TriggerName"|"TriggerRunTimestamp"}
-]: any -> record<continuationToken: string, value: table<dependencyStatus: record, message: string, properties: record, runDimension: record, status: string, triggerName: string, triggerRunId: string, triggerRunTimestamp: string, triggerType: string, triggeredPipelines: record>> {
+]: any -> oneof<record<continuationToken: string, value: table<dependencyStatus: record, message: string, properties: record, runDimension: record, status: string, triggerName: string, triggerRunId: string, triggerRunTimestamp: string, triggerType: string, triggeredPipelines: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3059,7 +3061,7 @@ export def "triggers-list-by-factory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3149,7 +3151,7 @@ export def "triggers-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
   --if-none-match: string # ETag of the trigger entity. Should only be specified for get. If the ETag matches the existing entity tag, or if * was provided, then no content will be returned.
-]: nothing -> record<properties: record<annotations: list<record>, description: string, runtimeState: string, type: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<annotations: list<record>, description: string, runtimeState: string, type: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3181,7 +3183,6 @@ export def "triggers-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataFactory/factories/{factoryName}/triggers/{triggerName}
 # operationId: Triggers_CreateOrUpdate
-# --properties shape: {annotations?: list, description?: string, runtimeState?: "Started"|"Stopped"|"Disabled", type: string}
 export def "triggers-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -3199,7 +3200,7 @@ export def "triggers-create-or-update" [
   --api-version: string # The API version. (required)
   --if-match: string # ETag of the trigger entity. Should only be specified for update, for which it should match existing entity or can be * for unconditional update.
   properties: record # Azure data factory nested object which contains information about creating pipeline run — shape: {annotations?: list, description?: string, runtimeState?: "Started"|"Stopped"|"Disabled", type: string}
-]: any -> record<properties: record<annotations: list<record>, description: string, runtimeState: string, type: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<annotations: list<record>, description: string, runtimeState: string, type: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3249,7 +3250,7 @@ export def "triggers-get-event-subscription-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<status: string, triggerName: string> {
+]: nothing -> oneof<record<status: string, triggerName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3294,7 +3295,7 @@ export def "rerun-triggers-list-by-trigger" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3343,7 +3344,7 @@ export def "rerun-triggers-create" [
   end_time: string # The end time for the time period for which restatement is initiated. Only UTC time is currently supported. (format: date-time)
   max_concurrency: int # The max number of parallel time windows (ready for execution) for which a rerun is triggered.
   start_time: string # The start time for the time period for which restatement is initiated. Only UTC time is currently supported. (format: date-time)
-]: any -> record<properties: record<annotations: list<record>, description: string, runtimeState: string, type: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<annotations: list<record>, description: string, runtimeState: string, type: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3623,7 +3624,7 @@ export def "triggers-subscribe-to-events" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<status: string, triggerName: string> {
+]: nothing -> oneof<record<status: string, triggerName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3715,7 +3716,7 @@ export def "triggers-unsubscribe-from-events" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version. (required)
-]: nothing -> record<status: string, triggerName: string> {
+]: nothing -> oneof<record<status: string, triggerName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }

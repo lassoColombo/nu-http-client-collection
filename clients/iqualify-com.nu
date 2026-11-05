@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -128,9 +152,9 @@ def permission-name-completer [] { ["builder" "manager"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-op" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-op" "get-course-mappings" "get-course-mappings-externalcourse-external-course-id" "get-course-mappings-offering-id" "delete-course-mappings-offering-id-external-course-id" "put-course-mappings-offering-id-external-course-id" "get-courses" "get-courses-content-id" "get-courses-content-id-activations" "put-courses-content-id-metadata-category" "put-courses-content-id-metadata-level" "put-courses-content-id-metadata-tags" "put-courses-content-id-metadata-topic" "get-courses-content-id-permissions" "post-courses-root-content-id-permissions-user-email" "get-offerings" "post-offerings" "get-offerings-current" "get-offerings-future" "get-offerings-info-text-pattern" "get-offerings-past" "get-offerings-summary" "get-offerings-offering-id" "patch-offerings-offering-id" "get-offerings-offering-id-activities-openresponse" "get-offerings-offering-id-analytics-activities-responses" "get-offerings-offering-id-analytics-channels-channel-id-comments" "get-offerings-offering-id-analytics-channels-channel-id-posts" "get-offerings-offering-id-analytics-channels-channel-id-replies" "get-offerings-offering-id-analytics-learners-progress" "get-offerings-offering-id-analytics-marks-assignments" "get-offerings-offering-id-analytics-marks-quizzes" "get-offerings-offering-id-analytics-pulses" "get-offerings-offering-id-analytics-pulses-responses" "get-offerings-offering-id-analytics-pulses-pulse-id-responses" "get-offerings-offering-id-analytics-social-notes" "get-offerings-offering-id-analytics-submissions-assignments" "get-offerings-offering-id-analytics-submissions-open-response-assessment-id" "get-offerings-offering-id-analytics-submissions-user-email-assignments-assessment-id" "get-offerings-offering-id-analytics-unit-reactions" "get-offerings-offering-id-assessments" "patch-offerings-offering-id-assessments-assessment-id" "delete-offerings-offering-id-assessments-assessment-id-documents-document-id" "patch-offerings-offering-id-assessments-assessment-id-user-email" "get-offerings-offering-id-badges" "get-offerings-offering-id-channels" "post-offerings-offering-id-channels" "patch-offerings-offering-id-channels-channel-id" "delete-offerings-offering-id-channels-channel-id-learners" "get-offerings-offering-id-channels-channel-id-learners" "post-offerings-offering-id-channels-channel-id-learners" "get-offerings-offering-id-groups" "post-offerings-offering-id-groups" "get-offerings-offering-id-groups-group-id-learners" "post-offerings-offering-id-groups-group-id-learners" "delete-offerings-offering-id-groups-group-id-learners-user-email" "get-offerings-offering-id-learners-pending-submission" "put-offerings-offering-id-metadata-category" "put-offerings-offering-id-metadata-level" "put-offerings-offering-id-metadata-tags" "put-offerings-offering-id-metadata-topic" "get-offerings-offering-id-users" "post-offerings-offering-id-users" "delete-offerings-offering-id-users-marker-email-marks" "get-offerings-offering-id-users-marker-email-marks" "post-offerings-offering-id-users-marker-email-marks" "delete-offerings-offering-id-users-user-email" "delete-offerings-offering-id-users-user-email-assessments-assessment-id" "post-offerings-offering-id-users-user-email-badges-award" "get-offerings-offering-id-users-user-email-submissions-open-response" "get-org" "post-users" "get-users-all-progress" "get-users-user-email" "patch-users-user-email" "get-users-user-email-badges" "post-users-user-email-invite-email" "get-users-user-email-offerings" "post-users-user-email-offerings" "get-users-user-email-offerings-offering-id-progress" "post-users-user-email-permissions-permission-name" "get-users-user-email-progress" "put-users-user-email-suspend" "patch-users-user-email-transfer" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +185,7 @@ export def "get-op" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
@@ -194,7 +218,7 @@ export def "get-course-mappings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/course-mappings" $auth.query)
@@ -228,7 +252,7 @@ export def "get-course-mappings-externalcourse-external-course-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($external_course_id | is-empty) { error make --unspanned { msg: "path parameter 'externalCourseId' must be non-empty" } }
@@ -263,7 +287,7 @@ export def "get-course-mappings-offering-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -299,7 +323,7 @@ export def "delete-course-mappings-offering-id-external-course-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -336,7 +360,7 @@ export def "put-course-mappings-offering-id-external-course-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -371,7 +395,7 @@ export def "get-courses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<coverImageUrl: string, createdAt: string, id: string, metadata: record<learning_outcomes: list>, name: string> {
+]: nothing -> oneof<table<coverImageUrl: string, createdAt: string, id: string, metadata: record<learning_outcomes: list>, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/courses" $auth.query)
@@ -405,7 +429,7 @@ export def "get-courses-content-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<coverImageUrl: string, createdAt: string, id: string, metadata: record<category: string, learning_outcomes: list<record>, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, tasksEnabled: bool> {
+]: nothing -> oneof<record<coverImageUrl: string, createdAt: string, id: string, metadata: record<category: string, learning_outcomes: list<record>, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, tasksEnabled: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_id | is-empty) { error make --unspanned { msg: "path parameter 'contentId' must be non-empty" } }
@@ -440,7 +464,7 @@ export def "get-courses-content-id-activations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<end: string, id: string, info: string, learnersCount: string, metadata: record<rootContentId: string>, name: string, start: string> {
+]: nothing -> oneof<record<end: string, id: string, info: string, learnersCount: string, metadata: record<rootContentId: string>, name: string, start: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_id | is-empty) { error make --unspanned { msg: "path parameter 'contentId' must be non-empty" } }
@@ -476,7 +500,7 @@ export def "put-courses-content-id-metadata-category" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --category: string
-]: any -> record<coverImageUrl: string, createdAt: string, id: string, metadata: record<category: string, learning_outcomes: list<record>, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, tasksEnabled: bool> {
+]: any -> oneof<record<coverImageUrl: string, createdAt: string, id: string, metadata: record<category: string, learning_outcomes: list<record>, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, tasksEnabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -515,7 +539,7 @@ export def "put-courses-content-id-metadata-level" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --level: string
-]: any -> record<coverImageUrl: string, createdAt: string, id: string, metadata: record<category: string, learning_outcomes: list<record>, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, tasksEnabled: bool> {
+]: any -> oneof<record<coverImageUrl: string, createdAt: string, id: string, metadata: record<category: string, learning_outcomes: list<record>, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, tasksEnabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -554,7 +578,7 @@ export def "put-courses-content-id-metadata-tags" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --tags: list<string>
-]: any -> record<coverImageUrl: string, createdAt: string, id: string, metadata: record<category: string, learning_outcomes: list<record>, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, tasksEnabled: bool> {
+]: any -> oneof<record<coverImageUrl: string, createdAt: string, id: string, metadata: record<category: string, learning_outcomes: list<record>, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, tasksEnabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -593,7 +617,7 @@ export def "put-courses-content-id-metadata-topic" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --topic: string
-]: any -> record<coverImageUrl: string, createdAt: string, id: string, metadata: record<category: string, learning_outcomes: list<record>, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, tasksEnabled: bool> {
+]: any -> oneof<record<coverImageUrl: string, createdAt: string, id: string, metadata: record<category: string, learning_outcomes: list<record>, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, tasksEnabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -631,7 +655,7 @@ export def "get-courses-content-id-permissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<email: string, isBuilder: bool, isReviewer: bool, name: string> {
+]: nothing -> oneof<record<email: string, isBuilder: bool, isReviewer: bool, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_id | is-empty) { error make --unspanned { msg: "path parameter 'contentId' must be non-empty" } }
@@ -669,7 +693,7 @@ export def "post-courses-root-content-id-permissions-user-email" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-builder: oneof<nothing, bool> # default: true
   --is-reviewer: oneof<nothing, bool> # default: false
-]: any -> record<contentId: string> {
+]: any -> oneof<record<contentId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -707,7 +731,7 @@ export def "get-offerings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool> {
+]: nothing -> oneof<table<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/offerings" $auth.query)
@@ -730,8 +754,6 @@ export def "get-offerings" [
 # Create offering
 #
 # POST /offerings
-# --badge shape: {badgeExpiry?: record, description?: string, requiresApproval?: bool, title?: string}
-# --metadata shape: {category?: string, level?: string, tags?: list<string>, topic?: string}
 export def "post-offerings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -757,7 +779,7 @@ export def "post-offerings" [
   start: string # format: date-time
   --trailer-video-url: string
   --use-relative-dates: oneof<nothing, bool> # default: false
-]: any -> record<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool> {
+]: any -> oneof<record<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -793,7 +815,7 @@ export def "get-offerings-current" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool> {
+]: nothing -> oneof<table<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/offerings/current" $auth.query)
@@ -826,7 +848,7 @@ export def "get-offerings-future" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool> {
+]: nothing -> oneof<table<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/offerings/future" $auth.query)
@@ -860,7 +882,7 @@ export def "get-offerings-info-text-pattern" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<contentId: string, end: string, id: string, info: string, learnersCount: float, metadata: record<rootContentId: string>, name: string, start: string> {
+]: nothing -> oneof<table<contentId: string, end: string, id: string, info: string, learnersCount: float, metadata: record<rootContentId: string>, name: string, start: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($text_pattern | is-empty) { error make --unspanned { msg: "path parameter 'textPattern' must be non-empty" } }
@@ -894,7 +916,7 @@ export def "get-offerings-past" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool> {
+]: nothing -> oneof<table<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/offerings/past" $auth.query)
@@ -930,7 +952,7 @@ export def "get-offerings-summary" [
   --top: string # Returns only the first n results. (default: 50)
   --orderby: string # Sorts the results.
   --filter: string # Filters the results, based on a Boolean condition.
-]: nothing -> table<contentId: string, end: string, id: string, info: string, learnersCount: float, metadata: record<rootContentId: string>, name: string, start: string> {
+]: nothing -> oneof<table<contentId: string, end: string, id: string, info: string, learnersCount: float, metadata: record<rootContentId: string>, name: string, start: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
@@ -965,7 +987,7 @@ export def "get-offerings-offering-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool> {
+]: nothing -> oneof<record<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -989,8 +1011,6 @@ export def "get-offerings-offering-id" [
 # Update offering
 #
 # PATCH /offerings/{offeringId}
-# --badge shape: {badgeExpiry?: record, description?: string, requiresApproval?: bool, title?: string}
-# --metadata shape: {category?: string, level?: string, tags?: list<string>, topic?: string}
 export def "patch-offerings-offering-id" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1017,7 +1037,7 @@ export def "patch-offerings-offering-id" [
   --start: string # format: date-time
   --trailer-video-url: string
   --use-relative-dates: oneof<nothing, bool>
-]: any -> record<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool> {
+]: any -> oneof<record<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1055,7 +1075,7 @@ export def "get-offerings-offering-id-activities-openresponse" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<activityId: string, time: float, title: string> {
+]: nothing -> oneof<table<activityId: string, time: float, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1090,7 +1110,7 @@ export def "get-offerings-offering-id-analytics-activities-responses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<activityId: string, activityType: string, feedback: record<facilitatorEmail: string, text: string>, learnerEmail: string, offeringId: string, responseText: string, uploadedFiles: record<filename: string, mimetype: string, size: string, url: string>> {
+]: nothing -> oneof<table<activityId: string, activityType: string, feedback: record<facilitatorEmail: string, text: string>, learnerEmail: string, offeringId: string, responseText: string, uploadedFiles: record<filename: string, mimetype: string, size: string, url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1126,7 +1146,7 @@ export def "get-offerings-offering-id-analytics-channels-channel-id-comments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<content: string, createdAt: string, email: string, id: string, isFacilitatorPost: bool, moderation: record<isMuted: bool, moderator: record, reason: string>, parentCommentId: string, postId: string> {
+]: nothing -> oneof<table<content: string, createdAt: string, email: string, id: string, isFacilitatorPost: bool, moderation: record<isMuted: bool, moderator: record, reason: string>, parentCommentId: string, postId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1163,7 +1183,7 @@ export def "get-offerings-offering-id-analytics-channels-channel-id-posts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attachments: list<record>, content: string, createdAt: string, email: string, id: string, isFacilitatorPost: bool, moderation: record<isMuted: bool, moderator: record, reason: string>, title: string> {
+]: nothing -> oneof<table<attachments: list<record>, content: string, createdAt: string, email: string, id: string, isFacilitatorPost: bool, moderation: record<isMuted: bool, moderator: record, reason: string>, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1200,7 +1220,7 @@ export def "get-offerings-offering-id-analytics-channels-channel-id-replies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<content: string, createdAt: string, email: string, id: string, isFacilitatorPost: bool, moderation: record<isMuted: bool, moderator: record, reason: string>, parentCommentId: string, postId: string> {
+]: nothing -> oneof<table<content: string, createdAt: string, email: string, id: string, isFacilitatorPost: bool, moderation: record<isMuted: bool, moderator: record, reason: string>, parentCommentId: string, postId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1236,7 +1256,7 @@ export def "get-offerings-offering-id-analytics-learners-progress" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<completion: string, courseId: string, email: string, firstName: string, lastLoggedInAt: string, lastName: string, personId: string> {
+]: nothing -> oneof<table<completion: string, courseId: string, email: string, firstName: string, lastLoggedInAt: string, lastName: string, personId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1271,7 +1291,7 @@ export def "get-offerings-offering-id-analytics-marks-assignments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<assessmentId: string, assessmentItemDetails: string, assessmentItemName: string, courseName: string, learnerEmail: string, learnerFirstName: string, learnerLastName: string, learnerPersonId: string, mark: string, markFeedback: string, markedBy: string, markedByEvaluator: bool, markedByFacilitator: bool, markedByMarker: bool, markedDateTime: string, submissionDateTime: string> {
+]: nothing -> oneof<table<assessmentId: string, assessmentItemDetails: string, assessmentItemName: string, courseName: string, learnerEmail: string, learnerFirstName: string, learnerLastName: string, learnerPersonId: string, mark: string, markFeedback: string, markedBy: string, markedByEvaluator: bool, markedByFacilitator: bool, markedByMarker: bool, markedDateTime: string, submissionDateTime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1306,7 +1326,7 @@ export def "get-offerings-offering-id-analytics-marks-quizzes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attempts: int, lastAttemptAt: string, learnerEmail: string, learnerFullname: string, learnerPersonId: string, mark: string, quizId: string, quizTitle: string> {
+]: nothing -> oneof<table<attempts: int, lastAttemptAt: string, learnerEmail: string, learnerFullname: string, learnerPersonId: string, mark: string, quizId: string, quizTitle: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1341,7 +1361,7 @@ export def "get-offerings-offering-id-analytics-pulses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1378,7 +1398,7 @@ export def "get-offerings-offering-id-analytics-pulses-responses" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pulse-type: string@pulse-type-completer # Filter pulse responses by type.
   --response-time: string # Filter pulse responses by responseTime. Lower then (`lt`), lower then or equal (`lte`), greater then (`gt`) and greater then or equal (`gte`) operators are available. Example of filtering by time range __gte__2017-03-14T07:30:00Z__
-]: nothing -> table<learnerFirstName: string, learnerId: string, learnerLastName: string, pulseBaseId: string, pulseInstanceId: string, pulseQuestion: string, pulseRunDurationMinutes: int, pulseRunStart: string, pulseType: string, response: record<multiChoiceAnswer: list, spatialAnswer: list, textAnswer: string>, responseTime: string> {
+]: nothing -> oneof<table<learnerFirstName: string, learnerId: string, learnerLastName: string, pulseBaseId: string, pulseInstanceId: string, pulseQuestion: string, pulseRunDurationMinutes: int, pulseRunStart: string, pulseType: string, response: record<multiChoiceAnswer: list, spatialAnswer: list, textAnswer: string>, responseTime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1415,7 +1435,7 @@ export def "get-offerings-offering-id-analytics-pulses-pulse-id-responses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<learnerFirstName: string, learnerId: string, learnerLastName: string, pulseBaseId: string, pulseInstanceId: string, pulseQuestion: string, pulseRunDurationMinutes: int, pulseRunStart: string, pulseType: string, response: record<multiChoiceAnswer: list, spatialAnswer: list, textAnswer: string>, responseTime: string> {
+]: nothing -> oneof<table<learnerFirstName: string, learnerId: string, learnerLastName: string, pulseBaseId: string, pulseInstanceId: string, pulseQuestion: string, pulseRunDurationMinutes: int, pulseRunStart: string, pulseType: string, response: record<multiChoiceAnswer: list, spatialAnswer: list, textAnswer: string>, responseTime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1451,7 +1471,7 @@ export def "get-offerings-offering-id-analytics-social-notes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<email: string, firstName: string, lastName: string, pageId: string, personId: string, social_note_content: string, social_note_paragraphId: string, userId: string> {
+]: nothing -> oneof<table<email: string, firstName: string, lastName: string, pageId: string, personId: string, social_note_content: string, social_note_paragraphId: string, userId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1486,7 +1506,7 @@ export def "get-offerings-offering-id-analytics-submissions-assignments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<assessmentId: string, assessmentItemDetails: string, assessmentItemName: string, courseName: string, learnerEmail: string, learnerFirstName: string, learnerLastName: string, learnerPersonId: string, mark: string, markFeedback: string, markedBy: string, markedByEvaluator: bool, markedByFacilitator: bool, markedByMarker: bool, markedDateTime: string, submissionDateTime: string> {
+]: nothing -> oneof<table<assessmentId: string, assessmentItemDetails: string, assessmentItemName: string, courseName: string, learnerEmail: string, learnerFirstName: string, learnerLastName: string, learnerPersonId: string, mark: string, markFeedback: string, markedBy: string, markedByEvaluator: bool, markedByFacilitator: bool, markedByMarker: bool, markedDateTime: string, submissionDateTime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1522,7 +1542,7 @@ export def "get-offerings-offering-id-analytics-submissions-open-response-assess
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<assessmentId: string, assessmentItemDetails: string, assessmentItemName: string, courseName: string, files: list<record>, html: string, learnerEmail: string, learnerFirstName: string, learnerLastName: string, learnerPersonId: string, marks: list<record>, status: string, submissionDateTime: string> {
+]: nothing -> oneof<table<assessmentId: string, assessmentItemDetails: string, assessmentItemName: string, courseName: string, files: list<record>, html: string, learnerEmail: string, learnerFirstName: string, learnerLastName: string, learnerPersonId: string, marks: list<record>, status: string, submissionDateTime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1560,7 +1580,7 @@ export def "get-offerings-offering-id-analytics-submissions-user-email-assignmen
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<assessmentId: string, assessmentItemDetails: string, assessmentItemName: string, courseName: string, files: list<record>, html: string, learnerEmail: string, learnerFirstName: string, learnerLastName: string, learnerPersonId: string, marks: list<record>, status: string, submissionDateTime: string> {
+]: nothing -> oneof<table<assessmentId: string, assessmentItemDetails: string, assessmentItemName: string, courseName: string, files: list<record>, html: string, learnerEmail: string, learnerFirstName: string, learnerLastName: string, learnerPersonId: string, marks: list<record>, status: string, submissionDateTime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1597,7 +1617,7 @@ export def "get-offerings-offering-id-analytics-unit-reactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<feedback: record<thumbs_down: float, thumbs_up: float>, pageId: bool> {
+]: nothing -> oneof<table<feedback: record<thumbs_down: float, thumbs_up: float>, pageId: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1632,7 +1652,7 @@ export def "get-offerings-offering-id-assessments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<content: string, documents: list<record>, dueDate: string, durationMinutes: int, filename: string, hidden: bool, id: string, markNumber: string, markType: string, maxAttempts: int, openDate: string, pid: string, points: string, themes: list<record>, title: string, totalQuestions: int, totalThemes: int, type: string> {
+]: nothing -> oneof<table<content: string, documents: list<record>, dueDate: string, durationMinutes: int, filename: string, hidden: bool, id: string, markNumber: string, markType: string, maxAttempts: int, openDate: string, pid: string, points: string, themes: list<record>, title: string, totalQuestions: int, totalThemes: int, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1673,7 +1693,7 @@ export def "patch-offerings-offering-id-assessments-assessment-id" [
   --mark-number: string
   --mark-type: string
   --open-date: string # format: date-time
-]: any -> record<content: string, documents: table<createdAt: string, filename: string, id: string, mimetype: string, size: int, url: string>, dueDate: string, durationMinutes: int, filename: string, hidden: bool, id: string, markNumber: string, markType: string, maxAttempts: int, openDate: string, pid: string, points: string, themes: table<filter: string, numberOfQuestions: string>, title: string, totalQuestions: int, totalThemes: int, type: string> {
+]: any -> oneof<record<content: string, documents: table<createdAt: string, filename: string, id: string, mimetype: string, size: int, url: string>, dueDate: string, durationMinutes: int, filename: string, hidden: bool, id: string, markNumber: string, markType: string, maxAttempts: int, openDate: string, pid: string, points: string, themes: table<filter: string, numberOfQuestions: string>, title: string, totalQuestions: int, totalThemes: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1794,7 +1814,7 @@ export def "get-offerings-offering-id-badges" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<badgeExpiry: record<expirationDate: string, expires: bool, expiryType: string, timeframeAmount: float, timeframeUnit: string>, badgeUrl: string, criterias: record<hasCompletedCourse: bool, hasPassedMandatoryAssessedQuizzes: bool>, description: string, openBadge: record<criteria: record<narrative: string>, description: string, id: string, image: string, issuer: string, name: string, type: string>, title: string> {
+]: nothing -> oneof<record<badgeExpiry: record<expirationDate: string, expires: bool, expiryType: string, timeframeAmount: float, timeframeUnit: string>, badgeUrl: string, criterias: record<hasCompletedCourse: bool, hasPassedMandatoryAssessedQuizzes: bool>, description: string, openBadge: record<criteria: record<narrative: string>, description: string, id: string, image: string, issuer: string, name: string, type: string>, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1829,7 +1849,7 @@ export def "get-offerings-offering-id-channels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: string, isBroadcastOnly: bool, title: string> {
+]: nothing -> oneof<table<id: string, isBroadcastOnly: bool, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -1866,7 +1886,7 @@ export def "post-offerings-offering-id-channels" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-broadcast-only: oneof<nothing, bool> # default: false
   title: string
-]: any -> record<id: string, isBroadcastOnly: bool, title: string> {
+]: any -> oneof<record<id: string, isBroadcastOnly: bool, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1893,7 +1913,6 @@ export def "post-offerings-offering-id-channels" [
 # Update channel
 #
 # PATCH /offerings/{offeringId}/channels/{channelId}
-# --group shape: {autoAssign?: bool}
 export def "patch-offerings-offering-id-channels-channel-id" [
   offering_id: string
   channel_id: string
@@ -1911,7 +1930,7 @@ export def "patch-offerings-offering-id-channels-channel-id" [
   --is-broadcast-only: oneof<nothing, bool>
   --private-support: oneof<nothing, bool>
   --title: string
-]: any -> record<id: string, isBroadcastOnly: bool, title: string> {
+]: any -> oneof<record<id: string, isBroadcastOnly: bool, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1992,7 +2011,7 @@ export def "get-offerings-offering-id-channels-channel-id-learners" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, isBroadcastOnly: bool, title: string> {
+]: nothing -> oneof<record<id: string, isBroadcastOnly: bool, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -2069,7 +2088,7 @@ export def "get-offerings-offering-id-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<createdAt: string, id: string, title: string> {
+]: nothing -> oneof<table<createdAt: string, id: string, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -2105,7 +2124,7 @@ export def "post-offerings-offering-id-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   title: string
-]: any -> record<createdAt: string, id: string, title: string> {
+]: any -> oneof<record<createdAt: string, id: string, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2144,7 +2163,7 @@ export def "get-offerings-offering-id-groups-group-id-learners" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<avatarUrl: string, email: string, firstAccessAt: string, firstName: string, id: string, invite: record<url: string>, lastAccessAt: string, lastName: string, metadata: record<tags: list>, personId: string, profile: record<displayName: string, mobile: string>> {
+]: nothing -> oneof<table<avatarUrl: string, email: string, firstAccessAt: string, firstName: string, id: string, invite: record<url: string>, lastAccessAt: string, lastName: string, metadata: record<tags: list>, personId: string, profile: record<displayName: string, mobile: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -2182,7 +2201,7 @@ export def "post-offerings-offering-id-groups-group-id-learners" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
-]: any -> record<avatarUrl: string, email: string, firstAccessAt: string, firstName: string, id: string, invite: record<url: string>, lastAccessAt: string, lastName: string, metadata: record<tags: list<string>>, personId: string, profile: record<displayName: string, mobile: string>> {
+]: any -> oneof<record<avatarUrl: string, email: string, firstAccessAt: string, firstName: string, id: string, invite: record<url: string>, lastAccessAt: string, lastName: string, metadata: record<tags: list<string>>, personId: string, profile: record<displayName: string, mobile: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2261,7 +2280,7 @@ export def "get-offerings-offering-id-learners-pending-submission" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --days: string # days to assessment due date. Default is 3 days
-]: nothing -> table<content: string, documents: list<record>, dueDate: string, durationMinutes: int, filename: string, hidden: bool, id: string, markNumber: string, markType: string, maxAttempts: int, offeringId: string, offeringName: string, openDate: string, pid: string, points: string, themes: list<record>, title: string, totalQuestions: int, totalThemes: int, type: string, users: list<record>> {
+]: nothing -> oneof<table<content: string, documents: list<record>, dueDate: string, durationMinutes: int, filename: string, hidden: bool, id: string, markNumber: string, markType: string, maxAttempts: int, offeringId: string, offeringName: string, openDate: string, pid: string, points: string, themes: list<record>, title: string, totalQuestions: int, totalThemes: int, type: string, users: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -2298,7 +2317,7 @@ export def "put-offerings-offering-id-metadata-category" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --category: string
-]: any -> record<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool> {
+]: any -> oneof<record<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2337,7 +2356,7 @@ export def "put-offerings-offering-id-metadata-level" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --level: string
-]: any -> record<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool> {
+]: any -> oneof<record<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2376,7 +2395,7 @@ export def "put-offerings-offering-id-metadata-tags" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --tags: list<string>
-]: any -> record<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool> {
+]: any -> oneof<record<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2415,7 +2434,7 @@ export def "put-offerings-offering-id-metadata-topic" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --topic: string
-]: any -> record<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool> {
+]: any -> oneof<record<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list<string>, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2456,7 +2475,7 @@ export def "get-offerings-offering-id-users" [
   --facilitators: string@facilitators-completer # If true, facilitators are included in the results. (default: true)
   --learners: string@learners-completer # If true, learners are included in the results. (default: true)
   --markers: string@markers-completer # If true, markers are included in the results. (default: true)
-]: nothing -> table<avatarUrl: string, email: string, evaluatedBy: list<string>, evaluates: list<string>, firstName: string, id: string, isFacilitator: bool, isMarker: bool, isReadonly: bool, lastName: string, markedBy: list<string>, marks: list<string>, personId: string, profile: record<displayName: string, mobile: string>> {
+]: nothing -> oneof<table<avatarUrl: string, email: string, evaluatedBy: list<string>, evaluates: list<string>, firstName: string, id: string, isFacilitator: bool, isMarker: bool, isReadonly: bool, lastName: string, markedBy: list<string>, marks: list<string>, personId: string, profile: record<displayName: string, mobile: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -2493,7 +2512,7 @@ export def "post-offerings-offering-id-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> table<email: string, firstName: string, invite: record<url: string>, isFacilitator: bool, isMarker: bool, isReadonly: bool, lastName: string, metadata: record<tags: list>, personId: string, profile: record<displayName: string>, sendInvite: bool, sendNotificationEmail: bool> {
+]: any -> oneof<table<email: string, firstName: string, invite: record<url: string>, isFacilitator: bool, isMarker: bool, isReadonly: bool, lastName: string, metadata: record<tags: list>, personId: string, profile: record<displayName: string>, sendInvite: bool, sendNotificationEmail: bool>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2533,7 +2552,7 @@ export def "delete-offerings-offering-id-users-marker-email-marks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> table<email: string, firstName: string, isFacilitator: bool, isMarker: bool, isReadonly: bool, lastName: string, metadata: record<tags: list>, personId: string, profile: record<displayName: string>, sendInvite: bool, sendNotificationEmail: bool> {
+]: any -> oneof<table<email: string, firstName: string, isFacilitator: bool, isMarker: bool, isReadonly: bool, lastName: string, metadata: record<tags: list>, personId: string, profile: record<displayName: string>, sendInvite: bool, sendNotificationEmail: bool>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2573,7 +2592,7 @@ export def "get-offerings-offering-id-users-marker-email-marks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<email: string, firstName: string, isFacilitator: bool, isMarker: bool, isReadonly: bool, lastName: string, metadata: record<tags: list>, personId: string, profile: record<displayName: string>, sendInvite: bool, sendNotificationEmail: bool> {
+]: nothing -> oneof<table<email: string, firstName: string, isFacilitator: bool, isMarker: bool, isReadonly: bool, lastName: string, metadata: record<tags: list>, personId: string, profile: record<displayName: string>, sendInvite: bool, sendNotificationEmail: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -2611,7 +2630,7 @@ export def "post-offerings-offering-id-users-marker-email-marks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> table<email: string, firstName: string, isFacilitator: bool, isMarker: bool, isReadonly: bool, lastName: string, metadata: record<tags: list>, personId: string, profile: record<displayName: string>, sendInvite: bool, sendNotificationEmail: bool> {
+]: any -> oneof<table<email: string, firstName: string, isFacilitator: bool, isMarker: bool, isReadonly: bool, lastName: string, metadata: record<tags: list>, personId: string, profile: record<displayName: string>, sendInvite: bool, sendNotificationEmail: bool>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2727,7 +2746,7 @@ export def "post-offerings-offering-id-users-user-email-badges-award" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<awarded: bool, badgeId: string, badgeUrl: string> {
+]: nothing -> oneof<record<awarded: bool, badgeId: string, badgeUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -2764,7 +2783,7 @@ export def "get-offerings-offering-id-users-user-email-submissions-open-response
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<files: list<record>, marks: list<record>, status: string, submittedAt: string, updatedAt: string> {
+]: nothing -> oneof<table<files: list<record>, marks: list<record>, status: string, submittedAt: string, updatedAt: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -2799,7 +2818,7 @@ export def "get-org" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, name: string> {
+]: nothing -> oneof<record<id: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/org" $auth.query)
@@ -2822,8 +2841,6 @@ export def "get-org" [
 # Add new user
 #
 # POST /users
-# --metadata shape: {tags?: list<string>}
-# --profile shape: {displayName?: string}
 export def "post-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2841,7 +2858,7 @@ export def "post-users" [
   --person-id: string
   --profile: record # shape: {displayName?: string}
   --send-invite: oneof<nothing, bool> # default: true
-]: any -> record<avatarUrl: string, email: string, firstAccessAt: string, firstName: string, id: string, invite: record<url: string>, lastAccessAt: string, lastName: string, metadata: record<tags: list<string>>, personId: string, profile: record<displayName: string, mobile: string>> {
+]: any -> oneof<record<avatarUrl: string, email: string, firstAccessAt: string, firstName: string, id: string, invite: record<url: string>, lastAccessAt: string, lastName: string, metadata: record<tags: list<string>>, personId: string, profile: record<displayName: string, mobile: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2880,7 +2897,7 @@ export def "get-users-all-progress" [
   --top: string # Returns only the first n results. (default: 50)
   --orderby: string # Sorts the results.
   --filter: string # Filters the results, based on a Boolean condition.
-]: nothing -> record<data: record<progress: list<record>>, top: int> {
+]: nothing -> oneof<record<data: record<progress: list<record>>, top: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$top" $top "scalar") (serialize-qp "$orderby" $orderby "scalar") (serialize-qp "$filter" $filter "scalar")] | flatten | str join "&"
@@ -2915,7 +2932,7 @@ export def "get-users-user-email" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatarUrl: string, email: string, firstAccessAt: string, firstName: string, id: string, invite: record<url: string>, lastAccessAt: string, lastName: string, metadata: record<tags: list<string>>, personId: string, profile: record<displayName: string, mobile: string>> {
+]: nothing -> oneof<record<avatarUrl: string, email: string, firstAccessAt: string, firstName: string, id: string, invite: record<url: string>, lastAccessAt: string, lastName: string, metadata: record<tags: list<string>>, personId: string, profile: record<displayName: string, mobile: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_email | is-empty) { error make --unspanned { msg: "path parameter 'userEmail' must be non-empty" } }
@@ -2939,8 +2956,6 @@ export def "get-users-user-email" [
 # Update user
 #
 # PATCH /users/{userEmail}
-# --metadata shape: {tags?: list<string>}
-# --profile shape: {displayName?: string}
 export def "patch-users-user-email" [
   user_email: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2959,7 +2974,7 @@ export def "patch-users-user-email" [
   --person-id: string
   --profile: record # shape: {displayName?: string}
   --send-invite: oneof<nothing, bool> # default: true
-]: any -> record<avatarUrl: string, email: string, firstAccessAt: string, firstName: string, id: string, invite: record<url: string>, lastAccessAt: string, lastName: string, metadata: record<tags: list<string>>, personId: string, profile: record<displayName: string, mobile: string>> {
+]: any -> oneof<record<avatarUrl: string, email: string, firstAccessAt: string, firstName: string, id: string, invite: record<url: string>, lastAccessAt: string, lastName: string, metadata: record<tags: list<string>>, personId: string, profile: record<displayName: string, mobile: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2997,7 +3012,7 @@ export def "get-users-user-email-badges" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<awardedAt: string, badgeExpiry: record<expirationDate: string, expires: bool>, badgeUrl: string, criterias: record<hasCompletedCourse: bool, hasPassedMandatoryAssessedQuizzes: bool>, description: string, offeringId: string, openBadge: record<criteria: record, description: string, id: string, image: string, issuer: string, name: string, type: string>, title: string> {
+]: nothing -> oneof<table<awardedAt: string, badgeExpiry: record<expirationDate: string, expires: bool>, badgeUrl: string, criterias: record<hasCompletedCourse: bool, hasPassedMandatoryAssessedQuizzes: bool>, description: string, offeringId: string, openBadge: record<criteria: record, description: string, id: string, image: string, issuer: string, name: string, type: string>, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_email | is-empty) { error make --unspanned { msg: "path parameter 'userEmail' must be non-empty" } }
@@ -3067,7 +3082,7 @@ export def "get-users-user-email-offerings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool> {
+]: nothing -> oneof<table<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_email | is-empty) { error make --unspanned { msg: "path parameter 'userEmail' must be non-empty" } }
@@ -3103,7 +3118,7 @@ export def "post-users-user-email-offerings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> table<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool> {
+]: any -> oneof<table<contentId: string, coverImageUrl: string, currency: string, description: string, earlyCloseOffDate: string, end: string, enrollmentLimit: float, hasEarlyCloseOff: bool, id: string, identifier: string, isReadonly: bool, metadata: record<category: string, level: string, rootContentId: string, tags: list, topic: string>, name: string, overview: string, price: float, start: string, tasksEnabled: bool, trailerVideoUrl: string, useRelativeDates: bool>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3142,7 +3157,7 @@ export def "get-users-user-email-offerings-offering-id-progress" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<completion: string, email: string, firstName: string, id: string, lastName: string> {
+]: nothing -> oneof<record<completion: string, email: string, firstName: string, id: string, lastName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_email | is-empty) { error make --unspanned { msg: "path parameter 'userEmail' must be non-empty" } }
@@ -3179,7 +3194,7 @@ export def "post-users-user-email-permissions-permission-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatarUrl: string, email: string, firstAccessAt: string, firstName: string, id: string, invite: record<url: string>, lastAccessAt: string, lastName: string, metadata: record<tags: list<string>>, personId: string, profile: record<displayName: string, mobile: string>> {
+]: nothing -> oneof<record<avatarUrl: string, email: string, firstAccessAt: string, firstName: string, id: string, invite: record<url: string>, lastAccessAt: string, lastName: string, metadata: record<tags: list<string>>, personId: string, profile: record<displayName: string, mobile: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_email | is-empty) { error make --unspanned { msg: "path parameter 'userEmail' must be non-empty" } }
@@ -3215,7 +3230,7 @@ export def "get-users-user-email-progress" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<email: string, firstName: string, id: string, lastName: string, offerings: table<completion: string, id: string>, personId: string> {
+]: nothing -> oneof<record<email: string, firstName: string, id: string, lastName: string, offerings: table<completion: string, id: string>, personId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_email | is-empty) { error make --unspanned { msg: "path parameter 'userEmail' must be non-empty" } }

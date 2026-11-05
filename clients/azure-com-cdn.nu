@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -127,9 +151,9 @@ def protocol-type-completer [] { ["IPBased" "ServerNameIndication"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "check-name-availability" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["check-name-availability" "edge-nodes-list" "operations-list" "check-name-availability-with-subscription" "resource-usage-list" "profiles-list" "validate-probe" "profiles-list-by-resource-group" "profiles-delete" "profiles-get" "profiles-update" "profiles-create" "profiles-list-resource-usage" "endpoints-list-by-profile" "endpoints-delete" "endpoints-get" "endpoints-update" "endpoints-create" "endpoints-list-resource-usage" "custom-domains-list-by-endpoint" "custom-domains-delete" "custom-domains-get" "custom-domains-create" "custom-domains-disable-custom-https" "custom-domains-enable-custom-https" "endpoints-load-content" "origins-list-by-endpoint" "origins-get" "origins-update" "endpoints-purge-content" "endpoints-start" "endpoints-stop" "endpoints-validate-custom-domain" "profiles-generate-sso-uri" "profiles-list-supported-optimization-types" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -164,7 +188,7 @@ export def "check-name-availability" [
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   name: string # The resource name to validate.
   type: string@type-completer # Type of CDN resource used in CheckNameAvailability.
-]: any -> record<message: string, nameAvailable: bool, reason: string> {
+]: any -> oneof<record<message: string, nameAvailable: bool, reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -204,7 +228,7 @@ export def "edge-nodes-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -241,7 +265,7 @@ export def "operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<display: record, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -281,7 +305,7 @@ export def "check-name-availability-with-subscription" [
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   name: string # The resource name to validate.
   type: string@type-completer # Type of CDN resource used in CheckNameAvailability.
-]: any -> record<message: string, nameAvailable: bool, reason: string> {
+]: any -> oneof<record<message: string, nameAvailable: bool, reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -323,7 +347,7 @@ export def "resource-usage-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, resourceType: string, unit: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<currentValue: int, limit: int, resourceType: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -362,7 +386,7 @@ export def "profiles-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -402,7 +426,7 @@ export def "validate-probe" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   probe_url: string # The probe URL to validate.
-]: any -> record<errorCode: string, isValid: bool, message: string> {
+]: any -> oneof<record<errorCode: string, isValid: bool, message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -445,7 +469,7 @@ export def "profiles-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -530,7 +554,7 @@ export def "profiles-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<properties: record<provisioningState: string, resourceState: string>, sku: record<name: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<provisioningState: string, resourceState: string>, sku: record<name: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -574,7 +598,7 @@ export def "profiles-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   --tags: record # Profile tags
-]: any -> record<properties: record<provisioningState: string, resourceState: string>, sku: record<name: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<provisioningState: string, resourceState: string>, sku: record<name: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -606,7 +630,6 @@ export def "profiles-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}
 # operationId: Profiles_Create
-# --sku shape: {name?: "Standard_Verizon"|"Premium_Verizon"|"Custom_Verizon"|"Standard_Akamai"|"Standard_ChinaCdn"|"Standard_Microsoft"|"Premium_ChinaCdn"}
 export def "profiles-create" [
   subscription_id: string
   resource_group_name: string
@@ -625,7 +648,7 @@ export def "profiles-create" [
   sku: record # The pricing tier (defines a CDN provider, feature list and rate) of the CDN profile. — shape: {name?: "Standard_Verizon"|"Premium_Verizon"|"Custom_Verizon"|"Standard_Akamai"|"Standard_ChinaCdn"|"Standard_Microsoft"|"Premium_ChinaCdn"}
   location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<properties: record<provisioningState: string, resourceState: string>, sku: record<name: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<provisioningState: string, resourceState: string>, sku: record<name: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -671,7 +694,7 @@ export def "profiles-list-resource-usage" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, resourceType: string, unit: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<currentValue: int, limit: int, resourceType: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -714,7 +737,7 @@ export def "endpoints-list-by-profile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -803,7 +826,7 @@ export def "endpoints-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>, location: string, tags: record, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -833,7 +856,6 @@ export def "endpoints-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}
 # operationId: Endpoints_Update
-# --properties shape: {contentTypesToCompress?: list<string>, deliveryPolicy?: record, geoFilters?: list, isCompressionEnabled?: bool, isHttpAllowed?: bool, isHttpsAllowed?: bool, optimizationType?: "GeneralWebDelivery"|"GeneralMediaStreaming"|"VideoOnDemandMediaStreaming"|"LargeFileDownload"|"DynamicSiteAcceleration", originHostHeader?: string, originPath?: string, probePath?: string, queryStringCachingBehavior?: "IgnoreQueryString"|"BypassCaching"|"UseQueryString"|"NotSet", webApplicationFirewallPolicyLink?: record}
 export def "endpoints-update" [
   subscription_id: string
   resource_group_name: string
@@ -851,7 +873,7 @@ export def "endpoints-update" [
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   --properties: any # The JSON object containing endpoint update parameters. — shape: {contentTypesToCompress?: list<string>, deliveryPolicy?: record, geoFilters?: list, isCompressionEnabled?: bool, isHttpAllowed?: bool, isHttpsAllowed?: bool, optimizationType?: "GeneralWebDelivery"|"GeneralMediaStreaming"|"VideoOnDemandMediaStreaming"|"LargeFileDownload"|"DynamicSiteAcceleration", originHostHeader?: string, originPath?: string, probePath?: string, queryStringCachingBehavior?: "IgnoreQueryString"|"BypassCaching"|"UseQueryString"|"NotSet", webApplicationFirewallPolicyLink?: record}
   --tags: record # Endpoint tags.
-]: any -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>, location: string, tags: record, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -884,7 +906,6 @@ export def "endpoints-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}
 # operationId: Endpoints_Create
-# --properties shape: {origins: list, contentTypesToCompress?: list<string>, deliveryPolicy?: record, geoFilters?: list, isCompressionEnabled?: bool, isHttpAllowed?: bool, isHttpsAllowed?: bool, optimizationType?: "GeneralWebDelivery"|"GeneralMediaStreaming"|"VideoOnDemandMediaStreaming"|"LargeFileDownload"|"DynamicSiteAcceleration", originHostHeader?: string, originPath?: string, probePath?: string, queryStringCachingBehavior?: "IgnoreQueryString"|"BypassCaching"|"UseQueryString"|"NotSet", ... (1 more fields)}
 export def "endpoints-create" [
   subscription_id: string
   resource_group_name: string
@@ -903,7 +924,7 @@ export def "endpoints-create" [
   --properties: any # The JSON object that contains the properties required to create an endpoint. — shape: {origins: list, contentTypesToCompress?: list<string>, deliveryPolicy?: record, geoFilters?: list, isCompressionEnabled?: bool, isHttpAllowed?: bool, isHttpsAllowed?: bool, optimizationType?: "GeneralWebDelivery"|"GeneralMediaStreaming"|"VideoOnDemandMediaStreaming"|"LargeFileDownload"|"DynamicSiteAcceleration", originHostHeader?: string, originPath?: string, probePath?: string, queryStringCachingBehavior?: "IgnoreQueryString"|"BypassCaching"|"UseQueryString"|"NotSet", ... (1 more fields)}
   location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>, location: string, tags: record, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -951,7 +972,7 @@ export def "endpoints-list-resource-usage" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<nextLink: string, value: table<currentValue: int, limit: int, resourceType: string, unit: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<currentValue: int, limit: int, resourceType: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -996,7 +1017,7 @@ export def "custom-domains-list-by-endpoint" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1042,7 +1063,7 @@ export def "custom-domains-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1089,7 +1110,7 @@ export def "custom-domains-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1120,7 +1141,6 @@ export def "custom-domains-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/customDomains/{customDomainName}
 # operationId: CustomDomains_Create
-# --properties shape: {hostName: string}
 export def "custom-domains-create" [
   subscription_id: string
   resource_group_name: string
@@ -1138,7 +1158,7 @@ export def "custom-domains-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   --properties: any # The JSON object that contains the properties of the custom domain to create. — shape: {hostName: string}
-]: any -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1188,7 +1208,7 @@ export def "custom-domains-disable-custom-https" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1239,7 +1259,7 @@ export def "custom-domains-enable-custom-https" [
   certificate_source: string@certificate-source-completer # Defines the source of the SSL certificate.
   --minimum-tls-version: string@minimum-tls-version-completer # TLS protocol version that will be used for Https
   protocol_type: string@protocol-type-completer # Defines the TLS extension protocol that is used for secure delivery.
-]: any -> record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<customHttpsParameters: record<certificateSource: string, minimumTlsVersion: string, protocolType: string>, customHttpsProvisioningState: string, customHttpsProvisioningSubstate: string, hostName: string, provisioningState: string, resourceState: string, validationData: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1337,7 +1357,7 @@ export def "origins-list-by-endpoint" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1383,7 +1403,7 @@ export def "origins-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<properties: record<hostName: string, httpPort: int, httpsPort: int, provisioningState: string, resourceState: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<hostName: string, httpPort: int, httpsPort: int, provisioningState: string, resourceState: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1414,7 +1434,6 @@ export def "origins-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/profiles/{profileName}/endpoints/{endpointName}/origins/{originName}
 # operationId: Origins_Update
-# --properties shape: {hostName?: string, httpPort?: int, httpsPort?: int}
 export def "origins-update" [
   subscription_id: string
   resource_group_name: string
@@ -1432,7 +1451,7 @@ export def "origins-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   --properties: any # The JSON object that contains the properties of the origin. — shape: {hostName?: string, httpPort?: int, httpsPort?: int}
-]: any -> record<properties: record<hostName: string, httpPort: int, httpsPort: int, provisioningState: string, resourceState: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<hostName: string, httpPort: int, httpsPort: int, provisioningState: string, resourceState: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1530,7 +1549,7 @@ export def "endpoints-start" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>, location: string, tags: record, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1575,7 +1594,7 @@ export def "endpoints-stop" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>, location: string, tags: record, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<hostName: string, origins: list<record>, provisioningState: string, resourceState: string, contentTypesToCompress: list<string>, deliveryPolicy: record<description: string, rules: list>, geoFilters: list<record>, isCompressionEnabled: bool, isHttpAllowed: bool, isHttpsAllowed: bool, optimizationType: string, originHostHeader: string, originPath: string, probePath: string, queryStringCachingBehavior: string, webApplicationFirewallPolicyLink: record<id: string>>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1621,7 +1640,7 @@ export def "endpoints-validate-custom-domain" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
   host_name: string # The host name of the custom domain. Must be a domain name.
-]: any -> record<customDomainValidated: bool, message: string, reason: string> {
+]: any -> oneof<record<customDomainValidated: bool, message: string, reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1668,7 +1687,7 @@ export def "profiles-generate-sso-uri" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<ssoUriValue: string> {
+]: nothing -> oneof<record<ssoUriValue: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1711,7 +1730,7 @@ export def "profiles-list-supported-optimization-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02. (required)
-]: nothing -> record<supportedOptimizationTypes: list<string>> {
+]: nothing -> oneof<record<supportedOptimizationTypes: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }

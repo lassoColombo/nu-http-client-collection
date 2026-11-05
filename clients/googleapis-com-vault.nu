@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -125,9 +149,9 @@ def view-completer-2 [] { ["ALL" "COUNT_RESULT_VIEW_UNSPECIFIED" "TOTAL_COUNT"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vault-matters-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["vault-matters-list" "vault-matters-create" "vault-matters-delete" "vault-matters-get" "vault-matters-update" "vault-matters-exports-list" "vault-matters-exports-create" "vault-matters-exports-delete" "vault-matters-exports-get" "vault-matters-holds-list" "vault-matters-holds-create" "vault-matters-holds-delete" "vault-matters-holds-get" "vault-matters-holds-update" "vault-matters-holds-accounts-list" "vault-matters-holds-accounts-create" "vault-matters-holds-accounts-delete" "vault-matters-holds-add-held-accounts" "vault-matters-holds-remove-held-accounts" "vault-matters-saved-queries-list" "vault-matters-saved-queries-create" "vault-matters-saved-queries-delete" "vault-matters-saved-queries-get" "vault-matters-add-permissions" "vault-matters-close" "vault-matters-count" "vault-matters-remove-permissions" "vault-matters-reopen" "vault-matters-undelete" "vault-operations-delete" "vault-operations-list" "vault-operations-cancel" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -174,7 +198,7 @@ export def "vault-matters-list" [
   --page-token: string # The pagination token as returned in the response.
   --state: string@state-completer # If set, lists only matters with the specified state. The default lists matters of all states.
   --view: string@view-completer # Specifies how much information about the matter to return in response.
-]: nothing -> record<matters: table<description: string, matterId: string, matterPermissions: list, name: string, state: string>, nextPageToken: string> {
+]: nothing -> oneof<record<matters: table<description: string, matterId: string, matterPermissions: list, name: string, state: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -199,7 +223,6 @@ export def "vault-matters-list" [
 #
 # POST /v1/matters
 # operationId: vault.matters.create
-# --matterPermissions item shape: {accountId?: string, role?: "ROLE_UNSPECIFIED"|"COLLABORATOR"|"OWNER"}
 export def "vault-matters-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +249,7 @@ export def "vault-matters-create" [
   --matter-permissions: list # Lists the users and their permission for the matter. Currently there is no programmer defined limit on the number of permissions a matter can have. — item shape: {accountId?: string, role?: "ROLE_UNSPECIFIED"|"COLLABORATOR"|"OWNER"}
   --name: string # The name of the matter.
   --state: string@state-completer # The state of the matter.
-]: any -> record<description: string, matterId: string, matterPermissions: table<accountId: string, role: string>, name: string, state: string> {
+]: any -> oneof<record<description: string, matterId: string, matterPermissions: table<accountId: string, role: string>, name: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -276,7 +299,7 @@ export def "vault-matters-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<description: string, matterId: string, matterPermissions: table<accountId: string, role: string>, name: string, state: string> {
+]: nothing -> oneof<record<description: string, matterId: string, matterPermissions: table<accountId: string, role: string>, name: string, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
@@ -325,7 +348,7 @@ export def "vault-matters-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer # Specifies how much information about the matter to return in the response.
-]: nothing -> record<description: string, matterId: string, matterPermissions: table<accountId: string, role: string>, name: string, state: string> {
+]: nothing -> oneof<record<description: string, matterId: string, matterPermissions: table<accountId: string, role: string>, name: string, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
@@ -351,7 +374,6 @@ export def "vault-matters-get" [
 #
 # PUT /v1/matters/{matterId}
 # operationId: vault.matters.update
-# --matterPermissions item shape: {accountId?: string, role?: "ROLE_UNSPECIFIED"|"COLLABORATOR"|"OWNER"}
 export def "vault-matters-update" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -379,7 +401,7 @@ export def "vault-matters-update" [
   --matter-permissions: list # Lists the users and their permission for the matter. Currently there is no programmer defined limit on the number of permissions a matter can have. — item shape: {accountId?: string, role?: "ROLE_UNSPECIFIED"|"COLLABORATOR"|"OWNER"}
   --name: string # The name of the matter.
   --state: string@state-completer # The state of the matter.
-]: any -> record<description: string, matterId: string, matterPermissions: table<accountId: string, role: string>, name: string, state: string> {
+]: any -> oneof<record<description: string, matterId: string, matterPermissions: table<accountId: string, role: string>, name: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -432,7 +454,7 @@ export def "vault-matters-exports-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The number of exports to return in the response.
   --page-token: string # The pagination token as returned in the response.
-]: nothing -> record<exports: table<cloudStorageSink: record, createTime: string, exportOptions: record, id: string, matterId: string, name: string, query: record, requester: record, stats: record, status: string>, nextPageToken: string> {
+]: nothing -> oneof<record<exports: table<cloudStorageSink: record, createTime: string, exportOptions: record, id: string, matterId: string, name: string, query: record, requester: record, stats: record, status: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
@@ -458,11 +480,6 @@ export def "vault-matters-exports-list" [
 #
 # POST /v1/matters/{matterId}/exports
 # operationId: vault.matters.exports.create
-# --cloudStorageSink shape: {files?: list}
-# --exportOptions shape: {driveOptions?: record, groupsOptions?: record, hangoutsChatOptions?: record, mailOptions?: record, region?: "EXPORT_REGION_UNSPECIFIED"|"ANY"|"US"|"EUROPE", voiceOptions?: record}
-# --query shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, ... (8 more fields)}
-# --requester shape: {displayName?: string, email?: string}
-# --stats shape: {exportedArtifactCount?: string, sizeInBytes?: string, totalArtifactCount?: string}
 export def "vault-matters-exports-create" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -495,7 +512,7 @@ export def "vault-matters-exports-create" [
   --requester: record # User's information. — shape: {displayName?: string, email?: string}
   --stats: record # Progress information for an export. — shape: {exportedArtifactCount?: string, sizeInBytes?: string, totalArtifactCount?: string}
   --status: string@status-completer # Output only. The status of the export.
-]: any -> record<cloudStorageSink: record<files: list<record>>, createTime: string, exportOptions: record<driveOptions: record<includeAccessInfo: bool>, groupsOptions: record<exportFormat: string>, hangoutsChatOptions: record<exportFormat: string>, mailOptions: record<exportFormat: string, showConfidentialModeContent: bool, useNewExport: bool>, region: string, voiceOptions: record<exportFormat: string>>, id: string, matterId: string, name: string, query: record<accountInfo: record<emails: list>, corpus: string, dataScope: string, driveOptions: record<clientSideEncryptedOption: string, includeSharedDrives: bool, includeTeamDrives: bool, versionDate: string>, endTime: string, hangoutsChatInfo: record<roomId: list>, hangoutsChatOptions: record<includeRooms: bool>, mailOptions: record<clientSideEncryptedOption: string, excludeDrafts: bool>, method: string, orgUnitInfo: record<orgUnitId: string>, searchMethod: string, sharedDriveInfo: record<sharedDriveIds: list>, sitesUrlInfo: record<urls: list>, startTime: string, teamDriveInfo: record<teamDriveIds: list>, terms: string, timeZone: string, voiceOptions: record<coveredData: list>>, requester: record<displayName: string, email: string>, stats: record<exportedArtifactCount: string, sizeInBytes: string, totalArtifactCount: string>, status: string> {
+]: any -> oneof<record<cloudStorageSink: record<files: list<record>>, createTime: string, exportOptions: record<driveOptions: record<includeAccessInfo: bool>, groupsOptions: record<exportFormat: string>, hangoutsChatOptions: record<exportFormat: string>, mailOptions: record<exportFormat: string, showConfidentialModeContent: bool, useNewExport: bool>, region: string, voiceOptions: record<exportFormat: string>>, id: string, matterId: string, name: string, query: record<accountInfo: record<emails: list>, corpus: string, dataScope: string, driveOptions: record<clientSideEncryptedOption: string, includeSharedDrives: bool, includeTeamDrives: bool, versionDate: string>, endTime: string, hangoutsChatInfo: record<roomId: list>, hangoutsChatOptions: record<includeRooms: bool>, mailOptions: record<clientSideEncryptedOption: string, excludeDrafts: bool>, method: string, orgUnitInfo: record<orgUnitId: string>, searchMethod: string, sharedDriveInfo: record<sharedDriveIds: list>, sitesUrlInfo: record<urls: list>, startTime: string, teamDriveInfo: record<teamDriveIds: list>, terms: string, timeZone: string, voiceOptions: record<coveredData: list>>, requester: record<displayName: string, email: string>, stats: record<exportedArtifactCount: string, sizeInBytes: string, totalArtifactCount: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -547,7 +564,7 @@ export def "vault-matters-exports-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
@@ -597,7 +614,7 @@ export def "vault-matters-exports-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<cloudStorageSink: record<files: list<record>>, createTime: string, exportOptions: record<driveOptions: record<includeAccessInfo: bool>, groupsOptions: record<exportFormat: string>, hangoutsChatOptions: record<exportFormat: string>, mailOptions: record<exportFormat: string, showConfidentialModeContent: bool, useNewExport: bool>, region: string, voiceOptions: record<exportFormat: string>>, id: string, matterId: string, name: string, query: record<accountInfo: record<emails: list>, corpus: string, dataScope: string, driveOptions: record<clientSideEncryptedOption: string, includeSharedDrives: bool, includeTeamDrives: bool, versionDate: string>, endTime: string, hangoutsChatInfo: record<roomId: list>, hangoutsChatOptions: record<includeRooms: bool>, mailOptions: record<clientSideEncryptedOption: string, excludeDrafts: bool>, method: string, orgUnitInfo: record<orgUnitId: string>, searchMethod: string, sharedDriveInfo: record<sharedDriveIds: list>, sitesUrlInfo: record<urls: list>, startTime: string, teamDriveInfo: record<teamDriveIds: list>, terms: string, timeZone: string, voiceOptions: record<coveredData: list>>, requester: record<displayName: string, email: string>, stats: record<exportedArtifactCount: string, sizeInBytes: string, totalArtifactCount: string>, status: string> {
+]: nothing -> oneof<record<cloudStorageSink: record<files: list<record>>, createTime: string, exportOptions: record<driveOptions: record<includeAccessInfo: bool>, groupsOptions: record<exportFormat: string>, hangoutsChatOptions: record<exportFormat: string>, mailOptions: record<exportFormat: string, showConfidentialModeContent: bool, useNewExport: bool>, region: string, voiceOptions: record<exportFormat: string>>, id: string, matterId: string, name: string, query: record<accountInfo: record<emails: list>, corpus: string, dataScope: string, driveOptions: record<clientSideEncryptedOption: string, includeSharedDrives: bool, includeTeamDrives: bool, versionDate: string>, endTime: string, hangoutsChatInfo: record<roomId: list>, hangoutsChatOptions: record<includeRooms: bool>, mailOptions: record<clientSideEncryptedOption: string, excludeDrafts: bool>, method: string, orgUnitInfo: record<orgUnitId: string>, searchMethod: string, sharedDriveInfo: record<sharedDriveIds: list>, sitesUrlInfo: record<urls: list>, startTime: string, teamDriveInfo: record<teamDriveIds: list>, terms: string, timeZone: string, voiceOptions: record<coveredData: list>>, requester: record<displayName: string, email: string>, stats: record<exportedArtifactCount: string, sizeInBytes: string, totalArtifactCount: string>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
@@ -649,7 +666,7 @@ export def "vault-matters-holds-list" [
   --page-size: int # The number of holds to return in the response, between 0 and 100 inclusive. Leaving this empty, or as 0, is the same as **page_size** = 100.
   --page-token: string # The pagination token as returned in the response. An empty token means start from the beginning.
   --view: string@view-completer-1 # The amount of detail to return for a hold.
-]: nothing -> record<holds: table<accounts: list, corpus: string, holdId: string, name: string, orgUnit: record, query: record, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<holds: table<accounts: list, corpus: string, holdId: string, name: string, orgUnit: record, query: record, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
@@ -675,9 +692,6 @@ export def "vault-matters-holds-list" [
 #
 # POST /v1/matters/{matterId}/holds
 # operationId: vault.matters.holds.create
-# --accounts item shape: {accountId?: string, email?: string, firstName?: string, holdTime?: string, lastName?: string}
-# --orgUnit shape: {holdTime?: string, orgUnitId?: string}
-# --query shape: {driveQuery?: record, groupsQuery?: record, hangoutsChatQuery?: record, mailQuery?: record, voiceQuery?: record}
 export def "vault-matters-holds-create" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -707,7 +721,7 @@ export def "vault-matters-holds-create" [
   --org-unit: record # The organizational unit covered by a hold. This structure is immutable. — shape: {holdTime?: string, orgUnitId?: string}
   --query: record # Service-specific options for holds. — shape: {driveQuery?: record, groupsQuery?: record, hangoutsChatQuery?: record, mailQuery?: record, voiceQuery?: record}
   --update-time: string # The last time this hold was modified. (format: google-datetime)
-]: any -> record<accounts: table<accountId: string, email: string, firstName: string, holdTime: string, lastName: string>, corpus: string, holdId: string, name: string, orgUnit: record<holdTime: string, orgUnitId: string>, query: record<driveQuery: record<includeSharedDriveFiles: bool, includeTeamDriveFiles: bool>, groupsQuery: record<endTime: string, startTime: string, terms: string>, hangoutsChatQuery: record<includeRooms: bool>, mailQuery: record<endTime: string, startTime: string, terms: string>, voiceQuery: record<coveredData: list>>, updateTime: string> {
+]: any -> oneof<record<accounts: table<accountId: string, email: string, firstName: string, holdTime: string, lastName: string>, corpus: string, holdId: string, name: string, orgUnit: record<holdTime: string, orgUnitId: string>, query: record<driveQuery: record<includeSharedDriveFiles: bool, includeTeamDriveFiles: bool>, groupsQuery: record<endTime: string, startTime: string, terms: string>, hangoutsChatQuery: record<includeRooms: bool>, mailQuery: record<endTime: string, startTime: string, terms: string>, voiceQuery: record<coveredData: list>>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -759,7 +773,7 @@ export def "vault-matters-holds-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
@@ -810,7 +824,7 @@ export def "vault-matters-holds-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --view: string@view-completer-1 # The amount of detail to return for a hold.
-]: nothing -> record<accounts: table<accountId: string, email: string, firstName: string, holdTime: string, lastName: string>, corpus: string, holdId: string, name: string, orgUnit: record<holdTime: string, orgUnitId: string>, query: record<driveQuery: record<includeSharedDriveFiles: bool, includeTeamDriveFiles: bool>, groupsQuery: record<endTime: string, startTime: string, terms: string>, hangoutsChatQuery: record<includeRooms: bool>, mailQuery: record<endTime: string, startTime: string, terms: string>, voiceQuery: record<coveredData: list>>, updateTime: string> {
+]: nothing -> oneof<record<accounts: table<accountId: string, email: string, firstName: string, holdTime: string, lastName: string>, corpus: string, holdId: string, name: string, orgUnit: record<holdTime: string, orgUnitId: string>, query: record<driveQuery: record<includeSharedDriveFiles: bool, includeTeamDriveFiles: bool>, groupsQuery: record<endTime: string, startTime: string, terms: string>, hangoutsChatQuery: record<includeRooms: bool>, mailQuery: record<endTime: string, startTime: string, terms: string>, voiceQuery: record<coveredData: list>>, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
@@ -837,9 +851,6 @@ export def "vault-matters-holds-get" [
 #
 # PUT /v1/matters/{matterId}/holds/{holdId}
 # operationId: vault.matters.holds.update
-# --accounts item shape: {accountId?: string, email?: string, firstName?: string, holdTime?: string, lastName?: string}
-# --orgUnit shape: {holdTime?: string, orgUnitId?: string}
-# --query shape: {driveQuery?: record, groupsQuery?: record, hangoutsChatQuery?: record, mailQuery?: record, voiceQuery?: record}
 export def "vault-matters-holds-update" [
   matter_id: string
   hold_id: string
@@ -870,7 +881,7 @@ export def "vault-matters-holds-update" [
   --org-unit: record # The organizational unit covered by a hold. This structure is immutable. — shape: {holdTime?: string, orgUnitId?: string}
   --query: record # Service-specific options for holds. — shape: {driveQuery?: record, groupsQuery?: record, hangoutsChatQuery?: record, mailQuery?: record, voiceQuery?: record}
   --update-time: string # The last time this hold was modified. (format: google-datetime)
-]: any -> record<accounts: table<accountId: string, email: string, firstName: string, holdTime: string, lastName: string>, corpus: string, holdId: string, name: string, orgUnit: record<holdTime: string, orgUnitId: string>, query: record<driveQuery: record<includeSharedDriveFiles: bool, includeTeamDriveFiles: bool>, groupsQuery: record<endTime: string, startTime: string, terms: string>, hangoutsChatQuery: record<includeRooms: bool>, mailQuery: record<endTime: string, startTime: string, terms: string>, voiceQuery: record<coveredData: list>>, updateTime: string> {
+]: any -> oneof<record<accounts: table<accountId: string, email: string, firstName: string, holdTime: string, lastName: string>, corpus: string, holdId: string, name: string, orgUnit: record<holdTime: string, orgUnitId: string>, query: record<driveQuery: record<includeSharedDriveFiles: bool, includeTeamDriveFiles: bool>, groupsQuery: record<endTime: string, startTime: string, terms: string>, hangoutsChatQuery: record<includeRooms: bool>, mailQuery: record<endTime: string, startTime: string, terms: string>, voiceQuery: record<coveredData: list>>, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -923,7 +934,7 @@ export def "vault-matters-holds-accounts-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<accounts: table<accountId: string, email: string, firstName: string, holdTime: string, lastName: string>> {
+]: nothing -> oneof<record<accounts: table<accountId: string, email: string, firstName: string, holdTime: string, lastName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
@@ -978,7 +989,7 @@ export def "vault-matters-holds-accounts-create" [
   --first-name: string # Output only. The first name of the account holder.
   --hold-time: string # Output only. When the account was put on hold. (format: google-datetime)
   --last-name: string # Output only. The last name of the account holder.
-]: any -> record<accountId: string, email: string, firstName: string, holdTime: string, lastName: string> {
+]: any -> oneof<record<accountId: string, email: string, firstName: string, holdTime: string, lastName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1032,7 +1043,7 @@ export def "vault-matters-holds-accounts-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
@@ -1085,7 +1096,7 @@ export def "vault-matters-holds-add-held-accounts" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-ids: list<string> # A comma-separated list of the account IDs of the accounts to add to the hold. Specify either **emails** or **account_ids**, but not both.
   --emails: list<string> # A comma-separated list of the emails of the accounts to add to the hold. Specify either **emails** or **account_ids**, but not both.
-]: any -> record<responses: table<account: record, status: record>> {
+]: any -> oneof<record<responses: table<account: record, status: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1139,7 +1150,7 @@ export def "vault-matters-holds-remove-held-accounts" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-ids: list<string> # The account IDs of the accounts to remove from the hold.
-]: any -> record<statuses: table<code: int, details: list, message: string>> {
+]: any -> oneof<record<statuses: table<code: int, details: list, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1193,7 +1204,7 @@ export def "vault-matters-saved-queries-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of saved queries to return.
   --page-token: string # The pagination token as returned in the previous response. An empty token means start from the beginning.
-]: nothing -> record<nextPageToken: string, savedQueries: table<createTime: string, displayName: string, matterId: string, query: record, savedQueryId: string>> {
+]: nothing -> oneof<record<nextPageToken: string, savedQueries: table<createTime: string, displayName: string, matterId: string, query: record, savedQueryId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
@@ -1219,7 +1230,6 @@ export def "vault-matters-saved-queries-list" [
 #
 # POST /v1/matters/{matterId}/savedQueries
 # operationId: vault.matters.savedQueries.create
-# --query shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, ... (8 more fields)}
 export def "vault-matters-saved-queries-create" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1247,7 +1257,7 @@ export def "vault-matters-saved-queries-create" [
   --body-matter-id: string # Output only. The matter ID of the matter the saved query is saved in. The server does not use this field during create and always uses matter ID in the URL.
   --query: record # The query definition used for search and export. — shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, ... (8 more fields)}
   --saved-query-id: string # A unique identifier for the saved query.
-]: any -> record<createTime: string, displayName: string, matterId: string, query: record<accountInfo: record<emails: list>, corpus: string, dataScope: string, driveOptions: record<clientSideEncryptedOption: string, includeSharedDrives: bool, includeTeamDrives: bool, versionDate: string>, endTime: string, hangoutsChatInfo: record<roomId: list>, hangoutsChatOptions: record<includeRooms: bool>, mailOptions: record<clientSideEncryptedOption: string, excludeDrafts: bool>, method: string, orgUnitInfo: record<orgUnitId: string>, searchMethod: string, sharedDriveInfo: record<sharedDriveIds: list>, sitesUrlInfo: record<urls: list>, startTime: string, teamDriveInfo: record<teamDriveIds: list>, terms: string, timeZone: string, voiceOptions: record<coveredData: list>>, savedQueryId: string> {
+]: any -> oneof<record<createTime: string, displayName: string, matterId: string, query: record<accountInfo: record<emails: list>, corpus: string, dataScope: string, driveOptions: record<clientSideEncryptedOption: string, includeSharedDrives: bool, includeTeamDrives: bool, versionDate: string>, endTime: string, hangoutsChatInfo: record<roomId: list>, hangoutsChatOptions: record<includeRooms: bool>, mailOptions: record<clientSideEncryptedOption: string, excludeDrafts: bool>, method: string, orgUnitInfo: record<orgUnitId: string>, searchMethod: string, sharedDriveInfo: record<sharedDriveIds: list>, sitesUrlInfo: record<urls: list>, startTime: string, teamDriveInfo: record<teamDriveIds: list>, terms: string, timeZone: string, voiceOptions: record<coveredData: list>>, savedQueryId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1299,7 +1309,7 @@ export def "vault-matters-saved-queries-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
@@ -1349,7 +1359,7 @@ export def "vault-matters-saved-queries-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<createTime: string, displayName: string, matterId: string, query: record<accountInfo: record<emails: list>, corpus: string, dataScope: string, driveOptions: record<clientSideEncryptedOption: string, includeSharedDrives: bool, includeTeamDrives: bool, versionDate: string>, endTime: string, hangoutsChatInfo: record<roomId: list>, hangoutsChatOptions: record<includeRooms: bool>, mailOptions: record<clientSideEncryptedOption: string, excludeDrafts: bool>, method: string, orgUnitInfo: record<orgUnitId: string>, searchMethod: string, sharedDriveInfo: record<sharedDriveIds: list>, sitesUrlInfo: record<urls: list>, startTime: string, teamDriveInfo: record<teamDriveIds: list>, terms: string, timeZone: string, voiceOptions: record<coveredData: list>>, savedQueryId: string> {
+]: nothing -> oneof<record<createTime: string, displayName: string, matterId: string, query: record<accountInfo: record<emails: list>, corpus: string, dataScope: string, driveOptions: record<clientSideEncryptedOption: string, includeSharedDrives: bool, includeTeamDrives: bool, versionDate: string>, endTime: string, hangoutsChatInfo: record<roomId: list>, hangoutsChatOptions: record<includeRooms: bool>, mailOptions: record<clientSideEncryptedOption: string, excludeDrafts: bool>, method: string, orgUnitInfo: record<orgUnitId: string>, searchMethod: string, sharedDriveInfo: record<sharedDriveIds: list>, sitesUrlInfo: record<urls: list>, startTime: string, teamDriveInfo: record<teamDriveIds: list>, terms: string, timeZone: string, voiceOptions: record<coveredData: list>>, savedQueryId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($matter_id | is-empty) { error make --unspanned { msg: "path parameter 'matterId' must be non-empty" } }
@@ -1376,7 +1386,6 @@ export def "vault-matters-saved-queries-get" [
 #
 # POST /v1/matters/{matterId}:addPermissions
 # operationId: vault.matters.addPermissions
-# --matterPermission shape: {accountId?: string, role?: "ROLE_UNSPECIFIED"|"COLLABORATOR"|"OWNER"}
 export def "vault-matters-add-permissions" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1402,7 +1411,7 @@ export def "vault-matters-add-permissions" [
   --cc-me: oneof<nothing, bool> # Only relevant if **sendEmails** is **true**. To CC the requestor in the email message, set to **true**. To not CC requestor, set to **false**.
   --matter-permission: record # Users can be matter owners or collaborators. Each matter has only one owner. All others users who can access the matter are collaborators. When an account is purged, its corresponding MatterPermission resources cease to exist. — shape: {accountId?: string, role?: "ROLE_UNSPECIFIED"|"COLLABORATOR"|"OWNER"}
   --send-emails: oneof<nothing, bool> # To send a notification email to the added account, set to **true**. To not send a notification email, set to **false**.
-]: any -> record<accountId: string, role: string> {
+]: any -> oneof<record<accountId: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1454,7 +1463,7 @@ export def "vault-matters-close" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<matter: record<description: string, matterId: string, matterPermissions: list<record>, name: string, state: string>> {
+]: any -> oneof<record<matter: record<description: string, matterId: string, matterPermissions: list<record>, name: string, state: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1483,7 +1492,6 @@ export def "vault-matters-close" [
 #
 # POST /v1/matters/{matterId}:count
 # operationId: vault.matters.count
-# --query shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, ... (8 more fields)}
 export def "vault-matters-count" [
   matter_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1508,7 +1516,7 @@ export def "vault-matters-count" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --query: record # The query definition used for search and export. — shape: {accountInfo?: record, corpus?: "CORPUS_TYPE_UNSPECIFIED"|"DRIVE"|"MAIL"|"GROUPS"|"HANGOUTS_CHAT"|"VOICE", dataScope?: "DATA_SCOPE_UNSPECIFIED"|"ALL_DATA"|"HELD_DATA"|"UNPROCESSED_DATA", driveOptions?: record, endTime?: string, hangoutsChatInfo?: record, hangoutsChatOptions?: record, mailOptions?: record, method?: "SEARCH_METHOD_UNSPECIFIED"|"ACCOUNT"|"ORG_UNIT"|"TEAM_DRIVE"|"ENTIRE_ORG"|"ROOM"|"SITES_URL"|"SHARED_DRIVE", orgUnitInfo?: record, ... (8 more fields)}
   --view: string@view-completer-2 # Sets the granularity of the count results.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1560,7 +1568,7 @@ export def "vault-matters-remove-permissions" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-id: string # The account ID.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1612,7 +1620,7 @@ export def "vault-matters-reopen" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<matter: record<description: string, matterId: string, matterPermissions: list<record>, name: string, state: string>> {
+]: any -> oneof<record<matter: record<description: string, matterId: string, matterPermissions: list<record>, name: string, state: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1664,7 +1672,7 @@ export def "vault-matters-undelete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<description: string, matterId: string, matterPermissions: table<accountId: string, role: string>, name: string, state: string> {
+]: any -> oneof<record<description: string, matterId: string, matterPermissions: table<accountId: string, role: string>, name: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1715,7 +1723,7 @@ export def "vault-operations-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1766,7 +1774,7 @@ export def "vault-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1815,7 +1823,7 @@ export def "vault-operations-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -18,7 +18,6 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "x-appwrite-key" => { {scheme: $scheme, headers: {"X-Appwrite-Key": $token_val}, query: "", location: "header"} }
     "x-appwrite-locale" => { {scheme: $scheme, headers: {"X-Appwrite-Locale": $token_val}, query: "", location: "header"} }
     "x-appwrite-project" => { {scheme: $scheme, headers: {"X-Appwrite-Project": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
@@ -33,22 +32,32 @@ def merge-auth [parts: list]: nothing -> record {
   {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -56,8 +65,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -68,7 +82,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -103,7 +126,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -165,9 +189,9 @@ def auth-scheme-completer [] { ["x-appwrite-jwt" "x-appwrite-key" "x-appwrite-lo
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-jwt" "token-project" "token-key"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["account-delete" "account-get" "account-update-email" "account-get-logs" "account-update-name" "account-update-password" "account-get-prefs" "account-update-prefs" "account-create-recovery" "account-update-recovery" "account-delete-sessions" "account-get-sessions" "account-delete-session" "account-get-session" "account-create-verification" "account-update-verification" "avatars-get-browser" "avatars-get-credit-card" "avatars-get-favicon" "avatars-get-flag" "avatars-get-image" "avatars-get-initials" "avatars-get-qr" "database-list-collections" "database-create-collection" "database-delete-collection" "database-get-collection" "database-update-collection" "database-list-documents" "database-create-document" "database-delete-document" "database-get-document" "database-update-document" "functions-list" "functions-create" "functions-delete" "functions-get" "functions-update" "functions-list-executions" "functions-create-execution" "functions-get-execution" "functions-update-tag" "functions-list-tags" "functions-create-tag" "functions-delete-tag" "functions-get-tag" "health-get" "health-get-anti-virus" "health-get-cache" "health-get-db" "health-get-queue-certificates" "health-get-queue-functions" "health-get-queue-logs" "health-get-queue-tasks" "health-get-queue-usage" "health-get-queue-webhooks" "health-get-storage-local" "health-get-time" "locale-get" "locale-get-continents" "locale-get-countries" "locale-get-countries-eu" "locale-get-countries-phones" "locale-get-currencies" "locale-get-languages" "storage-list-files" "storage-create-file" "storage-delete-file" "storage-get-file" "storage-update-file" "storage-get-file-download" "storage-get-file-preview" "storage-get-file-view" "teams-list" "teams-create" "teams-delete" "teams-get" "teams-update" "teams-get-memberships" "teams-create-membership" "teams-delete-membership" "teams-update-membership-roles" "teams-update-membership-status" "users-list" "users-create" "users-delete" "users-get" "users-get-logs" "users-get-prefs" "users-update-prefs" "users-delete-sessions" "users-get-sessions" "users-delete-session" "users-update-status" "users-update-verification" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -233,7 +257,7 @@ export def "account-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int> {
+]: nothing -> oneof<record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account" $auth.query)
@@ -269,7 +293,7 @@ export def "account-update-email" [
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # User email.
   password: string # User password. Must be between 6 to 32 chars.
-]: any -> record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int> {
+]: any -> oneof<record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -306,7 +330,7 @@ export def "account-get-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<logs: table<clientCode: string, clientEngine: string, clientEngineVersion: string, clientName: string, clientType: string, clientVersion: string, countryCode: string, countryName: string, deviceBrand: string, deviceModel: string, deviceName: string, event: string, ip: string, osCode: string, osName: string, osVersion: string, time: int>> {
+]: nothing -> oneof<record<logs: table<clientCode: string, clientEngine: string, clientEngineVersion: string, clientName: string, clientType: string, clientVersion: string, countryCode: string, countryName: string, deviceBrand: string, deviceModel: string, deviceName: string, event: string, ip: string, osCode: string, osName: string, osVersion: string, time: int>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/logs" $auth.query)
@@ -341,7 +365,7 @@ export def "account-update-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # User name. Max length: 128 chars.
-]: any -> record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int> {
+]: any -> oneof<record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -380,7 +404,7 @@ export def "account-update-password" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --old-password: string # Old user password. Must be between 6 to 32 chars.
   password: string # New user password. Must be between 6 to 32 chars.
-]: any -> record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int> {
+]: any -> oneof<record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -417,7 +441,7 @@ export def "account-get-prefs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/prefs" $auth.query)
@@ -452,7 +476,7 @@ export def "account-update-prefs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   prefs: record # Prefs key-value JSON object.
-]: any -> record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int> {
+]: any -> oneof<record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -491,7 +515,7 @@ export def "account-create-recovery" [
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # User email.
   url: string # URL to redirect the user back to your app from the recovery email. Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API.
-]: any -> record<_id: string, expire: int, secret: string, userId: string> {
+]: any -> oneof<record<_id: string, expire: int, secret: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -532,7 +556,7 @@ export def "account-update-recovery" [
   password_again: string # New password again. Must be between 6 to 32 chars.
   secret: string # Valid reset token.
   user_id: string # User account UID address.
-]: any -> record<_id: string, expire: int, secret: string, userId: string> {
+]: any -> oneof<record<_id: string, expire: int, secret: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -603,7 +627,7 @@ export def "account-get-sessions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<sessions: table<_id: string, clientCode: string, clientEngine: string, clientEngineVersion: string, clientName: string, clientType: string, clientVersion: string, countryCode: string, countryName: string, current: bool, deviceBrand: string, deviceModel: string, deviceName: string, expire: int, ip: string, osCode: string, osName: string, osVersion: string, provider: string, providerToken: string, providerUid: string, userId: string>, sum: int> {
+]: nothing -> oneof<record<sessions: table<_id: string, clientCode: string, clientEngine: string, clientEngineVersion: string, clientName: string, clientType: string, clientVersion: string, countryCode: string, countryName: string, current: bool, deviceBrand: string, deviceModel: string, deviceName: string, expire: int, ip: string, osCode: string, osName: string, osVersion: string, provider: string, providerToken: string, providerUid: string, userId: string>, sum: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/sessions" $auth.query)
@@ -674,7 +698,7 @@ export def "account-get-session" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_id: string, clientCode: string, clientEngine: string, clientEngineVersion: string, clientName: string, clientType: string, clientVersion: string, countryCode: string, countryName: string, current: bool, deviceBrand: string, deviceModel: string, deviceName: string, expire: int, ip: string, osCode: string, osName: string, osVersion: string, provider: string, providerToken: string, providerUid: string, userId: string> {
+]: nothing -> oneof<record<_id: string, clientCode: string, clientEngine: string, clientEngineVersion: string, clientName: string, clientType: string, clientVersion: string, countryCode: string, countryName: string, current: bool, deviceBrand: string, deviceModel: string, deviceName: string, expire: int, ip: string, osCode: string, osName: string, osVersion: string, provider: string, providerToken: string, providerUid: string, userId: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
@@ -710,7 +734,7 @@ export def "account-create-verification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   url: string # URL to redirect the user back to your app from the verification email. Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API.
-]: any -> record<_id: string, expire: int, secret: string, userId: string> {
+]: any -> oneof<record<_id: string, expire: int, secret: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -749,7 +773,7 @@ export def "account-update-verification" [
   --dry-run(-n) # Return the request that would be sent without executing it
   secret: string # Valid verification token.
   user_id: string # User unique ID.
-]: any -> record<_id: string, expire: int, secret: string, userId: string> {
+]: any -> oneof<record<_id: string, expire: int, secret: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -1073,7 +1097,7 @@ export def "database-list-collections" [
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
-]: nothing -> record<collections: table<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, name: string, rules: list>, sum: int> {
+]: nothing -> oneof<record<collections: table<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, name: string, rules: list>, sum: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderType" $order_type "scalar")] | flatten | str join "&"
@@ -1112,7 +1136,7 @@ export def "database-create-collection" [
   read: list<string> # An array of strings with read permissions. By default no user is granted with any read permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
   rules: list<string> # Array of [rule objects](/docs/rules). Each rule define a collection field name, data type and validation.
   write: list<string> # An array of strings with write permissions. By default no user is granted with any write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
-]: any -> record<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, name: string, rules: table<_collection: string, _id: string, array: bool, default: string, key: string, label: string, list: list, required: bool, type: string>> {
+]: any -> oneof<record<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, name: string, rules: table<_collection: string, _id: string, array: bool, default: string, key: string, label: string, list: list, required: bool, type: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -1186,7 +1210,7 @@ export def "database-get-collection" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, name: string, rules: table<_collection: string, _id: string, array: bool, default: string, key: string, label: string, list: list, required: bool, type: string>> {
+]: nothing -> oneof<record<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, name: string, rules: table<_collection: string, _id: string, array: bool, default: string, key: string, label: string, list: list, required: bool, type: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionId' must be non-empty" } }
@@ -1226,7 +1250,7 @@ export def "database-update-collection" [
   --read: list<string> # An array of strings with read permissions. By default inherits the existing read permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
   --rules: list<string> # Array of [rule objects](/docs/rules). Each rule define a collection field name, data type and validation.
   --write: list<string> # An array of strings with write permissions. By default inherits the existing write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
-]: any -> record<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, name: string, rules: table<_collection: string, _id: string, array: bool, default: string, key: string, label: string, list: list, required: bool, type: string>> {
+]: any -> oneof<record<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, name: string, rules: table<_collection: string, _id: string, array: bool, default: string, key: string, label: string, list: list, required: bool, type: string>>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -1273,7 +1297,7 @@ export def "database-list-documents" [
   --order-type: string # Order direction. Possible values are DESC for descending order, or ASC for ascending order. (default: ASC)
   --order-cast: string # Order field type casting. Possible values are int, string, date, time or datetime. The database will attempt to cast the order field to the value you pass here. The default value is a string. (default: string)
   --search: string # Search query. Enter any free text search. The database will try to find a match against all document attributes and children. Max length: 256 chars. (default: "")
-]: nothing -> record<documents: table<_collection: string, _id: string, _permissions: record>, sum: int> {
+]: nothing -> oneof<record<documents: table<_collection: string, _id: string, _permissions: record>, sum: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionId' must be non-empty" } }
@@ -1317,7 +1341,7 @@ export def "database-create-document" [
   --parent-property-type: string # Parent document property connection type. You can set this value to **assign**, **append** or **prepend**, default value is assign. Use when you want your new document to be a child of a parent document.
   --read: list<string> # An array of strings with read permissions. By default only the current user is granted with read permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
   --write: list<string> # An array of strings with write permissions. By default only the current user is granted with write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
-]: any -> record<_collection: string, _id: string, _permissions: record> {
+]: any -> oneof<record<_collection: string, _id: string, _permissions: record>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -1397,7 +1421,7 @@ export def "database-get-document" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_collection: string, _id: string, _permissions: record> {
+]: nothing -> oneof<record<_collection: string, _id: string, _permissions: record>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionId' must be non-empty" } }
@@ -1439,7 +1463,7 @@ export def "database-update-document" [
   data: record # Document data as JSON object.
   --read: list<string> # An array of strings with read permissions. By default inherits the existing read permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
   --write: list<string> # An array of strings with write permissions. By default inherits the existing write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
-]: any -> record<_collection: string, _id: string, _permissions: record> {
+]: any -> oneof<record<_collection: string, _id: string, _permissions: record>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -1482,7 +1506,7 @@ export def "functions-list" [
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
-]: nothing -> record<functions: table<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, events: list, name: string, runtime: string, schedule: string, scheduleNext: int, schedulePrevious: int, status: string, tag: string, timeout: int, vars: string>, sum: int> {
+]: nothing -> oneof<record<functions: table<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, events: list, name: string, runtime: string, schedule: string, scheduleNext: int, schedulePrevious: int, status: string, tag: string, timeout: int, vars: string>, sum: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderType" $order_type "scalar")] | flatten | str join "&"
@@ -1524,7 +1548,7 @@ export def "functions-create" [
   --schedule: string # Schedule CRON syntax.
   --timeout: int # Function maximum execution time in seconds.
   --vars: record # Key-value JSON object.
-]: any -> record<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, events: list<string>, name: string, runtime: string, schedule: string, scheduleNext: int, schedulePrevious: int, status: string, tag: string, timeout: int, vars: string> {
+]: any -> oneof<record<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, events: list<string>, name: string, runtime: string, schedule: string, scheduleNext: int, schedulePrevious: int, status: string, tag: string, timeout: int, vars: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -1598,7 +1622,7 @@ export def "functions-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, events: list<string>, name: string, runtime: string, schedule: string, scheduleNext: int, schedulePrevious: int, status: string, tag: string, timeout: int, vars: string> {
+]: nothing -> oneof<record<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, events: list<string>, name: string, runtime: string, schedule: string, scheduleNext: int, schedulePrevious: int, status: string, tag: string, timeout: int, vars: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
@@ -1640,7 +1664,7 @@ export def "functions-update" [
   --schedule: string # Schedule CRON syntax.
   --timeout: int # Function maximum execution time in seconds.
   --vars: record # Key-value JSON object.
-]: any -> record<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, events: list<string>, name: string, runtime: string, schedule: string, scheduleNext: int, schedulePrevious: int, status: string, tag: string, timeout: int, vars: string> {
+]: any -> oneof<record<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, events: list<string>, name: string, runtime: string, schedule: string, scheduleNext: int, schedulePrevious: int, status: string, tag: string, timeout: int, vars: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -1684,7 +1708,7 @@ export def "functions-list-executions" [
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
-]: nothing -> record<executions: table<_id: string, dateCreated: int, exitCode: int, functionId: string, status: string, stderr: string, stdout: string, time: float, trigger: string>, sum: int> {
+]: nothing -> oneof<record<executions: table<_id: string, dateCreated: int, exitCode: int, functionId: string, status: string, stderr: string, stdout: string, time: float, trigger: string>, sum: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
@@ -1723,7 +1747,7 @@ export def "functions-create-execution" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: string # String of custom data to send to function.
-]: any -> record<_id: string, dateCreated: int, exitCode: int, functionId: string, status: string, stderr: string, stdout: string, time: float, trigger: string> {
+]: any -> oneof<record<_id: string, dateCreated: int, exitCode: int, functionId: string, status: string, stderr: string, stdout: string, time: float, trigger: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -1764,7 +1788,7 @@ export def "functions-get-execution" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_id: string, dateCreated: int, exitCode: int, functionId: string, status: string, stderr: string, stdout: string, time: float, trigger: string> {
+]: nothing -> oneof<record<_id: string, dateCreated: int, exitCode: int, functionId: string, status: string, stderr: string, stdout: string, time: float, trigger: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
@@ -1802,7 +1826,7 @@ export def "functions-update-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   tag: string # Tag unique ID.
-]: any -> record<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, events: list<string>, name: string, runtime: string, schedule: string, scheduleNext: int, schedulePrevious: int, status: string, tag: string, timeout: int, vars: string> {
+]: any -> oneof<record<_id: string, _permissions: record, dateCreated: int, dateUpdated: int, events: list<string>, name: string, runtime: string, schedule: string, scheduleNext: int, schedulePrevious: int, status: string, tag: string, timeout: int, vars: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -1845,7 +1869,7 @@ export def "functions-list-tags" [
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
-]: nothing -> record<sum: int, tags: table<_id: string, command: string, dateCreated: int, functionId: string, size: string>> {
+]: nothing -> oneof<record<sum: int, tags: table<_id: string, command: string, dateCreated: int, functionId: string, size: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
@@ -1884,7 +1908,7 @@ export def "functions-create-tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   code: string # Gzip file with your code package. When used with the Appwrite CLI, pass the path to your code directory, and the CLI will automatically package your code. Use a path that is within the current directory.
   command: string # Code execution command.
-]: any -> record<_id: string, command: string, dateCreated: int, functionId: string, size: string> {
+]: any -> oneof<record<_id: string, command: string, dateCreated: int, functionId: string, size: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -1964,7 +1988,7 @@ export def "functions-get-tag" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_id: string, command: string, dateCreated: int, functionId: string, size: string> {
+]: nothing -> oneof<record<_id: string, command: string, dateCreated: int, functionId: string, size: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
@@ -2409,7 +2433,7 @@ export def "locale-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<continent: string, continentCode: string, country: string, countryCode: string, currency: string, eu: bool, ip: string> {
+]: nothing -> oneof<record<continent: string, continentCode: string, country: string, countryCode: string, currency: string, eu: bool, ip: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locale" $auth.query)
@@ -2444,7 +2468,7 @@ export def "locale-get-continents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<continents: table<code: string, name: string>, sum: int> {
+]: nothing -> oneof<record<continents: table<code: string, name: string>, sum: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locale/continents" $auth.query)
@@ -2479,7 +2503,7 @@ export def "locale-get-countries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<countries: table<code: string, name: string>, sum: int> {
+]: nothing -> oneof<record<countries: table<code: string, name: string>, sum: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locale/countries" $auth.query)
@@ -2514,7 +2538,7 @@ export def "locale-get-countries-eu" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<countries: table<code: string, name: string>, sum: int> {
+]: nothing -> oneof<record<countries: table<code: string, name: string>, sum: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locale/countries/eu" $auth.query)
@@ -2549,7 +2573,7 @@ export def "locale-get-countries-phones" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<phones: table<code: string, countryCode: string, countryName: string>, sum: int> {
+]: nothing -> oneof<record<phones: table<code: string, countryCode: string, countryName: string>, sum: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locale/countries/phones" $auth.query)
@@ -2584,7 +2608,7 @@ export def "locale-get-currencies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<currencies: table<code: string, decimalDigits: int, name: string, namePlural: string, rounding: float, symbol: string, symbolNative: string>, sum: int> {
+]: nothing -> oneof<record<currencies: table<code: string, decimalDigits: int, name: string, namePlural: string, rounding: float, symbol: string, symbolNative: string>, sum: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locale/currencies" $auth.query)
@@ -2619,7 +2643,7 @@ export def "locale-get-languages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<languages: table<code: string, name: string, nativeName: string>, sum: int> {
+]: nothing -> oneof<record<languages: table<code: string, name: string, nativeName: string>, sum: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locale/languages" $auth.query)
@@ -2658,7 +2682,7 @@ export def "storage-list-files" [
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
-]: nothing -> record<files: table<_id: string, _permissions: record, dateCreated: int, mimeType: string, name: string, signature: string, sizeOriginal: int>, sum: int> {
+]: nothing -> oneof<record<files: table<_id: string, _permissions: record, dateCreated: int, mimeType: string, name: string, signature: string, sizeOriginal: int>, sum: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderType" $order_type "scalar")] | flatten | str join "&"
@@ -2697,7 +2721,7 @@ export def "storage-create-file" [
   file: string # Binary file.
   --read: list<string> # An array of strings with read permissions. By default only the current user is granted with read permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
   --write: list<string> # An array of strings with write permissions. By default only the current user is granted with write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
-]: any -> record<_id: string, _permissions: record, dateCreated: int, mimeType: string, name: string, signature: string, sizeOriginal: int> {
+]: any -> oneof<record<_id: string, _permissions: record, dateCreated: int, mimeType: string, name: string, signature: string, sizeOriginal: int>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -2775,7 +2799,7 @@ export def "storage-get-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_id: string, _permissions: record, dateCreated: int, mimeType: string, name: string, signature: string, sizeOriginal: int> {
+]: nothing -> oneof<record<_id: string, _permissions: record, dateCreated: int, mimeType: string, name: string, signature: string, sizeOriginal: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
@@ -2814,7 +2838,7 @@ export def "storage-update-file" [
   --dry-run(-n) # Return the request that would be sent without executing it
   read: list<string> # An array of strings with read permissions. By default no user is granted with any read permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
   write: list<string> # An array of strings with write permissions. By default no user is granted with any write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
-]: any -> record<_id: string, _permissions: record, dateCreated: int, mimeType: string, name: string, signature: string, sizeOriginal: int> {
+]: any -> oneof<record<_id: string, _permissions: record, dateCreated: int, mimeType: string, name: string, signature: string, sizeOriginal: int>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -2980,7 +3004,7 @@ export def "teams-list" [
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
-]: nothing -> record<sum: int, teams: table<_id: string, dateCreated: int, name: string, sum: int>> {
+]: nothing -> oneof<record<sum: int, teams: table<_id: string, dateCreated: int, name: string, sum: int>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderType" $order_type "scalar")] | flatten | str join "&"
@@ -3018,7 +3042,7 @@ export def "teams-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Team name. Max length: 128 chars.
   --roles: list<string> # Array of strings. Use this param to set the roles in the team for the user who created it. The default role is **owner**. A role can be any string. Learn more about [roles and permissions](/docs/permissions). Max length for each role is 32 chars.
-]: any -> record<_id: string, dateCreated: int, name: string, sum: int> {
+]: any -> oneof<record<_id: string, dateCreated: int, name: string, sum: int>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -3094,7 +3118,7 @@ export def "teams-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_id: string, dateCreated: int, name: string, sum: int> {
+]: nothing -> oneof<record<_id: string, dateCreated: int, name: string, sum: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
@@ -3132,7 +3156,7 @@ export def "teams-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Team name. Max length: 128 chars.
-]: any -> record<_id: string, dateCreated: int, name: string, sum: int> {
+]: any -> oneof<record<_id: string, dateCreated: int, name: string, sum: int>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -3176,7 +3200,7 @@ export def "teams-get-memberships" [
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
-]: nothing -> record<memberships: table<_id: string, confirm: bool, email: string, invited: int, joined: int, name: string, roles: list, teamId: string, userId: string>, sum: int> {
+]: nothing -> oneof<record<memberships: table<_id: string, confirm: bool, email: string, invited: int, joined: int, name: string, roles: list, teamId: string, userId: string>, sum: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
@@ -3218,7 +3242,7 @@ export def "teams-create-membership" [
   --name: string # New team member name. Max length: 128 chars.
   roles: list<string> # Array of strings. Use this param to set the user roles in the team. A role can be any string. Learn more about [roles and permissions](/docs/permissions). Max length for each role is 32 chars.
   url: string # URL to redirect the user back to your app from the invitation email. Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API.
-]: any -> record<_id: string, confirm: bool, email: string, invited: int, joined: int, name: string, roles: list<string>, teamId: string, userId: string> {
+]: any -> oneof<record<_id: string, confirm: bool, email: string, invited: int, joined: int, name: string, roles: list<string>, teamId: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -3299,7 +3323,7 @@ export def "teams-update-membership-roles" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   roles: list<string> # Array of strings. Use this param to set the user roles in the team. A role can be any string. Learn more about [roles and permissions](/docs/permissions). Max length for each role is 32 chars.
-]: any -> record<_id: string, confirm: bool, email: string, invited: int, joined: int, name: string, roles: list<string>, teamId: string, userId: string> {
+]: any -> oneof<record<_id: string, confirm: bool, email: string, invited: int, joined: int, name: string, roles: list<string>, teamId: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -3342,7 +3366,7 @@ export def "teams-update-membership-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   secret: string # Secret key.
   user_id: string # User unique ID.
-]: any -> record<_id: string, confirm: bool, email: string, invited: int, joined: int, name: string, roles: list<string>, teamId: string, userId: string> {
+]: any -> oneof<record<_id: string, confirm: bool, email: string, invited: int, joined: int, name: string, roles: list<string>, teamId: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -3385,7 +3409,7 @@ export def "users-list" [
   --limit: int # Results limit value. By default will return maximum 25 results. Maximum of 100 results allowed per request. (format: int32, default: 25)
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
-]: nothing -> record<sum: int, users: table<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int>> {
+]: nothing -> oneof<record<sum: int, users: table<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderType" $order_type "scalar")] | flatten | str join "&"
@@ -3423,7 +3447,7 @@ export def "users-create" [
   email: string # User email.
   --name: string # User name. Max length: 128 chars.
   password: string # User password. Must be between 6 to 32 chars.
-]: any -> record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int> {
+]: any -> oneof<record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -3497,7 +3521,7 @@ export def "users-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int> {
+]: nothing -> oneof<record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -3533,7 +3557,7 @@ export def "users-get-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<logs: table<clientCode: string, clientEngine: string, clientEngineVersion: string, clientName: string, clientType: string, clientVersion: string, countryCode: string, countryName: string, deviceBrand: string, deviceModel: string, deviceName: string, event: string, ip: string, osCode: string, osName: string, osVersion: string, time: int>> {
+]: nothing -> oneof<record<logs: table<clientCode: string, clientEngine: string, clientEngineVersion: string, clientName: string, clientType: string, clientVersion: string, countryCode: string, countryName: string, deviceBrand: string, deviceModel: string, deviceName: string, event: string, ip: string, osCode: string, osName: string, osVersion: string, time: int>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -3569,7 +3593,7 @@ export def "users-get-prefs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -3606,7 +3630,7 @@ export def "users-update-prefs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   prefs: record # Prefs key-value JSON object.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -3681,7 +3705,7 @@ export def "users-get-sessions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<sessions: table<_id: string, clientCode: string, clientEngine: string, clientEngineVersion: string, clientName: string, clientType: string, clientVersion: string, countryCode: string, countryName: string, current: bool, deviceBrand: string, deviceModel: string, deviceName: string, expire: int, ip: string, osCode: string, osName: string, osVersion: string, provider: string, providerToken: string, providerUid: string, userId: string>, sum: int> {
+]: nothing -> oneof<record<sessions: table<_id: string, clientCode: string, clientEngine: string, clientEngineVersion: string, clientName: string, clientType: string, clientVersion: string, countryCode: string, countryName: string, current: bool, deviceBrand: string, deviceModel: string, deviceName: string, expire: int, ip: string, osCode: string, osName: string, osVersion: string, provider: string, providerToken: string, providerUid: string, userId: string>, sum: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -3756,7 +3780,7 @@ export def "users-update-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   status: int # User Status code. To activate the user pass 1, to block the user pass 2 and for disabling the user pass 0
-]: any -> record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int> {
+]: any -> oneof<record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
@@ -3796,7 +3820,7 @@ export def "users-update-verification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --email-verification: oneof<nothing, bool> # User Email Verification Status.
-]: any -> record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int> {
+]: any -> oneof<record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_key | default ($env | get -o APPWRITE_KEY_TOKEN | default "")) "x-appwrite-key") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)

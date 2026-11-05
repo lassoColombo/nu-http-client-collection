@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -164,9 +187,9 @@ def x-amz-target-completer-62 [] { ["OvertureService.UpdateVirtualInterfaceAttri
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-direct-connect-gateway-association-proposal" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["accept-direct-connect-gateway-association-proposal" "allocate-connection-on-interconnect" "allocate-hosted-connection" "allocate-private-virtual-interface" "allocate-public-virtual-interface" "allocate-transit-virtual-interface" "associate-connection-with-lag" "associate-hosted-connection" "associate-mac-sec-key" "associate-virtual-interface" "confirm-connection" "confirm-customer-agreement" "confirm-private-virtual-interface" "confirm-public-virtual-interface" "confirm-transit-virtual-interface" "create-bgp-peer" "create-connection" "create-direct-connect-gateway" "create-direct-connect-gateway-association" "create-direct-connect-gateway-association-proposal" "create-interconnect" "create-lag" "create-private-virtual-interface" "create-public-virtual-interface" "create-transit-virtual-interface" "delete-bgp-peer" "delete-connection" "delete-direct-connect-gateway" "delete-direct-connect-gateway-association" "delete-direct-connect-gateway-association-proposal" "delete-interconnect" "delete-lag" "delete-virtual-interface" "describe-connection-loa" "describe-connections" "describe-connections-on-interconnect" "describe-customer-metadata" "describe-direct-connect-gateway-association-proposals" "describe-direct-connect-gateway-associations" "describe-direct-connect-gateway-attachments" "describe-direct-connect-gateways" "describe-hosted-connections" "describe-interconnect-loa" "describe-interconnects" "describe-lags" "describe-loa" "describe-locations" "describe-router-configuration" "describe-tags" "describe-virtual-gateways" "describe-virtual-interfaces" "disassociate-connection-from-lag" "disassociate-mac-sec-key" "list-virtual-interface-test-history" "start-bgp-failover-test" "stop-bgp-failover-test" "tag-resource" "untag-resource" "update-connection" "update-direct-connect-gateway" "update-direct-connect-gateway-association" "update-lag" "update-virtual-interface-attributes" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -188,7 +211,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AcceptDirectConnectGatewayAssociationProposal
-# --overrideAllowedPrefixesToDirectConnectGateway item shape: {cidr?: string}
 export def "accept-direct-connect-gateway-association-proposal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -211,7 +233,7 @@ export def "accept-direct-connect-gateway-association-proposal" [
   proposal_id: string # The ID of the request proposal.
   associated_gateway_owner_account: string # The ID of the Amazon Web Services account that owns the virtual private gateway or transit gateway.
   --override-allowed-prefixes-to-direct-connect-gateway: list # Overrides the Amazon VPC prefixes advertised to the Direct Connect gateway. For information about how to set the prefixes, see Allowed Prefixes (https://docs.aws.amazon.com/directconnect/latest/UserGuide/multi-account-associate-vgw.html#allowed-prefixes) in the Direct Connect User Guide. — item shape: {cidr?: string}
-]: any -> record<directConnectGatewayAssociation: record<directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, associationState: string, stateChangeError: string, associatedGateway: record<id: string, type: string, ownerAccount: string, region: string>, associationId: string, allowedPrefixesToDirectConnectGateway: list<record>, virtualGatewayId: string, virtualGatewayRegion: string, virtualGatewayOwnerAccount: string>> {
+]: any -> oneof<record<directConnectGatewayAssociation: record<directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, associationState: string, stateChangeError: string, associatedGateway: record<id: string, type: string, ownerAccount: string, region: string>, associationId: string, allowedPrefixesToDirectConnectGateway: list<record>, virtualGatewayId: string, virtualGatewayRegion: string, virtualGatewayOwnerAccount: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -266,7 +288,7 @@ export def "allocate-connection-on-interconnect" [
   owner_account: string # The ID of the Amazon Web Services account of the customer for whom the connection will be provisioned.
   interconnect_id: string # The ID of the interconnect on which the connection will be provisioned.
   vlan: int # The dedicated VLAN provisioned to the connection.
-]: any -> record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>> {
+]: any -> oneof<record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -296,7 +318,6 @@ export def "allocate-connection-on-interconnect" [
 #
 # POST /
 # operationId: AllocateHostedConnection
-# --tags item shape: {key: string, value?: string}
 export def "allocate-hosted-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,7 +342,7 @@ export def "allocate-hosted-connection" [
   connection_name: string # The name of the hosted connection.
   vlan: int # The dedicated VLAN provisioned to the hosted connection.
   --tags: list # The tags associated with the connection. — item shape: {key: string, value?: string}
-]: any -> record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>> {
+]: any -> oneof<record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -351,7 +372,6 @@ export def "allocate-hosted-connection" [
 #
 # POST /
 # operationId: AllocatePrivateVirtualInterface
-# --newPrivateVirtualInterfaceAllocation shape: {virtualInterfaceName: string, vlan: int, asn: int, mtu?: int, authKey?: string, amazonAddress?: string, addressFamily?: "ipv4"|"ipv6", customerAddress?: string, tags?: list}
 export def "allocate-private-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,7 +393,7 @@ export def "allocate-private-virtual-interface" [
   connection_id: string # The ID of the connection on which the private virtual interface is provisioned.
   owner_account: string # The ID of the Amazon Web Services account that owns the virtual private interface.
   new_private_virtual_interface_allocation: record # Information about a private virtual interface to be provisioned on a connection. — shape: {virtualInterfaceName: string, vlan: int, asn: int, mtu?: int, authKey?: string, amazonAddress?: string, addressFamily?: "ipv4"|"ipv6", customerAddress?: string, tags?: list}
-]: any -> record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: table<cidr: string>, bgpPeers: table<bgpPeerId: string, asn: int, authKey: string, addressFamily: string, amazonAddress: string, customerAddress: string, bgpPeerState: string, bgpStatus: string, awsDeviceV2: string, awsLogicalDeviceId: string>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: table<key: string, value: string>, siteLinkEnabled: bool> {
+]: any -> oneof<record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: table<cidr: string>, bgpPeers: table<bgpPeerId: string, asn: int, authKey: string, addressFamily: string, amazonAddress: string, customerAddress: string, bgpPeerState: string, bgpStatus: string, awsDeviceV2: string, awsLogicalDeviceId: string>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: table<key: string, value: string>, siteLinkEnabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -403,7 +423,6 @@ export def "allocate-private-virtual-interface" [
 #
 # POST /
 # operationId: AllocatePublicVirtualInterface
-# --newPublicVirtualInterfaceAllocation shape: {virtualInterfaceName: string, vlan: int, asn: int, authKey?: string, amazonAddress?: string, customerAddress?: string, addressFamily?: "ipv4"|"ipv6", routeFilterPrefixes?: list, tags?: list}
 export def "allocate-public-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -425,7 +444,7 @@ export def "allocate-public-virtual-interface" [
   connection_id: string # The ID of the connection on which the public virtual interface is provisioned.
   owner_account: string # The ID of the Amazon Web Services account that owns the public virtual interface.
   new_public_virtual_interface_allocation: record # Information about a public virtual interface to be provisioned on a connection. — shape: {virtualInterfaceName: string, vlan: int, asn: int, authKey?: string, amazonAddress?: string, customerAddress?: string, addressFamily?: "ipv4"|"ipv6", routeFilterPrefixes?: list, tags?: list}
-]: any -> record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: table<cidr: string>, bgpPeers: table<bgpPeerId: string, asn: int, authKey: string, addressFamily: string, amazonAddress: string, customerAddress: string, bgpPeerState: string, bgpStatus: string, awsDeviceV2: string, awsLogicalDeviceId: string>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: table<key: string, value: string>, siteLinkEnabled: bool> {
+]: any -> oneof<record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: table<cidr: string>, bgpPeers: table<bgpPeerId: string, asn: int, authKey: string, addressFamily: string, amazonAddress: string, customerAddress: string, bgpPeerState: string, bgpStatus: string, awsDeviceV2: string, awsLogicalDeviceId: string>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: table<key: string, value: string>, siteLinkEnabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -455,7 +474,6 @@ export def "allocate-public-virtual-interface" [
 #
 # POST /
 # operationId: AllocateTransitVirtualInterface
-# --newTransitVirtualInterfaceAllocation shape: {virtualInterfaceName?: string, vlan?: int, asn?: int, mtu?: int, authKey?: string, amazonAddress?: string, customerAddress?: string, addressFamily?: "ipv4"|"ipv6", tags?: list}
 export def "allocate-transit-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,7 +495,7 @@ export def "allocate-transit-virtual-interface" [
   connection_id: string # The ID of the connection on which the transit virtual interface is provisioned.
   owner_account: string # The ID of the Amazon Web Services account that owns the transit virtual interface.
   new_transit_virtual_interface_allocation: record # Information about a transit virtual interface to be provisioned on a connection. — shape: {virtualInterfaceName?: string, vlan?: int, asn?: int, mtu?: int, authKey?: string, amazonAddress?: string, customerAddress?: string, addressFamily?: "ipv4"|"ipv6", tags?: list}
-]: any -> record<virtualInterface: record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: list<record>, bgpPeers: list<record>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: list<record>, siteLinkEnabled: bool>> {
+]: any -> oneof<record<virtualInterface: record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: list<record>, bgpPeers: list<record>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: list<record>, siteLinkEnabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -527,7 +545,7 @@ export def "associate-connection-with-lag" [
   --x-amz-target: string@x-amz-target-completer-6 # required
   connection_id: string # The ID of the connection.
   lag_id: string # The ID of the LAG with which to associate the connection.
-]: any -> record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>> {
+]: any -> oneof<record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -577,7 +595,7 @@ export def "associate-hosted-connection" [
   --x-amz-target: string@x-amz-target-completer-7 # required
   connection_id: string # The ID of the hosted connection.
   parent_connection_id: string # The ID of the interconnect or the LAG.
-]: any -> record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>> {
+]: any -> oneof<record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -629,7 +647,7 @@ export def "associate-mac-sec-key" [
   --secret-arn: string # The Amazon Resource Name (ARN) of the MAC Security (MACsec) secret key to associate with the dedicated connection. You can use DescribeConnections or DescribeLags to retrieve the MAC Security (MACsec) secret key. If you use this request parameter, you do not use the ckn and cak request parameters.
   --ckn: string # The MAC Security (MACsec) CKN to associate with the dedicated connection. You can create the CKN/CAK pair using an industry standard tool. The valid values are 64 hexadecimal characters (0-9, A-E). If you use this request parameter, you must use the cak request parameter and not use the secretARN request parameter.
   --cak: string # The MAC Security (MACsec) CAK to associate with the dedicated connection. You can create the CKN/CAK pair using an industry standard tool. The valid values are 64 hexadecimal characters (0-9, A-E). If you use this request parameter, you must use the ckn request parameter and not use the secretARN request parameter.
-]: any -> record<connectionId: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>> {
+]: any -> oneof<record<connectionId: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -679,7 +697,7 @@ export def "associate-virtual-interface" [
   --x-amz-target: string@x-amz-target-completer-9 # required
   virtual_interface_id: string # The ID of the virtual interface.
   connection_id: string # The ID of the LAG or connection.
-]: any -> record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: table<cidr: string>, bgpPeers: table<bgpPeerId: string, asn: int, authKey: string, addressFamily: string, amazonAddress: string, customerAddress: string, bgpPeerState: string, bgpStatus: string, awsDeviceV2: string, awsLogicalDeviceId: string>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: table<key: string, value: string>, siteLinkEnabled: bool> {
+]: any -> oneof<record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: table<cidr: string>, bgpPeers: table<bgpPeerId: string, asn: int, authKey: string, addressFamily: string, amazonAddress: string, customerAddress: string, bgpPeerState: string, bgpStatus: string, awsDeviceV2: string, awsLogicalDeviceId: string>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: table<key: string, value: string>, siteLinkEnabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -728,7 +746,7 @@ export def "confirm-connection" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   connection_id: string # The ID of the hosted connection.
-]: any -> record<connectionState: string> {
+]: any -> oneof<record<connectionState: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -777,7 +795,7 @@ export def "confirm-customer-agreement" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   --agreement-name: string # The name of the customer agreement.
-]: any -> record<status: string> {
+]: any -> oneof<record<status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -828,7 +846,7 @@ export def "confirm-private-virtual-interface" [
   virtual_interface_id: string # The ID of the virtual interface.
   --virtual-gateway-id: string # The ID of the virtual private gateway.
   --direct-connect-gateway-id: string # The ID of the Direct Connect gateway.
-]: any -> record<virtualInterfaceState: string> {
+]: any -> oneof<record<virtualInterfaceState: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -877,7 +895,7 @@ export def "confirm-public-virtual-interface" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   virtual_interface_id: string # The ID of the virtual interface.
-]: any -> record<virtualInterfaceState: string> {
+]: any -> oneof<record<virtualInterfaceState: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -927,7 +945,7 @@ export def "confirm-transit-virtual-interface" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   virtual_interface_id: string # The ID of the virtual interface.
   direct_connect_gateway_id: string # The ID of the Direct Connect gateway.
-]: any -> record<virtualInterfaceState: string> {
+]: any -> oneof<record<virtualInterfaceState: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -957,7 +975,6 @@ export def "confirm-transit-virtual-interface" [
 #
 # POST /
 # operationId: CreateBGPPeer
-# --newBGPPeer shape: {asn?: int, authKey?: string, addressFamily?: "ipv4"|"ipv6", amazonAddress?: string, customerAddress?: string}
 export def "create-bgp-peer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -978,7 +995,7 @@ export def "create-bgp-peer" [
   --x-amz-target: string@x-amz-target-completer-15 # required
   --virtual-interface-id: string # The ID of the virtual interface.
   --new-bgp-peer: record # Information about a new BGP peer. — shape: {asn?: int, authKey?: string, addressFamily?: "ipv4"|"ipv6", amazonAddress?: string, customerAddress?: string}
-]: any -> record<virtualInterface: record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: list<record>, bgpPeers: list<record>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: list<record>, siteLinkEnabled: bool>> {
+]: any -> oneof<record<virtualInterface: record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: list<record>, bgpPeers: list<record>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: list<record>, siteLinkEnabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1008,7 +1025,6 @@ export def "create-bgp-peer" [
 #
 # POST /
 # operationId: CreateConnection
-# --tags item shape: {key: string, value?: string}
 export def "create-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1034,7 +1050,7 @@ export def "create-connection" [
   --tags: list # The tags to associate with the lag. — item shape: {key: string, value?: string}
   --provider-name: string # The name of the service provider associated with the requested connection.
   --request-mac-sec: oneof<nothing, bool> # Indicates whether you want the connection to support MAC Security (MACsec). MAC Security (MACsec) is only available on dedicated connections. For information about MAC Security (MACsec) prerequisties, see MACsec prerequisties (https://docs.aws.amazon.com/directconnect/latest/UserGuide/direct-connect-mac-sec-getting-started.html#mac-sec-prerequisites) in the Direct Connect User Guide.
-]: any -> record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>> {
+]: any -> oneof<record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1084,7 +1100,7 @@ export def "create-direct-connect-gateway" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   direct_connect_gateway_name: string # The name of the Direct Connect gateway.
   --amazon-side-asn: int # The autonomous system number (ASN) for Border Gateway Protocol (BGP) to be configured on the Amazon side of the connection. The ASN must be in the private range of 64,512 to 65,534 or 4,200,000,000 to 4,294,967,294. The default is 64512.
-]: any -> record<directConnectGateway: record<directConnectGatewayId: string, directConnectGatewayName: string, amazonSideAsn: int, ownerAccount: string, directConnectGatewayState: string, stateChangeError: string>> {
+]: any -> oneof<record<directConnectGateway: record<directConnectGatewayId: string, directConnectGatewayName: string, amazonSideAsn: int, ownerAccount: string, directConnectGatewayState: string, stateChangeError: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1114,7 +1130,6 @@ export def "create-direct-connect-gateway" [
 #
 # POST /
 # operationId: CreateDirectConnectGatewayAssociation
-# --addAllowedPrefixesToDirectConnectGateway item shape: {cidr?: string}
 export def "create-direct-connect-gateway-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1137,7 +1152,7 @@ export def "create-direct-connect-gateway-association" [
   --gateway-id: string # The ID of the virtual private gateway or transit gateway.
   --add-allowed-prefixes-to-direct-connect-gateway: list # The Amazon VPC prefixes to advertise to the Direct Connect gateway This parameter is required when you create an association to a transit gateway. For information about how to set the prefixes, see Allowed Prefixes (https://docs.aws.amazon.com/directconnect/latest/UserGuide/multi-account-associate-vgw.html#allowed-prefixes) in the Direct Connect User Guide. — item shape: {cidr?: string}
   --virtual-gateway-id: string # The ID of the virtual private gateway.
-]: any -> record<directConnectGatewayAssociation: record<directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, associationState: string, stateChangeError: string, associatedGateway: record<id: string, type: string, ownerAccount: string, region: string>, associationId: string, allowedPrefixesToDirectConnectGateway: list<record>, virtualGatewayId: string, virtualGatewayRegion: string, virtualGatewayOwnerAccount: string>> {
+]: any -> oneof<record<directConnectGatewayAssociation: record<directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, associationState: string, stateChangeError: string, associatedGateway: record<id: string, type: string, ownerAccount: string, region: string>, associationId: string, allowedPrefixesToDirectConnectGateway: list<record>, virtualGatewayId: string, virtualGatewayRegion: string, virtualGatewayOwnerAccount: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1167,8 +1182,6 @@ export def "create-direct-connect-gateway-association" [
 #
 # POST /
 # operationId: CreateDirectConnectGatewayAssociationProposal
-# --addAllowedPrefixesToDirectConnectGateway item shape: {cidr?: string}
-# --removeAllowedPrefixesToDirectConnectGateway item shape: {cidr?: string}
 export def "create-direct-connect-gateway-association-proposal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1192,7 +1205,7 @@ export def "create-direct-connect-gateway-association-proposal" [
   gateway_id: string # The ID of the virtual private gateway or transit gateway.
   --add-allowed-prefixes-to-direct-connect-gateway: list # The Amazon VPC prefixes to advertise to the Direct Connect gateway. — item shape: {cidr?: string}
   --remove-allowed-prefixes-to-direct-connect-gateway: list # The Amazon VPC prefixes to no longer advertise to the Direct Connect gateway. — item shape: {cidr?: string}
-]: any -> record<directConnectGatewayAssociationProposal: record<proposalId: string, directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, proposalState: string, associatedGateway: record<id: string, type: string, ownerAccount: string, region: string>, existingAllowedPrefixesToDirectConnectGateway: list<record>, requestedAllowedPrefixesToDirectConnectGateway: list<record>>> {
+]: any -> oneof<record<directConnectGatewayAssociationProposal: record<proposalId: string, directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, proposalState: string, associatedGateway: record<id: string, type: string, ownerAccount: string, region: string>, existingAllowedPrefixesToDirectConnectGateway: list<record>, requestedAllowedPrefixesToDirectConnectGateway: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1222,7 +1235,6 @@ export def "create-direct-connect-gateway-association-proposal" [
 #
 # POST /
 # operationId: CreateInterconnect
-# --tags item shape: {key: string, value?: string}
 export def "create-interconnect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1247,7 +1259,7 @@ export def "create-interconnect" [
   --lag-id: string # The ID of the LAG.
   --tags: list # The tags to associate with the interconnect. — item shape: {key: string, value?: string}
   --provider-name: string # The name of the service provider associated with the interconnect.
-]: any -> record<interconnectId: string, interconnectName: string, interconnectState: string, region: string, location: string, bandwidth: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string> {
+]: any -> oneof<record<interconnectId: string, interconnectName: string, interconnectState: string, region: string, location: string, bandwidth: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1277,8 +1289,6 @@ export def "create-interconnect" [
 #
 # POST /
 # operationId: CreateLag
-# --tags item shape: {key: string, value?: string}
-# --childConnectionTags item shape: {key: string, value?: string}
 export def "create-lag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1306,7 +1316,7 @@ export def "create-lag" [
   --child-connection-tags: list # The tags to associate with the automtically created LAGs. — item shape: {key: string, value?: string}
   --provider-name: string # The name of the service provider associated with the LAG.
   --request-mac-sec: oneof<nothing, bool> # Indicates whether the connection will support MAC Security (MACsec). All connections in the LAG must be capable of supporting MAC Security (MACsec). For information about MAC Security (MACsec) prerequisties, see MACsec prerequisties (https://docs.aws.amazon.com/directconnect/latest/UserGuide/direct-connect-mac-sec-getting-started.html#mac-sec-prerequisites) in the Direct Connect User Guide.
-]: any -> record<connectionsBandwidth: string, numberOfConnections: int, lagId: string, ownerAccount: string, lagName: string, lagState: string, location: string, region: string, minimumLinks: int, awsDevice: string, awsDeviceV2: string, awsLogicalDeviceId: string, connections: table<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: list, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: list>, allowsHostedConnections: bool, jumboFrameCapable: bool, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>> {
+]: any -> oneof<record<connectionsBandwidth: string, numberOfConnections: int, lagId: string, ownerAccount: string, lagName: string, lagState: string, location: string, region: string, minimumLinks: int, awsDevice: string, awsDeviceV2: string, awsLogicalDeviceId: string, connections: table<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: list, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: list>, allowsHostedConnections: bool, jumboFrameCapable: bool, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1336,7 +1346,6 @@ export def "create-lag" [
 #
 # POST /
 # operationId: CreatePrivateVirtualInterface
-# --newPrivateVirtualInterface shape: {virtualInterfaceName: string, vlan: int, asn: int, mtu?: int, authKey?: string, amazonAddress?: string, customerAddress?: string, addressFamily?: "ipv4"|"ipv6", virtualGatewayId?: string, directConnectGatewayId?: string, tags?: list, enableSiteLink?: bool}
 export def "create-private-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1357,7 +1366,7 @@ export def "create-private-virtual-interface" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   connection_id: string # The ID of the connection.
   new_private_virtual_interface: record # Information about a private virtual interface. — shape: {virtualInterfaceName: string, vlan: int, asn: int, mtu?: int, authKey?: string, amazonAddress?: string, customerAddress?: string, addressFamily?: "ipv4"|"ipv6", virtualGatewayId?: string, directConnectGatewayId?: string, tags?: list, enableSiteLink?: bool}
-]: any -> record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: table<cidr: string>, bgpPeers: table<bgpPeerId: string, asn: int, authKey: string, addressFamily: string, amazonAddress: string, customerAddress: string, bgpPeerState: string, bgpStatus: string, awsDeviceV2: string, awsLogicalDeviceId: string>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: table<key: string, value: string>, siteLinkEnabled: bool> {
+]: any -> oneof<record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: table<cidr: string>, bgpPeers: table<bgpPeerId: string, asn: int, authKey: string, addressFamily: string, amazonAddress: string, customerAddress: string, bgpPeerState: string, bgpStatus: string, awsDeviceV2: string, awsLogicalDeviceId: string>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: table<key: string, value: string>, siteLinkEnabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1387,7 +1396,6 @@ export def "create-private-virtual-interface" [
 #
 # POST /
 # operationId: CreatePublicVirtualInterface
-# --newPublicVirtualInterface shape: {virtualInterfaceName: string, vlan: int, asn: int, authKey?: string, amazonAddress?: string, customerAddress?: string, addressFamily?: "ipv4"|"ipv6", routeFilterPrefixes?: list, tags?: list}
 export def "create-public-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1408,7 +1416,7 @@ export def "create-public-virtual-interface" [
   --x-amz-target: string@x-amz-target-completer-23 # required
   connection_id: string # The ID of the connection.
   new_public_virtual_interface: record # Information about a public virtual interface. — shape: {virtualInterfaceName: string, vlan: int, asn: int, authKey?: string, amazonAddress?: string, customerAddress?: string, addressFamily?: "ipv4"|"ipv6", routeFilterPrefixes?: list, tags?: list}
-]: any -> record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: table<cidr: string>, bgpPeers: table<bgpPeerId: string, asn: int, authKey: string, addressFamily: string, amazonAddress: string, customerAddress: string, bgpPeerState: string, bgpStatus: string, awsDeviceV2: string, awsLogicalDeviceId: string>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: table<key: string, value: string>, siteLinkEnabled: bool> {
+]: any -> oneof<record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: table<cidr: string>, bgpPeers: table<bgpPeerId: string, asn: int, authKey: string, addressFamily: string, amazonAddress: string, customerAddress: string, bgpPeerState: string, bgpStatus: string, awsDeviceV2: string, awsLogicalDeviceId: string>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: table<key: string, value: string>, siteLinkEnabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1438,7 +1446,6 @@ export def "create-public-virtual-interface" [
 #
 # POST /
 # operationId: CreateTransitVirtualInterface
-# --newTransitVirtualInterface shape: {virtualInterfaceName?: string, vlan?: int, asn?: int, mtu?: int, authKey?: string, amazonAddress?: string, customerAddress?: string, addressFamily?: "ipv4"|"ipv6", directConnectGatewayId?: string, tags?: list, enableSiteLink?: bool}
 export def "create-transit-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1459,7 +1466,7 @@ export def "create-transit-virtual-interface" [
   --x-amz-target: string@x-amz-target-completer-24 # required
   connection_id: string # The ID of the connection.
   new_transit_virtual_interface: record # Information about a transit virtual interface. — shape: {virtualInterfaceName?: string, vlan?: int, asn?: int, mtu?: int, authKey?: string, amazonAddress?: string, customerAddress?: string, addressFamily?: "ipv4"|"ipv6", directConnectGatewayId?: string, tags?: list, enableSiteLink?: bool}
-]: any -> record<virtualInterface: record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: list<record>, bgpPeers: list<record>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: list<record>, siteLinkEnabled: bool>> {
+]: any -> oneof<record<virtualInterface: record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: list<record>, bgpPeers: list<record>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: list<record>, siteLinkEnabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1511,7 +1518,7 @@ export def "delete-bgp-peer" [
   --asn: int # The autonomous system (AS) number for Border Gateway Protocol (BGP) configuration.
   --customer-address: string # The IP address assigned to the customer interface.
   --bgp-peer-id: string # The ID of the BGP peer.
-]: any -> record<virtualInterface: record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: list<record>, bgpPeers: list<record>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: list<record>, siteLinkEnabled: bool>> {
+]: any -> oneof<record<virtualInterface: record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: list<record>, bgpPeers: list<record>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: list<record>, siteLinkEnabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1560,7 +1567,7 @@ export def "delete-connection" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-26 # required
   connection_id: string # The ID of the connection.
-]: any -> record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>> {
+]: any -> oneof<record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1609,7 +1616,7 @@ export def "delete-direct-connect-gateway" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   direct_connect_gateway_id: string # The ID of the Direct Connect gateway.
-]: any -> record<directConnectGateway: record<directConnectGatewayId: string, directConnectGatewayName: string, amazonSideAsn: int, ownerAccount: string, directConnectGatewayState: string, stateChangeError: string>> {
+]: any -> oneof<record<directConnectGateway: record<directConnectGatewayId: string, directConnectGatewayName: string, amazonSideAsn: int, ownerAccount: string, directConnectGatewayState: string, stateChangeError: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1660,7 +1667,7 @@ export def "delete-direct-connect-gateway-association" [
   --association-id: string # The ID of the Direct Connect gateway association.
   --direct-connect-gateway-id: string # The ID of the Direct Connect gateway.
   --virtual-gateway-id: string # The ID of the virtual private gateway.
-]: any -> record<directConnectGatewayAssociation: record<directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, associationState: string, stateChangeError: string, associatedGateway: record<id: string, type: string, ownerAccount: string, region: string>, associationId: string, allowedPrefixesToDirectConnectGateway: list<record>, virtualGatewayId: string, virtualGatewayRegion: string, virtualGatewayOwnerAccount: string>> {
+]: any -> oneof<record<directConnectGatewayAssociation: record<directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, associationState: string, stateChangeError: string, associatedGateway: record<id: string, type: string, ownerAccount: string, region: string>, associationId: string, allowedPrefixesToDirectConnectGateway: list<record>, virtualGatewayId: string, virtualGatewayRegion: string, virtualGatewayOwnerAccount: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1709,7 +1716,7 @@ export def "delete-direct-connect-gateway-association-proposal" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-29 # required
   proposal_id: string # The ID of the proposal.
-]: any -> record<directConnectGatewayAssociationProposal: record<proposalId: string, directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, proposalState: string, associatedGateway: record<id: string, type: string, ownerAccount: string, region: string>, existingAllowedPrefixesToDirectConnectGateway: list<record>, requestedAllowedPrefixesToDirectConnectGateway: list<record>>> {
+]: any -> oneof<record<directConnectGatewayAssociationProposal: record<proposalId: string, directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, proposalState: string, associatedGateway: record<id: string, type: string, ownerAccount: string, region: string>, existingAllowedPrefixesToDirectConnectGateway: list<record>, requestedAllowedPrefixesToDirectConnectGateway: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1758,7 +1765,7 @@ export def "delete-interconnect" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-30 # required
   interconnect_id: string # The ID of the interconnect.
-]: any -> record<interconnectState: string> {
+]: any -> oneof<record<interconnectState: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1807,7 +1814,7 @@ export def "delete-lag" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-31 # required
   lag_id: string # The ID of the LAG.
-]: any -> record<connectionsBandwidth: string, numberOfConnections: int, lagId: string, ownerAccount: string, lagName: string, lagState: string, location: string, region: string, minimumLinks: int, awsDevice: string, awsDeviceV2: string, awsLogicalDeviceId: string, connections: table<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: list, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: list>, allowsHostedConnections: bool, jumboFrameCapable: bool, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>> {
+]: any -> oneof<record<connectionsBandwidth: string, numberOfConnections: int, lagId: string, ownerAccount: string, lagName: string, lagState: string, location: string, region: string, minimumLinks: int, awsDevice: string, awsDeviceV2: string, awsLogicalDeviceId: string, connections: table<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: list, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: list>, allowsHostedConnections: bool, jumboFrameCapable: bool, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1856,7 +1863,7 @@ export def "delete-virtual-interface" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-32 # required
   virtual_interface_id: string # The ID of the virtual interface.
-]: any -> record<virtualInterfaceState: string> {
+]: any -> oneof<record<virtualInterfaceState: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1909,7 +1916,7 @@ export def "describe-connection-loa" [
   connection_id: string # The ID of the connection.
   --provider-name: string # The name of the APN partner or service provider who establishes connectivity on your behalf. If you specify this parameter, the LOA-CFA lists the provider name alongside your company name as the requester of the cross connect.
   --loa-content-type: string@loa-content-type-completer # The standard media type for the LOA-CFA document. The only supported value is application/pdf.
-]: any -> record<loa: record<loaContent: string, loaContentType: string>> {
+]: any -> oneof<record<loa: record<loaContent: string, loaContentType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1958,7 +1965,7 @@ export def "describe-connections" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-34 # required
   --connection-id: string # The ID of the connection.
-]: any -> record<connections: table<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: list, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: list>> {
+]: any -> oneof<record<connections: table<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: list, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2009,7 +2016,7 @@ export def "describe-connections-on-interconnect" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-35 # required
   interconnect_id: string # The ID of the interconnect.
-]: any -> record<connections: table<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: list, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: list>> {
+]: any -> oneof<record<connections: table<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: list, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2057,7 +2064,7 @@ export def "describe-customer-metadata" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-36 # required
-]: nothing -> record<agreements: table<agreementName: string, status: string>, nniPartnerType: string> {
+]: nothing -> oneof<record<agreements: table<agreementName: string, status: string>, nniPartnerType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let x_amz_target = ($x_amz_target | default "OvertureService.DescribeCustomerMetadata")
@@ -2107,7 +2114,7 @@ export def "describe-direct-connect-gateway-association-proposals" [
   --associated-gateway-id: string # The ID of the associated gateway.
   --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. If MaxResults is given a value larger than 100, only 100 results are returned.
   --next-token: string # The token for the next page of results.
-]: any -> record<directConnectGatewayAssociationProposals: table<proposalId: string, directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, proposalState: string, associatedGateway: record, existingAllowedPrefixesToDirectConnectGateway: list, requestedAllowedPrefixesToDirectConnectGateway: list>, nextToken: string> {
+]: any -> oneof<record<directConnectGatewayAssociationProposals: table<proposalId: string, directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, proposalState: string, associatedGateway: record, existingAllowedPrefixesToDirectConnectGateway: list, requestedAllowedPrefixesToDirectConnectGateway: list>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2161,7 +2168,7 @@ export def "describe-direct-connect-gateway-associations" [
   --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. If MaxResults is given a value larger than 100, only 100 results are returned.
   --next-token: string # The token provided in the previous call to retrieve the next page.
   --virtual-gateway-id: string # The ID of the virtual private gateway or transit gateway.
-]: any -> record<directConnectGatewayAssociations: table<directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, associationState: string, stateChangeError: string, associatedGateway: record, associationId: string, allowedPrefixesToDirectConnectGateway: list, virtualGatewayId: string, virtualGatewayRegion: string, virtualGatewayOwnerAccount: string>, nextToken: string> {
+]: any -> oneof<record<directConnectGatewayAssociations: table<directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, associationState: string, stateChangeError: string, associatedGateway: record, associationId: string, allowedPrefixesToDirectConnectGateway: list, virtualGatewayId: string, virtualGatewayRegion: string, virtualGatewayOwnerAccount: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2213,7 +2220,7 @@ export def "describe-direct-connect-gateway-attachments" [
   --virtual-interface-id: string # The ID of the virtual interface.
   --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. If MaxResults is given a value larger than 100, only 100 results are returned.
   --next-token: string # The token provided in the previous call to retrieve the next page.
-]: any -> record<directConnectGatewayAttachments: table<directConnectGatewayId: string, virtualInterfaceId: string, virtualInterfaceRegion: string, virtualInterfaceOwnerAccount: string, attachmentState: string, attachmentType: string, stateChangeError: string>, nextToken: string> {
+]: any -> oneof<record<directConnectGatewayAttachments: table<directConnectGatewayId: string, virtualInterfaceId: string, virtualInterfaceRegion: string, virtualInterfaceOwnerAccount: string, attachmentState: string, attachmentType: string, stateChangeError: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2264,7 +2271,7 @@ export def "describe-direct-connect-gateways" [
   --direct-connect-gateway-id: string # The ID of the Direct Connect gateway.
   --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. If MaxResults is given a value larger than 100, only 100 results are returned.
   --next-token: string # The token provided in the previous call to retrieve the next page.
-]: any -> record<directConnectGateways: table<directConnectGatewayId: string, directConnectGatewayName: string, amazonSideAsn: int, ownerAccount: string, directConnectGatewayState: string, stateChangeError: string>, nextToken: string> {
+]: any -> oneof<record<directConnectGateways: table<directConnectGatewayId: string, directConnectGatewayName: string, amazonSideAsn: int, ownerAccount: string, directConnectGatewayState: string, stateChangeError: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2313,7 +2320,7 @@ export def "describe-hosted-connections" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-41 # required
   connection_id: string # The ID of the interconnect or LAG.
-]: any -> record<connections: table<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: list, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: list>> {
+]: any -> oneof<record<connections: table<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: list, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2366,7 +2373,7 @@ export def "describe-interconnect-loa" [
   interconnect_id: string # The ID of the interconnect.
   --provider-name: string # The name of the service provider who establishes connectivity on your behalf. If you supply this parameter, the LOA-CFA lists the provider name alongside your company name as the requester of the cross connect.
   --loa-content-type: string@loa-content-type-completer # The standard media type for the LOA-CFA document. The only supported value is application/pdf.
-]: any -> record<loa: record<loaContent: string, loaContentType: string>> {
+]: any -> oneof<record<loa: record<loaContent: string, loaContentType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2415,7 +2422,7 @@ export def "describe-interconnects" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-43 # required
   --interconnect-id: string # The ID of the interconnect.
-]: any -> record<interconnects: table<interconnectId: string, interconnectName: string, interconnectState: string, region: string, location: string, bandwidth: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: list, providerName: string>> {
+]: any -> oneof<record<interconnects: table<interconnectId: string, interconnectName: string, interconnectState: string, region: string, location: string, bandwidth: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: list, providerName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2464,7 +2471,7 @@ export def "describe-lags" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-44 # required
   --lag-id: string # The ID of the LAG.
-]: any -> record<lags: table<connectionsBandwidth: string, numberOfConnections: int, lagId: string, ownerAccount: string, lagName: string, lagState: string, location: string, region: string, minimumLinks: int, awsDevice: string, awsDeviceV2: string, awsLogicalDeviceId: string, connections: list, allowsHostedConnections: bool, jumboFrameCapable: bool, hasLogicalRedundancy: string, tags: list, providerName: string, macSecCapable: bool, encryptionMode: string, macSecKeys: list>> {
+]: any -> oneof<record<lags: table<connectionsBandwidth: string, numberOfConnections: int, lagId: string, ownerAccount: string, lagName: string, lagState: string, location: string, region: string, minimumLinks: int, awsDevice: string, awsDeviceV2: string, awsLogicalDeviceId: string, connections: list, allowsHostedConnections: bool, jumboFrameCapable: bool, hasLogicalRedundancy: string, tags: list, providerName: string, macSecCapable: bool, encryptionMode: string, macSecKeys: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2515,7 +2522,7 @@ export def "describe-loa" [
   connection_id: string # The ID of a connection, LAG, or interconnect.
   --provider-name: string # The name of the service provider who establishes connectivity on your behalf. If you specify this parameter, the LOA-CFA lists the provider name alongside your company name as the requester of the cross connect.
   --loa-content-type: string@loa-content-type-completer # The standard media type for the LOA-CFA document. The only supported value is application/pdf.
-]: any -> record<loaContent: string, loaContentType: string> {
+]: any -> oneof<record<loaContent: string, loaContentType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2563,7 +2570,7 @@ export def "describe-locations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-46 # required
-]: nothing -> record<locations: table<locationCode: string, locationName: string, region: string, availablePortSpeeds: list, availableProviders: list, availableMacSecPortSpeeds: list>> {
+]: nothing -> oneof<record<locations: table<locationCode: string, locationName: string, region: string, availablePortSpeeds: list, availableProviders: list, availableMacSecPortSpeeds: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let x_amz_target = ($x_amz_target | default "OvertureService.DescribeLocations")
@@ -2610,7 +2617,7 @@ export def "describe-router-configuration" [
   --x-amz-target: string@x-amz-target-completer-47 # required
   virtual_interface_id: string # The ID of the virtual interface.
   --router-type-identifier: string # Identifies the router by a combination of vendor, platform, and software version. For example, CiscoSystemsInc-2900SeriesRouters-IOS124.
-]: any -> record<customerRouterConfig: string, router: record<vendor: string, platform: string, software: string, xsltTemplateName: string, xsltTemplateNameForMacSec: string, routerTypeIdentifier: string>, virtualInterfaceId: string, virtualInterfaceName: string> {
+]: any -> oneof<record<customerRouterConfig: string, router: record<vendor: string, platform: string, software: string, xsltTemplateName: string, xsltTemplateNameForMacSec: string, routerTypeIdentifier: string>, virtualInterfaceId: string, virtualInterfaceName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2659,7 +2666,7 @@ export def "describe-tags" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-48 # required
   resource_arns: list<string> # The Amazon Resource Names (ARNs) of the resources.
-]: any -> record<resourceTags: table<resourceArn: string, tags: list>> {
+]: any -> oneof<record<resourceTags: table<resourceArn: string, tags: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2707,7 +2714,7 @@ export def "describe-virtual-gateways" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-49 # required
-]: nothing -> record<virtualGateways: table<virtualGatewayId: string, virtualGatewayState: string>> {
+]: nothing -> oneof<record<virtualGateways: table<virtualGatewayId: string, virtualGatewayState: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let x_amz_target = ($x_amz_target | default "OvertureService.DescribeVirtualGateways")
@@ -2754,7 +2761,7 @@ export def "describe-virtual-interfaces" [
   --x-amz-target: string@x-amz-target-completer-50 # required
   --connection-id: string # The ID of the connection.
   --virtual-interface-id: string # The ID of the virtual interface.
-]: any -> record<virtualInterfaces: table<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: list, bgpPeers: list, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: list, siteLinkEnabled: bool>> {
+]: any -> oneof<record<virtualInterfaces: table<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: list, bgpPeers: list, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: list, siteLinkEnabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2804,7 +2811,7 @@ export def "disassociate-connection-from-lag" [
   --x-amz-target: string@x-amz-target-completer-51 # required
   connection_id: string # The ID of the connection.
   lag_id: string # The ID of the LAG.
-]: any -> record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>> {
+]: any -> oneof<record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2854,7 +2861,7 @@ export def "disassociate-mac-sec-key" [
   --x-amz-target: string@x-amz-target-completer-52 # required
   connection_id: string # The ID of the dedicated connection (dxcon-xxxx), or the ID of the LAG (dxlag-xxxx). You can use DescribeConnections or DescribeLags to retrieve connection ID.
   secret_arn: string # The Amazon Resource Name (ARN) of the MAC Security (MACsec) secret key. You can use DescribeConnections to retrieve the ARN of the MAC Security (MACsec) secret key.
-]: any -> record<connectionId: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>> {
+]: any -> oneof<record<connectionId: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2908,7 +2915,7 @@ export def "list-virtual-interface-test-history" [
   --status: string # The status of the virtual interface failover test.
   --max-results: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. If MaxResults is given a value larger than 100, only 100 results are returned.
   --next-token: string # The token for the next page of results.
-]: any -> record<virtualInterfaceTestHistory: table<testId: string, virtualInterfaceId: string, bgpPeers: list, status: string, ownerAccount: string, testDurationInMinutes: int, startTime: string, endTime: string>, nextToken: string> {
+]: any -> oneof<record<virtualInterfaceTestHistory: table<testId: string, virtualInterfaceId: string, bgpPeers: list, status: string, ownerAccount: string, testDurationInMinutes: int, startTime: string, endTime: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2959,7 +2966,7 @@ export def "start-bgp-failover-test" [
   virtual_interface_id: string # The ID of the virtual interface you want to test.
   --bgp-peers: list<string> # The BGP peers to place in the DOWN state.
   --test-duration-in-minutes: int # The time in minutes that the virtual interface failover test will last. Maximum value: 4,320 minutes (72 hours). Default: 180 minutes (3 hours).
-]: any -> record<virtualInterfaceTest: record<testId: string, virtualInterfaceId: string, bgpPeers: list<string>, status: string, ownerAccount: string, testDurationInMinutes: int, startTime: string, endTime: string>> {
+]: any -> oneof<record<virtualInterfaceTest: record<testId: string, virtualInterfaceId: string, bgpPeers: list<string>, status: string, ownerAccount: string, testDurationInMinutes: int, startTime: string, endTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3008,7 +3015,7 @@ export def "stop-bgp-failover-test" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-55 # required
   virtual_interface_id: string # The ID of the virtual interface you no longer want to test.
-]: any -> record<virtualInterfaceTest: record<testId: string, virtualInterfaceId: string, bgpPeers: list<string>, status: string, ownerAccount: string, testDurationInMinutes: int, startTime: string, endTime: string>> {
+]: any -> oneof<record<virtualInterfaceTest: record<testId: string, virtualInterfaceId: string, bgpPeers: list<string>, status: string, ownerAccount: string, testDurationInMinutes: int, startTime: string, endTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3038,7 +3045,6 @@ export def "stop-bgp-failover-test" [
 #
 # POST /
 # operationId: TagResource
-# --tags item shape: {key: string, value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3059,7 +3065,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-56 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource.
   tags: list # The tags to add. — item shape: {key: string, value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3109,7 +3115,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-57 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource.
   tag_keys: list<string> # The tag keys of the tags to remove.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3160,7 +3166,7 @@ export def "update-connection" [
   connection_id: string # The ID of the dedicated connection. You can use DescribeConnections to retrieve the connection ID.
   --connection-name: string # The name of the connection.
   --encryption-mode: string # The connection MAC Security (MACsec) encryption mode. The valid values are no_encrypt, should_encrypt, and must_encrypt.
-]: any -> record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>> {
+]: any -> oneof<record<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3210,7 +3216,7 @@ export def "update-direct-connect-gateway" [
   --x-amz-target: string@x-amz-target-completer-59 # required
   direct_connect_gateway_id: string # The ID of the Direct Connect gateway to update.
   new_direct_connect_gateway_name: string # The new name for the Direct Connect gateway.
-]: any -> record<directConnectGateway: record<directConnectGatewayId: string, directConnectGatewayName: string, amazonSideAsn: int, ownerAccount: string, directConnectGatewayState: string, stateChangeError: string>> {
+]: any -> oneof<record<directConnectGateway: record<directConnectGatewayId: string, directConnectGatewayName: string, amazonSideAsn: int, ownerAccount: string, directConnectGatewayState: string, stateChangeError: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3240,8 +3246,6 @@ export def "update-direct-connect-gateway" [
 #
 # POST /
 # operationId: UpdateDirectConnectGatewayAssociation
-# --addAllowedPrefixesToDirectConnectGateway item shape: {cidr?: string}
-# --removeAllowedPrefixesToDirectConnectGateway item shape: {cidr?: string}
 export def "update-direct-connect-gateway-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3263,7 +3267,7 @@ export def "update-direct-connect-gateway-association" [
   --association-id: string # The ID of the Direct Connect gateway association.
   --add-allowed-prefixes-to-direct-connect-gateway: list # The Amazon VPC prefixes to advertise to the Direct Connect gateway. — item shape: {cidr?: string}
   --remove-allowed-prefixes-to-direct-connect-gateway: list # The Amazon VPC prefixes to no longer advertise to the Direct Connect gateway. — item shape: {cidr?: string}
-]: any -> record<directConnectGatewayAssociation: record<directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, associationState: string, stateChangeError: string, associatedGateway: record<id: string, type: string, ownerAccount: string, region: string>, associationId: string, allowedPrefixesToDirectConnectGateway: list<record>, virtualGatewayId: string, virtualGatewayRegion: string, virtualGatewayOwnerAccount: string>> {
+]: any -> oneof<record<directConnectGatewayAssociation: record<directConnectGatewayId: string, directConnectGatewayOwnerAccount: string, associationState: string, stateChangeError: string, associatedGateway: record<id: string, type: string, ownerAccount: string, region: string>, associationId: string, allowedPrefixesToDirectConnectGateway: list<record>, virtualGatewayId: string, virtualGatewayRegion: string, virtualGatewayOwnerAccount: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3315,7 +3319,7 @@ export def "update-lag" [
   --lag-name: string # The name of the LAG.
   --minimum-links: int # The minimum number of physical connections that must be operational for the LAG itself to be operational.
   --encryption-mode: string # The LAG MAC Security (MACsec) encryption mode. Amazon Web Services applies the value to all connections which are part of the LAG.
-]: any -> record<connectionsBandwidth: string, numberOfConnections: int, lagId: string, ownerAccount: string, lagName: string, lagState: string, location: string, region: string, minimumLinks: int, awsDevice: string, awsDeviceV2: string, awsLogicalDeviceId: string, connections: table<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: list, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: list>, allowsHostedConnections: bool, jumboFrameCapable: bool, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>> {
+]: any -> oneof<record<connectionsBandwidth: string, numberOfConnections: int, lagId: string, ownerAccount: string, lagName: string, lagState: string, location: string, region: string, minimumLinks: int, awsDevice: string, awsDeviceV2: string, awsLogicalDeviceId: string, connections: table<ownerAccount: string, connectionId: string, connectionName: string, connectionState: string, region: string, location: string, bandwidth: string, vlan: int, partnerName: string, loaIssueTime: string, lagId: string, awsDevice: string, jumboFrameCapable: bool, awsDeviceV2: string, awsLogicalDeviceId: string, hasLogicalRedundancy: string, tags: list, providerName: string, macSecCapable: bool, portEncryptionStatus: string, encryptionMode: string, macSecKeys: list>, allowsHostedConnections: bool, jumboFrameCapable: bool, hasLogicalRedundancy: string, tags: table<key: string, value: string>, providerName: string, macSecCapable: bool, encryptionMode: string, macSecKeys: table<secretARN: string, ckn: string, state: string, startOn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3367,7 +3371,7 @@ export def "update-virtual-interface-attributes" [
   --mtu: int # The maximum transmission unit (MTU), in bytes. The supported values are 1500 and 9001. The default value is 1500.
   --enable-site-link: oneof<nothing, bool> # Indicates whether to enable or disable SiteLink.
   --virtual-interface-name: string # The name of the virtual private interface.
-]: any -> record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: table<cidr: string>, bgpPeers: table<bgpPeerId: string, asn: int, authKey: string, addressFamily: string, amazonAddress: string, customerAddress: string, bgpPeerState: string, bgpStatus: string, awsDeviceV2: string, awsLogicalDeviceId: string>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: table<key: string, value: string>, siteLinkEnabled: bool> {
+]: any -> oneof<record<ownerAccount: string, virtualInterfaceId: string, location: string, connectionId: string, virtualInterfaceType: string, virtualInterfaceName: string, vlan: int, asn: int, amazonSideAsn: int, authKey: string, amazonAddress: string, customerAddress: string, addressFamily: string, virtualInterfaceState: string, customerRouterConfig: string, mtu: int, jumboFrameCapable: bool, virtualGatewayId: string, directConnectGatewayId: string, routeFilterPrefixes: table<cidr: string>, bgpPeers: table<bgpPeerId: string, asn: int, authKey: string, addressFamily: string, amazonAddress: string, customerAddress: string, bgpPeerState: string, bgpStatus: string, awsDeviceV2: string, awsLogicalDeviceId: string>, region: string, awsDeviceV2: string, awsLogicalDeviceId: string, tags: table<key: string, value: string>, siteLinkEnabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -133,9 +157,9 @@ def time-series-type-completer [] { ["ASSOCIATED" "DISASSOCIATED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-assets" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-assets" "associate-time-series-to-asset-property" "batch-associate-project-assets" "batch-disassociate-project-assets" "batch-get-asset-property-aggregates" "batch-get-asset-property-value" "batch-get-asset-property-value-history" "batch-put-asset-property-value" "create-access-policy" "list-access-policies" "create-asset" "list-assets" "create-asset-model" "list-asset-models" "create-bulk-import-job" "list-bulk-import-jobs" "create-dashboard" "create-gateway" "list-gateways" "create-portal" "list-portals" "create-project" "delete-access-policy" "describe-access-policy" "update-access-policy" "delete-asset" "describe-asset" "update-asset" "delete-asset-model" "describe-asset-model" "update-asset-model" "delete-dashboard" "describe-dashboard" "update-dashboard" "delete-gateway" "describe-gateway" "update-gateway" "delete-portal" "describe-portal" "update-portal" "delete-project" "describe-project" "update-project" "delete-time-series" "describe-asset-property" "update-asset-property" "describe-bulk-import-job" "describe-default-encryption-configuration" "put-default-encryption-configuration" "describe-gateway-capability-configuration" "describe-logging-options" "put-logging-options" "describe-storage-configuration" "put-storage-configuration" "describe-time-series" "disassociate-assets" "disassociate-time-series-from-asset-property" "get-asset-property-aggregates" "get-asset-property-value" "get-asset-property-value-history" "get-interpolated-asset-property-values" "list-asset-model-properties" "list-asset-properties" "list-asset-relationships" "list-associated-assets" "list-dashboards" "list-project-assets" "list-projects" "list-tags-for-resource" "tag-resource" "list-time-series" "untag-resource" "update-gateway-capability-configuration" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -282,7 +306,7 @@ export def "batch-associate-project-assets" [
   --x-amz-signed-headers: string
   asset_ids: list<string> # The IDs of the assets to be associated to the project.
   --client-token: string # A unique case-sensitive identifier that you can provide to ensure the idempotency of the request. Don't reuse this client token if a new idempotent request is required.
-]: any -> record<errors: table<assetId: string, code: string, message: string>> {
+]: any -> oneof<record<errors: table<assetId: string, code: string, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -332,7 +356,7 @@ export def "batch-disassociate-project-assets" [
   --x-amz-signed-headers: string
   asset_ids: list<string> # The IDs of the assets to be disassociated from the project.
   --client-token: string # A unique case-sensitive identifier that you can provide to ensure the idempotency of the request. Don't reuse this client token if a new idempotent request is required.
-]: any -> record<errors: table<assetId: string, code: string, message: string>> {
+]: any -> oneof<record<errors: table<assetId: string, code: string, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -362,7 +386,6 @@ export def "batch-disassociate-project-assets" [
 #
 # POST /properties/batch/aggregates
 # operationId: BatchGetAssetPropertyAggregates
-# --entries item shape: {entryId: string, assetId?: string, propertyId?: string, propertyAlias?: string, aggregateTypes: list<string>, resolution: string, startDate: string, endDate: string, qualities?: list<string>, timeOrdering?: "ASCENDING"|"DESCENDING"}
 export def "batch-get-asset-property-aggregates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -385,7 +408,7 @@ export def "batch-get-asset-property-aggregates" [
   entries: list # The list of asset property aggregate entries for the batch get request. You can specify up to 16 entries per request. — item shape: {entryId: string, assetId?: string, propertyId?: string, propertyAlias?: string, aggregateTypes: list<string>, resolution: string, startDate: string, endDate: string, qualities?: list<string>, timeOrdering?: "ASCENDING"|"DESCENDING"}
   --next-token-body: string # The token to be used for the next set of paginated results. (body field)
   --max-results-body: int # The maximum number of results to return for each paginated request. A result set is returned in the two cases, whichever occurs first. The size of the result set is less than 1 MB. The number of data points in the result set is less than the value of maxResults. The maximum value of maxResults is 4000. (body field)
-]: any -> record<errorEntries: table<errorCode: string, errorMessage: string, entryId: string>, successEntries: table<entryId: string, aggregatedValues: list>, skippedEntries: table<entryId: string, completionStatus: string, errorInfo: record>, nextToken: string> {
+]: any -> oneof<record<errorEntries: table<errorCode: string, errorMessage: string, entryId: string>, successEntries: table<entryId: string, aggregatedValues: list>, skippedEntries: table<entryId: string, completionStatus: string, errorInfo: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -415,7 +438,6 @@ export def "batch-get-asset-property-aggregates" [
 #
 # POST /properties/batch/latest
 # operationId: BatchGetAssetPropertyValue
-# --entries item shape: {entryId: string, assetId?: string, propertyId?: string, propertyAlias?: string}
 export def "batch-get-asset-property-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,7 +458,7 @@ export def "batch-get-asset-property-value" [
   --x-amz-signed-headers: string
   entries: list # The list of asset property value entries for the batch get request. You can specify up to 128 entries per request. — item shape: {entryId: string, assetId?: string, propertyId?: string, propertyAlias?: string}
   --next-token-body: string # The token to be used for the next set of paginated results. (body field)
-]: any -> record<errorEntries: table<errorCode: string, errorMessage: string, entryId: string>, successEntries: table<entryId: string, assetPropertyValue: record>, skippedEntries: table<entryId: string, completionStatus: string, errorInfo: record>, nextToken: string> {
+]: any -> oneof<record<errorEntries: table<errorCode: string, errorMessage: string, entryId: string>, successEntries: table<entryId: string, assetPropertyValue: record>, skippedEntries: table<entryId: string, completionStatus: string, errorInfo: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -466,7 +488,6 @@ export def "batch-get-asset-property-value" [
 #
 # POST /properties/batch/history
 # operationId: BatchGetAssetPropertyValueHistory
-# --entries item shape: {entryId: string, assetId?: string, propertyId?: string, propertyAlias?: string, startDate?: string, endDate?: string, qualities?: list<string>, timeOrdering?: "ASCENDING"|"DESCENDING"}
 export def "batch-get-asset-property-value-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -489,7 +510,7 @@ export def "batch-get-asset-property-value-history" [
   entries: list # The list of asset property historical value entries for the batch get request. You can specify up to 16 entries per request. — item shape: {entryId: string, assetId?: string, propertyId?: string, propertyAlias?: string, startDate?: string, endDate?: string, qualities?: list<string>, timeOrdering?: "ASCENDING"|"DESCENDING"}
   --next-token-body: string # The token to be used for the next set of paginated results. (body field)
   --max-results-body: int # The maximum number of results to return for each paginated request. A result set is returned in the two cases, whichever occurs first. The size of the result set is less than 1 MB. The number of data points in the result set is less than the value of maxResults. The maximum value of maxResults is 4000. (body field)
-]: any -> record<errorEntries: table<errorCode: string, errorMessage: string, entryId: string>, successEntries: table<entryId: string, assetPropertyValueHistory: list>, skippedEntries: table<entryId: string, completionStatus: string, errorInfo: record>, nextToken: string> {
+]: any -> oneof<record<errorEntries: table<errorCode: string, errorMessage: string, entryId: string>, successEntries: table<entryId: string, assetPropertyValueHistory: list>, skippedEntries: table<entryId: string, completionStatus: string, errorInfo: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -519,7 +540,6 @@ export def "batch-get-asset-property-value-history" [
 #
 # POST /properties
 # operationId: BatchPutAssetPropertyValue
-# --entries item shape: {entryId: string, assetId?: string, propertyId?: string, propertyAlias?: string, propertyValues: list}
 export def "batch-put-asset-property-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -538,7 +558,7 @@ export def "batch-put-asset-property-value" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   entries: list # The list of asset property value entries for the batch put request. You can specify up to 10 entries per request. — item shape: {entryId: string, assetId?: string, propertyId?: string, propertyAlias?: string, propertyValues: list}
-]: any -> record<errorEntries: table<entryId: string, errors: list>> {
+]: any -> oneof<record<errorEntries: table<entryId: string, errors: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -567,8 +587,6 @@ export def "batch-put-asset-property-value" [
 #
 # POST /access-policies
 # operationId: CreateAccessPolicy
-# --accessPolicyIdentity shape: {user?: record, group?: record, iamUser?: record, iamRole?: record}
-# --accessPolicyResource shape: {portal?: record, project?: record}
 export def "create-access-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -591,7 +609,7 @@ export def "create-access-policy" [
   access_policy_permission: string@access-policy-permission-completer # The permission level for this access policy. Note that a project ADMINISTRATOR is also known as a project owner.
   --client-token: string # A unique case-sensitive identifier that you can provide to ensure the idempotency of the request. Don't reuse this client token if a new idempotent request is required.
   --tags: record # A list of key-value pairs that contain metadata for the access policy. For more information, see Tagging your IoT SiteWise resources (https://docs.aws.amazon.com/iot-sitewise/latest/userguide/tag-resources.html) in the IoT SiteWise User Guide.
-]: any -> record<accessPolicyId: string, accessPolicyArn: string> {
+]: any -> oneof<record<accessPolicyId: string, accessPolicyArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -644,7 +662,7 @@ export def "list-access-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<accessPolicySummaries: table<id: string, identity: record, resource: record, permission: string, creationDate: string, lastUpdateDate: string>, nextToken: string> {
+]: nothing -> oneof<record<accessPolicySummaries: table<id: string, identity: record, resource: record, permission: string, creationDate: string, lastUpdateDate: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "identityType" $identity_type "scalar") (serialize-qp "identityId" $identity_id "scalar") (serialize-qp "resourceType" $resource_type "scalar") (serialize-qp "resourceId" $resource_id "scalar") (serialize-qp "iamArn" $iam_arn "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -693,7 +711,7 @@ export def "create-asset" [
   --client-token: string # A unique case-sensitive identifier that you can provide to ensure the idempotency of the request. Don't reuse this client token if a new idempotent request is required.
   --tags: record # A list of key-value pairs that contain metadata for the asset. For more information, see Tagging your IoT SiteWise resources (https://docs.aws.amazon.com/iot-sitewise/latest/userguide/tag-resources.html) in the IoT SiteWise User Guide.
   --asset-description: string # A description for the asset.
-]: any -> record<assetId: string, assetArn: string, assetStatus: record<state: string, error: record<code: string, message: string, details: list>>> {
+]: any -> oneof<record<assetId: string, assetArn: string, assetStatus: record<state: string, error: record<code: string, message: string, details: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -743,7 +761,7 @@ export def "list-assets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assetSummaries: table<id: string, arn: string, name: string, assetModelId: string, creationDate: string, lastUpdateDate: string, status: record, hierarchies: list, description: string>, nextToken: string> {
+]: nothing -> oneof<record<assetSummaries: table<id: string, arn: string, name: string, assetModelId: string, creationDate: string, lastUpdateDate: string, status: record, hierarchies: list, description: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "assetModelId" $asset_model_id "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
@@ -770,9 +788,6 @@ export def "list-assets" [
 #
 # POST /asset-models
 # operationId: CreateAssetModel
-# --assetModelProperties item shape: {name: string, dataType: "STRING"|"INTEGER"|"DOUBLE"|"BOOLEAN"|"STRUCT", dataTypeSpec?: string, unit?: string, type: record}
-# --assetModelHierarchies item shape: {name: string, childAssetModelId: string}
-# --assetModelCompositeModels item shape: {name: string, description?: string, type: string, properties?: any}
 export def "create-asset-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -797,7 +812,7 @@ export def "create-asset-model" [
   --asset-model-composite-models: list # The composite asset models that are part of this asset model. Composite asset models are asset models that contain specific properties. Each composite model has a type that defines the properties that the composite model supports. Use composite asset models to define alarms on this asset model. — item shape: {name: string, description?: string, type: string, properties?: any}
   --client-token: string # A unique case-sensitive identifier that you can provide to ensure the idempotency of the request. Don't reuse this client token if a new idempotent request is required.
   --tags: record # A list of key-value pairs that contain metadata for the asset model. For more information, see Tagging your IoT SiteWise resources (https://docs.aws.amazon.com/iot-sitewise/latest/userguide/tag-resources.html) in the IoT SiteWise User Guide.
-]: any -> record<assetModelId: string, assetModelArn: string, assetModelStatus: record<state: string, error: record<code: string, message: string, details: list>>> {
+]: any -> oneof<record<assetModelId: string, assetModelArn: string, assetModelStatus: record<state: string, error: record<code: string, message: string, details: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -845,7 +860,7 @@ export def "list-asset-models" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assetModelSummaries: table<id: string, arn: string, name: string, description: string, creationDate: string, lastUpdateDate: string, status: record>, nextToken: string> {
+]: nothing -> oneof<record<assetModelSummaries: table<id: string, arn: string, name: string, description: string, creationDate: string, lastUpdateDate: string, status: record>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -872,9 +887,6 @@ export def "list-asset-models" [
 #
 # POST /jobs
 # operationId: CreateBulkImportJob
-# --files item shape: {bucket: string, key: string, versionId?: string}
-# --errorReportLocation shape: {bucket?: string, prefix?: string}
-# --jobConfiguration shape: {fileFormat?: record}
 export def "create-bulk-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -897,7 +909,7 @@ export def "create-bulk-import-job" [
   files: list # The files in the specified Amazon S3 bucket that contain your data. — item shape: {bucket: string, key: string, versionId?: string}
   error_report_location: record # The Amazon S3 destination where errors associated with the job creation request are saved. — shape: {bucket?: string, prefix?: string}
   job_configuration: record # Contains the configuration information of a job, such as the file format used to save data in Amazon S3. — shape: {fileFormat?: record}
-]: any -> record<jobId: string, jobName: string, jobStatus: string> {
+]: any -> oneof<record<jobId: string, jobName: string, jobStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -946,7 +958,7 @@ export def "list-bulk-import-jobs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<jobSummaries: table<id: string, name: string, status: string>, nextToken: string> {
+]: nothing -> oneof<record<jobSummaries: table<id: string, name: string, status: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
@@ -996,7 +1008,7 @@ export def "create-dashboard" [
   dashboard_definition: string # The dashboard definition specified in a JSON literal. For detailed information, see Creating dashboards (CLI) (https://docs.aws.amazon.com/iot-sitewise/latest/userguide/create-dashboards-using-aws-cli.html) in the IoT SiteWise User Guide.
   --client-token: string # A unique case-sensitive identifier that you can provide to ensure the idempotency of the request. Don't reuse this client token if a new idempotent request is required.
   --tags: record # A list of key-value pairs that contain metadata for the dashboard. For more information, see Tagging your IoT SiteWise resources (https://docs.aws.amazon.com/iot-sitewise/latest/userguide/tag-resources.html) in the IoT SiteWise User Guide.
-]: any -> record<dashboardId: string, dashboardArn: string> {
+]: any -> oneof<record<dashboardId: string, dashboardArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1025,7 +1037,6 @@ export def "create-dashboard" [
 #
 # POST /20200301/gateways
 # operationId: CreateGateway
-# --gatewayPlatform shape: {greengrass?: record, greengrassV2?: record}
 export def "create-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1046,7 +1057,7 @@ export def "create-gateway" [
   gateway_name: string # A unique, friendly name for the gateway.
   gateway_platform: record # Contains a gateway's platform information. — shape: {greengrass?: record, greengrassV2?: record}
   --tags: record # A list of key-value pairs that contain metadata for the gateway. For more information, see Tagging your IoT SiteWise resources (https://docs.aws.amazon.com/iot-sitewise/latest/userguide/tag-resources.html) in the IoT SiteWise User Guide.
-]: any -> record<gatewayId: string, gatewayArn: string> {
+]: any -> oneof<record<gatewayId: string, gatewayArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1094,7 +1105,7 @@ export def "list-gateways" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<gatewaySummaries: table<gatewayId: string, gatewayName: string, gatewayPlatform: record, gatewayCapabilitySummaries: list, creationDate: string, lastUpdateDate: string>, nextToken: string> {
+]: nothing -> oneof<record<gatewaySummaries: table<gatewayId: string, gatewayName: string, gatewayPlatform: record, gatewayCapabilitySummaries: list, creationDate: string, lastUpdateDate: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -1121,8 +1132,6 @@ export def "list-gateways" [
 #
 # POST /portals
 # operationId: CreatePortal
-# --portalLogoImageFile shape: {data?: string, type?: "PNG"}
-# --alarms shape: {alarmRoleArn?: string, notificationLambdaArn?: string}
 export def "create-portal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1150,7 +1159,7 @@ export def "create-portal" [
   --portal-auth-mode: string@portal-auth-mode-completer # The service to use to authenticate users to the portal. Choose from the following options: SSO – The portal uses IAM Identity Center (successor to Single Sign-On) to authenticate users and manage user permissions. Before you can create a portal that uses IAM Identity Center, you must enable IAM Identity Center. For more information, see Enabling IAM Identity Center (https://docs.aws.amazon.com/iot-sitewise/latest/userguide/monitor-get-started.html#mon-gs-sso) in the IoT SiteWise User Guide. This option is only available in Amazon Web Services Regions other than the China Regions. IAM – The portal uses Identity and Access Management to authenticate users and manage user permissions. You can't change this value after you create a portal. Default: SSO
   --notification-sender-email: string # The email address that sends alarm notifications. If you use the IoT Events managed Lambda function (https://docs.aws.amazon.com/iotevents/latest/developerguide/lambda-support.html) to manage your emails, you must verify the sender email address in Amazon SES (https://docs.aws.amazon.com/ses/latest/DeveloperGuide/verify-email-addresses.html).
   --alarms: record # Contains the configuration information of an alarm created in an IoT SiteWise Monitor portal. You can use the alarm to monitor an asset property and get notified when the asset property value is outside a specified range. For more information, see Monitoring with alarms (https://docs.aws.amazon.com/iot-sitewise/latest/appguide/monitor-alarms.html) in the IoT SiteWise Application Guide. — shape: {alarmRoleArn?: string, notificationLambdaArn?: string}
-]: any -> record<portalId: string, portalArn: string, portalStartUrl: string, portalStatus: record<state: string, error: record<code: string, message: string>>, ssoApplicationId: string> {
+]: any -> oneof<record<portalId: string, portalArn: string, portalStartUrl: string, portalStatus: record<state: string, error: record<code: string, message: string>>, ssoApplicationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1198,7 +1207,7 @@ export def "list-portals" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<portalSummaries: table<id: string, name: string, description: string, startUrl: string, creationDate: string, lastUpdateDate: string, roleArn: string, status: record>, nextToken: string> {
+]: nothing -> oneof<record<portalSummaries: table<id: string, name: string, description: string, startUrl: string, creationDate: string, lastUpdateDate: string, roleArn: string, status: record>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -1247,7 +1256,7 @@ export def "create-project" [
   --project-description: string # A description for the project.
   --client-token: string # A unique case-sensitive identifier that you can provide to ensure the idempotency of the request. Don't reuse this client token if a new idempotent request is required.
   --tags: record # A list of key-value pairs that contain metadata for the project. For more information, see Tagging your IoT SiteWise resources (https://docs.aws.amazon.com/iot-sitewise/latest/userguide/tag-resources.html) in the IoT SiteWise User Guide.
-]: any -> record<projectId: string, projectArn: string> {
+]: any -> oneof<record<projectId: string, projectArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1295,7 +1304,7 @@ export def "delete-access-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'accessPolicyId' must be non-empty" } }
@@ -1341,7 +1350,7 @@ export def "describe-access-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<accessPolicyId: string, accessPolicyArn: string, accessPolicyIdentity: record<user: record<id: string>, group: record<id: string>, iamUser: record<arn: string>, iamRole: record<arn: string>>, accessPolicyResource: record<portal: record<id: string>, project: record<id: string>>, accessPolicyPermission: string, accessPolicyCreationDate: string, accessPolicyLastUpdateDate: string> {
+]: nothing -> oneof<record<accessPolicyId: string, accessPolicyArn: string, accessPolicyIdentity: record<user: record<id: string>, group: record<id: string>, iamUser: record<arn: string>, iamRole: record<arn: string>>, accessPolicyResource: record<portal: record<id: string>, project: record<id: string>>, accessPolicyPermission: string, accessPolicyCreationDate: string, accessPolicyLastUpdateDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($access_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'accessPolicyId' must be non-empty" } }
@@ -1368,8 +1377,6 @@ export def "describe-access-policy" [
 #
 # PUT /access-policies/{accessPolicyId}
 # operationId: UpdateAccessPolicy
-# --accessPolicyIdentity shape: {user?: record, group?: record, iamUser?: record, iamRole?: record}
-# --accessPolicyResource shape: {portal?: record, project?: record}
 export def "update-access-policy" [
   access_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1392,7 +1399,7 @@ export def "update-access-policy" [
   access_policy_resource: record # Contains an IoT SiteWise Monitor resource ID for a portal or project. — shape: {portal?: record, project?: record}
   access_policy_permission: string@access-policy-permission-completer # The permission level for this access policy. Note that a project ADMINISTRATOR is also known as a project owner.
   --client-token: string # A unique case-sensitive identifier that you can provide to ensure the idempotency of the request. Don't reuse this client token if a new idempotent request is required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1441,7 +1448,7 @@ export def "delete-asset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assetStatus: record<state: string, error: record<code: string, message: string, details: list>>> {
+]: nothing -> oneof<record<assetStatus: record<state: string, error: record<code: string, message: string, details: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'assetId' must be non-empty" } }
@@ -1488,7 +1495,7 @@ export def "describe-asset" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assetId: string, assetArn: string, assetName: string, assetModelId: string, assetProperties: table<id: string, name: string, alias: string, notification: record, dataType: string, dataTypeSpec: string, unit: string>, assetHierarchies: table<id: string, name: string>, assetCompositeModels: table<name: string, description: string, type: string, properties: any, id: string>, assetCreationDate: string, assetLastUpdateDate: string, assetStatus: record<state: string, error: record<code: string, message: string, details: list>>, assetDescription: string> {
+]: nothing -> oneof<record<assetId: string, assetArn: string, assetName: string, assetModelId: string, assetProperties: table<id: string, name: string, alias: string, notification: record, dataType: string, dataTypeSpec: string, unit: string>, assetHierarchies: table<id: string, name: string>, assetCompositeModels: table<name: string, description: string, type: string, properties: any, id: string>, assetCreationDate: string, assetLastUpdateDate: string, assetStatus: record<state: string, error: record<code: string, message: string, details: list>>, assetDescription: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'assetId' must be non-empty" } }
@@ -1537,7 +1544,7 @@ export def "update-asset" [
   asset_name: string # A friendly name for the asset.
   --client-token: string # A unique case-sensitive identifier that you can provide to ensure the idempotency of the request. Don't reuse this client token if a new idempotent request is required.
   --asset-description: string # A description for the asset.
-]: any -> record<assetStatus: record<state: string, error: record<code: string, message: string, details: list>>> {
+]: any -> oneof<record<assetStatus: record<state: string, error: record<code: string, message: string, details: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1586,7 +1593,7 @@ export def "delete-asset-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assetModelStatus: record<state: string, error: record<code: string, message: string, details: list>>> {
+]: nothing -> oneof<record<assetModelStatus: record<state: string, error: record<code: string, message: string, details: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_model_id | is-empty) { error make --unspanned { msg: "path parameter 'assetModelId' must be non-empty" } }
@@ -1633,7 +1640,7 @@ export def "describe-asset-model" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assetModelId: string, assetModelArn: string, assetModelName: string, assetModelDescription: string, assetModelProperties: table<id: string, name: string, dataType: string, dataTypeSpec: string, unit: string, type: record>, assetModelHierarchies: table<id: string, name: string, childAssetModelId: string>, assetModelCompositeModels: table<name: string, description: string, type: string, properties: any, id: string>, assetModelCreationDate: string, assetModelLastUpdateDate: string, assetModelStatus: record<state: string, error: record<code: string, message: string, details: list>>> {
+]: nothing -> oneof<record<assetModelId: string, assetModelArn: string, assetModelName: string, assetModelDescription: string, assetModelProperties: table<id: string, name: string, dataType: string, dataTypeSpec: string, unit: string, type: record>, assetModelHierarchies: table<id: string, name: string, childAssetModelId: string>, assetModelCompositeModels: table<name: string, description: string, type: string, properties: any, id: string>, assetModelCreationDate: string, assetModelLastUpdateDate: string, assetModelStatus: record<state: string, error: record<code: string, message: string, details: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_model_id | is-empty) { error make --unspanned { msg: "path parameter 'assetModelId' must be non-empty" } }
@@ -1661,9 +1668,6 @@ export def "describe-asset-model" [
 #
 # PUT /asset-models/{assetModelId}
 # operationId: UpdateAssetModel
-# --assetModelProperties item shape: {id?: string, name: string, dataType: "STRING"|"INTEGER"|"DOUBLE"|"BOOLEAN"|"STRUCT", dataTypeSpec?: string, unit?: string, type: record}
-# --assetModelHierarchies item shape: {id?: string, name: string, childAssetModelId: string}
-# --assetModelCompositeModels item shape: {name: string, description?: string, type: string, properties?: any, id?: string}
 export def "update-asset-model" [
   asset_model_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1688,7 +1692,7 @@ export def "update-asset-model" [
   --asset-model-hierarchies: list # The updated hierarchy definitions of the asset model. Each hierarchy specifies an asset model whose assets can be children of any other assets created from this asset model. For more information, see Asset hierarchies (https://docs.aws.amazon.com/iot-sitewise/latest/userguide/asset-hierarchies.html) in the IoT SiteWise User Guide. You can specify up to 10 hierarchies per asset model. For more information, see Quotas (https://docs.aws.amazon.com/iot-sitewise/latest/userguide/quotas.html) in the IoT SiteWise User Guide. — item shape: {id?: string, name: string, childAssetModelId: string}
   --asset-model-composite-models: list # The composite asset models that are part of this asset model. Composite asset models are asset models that contain specific properties. Each composite model has a type that defines the properties that the composite model supports. Use composite asset models to define alarms on this asset model. — item shape: {name: string, description?: string, type: string, properties?: any, id?: string}
   --client-token: string # A unique case-sensitive identifier that you can provide to ensure the idempotency of the request. Don't reuse this client token if a new idempotent request is required.
-]: any -> record<assetModelStatus: record<state: string, error: record<code: string, message: string, details: list>>> {
+]: any -> oneof<record<assetModelStatus: record<state: string, error: record<code: string, message: string, details: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1737,7 +1741,7 @@ export def "delete-dashboard" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardId' must be non-empty" } }
@@ -1783,7 +1787,7 @@ export def "describe-dashboard" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<dashboardId: string, dashboardArn: string, dashboardName: string, projectId: string, dashboardDescription: string, dashboardDefinition: string, dashboardCreationDate: string, dashboardLastUpdateDate: string> {
+]: nothing -> oneof<record<dashboardId: string, dashboardArn: string, dashboardName: string, projectId: string, dashboardDescription: string, dashboardDefinition: string, dashboardCreationDate: string, dashboardLastUpdateDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dashboard_id | is-empty) { error make --unspanned { msg: "path parameter 'dashboardId' must be non-empty" } }
@@ -1832,7 +1836,7 @@ export def "update-dashboard" [
   --dashboard-description: string # A new description for the dashboard.
   dashboard_definition: string # The new dashboard definition, as specified in a JSON literal. For detailed information, see Creating dashboards (CLI) (https://docs.aws.amazon.com/iot-sitewise/latest/userguide/create-dashboards-using-aws-cli.html) in the IoT SiteWise User Guide.
   --client-token: string # A unique case-sensitive identifier that you can provide to ensure the idempotency of the request. Don't reuse this client token if a new idempotent request is required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1925,7 +1929,7 @@ export def "describe-gateway" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<gatewayId: string, gatewayName: string, gatewayArn: string, gatewayPlatform: record<greengrass: record<groupArn: string>, greengrassV2: record<coreDeviceThingName: string>>, gatewayCapabilitySummaries: table<capabilityNamespace: string, capabilitySyncStatus: string>, creationDate: string, lastUpdateDate: string> {
+]: nothing -> oneof<record<gatewayId: string, gatewayName: string, gatewayArn: string, gatewayPlatform: record<greengrass: record<groupArn: string>, greengrassV2: record<coreDeviceThingName: string>>, gatewayCapabilitySummaries: table<capabilityNamespace: string, capabilitySyncStatus: string>, creationDate: string, lastUpdateDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($gateway_id | is-empty) { error make --unspanned { msg: "path parameter 'gatewayId' must be non-empty" } }
@@ -2020,7 +2024,7 @@ export def "delete-portal" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<portalStatus: record<state: string, error: record<code: string, message: string>>> {
+]: nothing -> oneof<record<portalStatus: record<state: string, error: record<code: string, message: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($portal_id | is-empty) { error make --unspanned { msg: "path parameter 'portalId' must be non-empty" } }
@@ -2066,7 +2070,7 @@ export def "describe-portal" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<portalId: string, portalArn: string, portalName: string, portalDescription: string, portalClientId: string, portalStartUrl: string, portalContactEmail: string, portalStatus: record<state: string, error: record<code: string, message: string>>, portalCreationDate: string, portalLastUpdateDate: string, portalLogoImageLocation: record<id: string, url: string>, roleArn: string, portalAuthMode: string, notificationSenderEmail: string, alarms: record<alarmRoleArn: string, notificationLambdaArn: string>> {
+]: nothing -> oneof<record<portalId: string, portalArn: string, portalName: string, portalDescription: string, portalClientId: string, portalStartUrl: string, portalContactEmail: string, portalStatus: record<state: string, error: record<code: string, message: string>>, portalCreationDate: string, portalLastUpdateDate: string, portalLogoImageLocation: record<id: string, url: string>, roleArn: string, portalAuthMode: string, notificationSenderEmail: string, alarms: record<alarmRoleArn: string, notificationLambdaArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($portal_id | is-empty) { error make --unspanned { msg: "path parameter 'portalId' must be non-empty" } }
@@ -2093,8 +2097,6 @@ export def "describe-portal" [
 #
 # PUT /portals/{portalId}
 # operationId: UpdatePortal
-# --portalLogoImage shape: {id?: string, file?: record}
-# --alarms shape: {alarmRoleArn?: string, notificationLambdaArn?: string}
 export def "update-portal" [
   portal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2121,7 +2123,7 @@ export def "update-portal" [
   --client-token: string # A unique case-sensitive identifier that you can provide to ensure the idempotency of the request. Don't reuse this client token if a new idempotent request is required.
   --notification-sender-email: string # The email address that sends alarm notifications.
   --alarms: record # Contains the configuration information of an alarm created in an IoT SiteWise Monitor portal. You can use the alarm to monitor an asset property and get notified when the asset property value is outside a specified range. For more information, see Monitoring with alarms (https://docs.aws.amazon.com/iot-sitewise/latest/appguide/monitor-alarms.html) in the IoT SiteWise Application Guide. — shape: {alarmRoleArn?: string, notificationLambdaArn?: string}
-]: any -> record<portalStatus: record<state: string, error: record<code: string, message: string>>> {
+]: any -> oneof<record<portalStatus: record<state: string, error: record<code: string, message: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2170,7 +2172,7 @@ export def "delete-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -2216,7 +2218,7 @@ export def "describe-project" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<projectId: string, projectArn: string, projectName: string, portalId: string, projectDescription: string, projectCreationDate: string, projectLastUpdateDate: string> {
+]: nothing -> oneof<record<projectId: string, projectArn: string, projectName: string, portalId: string, projectDescription: string, projectCreationDate: string, projectLastUpdateDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -2264,7 +2266,7 @@ export def "update-project" [
   project_name: string # A new friendly name for the project.
   --project-description: string # A new description for the project.
   --client-token: string # A unique case-sensitive identifier that you can provide to ensure the idempotency of the request. Don't reuse this client token if a new idempotent request is required.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2364,7 +2366,7 @@ export def "describe-asset-property" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assetId: string, assetName: string, assetModelId: string, assetProperty: record<id: string, name: string, alias: string, notification: record<topic: string, state: string>, dataType: string, unit: string, type: record<attribute: record, measurement: record, transform: record, metric: record>>, compositeModel: record<name: string, type: string, assetProperty: record<id: string, name: string, alias: string, notification: record, dataType: string, unit: string, type: record>, id: string>> {
+]: nothing -> oneof<record<assetId: string, assetName: string, assetModelId: string, assetProperty: record<id: string, name: string, alias: string, notification: record<topic: string, state: string>, dataType: string, unit: string, type: record<attribute: record, measurement: record, transform: record, metric: record>>, compositeModel: record<name: string, type: string, assetProperty: record<id: string, name: string, alias: string, notification: record, dataType: string, unit: string, type: record>, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'assetId' must be non-empty" } }
@@ -2464,7 +2466,7 @@ export def "describe-bulk-import-job" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<jobId: string, jobName: string, jobStatus: string, jobRoleArn: string, files: table<bucket: string, key: string, versionId: string>, errorReportLocation: record<bucket: string, prefix: string>, jobConfiguration: record<fileFormat: record<csv: record>>, jobCreationDate: string, jobLastUpdateDate: string> {
+]: nothing -> oneof<record<jobId: string, jobName: string, jobStatus: string, jobRoleArn: string, files: table<bucket: string, key: string, versionId: string>, errorReportLocation: record<bucket: string, prefix: string>, jobConfiguration: record<fileFormat: record<csv: record>>, jobCreationDate: string, jobLastUpdateDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -2508,7 +2510,7 @@ export def "describe-default-encryption-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<encryptionType: string, kmsKeyArn: string, configurationStatus: record<state: string, error: record<code: string, message: string>>> {
+]: nothing -> oneof<record<encryptionType: string, kmsKeyArn: string, configurationStatus: record<state: string, error: record<code: string, message: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration/account/encryption" $auth.query)
@@ -2553,7 +2555,7 @@ export def "put-default-encryption-configuration" [
   --x-amz-signed-headers: string
   encryption_type: string@encryption-type-completer # The type of encryption used for the encryption configuration.
   --kms-key-id: string # The Key ID of the customer managed key used for KMS encryption. This is required if you use KMS_BASED_ENCRYPTION.
-]: any -> record<encryptionType: string, kmsKeyArn: string, configurationStatus: record<state: string, error: record<code: string, message: string>>> {
+]: any -> oneof<record<encryptionType: string, kmsKeyArn: string, configurationStatus: record<state: string, error: record<code: string, message: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2601,7 +2603,7 @@ export def "describe-gateway-capability-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<gatewayId: string, capabilityNamespace: string, capabilityConfiguration: string, capabilitySyncStatus: string> {
+]: nothing -> oneof<record<gatewayId: string, capabilityNamespace: string, capabilityConfiguration: string, capabilitySyncStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($gateway_id | is-empty) { error make --unspanned { msg: "path parameter 'gatewayId' must be non-empty" } }
@@ -2646,7 +2648,7 @@ export def "describe-logging-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<loggingOptions: record<level: string>> {
+]: nothing -> oneof<record<loggingOptions: record<level: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/logging" $auth.query)
@@ -2672,7 +2674,6 @@ export def "describe-logging-options" [
 #
 # PUT /logging
 # operationId: PutLoggingOptions
-# --loggingOptions shape: {level?: "ERROR"|"INFO"|"OFF"}
 export def "put-logging-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2691,7 +2692,7 @@ export def "put-logging-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   logging_options: record # Contains logging options. — shape: {level?: "ERROR"|"INFO"|"OFF"}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2737,7 +2738,7 @@ export def "describe-storage-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<storageType: string, multiLayerStorage: record<customerManagedS3Storage: record<s3ResourceArn: string, roleArn: string>>, disassociatedDataStorage: string, retentionPeriod: record<numberOfDays: int, unlimited: bool>, configurationStatus: record<state: string, error: record<code: string, message: string>>, lastUpdateDate: string> {
+]: nothing -> oneof<record<storageType: string, multiLayerStorage: record<customerManagedS3Storage: record<s3ResourceArn: string, roleArn: string>>, disassociatedDataStorage: string, retentionPeriod: record<numberOfDays: int, unlimited: bool>, configurationStatus: record<state: string, error: record<code: string, message: string>>, lastUpdateDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration/account/storage" $auth.query)
@@ -2763,8 +2764,6 @@ export def "describe-storage-configuration" [
 #
 # POST /configuration/account/storage
 # operationId: PutStorageConfiguration
-# --multiLayerStorage shape: {customerManagedS3Storage?: record}
-# --retentionPeriod shape: {numberOfDays?: int, unlimited?: bool}
 export def "put-storage-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2786,7 +2785,7 @@ export def "put-storage-configuration" [
   --multi-layer-storage: record # Contains information about the storage destination. — shape: {customerManagedS3Storage?: record}
   --disassociated-data-storage: string@disassociated-data-storage-completer # Contains the storage configuration for time series (data streams) that aren't associated with asset properties. The disassociatedDataStorage can be one of the following values: ENABLED – IoT SiteWise accepts time series that aren't associated with asset properties. After the disassociatedDataStorage is enabled, you can't disable it. DISABLED – IoT SiteWise doesn't accept time series (data streams) that aren't associated with asset properties. For more information, see Data streams (https://docs.aws.amazon.com/iot-sitewise/latest/userguide/data-streams.html) in the IoT SiteWise User Guide.
   --retention-period: record # How many days your data is kept in the hot tier. By default, your data is kept indefinitely in the hot tier. — shape: {numberOfDays?: int, unlimited?: bool}
-]: any -> record<storageType: string, multiLayerStorage: record<customerManagedS3Storage: record<s3ResourceArn: string, roleArn: string>>, disassociatedDataStorage: string, retentionPeriod: record<numberOfDays: int, unlimited: bool>, configurationStatus: record<state: string, error: record<code: string, message: string>>> {
+]: any -> oneof<record<storageType: string, multiLayerStorage: record<customerManagedS3Storage: record<s3ResourceArn: string, roleArn: string>>, disassociatedDataStorage: string, retentionPeriod: record<numberOfDays: int, unlimited: bool>, configurationStatus: record<state: string, error: record<code: string, message: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2835,7 +2834,7 @@ export def "describe-time-series" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assetId: string, propertyId: string, alias: string, timeSeriesId: string, dataType: string, dataTypeSpec: string, timeSeriesCreationDate: string, timeSeriesLastUpdateDate: string, timeSeriesArn: string> {
+]: nothing -> oneof<record<assetId: string, propertyId: string, alias: string, timeSeriesId: string, dataType: string, dataTypeSpec: string, timeSeriesCreationDate: string, timeSeriesLastUpdateDate: string, timeSeriesArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alias" $alias "scalar") (serialize-qp "assetId" $asset_id "scalar") (serialize-qp "propertyId" $property_id "scalar")] | flatten | str join "&"
@@ -2995,7 +2994,7 @@ export def "get-asset-property-aggregates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<aggregatedValues: table<timestamp: string, quality: string, value: record>, nextToken: string> {
+]: nothing -> oneof<record<aggregatedValues: table<timestamp: string, quality: string, value: record>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aggregate_types == null) { error make --unspanned { msg: "required query parameter 'aggregateTypes' missing: pass --aggregate-types" } }
@@ -3046,7 +3045,7 @@ export def "get-asset-property-value" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<propertyValue: record<value: record<stringValue: string, integerValue: int, doubleValue: float, booleanValue: bool>, timestamp: record<timeInSeconds: int, offsetInNanos: int>, quality: string>> {
+]: nothing -> oneof<record<propertyValue: record<value: record<stringValue: string, integerValue: int, doubleValue: float, booleanValue: bool>, timestamp: record<timeInSeconds: int, offsetInNanos: int>, quality: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "assetId" $asset_id "scalar") (serialize-qp "propertyId" $property_id "scalar") (serialize-qp "propertyAlias" $property_alias "scalar")] | flatten | str join "&"
@@ -3099,7 +3098,7 @@ export def "get-asset-property-value-history" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assetPropertyValueHistory: table<value: record, timestamp: record, quality: string>, nextToken: string> {
+]: nothing -> oneof<record<assetPropertyValueHistory: table<value: record, timestamp: record, quality: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "assetId" $asset_id "scalar") (serialize-qp "propertyId" $property_id "scalar") (serialize-qp "propertyAlias" $property_alias "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "qualities" $qualities "multi") (serialize-qp "timeOrdering" $time_ordering "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar")] | flatten | str join "&"
@@ -3156,7 +3155,7 @@ export def "get-interpolated-asset-property-values" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<interpolatedAssetPropertyValues: table<timestamp: record, value: record>, nextToken: string> {
+]: nothing -> oneof<record<interpolatedAssetPropertyValues: table<timestamp: record, value: record>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($start_time_in_seconds == null) { error make --unspanned { msg: "required query parameter 'startTimeInSeconds' missing: pass --start-time-in-seconds" } }
@@ -3209,7 +3208,7 @@ export def "list-asset-model-properties" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assetModelPropertySummaries: table<id: string, name: string, dataType: string, dataTypeSpec: string, unit: string, type: record, assetModelCompositeModelId: string>, nextToken: string> {
+]: nothing -> oneof<record<assetModelPropertySummaries: table<id: string, name: string, dataType: string, dataTypeSpec: string, unit: string, type: record, assetModelCompositeModelId: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_model_id | is-empty) { error make --unspanned { msg: "path parameter 'assetModelId' must be non-empty" } }
@@ -3258,7 +3257,7 @@ export def "list-asset-properties" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assetPropertySummaries: table<id: string, alias: string, unit: string, notification: record, assetCompositeModelId: string>, nextToken: string> {
+]: nothing -> oneof<record<assetPropertySummaries: table<id: string, alias: string, unit: string, notification: record, assetCompositeModelId: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'assetId' must be non-empty" } }
@@ -3307,7 +3306,7 @@ export def "list-asset-relationships" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assetRelationshipSummaries: table<hierarchyInfo: record, relationshipType: string>, nextToken: string> {
+]: nothing -> oneof<record<assetRelationshipSummaries: table<hierarchyInfo: record, relationshipType: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'assetId' must be non-empty" } }
@@ -3358,7 +3357,7 @@ export def "list-associated-assets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assetSummaries: table<id: string, arn: string, name: string, assetModelId: string, creationDate: string, lastUpdateDate: string, status: record, hierarchies: list, description: string>, nextToken: string> {
+]: nothing -> oneof<record<assetSummaries: table<id: string, arn: string, name: string, assetModelId: string, creationDate: string, lastUpdateDate: string, status: record, hierarchies: list, description: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($asset_id | is-empty) { error make --unspanned { msg: "path parameter 'assetId' must be non-empty" } }
@@ -3406,7 +3405,7 @@ export def "list-dashboards" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<dashboardSummaries: table<id: string, name: string, description: string, creationDate: string, lastUpdateDate: string>, nextToken: string> {
+]: nothing -> oneof<record<dashboardSummaries: table<id: string, name: string, description: string, creationDate: string, lastUpdateDate: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id == null) { error make --unspanned { msg: "required query parameter 'projectId' missing: pass --project-id" } }
@@ -3454,7 +3453,7 @@ export def "list-project-assets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<assetIds: list<string>, nextToken: string> {
+]: nothing -> oneof<record<assetIds: list<string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -3502,7 +3501,7 @@ export def "list-projects" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<projectSummaries: table<id: string, name: string, description: string, creationDate: string, lastUpdateDate: string>, nextToken: string> {
+]: nothing -> oneof<record<projectSummaries: table<id: string, name: string, description: string, creationDate: string, lastUpdateDate: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($portal_id == null) { error make --unspanned { msg: "required query parameter 'portalId' missing: pass --portal-id" } }
@@ -3548,7 +3547,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> oneof<record<tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
@@ -3595,7 +3594,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # A list of key-value pairs that contain metadata for the resource. For more information, see Tagging your IoT SiteWise resources (https://docs.aws.amazon.com/iot-sitewise/latest/userguide/tag-resources.html) in the IoT SiteWise User Guide.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3648,7 +3647,7 @@ export def "list-time-series" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TimeSeriesSummaries: table<assetId: string, propertyId: string, alias: string, timeSeriesId: string, dataType: string, dataTypeSpec: string, timeSeriesCreationDate: string, timeSeriesLastUpdateDate: string, timeSeriesArn: string>, nextToken: string> {
+]: nothing -> oneof<record<TimeSeriesSummaries: table<assetId: string, propertyId: string, alias: string, timeSeriesId: string, dataType: string, dataTypeSpec: string, timeSeriesCreationDate: string, timeSeriesLastUpdateDate: string, timeSeriesArn: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "assetId" $asset_id "scalar") (serialize-qp "aliasPrefix" $alias_prefix "scalar") (serialize-qp "timeSeriesType" $time_series_type "scalar")] | flatten | str join "&"
@@ -3694,7 +3693,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn == null) { error make --unspanned { msg: "required query parameter 'resourceArn' missing: pass --resource-arn" } }
@@ -3743,7 +3742,7 @@ export def "update-gateway-capability-configuration" [
   --x-amz-signed-headers: string
   capability_namespace: string # The namespace of the gateway capability configuration to be updated. For example, if you configure OPC-UA sources from the IoT SiteWise console, your OPC-UA capability configuration has the namespace iotsitewise:opcuacollector:version, where version is a number such as 1.
   capability_configuration: string # The JSON document that defines the configuration for the gateway capability. For more information, see Configuring data sources (CLI) (https://docs.aws.amazon.com/iot-sitewise/latest/userguide/configure-sources.html#configure-source-cli) in the IoT SiteWise User Guide.
-]: any -> record<capabilityNamespace: string, capabilitySyncStatus: string> {
+]: any -> oneof<record<capabilityNamespace: string, capabilitySyncStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

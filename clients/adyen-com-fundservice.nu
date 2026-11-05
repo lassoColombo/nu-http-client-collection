@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "x-api-key" => { {scheme: $scheme, headers: {"X-API-Key": $token_val}, query: "", location: "header"} }
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -103,9 +126,9 @@ def payout-speed-completer [] { ["INSTANT" "SAME_DAY" "STANDARD"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-account-holder-balance" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-account-holder-balance" "post-account-holder-transaction-list" "post-debit-account-holder" "post-payout-account-holder" "post-refund-funds-transfer" "post-refund-not-paid-out-transfers" "post-setup-beneficiary" "post-transfer-funds" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -138,7 +161,7 @@ export def "post-account-holder-balance" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   account_holder_code: string # The code of the Account Holder of which to retrieve the balance.
-]: any -> record<balancePerAccount: table<accountCode: string, detailBalance: record>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string, totalBalance: record<balance: list<record>, onHoldBalance: list<record>, pendingBalance: list<record>>> {
+]: any -> oneof<record<balancePerAccount: table<accountCode: string, detailBalance: record>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string, totalBalance: record<balance: list<record>, onHoldBalance: list<record>, pendingBalance: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -165,7 +188,6 @@ export def "post-account-holder-balance" [
 #
 # POST /accountHolderTransactionList
 # operationId: post-accountHolderTransactionList
-# --transactionListsPerAccount item shape: {accountCode: string, page: int}
 export def "post-account-holder-transaction-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +201,7 @@ export def "post-account-holder-transaction-list" [
   account_holder_code: string # The code of the account holder that owns the account(s) of which retrieve the transaction list.
   --transaction-lists-per-account: list # A list of accounts to include in the transaction list. If left blank, the last fifty (50) transactions for all accounts of the account holder will be included. — item shape: {accountCode: string, page: int}
   --transaction-statuses: list<string> # A list of statuses to include in the transaction list. If left blank, all transactions will be included. >Permitted values: >* `PendingCredit` - a pending balance credit. >* `CreditFailed` - a pending credit failure; the balance will not be credited. >* `Credited` - a credited balance. >* `PendingDebit` - a pending balance debit (e.g., a refund). >* `CreditClosed` - a pending credit closed; the balance will not be credited. >* `CreditSuspended` - a pending credit closed; the balance will not be credited. >* `DebitFailed` - a pending debit failure; the balance will not be debited. >* `Debited` - a debited balance (e.g., a refund). >* `DebitReversedReceived` - a pending refund reversal. >* `DebitedReversed` - a reversed refund. >* `ChargebackReceived` - a received chargeback request. >* `Chargeback` - a processed chargeback. >* `ChargebackReversedReceived` - a pending chargeback reversal. >* `ChargebackReversed` - a reversed chargeback. >* `Converted` - converted. >* `ManualCorrected` - manual booking/adjustment by Adyen. >* `Payout` - a payout. >* `PayoutReversed` - a reversed payout. >* `PendingFundTransfer` - a pending transfer of funds from one account to another. >* `FundTransfer` - a transfer of funds from one account to another.
-]: any -> record<accountTransactionLists: table<accountCode: string, hasNextPage: bool, transactions: list>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
+]: any -> oneof<record<accountTransactionLists: table<accountCode: string, hasNextPage: bool, transactions: list>, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -206,8 +228,6 @@ export def "post-account-holder-transaction-list" [
 #
 # POST /debitAccountHolder
 # operationId: post-debitAccountHolder
-# --amount shape: {currency: string, value: int}
-# --splits item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
 export def "post-debit-account-holder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +244,7 @@ export def "post-debit-account-holder" [
   --description: string # A description of the direct debit. Maximum length: 35 characters. Allowed characters: **a-z**, **A-Z**, **0-9**, and special characters **/?:().,'+ ";**.
   merchant_account: string # Your merchant account.
   splits: list # Contains instructions on how to split the funds between the accounts in your platform. The request must have at least one split item. — item shape: {account?: string, amount: record, description?: string, reference?: string, type: "BalanceAccount"|"Commission"|"Default"|"MarketPlace"|"PaymentFee"|"Remainder"|"Surcharge"|"Tip"|"VAT"|"Verification"}
-]: any -> record<accountHolderCode: string, bankAccountUUID: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, merchantReferences: list<string>, pspReference: string, resultCode: string> {
+]: any -> oneof<record<accountHolderCode: string, bankAccountUUID: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, merchantReferences: list<string>, pspReference: string, resultCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -251,7 +271,6 @@ export def "post-debit-account-holder" [
 #
 # POST /payoutAccountHolder
 # operationId: post-payoutAccountHolder
-# --amount shape: {currency: string, value: int}
 export def "post-payout-account-holder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -270,7 +289,7 @@ export def "post-payout-account-holder" [
   --merchant-reference: string # A value that can be supplied at the discretion of the executing user in order to link multiple transactions to one another.
   --payout-method-code: string # The unique ID of the payout method held by the Account Holder to which the payout is to be made. If left blank, a payout instrument is automatically selected.
   --payout-speed: string@payout-speed-completer # Speed with which payouts for this account are processed. Permitted values: `STANDARD`, `SAME_DAY`. (default: STANDARD)
-]: any -> record<bankAccountUUID: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, merchantReference: string, payoutSpeed: string, pspReference: string, resultCode: string> {
+]: any -> oneof<record<bankAccountUUID: string, invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, merchantReference: string, payoutSpeed: string, pspReference: string, resultCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -297,7 +316,6 @@ export def "post-payout-account-holder" [
 #
 # POST /refundFundsTransfer
 # operationId: post-refundFundsTransfer
-# --amount shape: {currency: string, value: int}
 export def "post-refund-funds-transfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,7 +329,7 @@ export def "post-refund-funds-transfer" [
   amount: record # shape: {currency: string, value: int}
   --merchant-reference: string # A value that can be supplied at the discretion of the executing user in order to link multiple transactions to one another.
   original_reference: string # A PSP reference of the original fund transfer.
-]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, merchantReference: string, message: string, originalReference: string, pspReference: string, resultCode: string> {
+]: any -> oneof<record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, merchantReference: string, message: string, originalReference: string, pspReference: string, resultCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -350,7 +368,7 @@ export def "post-refund-not-paid-out-transfers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   account_code: string # The code of the account from which to perform the refund(s).
   account_holder_code: string # The code of the Account Holder which owns the account from which to perform the refund(s).
-]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
+]: any -> oneof<record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -390,7 +408,7 @@ export def "post-setup-beneficiary" [
   destination_account_code: string # The destination account code.
   --merchant-reference: string # A value that can be supplied at the discretion of the executing user.
   source_account_code: string # The benefactor account.
-]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string> {
+]: any -> oneof<record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, pspReference: string, resultCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -417,7 +435,6 @@ export def "post-setup-beneficiary" [
 #
 # POST /transferFunds
 # operationId: post-transferFunds
-# --amount shape: {currency: string, value: int}
 export def "post-transfer-funds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -433,7 +450,7 @@ export def "post-transfer-funds" [
   --merchant-reference: string # A value that can be supplied at the discretion of the executing user in order to link multiple transactions to one another.
   source_account_code: string # The code of the account from which the funds are to be debited. >The state of the Account Holder of this account must be Active and allow payouts.
   transfer_code: string # The code related to the type of transfer being performed. >The permitted codes differ for each platform account and are defined in their service level agreement.
-]: any -> record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, merchantReference: string, pspReference: string, resultCode: string> {
+]: any -> oneof<record<invalidFields: table<errorCode: int, errorDescription: string, fieldType: record>, merchantReference: string, pspReference: string, resultCode: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

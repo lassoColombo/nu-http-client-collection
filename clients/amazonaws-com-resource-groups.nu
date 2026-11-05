@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -118,9 +142,9 @@ def group-lifecycle-events-desired-status-completer [] { ["ACTIVE" "INACTIVE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-group" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-group" "delete-group" "get-account-settings" "get-group" "get-group-configuration" "get-group-query" "get-tags" "tag" "untag" "group-resources" "list-group-resources" "list-groups" "put-group-configuration" "search-resources" "ungroup-resources" "update-account-settings" "update-group" "update-group-query" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -142,8 +166,6 @@ export def commands []: nothing -> table {
 #
 # POST /groups
 # operationId: CreateGroup
-# --ResourceQuery shape: {Type?: "TAG_FILTERS_1_0"|"CLOUDFORMATION_STACK_1_0", Query?: string}
-# --Configuration item shape: {Type: string, Parameters?: list}
 export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -166,7 +188,7 @@ export def "create-group" [
   --resource-query: record # The query you can use to define a resource group or a search for resources. A ResourceQuery specifies both a query Type and a Query string as JSON string objects. See the examples section for example JSON strings. For more information about creating a resource group with a resource query, see Build queries and groups in Resource Groups (https://docs.aws.amazon.com/ARG/latest/userguide/gettingstarted-query.html) in the Resource Groups User Guide When you combine all of the elements together into a single string, any double quotes that are embedded inside another double quote pair must be escaped by preceding the embedded double quote with a backslash character (\). For example, a complete ResourceQuery parameter must be formatted like the following CLI parameter example: --resource-query '{"Type":"TAG_FILTERS_1_0","Query":"{\"ResourceTypeFilters\":[\"AWS::AllSupported\"],\"TagFilters\":[{\"Key\":\"Stage\",\"Values\":[\"Test\"]}]}"}' In the preceding example, all of the double quote characters in the value part of the Query element must be escaped because the value itself is surrounded by double quotes. For more information, see Quoting strings (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters-quoting-strings.html) in the Command Line Interface User Guide. For the complete list of resource types that you can use in the array value for ResourceTypeFilters, see Resources you can use with Resource Groups and Tag Editor (https://docs.aws.amazon.com/ARG/latest/userguide/supported-resources.html) in the Resource Groups User Guide. For example: "ResourceTypeFilters":["AWS::S3::Bucket", "AWS::EC2::Instance"] — shape: {Type?: "TAG_FILTERS_1_0"|"CLOUDFORMATION_STACK_1_0", Query?: string}
   --tags: record # The tags to add to the group. A tag is key-value pair string.
   --configuration: list # A configuration associates the resource group with an Amazon Web Services service and specifies how the service can interact with the resources in the group. A configuration is an array of GroupConfigurationItem elements. For details about the syntax of service configurations, see Service configurations for Resource Groups (https://docs.aws.amazon.com/ARG/latest/APIReference/about-slg.html). A resource group can contain either a Configuration or a ResourceQuery, but not both. — item shape: {Type: string, Parameters?: list}
-]: any -> record<Group: record<GroupArn: string, Name: string, Description: string>, ResourceQuery: record<Type: string, Query: string>, Tags: record, GroupConfiguration: record<Configuration: list<record>, ProposedConfiguration: list<record>, Status: string, FailureReason: string>> {
+]: any -> oneof<record<Group: record<GroupArn: string, Name: string, Description: string>, ResourceQuery: record<Type: string, Query: string>, Tags: record, GroupConfiguration: record<Configuration: list<record>, ProposedConfiguration: list<record>, Status: string, FailureReason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -214,7 +236,7 @@ export def "delete-group" [
   --x-amz-signed-headers: string
   --group-name: string # Deprecated - don't use this parameter. Use Group instead.
   --group: string # The name or the ARN of the resource group to delete.
-]: any -> record<Group: record<GroupArn: string, Name: string, Description: string>> {
+]: any -> oneof<record<Group: record<GroupArn: string, Name: string, Description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -260,7 +282,7 @@ export def "get-account-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<AccountSettings: record<GroupLifecycleEventsDesiredStatus: string, GroupLifecycleEventsStatus: string, GroupLifecycleEventsStatusMessage: string>> {
+]: nothing -> oneof<record<AccountSettings: record<GroupLifecycleEventsDesiredStatus: string, GroupLifecycleEventsStatus: string, GroupLifecycleEventsStatusMessage: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/get-account-settings" $auth.query)
@@ -305,7 +327,7 @@ export def "get-group" [
   --x-amz-signed-headers: string
   --group-name: string # Deprecated - don't use this parameter. Use Group instead.
   --group: string # The name or the ARN of the resource group to retrieve.
-]: any -> record<Group: record<GroupArn: string, Name: string, Description: string>> {
+]: any -> oneof<record<Group: record<GroupArn: string, Name: string, Description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -352,7 +374,7 @@ export def "get-group-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --group: string # The name or the ARN of the resource group for which you want to retrive the service configuration.
-]: any -> record<GroupConfiguration: record<Configuration: list<record>, ProposedConfiguration: list<record>, Status: string, FailureReason: string>> {
+]: any -> oneof<record<GroupConfiguration: record<Configuration: list<record>, ProposedConfiguration: list<record>, Status: string, FailureReason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -400,7 +422,7 @@ export def "get-group-query" [
   --x-amz-signed-headers: string
   --group-name: string # Don't use this parameter. Use Group instead.
   --group: string # The name or the ARN of the resource group to query.
-]: any -> record<GroupQuery: record<GroupName: string, ResourceQuery: record<Type: string, Query: string>>> {
+]: any -> oneof<record<GroupQuery: record<GroupName: string, ResourceQuery: record<Type: string, Query: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -447,7 +469,7 @@ export def "get-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, Tags: record> {
+]: nothing -> oneof<record<Arn: string, Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'Arn' must be non-empty" } }
@@ -493,7 +515,7 @@ export def "tag" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # The tags to add to the specified resource group. A tag is a string-to-string map of key-value pairs.
-]: any -> record<Arn: string, Tags: record> {
+]: any -> oneof<record<Arn: string, Tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -542,7 +564,7 @@ export def "untag" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   keys: list<string> # The keys of the tags to be removed.
-]: any -> record<Arn: string, Keys: list<string>> {
+]: any -> oneof<record<Arn: string, Keys: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -591,7 +613,7 @@ export def "group-resources" [
   --x-amz-signed-headers: string
   group: string # The name or the ARN of the resource group to add resources to.
   resource_arns: list<string> # The list of ARNs of the resources to be added to the group.
-]: any -> record<Succeeded: list<string>, Failed: table<ResourceArn: string, ErrorMessage: string, ErrorCode: string>, Pending: table<ResourceArn: string>> {
+]: any -> oneof<record<Succeeded: list<string>, Failed: table<ResourceArn: string, ErrorMessage: string, ErrorCode: string>, Pending: table<ResourceArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -620,7 +642,6 @@ export def "group-resources" [
 #
 # POST /list-group-resources
 # operationId: ListGroupResources
-# --Filters item shape: {Name: "resource-type", Values: list<string>}
 export def "list-group-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -645,7 +666,7 @@ export def "list-group-resources" [
   --filters: list # Filters, formatted as ResourceFilter objects, that you want to apply to a ListGroupResources operation. Filters the results to include only those of the specified resource types. resource-type - Filter resources by their type. Specify up to five resource types in the format AWS::ServiceCode::ResourceType. For example, AWS::EC2::Instance, or AWS::S3::Bucket. When you specify a resource-type filter for ListGroupResources, Resource Groups validates your filter resource types against the types that are defined in the query associated with the group. For example, if a group contains only S3 buckets because its query specifies only that resource type, but your resource-type filter includes EC2 instances, AWS Resource Groups does not filter for EC2 instances. In this case, a ListGroupResources request returns a BadRequestException error with a message similar to the following: The resource types specified as filters in the request are not valid. The error includes a list of resource types that failed the validation because they are not part of the query associated with the group. This validation doesn't occur when the group query specifies AWS::AllSupported, because a group based on such a query can contain any of the allowed resource types for the query type (tag-based or Amazon CloudFront stack-based queries). — item shape: {Name: "resource-type", Values: list<string>}
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value provided by a previous call's NextToken response to indicate where the output should continue from. (body field)
-]: any -> record<Resources: table<Identifier: record, Status: record>, ResourceIdentifiers: table<ResourceArn: string, ResourceType: string>, NextToken: string, QueryErrors: table<ErrorCode: string, Message: string>> {
+]: any -> oneof<record<Resources: table<Identifier: record, Status: record>, ResourceIdentifiers: table<ResourceArn: string, ResourceType: string>, NextToken: string, QueryErrors: table<ErrorCode: string, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -675,7 +696,6 @@ export def "list-group-resources" [
 #
 # POST /groups-list
 # operationId: ListGroups
-# --Filters item shape: {Name: "resource-type"|"configuration-type", Values: list<string>}
 export def "list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -698,7 +718,7 @@ export def "list-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --filters: list # Filters, formatted as GroupFilter objects, that you want to apply to a ListGroups operation. resource-type - Filter the results to include only those of the specified resource types. Specify up to five resource types in the format AWS::ServiceCode::ResourceType . For example, AWS::EC2::Instance, or AWS::S3::Bucket. configuration-type - Filter the results to include only those groups that have the specified configuration types attached. The current supported values are: AWS::EC2::CapacityReservationPool AWS::EC2::HostManagement — item shape: {Name: "resource-type"|"configuration-type", Values: list<string>}
-]: any -> record<GroupIdentifiers: table<GroupName: string, GroupArn: string>, Groups: table<GroupArn: string, Name: string, Description: string>, NextToken: string> {
+]: any -> oneof<record<GroupIdentifiers: table<GroupName: string, GroupArn: string>, Groups: table<GroupArn: string, Name: string, Description: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -728,7 +748,6 @@ export def "list-groups" [
 #
 # POST /put-group-configuration
 # operationId: PutGroupConfiguration
-# --Configuration item shape: {Type: string, Parameters?: list}
 export def "put-group-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -748,7 +767,7 @@ export def "put-group-configuration" [
   --x-amz-signed-headers: string
   --group: string # The name or ARN of the resource group with the configuration that you want to update.
   --configuration: list # The new configuration to associate with the specified group. A configuration associates the resource group with an Amazon Web Services service and specifies how the service can interact with the resources in the group. A configuration is an array of GroupConfigurationItem elements. For information about the syntax of a service configuration, see Service configurations for Resource Groups (https://docs.aws.amazon.com/ARG/latest/APIReference/about-slg.html). A resource group can contain either a Configuration or a ResourceQuery, but not both. — item shape: {Type: string, Parameters?: list}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -777,7 +796,6 @@ export def "put-group-configuration" [
 #
 # POST /resources/search
 # operationId: SearchResources
-# --ResourceQuery shape: {Type?: "TAG_FILTERS_1_0"|"CLOUDFORMATION_STACK_1_0", Query?: string}
 export def "search-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -800,7 +818,7 @@ export def "search-resources" [
   resource_query: record # The query you can use to define a resource group or a search for resources. A ResourceQuery specifies both a query Type and a Query string as JSON string objects. See the examples section for example JSON strings. For more information about creating a resource group with a resource query, see Build queries and groups in Resource Groups (https://docs.aws.amazon.com/ARG/latest/userguide/gettingstarted-query.html) in the Resource Groups User Guide When you combine all of the elements together into a single string, any double quotes that are embedded inside another double quote pair must be escaped by preceding the embedded double quote with a backslash character (\). For example, a complete ResourceQuery parameter must be formatted like the following CLI parameter example: --resource-query '{"Type":"TAG_FILTERS_1_0","Query":"{\"ResourceTypeFilters\":[\"AWS::AllSupported\"],\"TagFilters\":[{\"Key\":\"Stage\",\"Values\":[\"Test\"]}]}"}' In the preceding example, all of the double quote characters in the value part of the Query element must be escaped because the value itself is surrounded by double quotes. For more information, see Quoting strings (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters-quoting-strings.html) in the Command Line Interface User Guide. For the complete list of resource types that you can use in the array value for ResourceTypeFilters, see Resources you can use with Resource Groups and Tag Editor (https://docs.aws.amazon.com/ARG/latest/userguide/supported-resources.html) in the Resource Groups User Guide. For example: "ResourceTypeFilters":["AWS::S3::Bucket", "AWS::EC2::Instance"] — shape: {Type?: "TAG_FILTERS_1_0"|"CLOUDFORMATION_STACK_1_0", Query?: string}
   --max-results-body: int # The total number of results that you want included on each page of the response. If you do not include this parameter, it defaults to a value that is specific to the operation. If additional items exist beyond the maximum you specify, the NextToken response element is present and has a value (is not null). Include that value as the NextToken request parameter in the next call to the operation to get the next part of the results. Note that the service might return fewer results than the maximum even when there are more results available. You should check NextToken after every operation to ensure that you receive all of the results. (body field)
   --next-token-body: string # The parameter for receiving additional results if you receive a NextToken response in a previous request. A NextToken response indicates that more output is available. Set this parameter to the value provided by a previous call's NextToken response to indicate where the output should continue from. (body field)
-]: any -> record<ResourceIdentifiers: table<ResourceArn: string, ResourceType: string>, NextToken: string, QueryErrors: table<ErrorCode: string, Message: string>> {
+]: any -> oneof<record<ResourceIdentifiers: table<ResourceArn: string, ResourceType: string>, NextToken: string, QueryErrors: table<ErrorCode: string, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -849,7 +867,7 @@ export def "ungroup-resources" [
   --x-amz-signed-headers: string
   group: string # The name or the ARN of the resource group from which to remove the resources.
   resource_arns: list<string> # The ARNs of the resources to be removed from the group.
-]: any -> record<Succeeded: list<string>, Failed: table<ResourceArn: string, ErrorMessage: string, ErrorCode: string>, Pending: table<ResourceArn: string>> {
+]: any -> oneof<record<Succeeded: list<string>, Failed: table<ResourceArn: string, ErrorMessage: string, ErrorCode: string>, Pending: table<ResourceArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -896,7 +914,7 @@ export def "update-account-settings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --group-lifecycle-events-desired-status: string@group-lifecycle-events-desired-status-completer # Specifies whether you want to turn group lifecycle events (https://docs.aws.amazon.com/ARG/latest/userguide/monitor-groups.html) on or off.
-]: any -> record<AccountSettings: record<GroupLifecycleEventsDesiredStatus: string, GroupLifecycleEventsStatus: string, GroupLifecycleEventsStatusMessage: string>> {
+]: any -> oneof<record<AccountSettings: record<GroupLifecycleEventsDesiredStatus: string, GroupLifecycleEventsStatus: string, GroupLifecycleEventsStatusMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -945,7 +963,7 @@ export def "update-group" [
   --group-name: string # Don't use this parameter. Use Group instead.
   --group: string # The name or the ARN of the resource group to modify.
   --description: string # The new description that you want to update the resource group with. Descriptions can contain letters, numbers, hyphens, underscores, periods, and spaces.
-]: any -> record<Group: record<GroupArn: string, Name: string, Description: string>> {
+]: any -> oneof<record<Group: record<GroupArn: string, Name: string, Description: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -974,7 +992,6 @@ export def "update-group" [
 #
 # POST /update-group-query
 # operationId: UpdateGroupQuery
-# --ResourceQuery shape: {Type?: "TAG_FILTERS_1_0"|"CLOUDFORMATION_STACK_1_0", Query?: string}
 export def "update-group-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -995,7 +1012,7 @@ export def "update-group-query" [
   --group-name: string # Don't use this parameter. Use Group instead.
   --group: string # The name or the ARN of the resource group to query.
   resource_query: record # The query you can use to define a resource group or a search for resources. A ResourceQuery specifies both a query Type and a Query string as JSON string objects. See the examples section for example JSON strings. For more information about creating a resource group with a resource query, see Build queries and groups in Resource Groups (https://docs.aws.amazon.com/ARG/latest/userguide/gettingstarted-query.html) in the Resource Groups User Guide When you combine all of the elements together into a single string, any double quotes that are embedded inside another double quote pair must be escaped by preceding the embedded double quote with a backslash character (\). For example, a complete ResourceQuery parameter must be formatted like the following CLI parameter example: --resource-query '{"Type":"TAG_FILTERS_1_0","Query":"{\"ResourceTypeFilters\":[\"AWS::AllSupported\"],\"TagFilters\":[{\"Key\":\"Stage\",\"Values\":[\"Test\"]}]}"}' In the preceding example, all of the double quote characters in the value part of the Query element must be escaped because the value itself is surrounded by double quotes. For more information, see Quoting strings (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters-quoting-strings.html) in the Command Line Interface User Guide. For the complete list of resource types that you can use in the array value for ResourceTypeFilters, see Resources you can use with Resource Groups and Tag Editor (https://docs.aws.amazon.com/ARG/latest/userguide/supported-resources.html) in the Resource Groups User Guide. For example: "ResourceTypeFilters":["AWS::S3::Bucket", "AWS::EC2::Instance"] — shape: {Type?: "TAG_FILTERS_1_0"|"CLOUDFORMATION_STACK_1_0", Query?: string}
-]: any -> record<GroupQuery: record<GroupName: string, ResourceQuery: record<Type: string, Query: string>>> {
+]: any -> oneof<record<GroupQuery: record<GroupName: string, ResourceQuery: record<Type: string, Query: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

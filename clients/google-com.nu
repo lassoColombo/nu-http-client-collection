@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def status-completer [] { ["ACCOUNT_LINK_STATUS_UNKNOWN" "ACCOUNT_LINK_STATUS_UN
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "travelpartner-accounts-hotels-set-live-on-google" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["travelpartner-accounts-hotels-set-live-on-google" "travelpartner-accounts-account-links-delete" "travelpartner-accounts-reconciliation-reports-get" "travelpartner-accounts-brands-patch" "travelpartner-accounts-free-booking-links-report-views-query" "travelpartner-accounts-participation-report-views-query" "travelpartner-accounts-property-performance-report-views-query" "travelpartner-accounts-account-links-list" "travelpartner-accounts-account-links-create" "travelpartner-accounts-brands-list" "travelpartner-accounts-brands-create" "travelpartner-accounts-hotel-views-list" "travelpartner-accounts-hotel-views-summarize" "travelpartner-accounts-icons-list" "travelpartner-accounts-icons-create" "travelpartner-accounts-listings-verify" "travelpartner-accounts-price-accuracy-views-list" "travelpartner-accounts-price-accuracy-views-summarize" "travelpartner-accounts-price-coverage-views-list" "travelpartner-accounts-price-coverage-views-get-latest" "travelpartner-accounts-reconciliation-reports-list" "travelpartner-accounts-reconciliation-reports-create" "travelpartner-accounts-reconciliation-reports-validate" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "travelpartner-accounts-hotels-set-live-on-google" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --live-on-google: oneof<nothing, bool> # Required. Whether the property will show on Google. When true, Google will show the properties if their integration is complete and the property is available. When false, Google will never show the properties.
   --partner-hotel-ids: list<string> # Required. Identifies the properties to update with the liveOnGoogle setting.
-]: any -> record<failedHotelIds: list<string>, updatedHotelIds: list<string>> {
+]: any -> oneof<record<failedHotelIds: list<string>, updatedHotelIds: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -218,7 +242,7 @@ export def "travelpartner-accounts-account-links-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -269,7 +293,7 @@ export def "travelpartner-accounts-reconciliation-reports-get" [
   --include-matched-prices: oneof<nothing, bool> # Set to true if matched prices are to be added into the report.
   --include-non-scoring: oneof<nothing, bool> # Set to true if non-account impacting rows are to be added into the report.
   --include-pixels: oneof<nothing, bool> # Set to true if pixel signals are to be added into the report.
-]: nothing -> record<contents: string, fileName: string, name: string> {
+]: nothing -> oneof<record<contents: string, fileName: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -295,10 +319,6 @@ export def "travelpartner-accounts-reconciliation-reports-get" [
 #
 # PATCH /v3/{name}
 # operationId: travelpartner.accounts.brands.patch
-# --activeDisplayNames item shape: {languageCode?: string, text?: string}
-# --displayNameDisapprovalReason item shape: {disapprovalReason?: "DISAPPROVAL_REASON_UNSPECIFIED"|"PUNCTUATION"|"MARKETING_LANGUAGE"|"LANDING_PAGE_NOT_MATCHED", languageCode?: string}
-# --displayNames item shape: {languageCode?: string, text?: string}
-# --submittedDisplayNames item shape: {languageCode?: string, text?: string}
 export def "travelpartner-accounts-brands-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -325,7 +345,7 @@ export def "travelpartner-accounts-brands-patch" [
   --update-mask: string # Required. The field to update. Only the `display_names` and `icon` fields can be updated. Use the syntax shown in the example URI below and provide the new value in the request body. Example request URI and request body: ``` PATCH https://travelpartner.googleapis.com/v3/accounts/123456789/ brands/my-brand?update_mask=brand.display_names ``` ``` { "display_names": [{ "language": "en" "text": "Gilles' Gites" }] } ``` The information above is sufficient for forming the URI and request body. The sentence below is auto-generated, supplemental information about the `FieldMask` format in general.
   --display-names: list # Input only. The name Google displays for the brand's properties. Setting the display names is only necessary if you want to override the landing page display name or account-level display name for the brand. Google reviews the display names for appropriate content. When there are multiple languages, Google will only show the display names once Google approves all the languages. — item shape: {languageCode?: string, text?: string}
   --icon: string # Input only. The brand's [accounts.icon](/hotels/hotel-prices/api-reference/rest/v3/accounts.icons#resource:-iconresource) identifying the brand's icon. The value refers to the icons's resource name in the format `accounts/{account_id}/icons/{icon_id}`.
-]: any -> record<activeDisplayNames: table<languageCode: string, text: string>, activeIcon: string, activeIconUri: string, displayNameDisapprovalReason: table<disapprovalReason: string, languageCode: string>, displayNameState: string, displayNames: table<languageCode: string, text: string>, icon: string, iconDisapprovalReasons: list<string>, iconState: string, name: string, propertyCount: string, submittedDisplayNames: table<languageCode: string, text: string>, submittedIcon: string> {
+]: any -> oneof<record<activeDisplayNames: table<languageCode: string, text: string>, activeIcon: string, activeIconUri: string, displayNameDisapprovalReason: table<disapprovalReason: string, languageCode: string>, displayNameState: string, displayNames: table<languageCode: string, text: string>, icon: string, iconDisapprovalReasons: list<string>, iconState: string, name: string, propertyCount: string, submittedDisplayNames: table<languageCode: string, text: string>, submittedIcon: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -380,7 +400,7 @@ export def "travelpartner-accounts-free-booking-links-report-views-query" [
   --filter: string # The conditions (fields and expressions) used to filter the free booking link metrics for the account being queried. The syntax requires spaces surrounding the `in` operator. Otherwise, spaces can be omitted. Conditions can be joined using the `and` operator. The `date` field is required. All other fields are optional. The `date` field values are inclusive and must be in YYYY-MM-DD format. The earliest acceptable date is 2021-03-09; earlier date values will be coerced to 2021-03-09. Values for `partnerHotelDisplayName` are matched case-insensitively. Examples of valid conditions are as follows: * `date = '2021-12-03'` * `date between '2021-12-03' and '2021-12-08'` * `deviceType = 'TABLET'` * `deviceType in ('MOBILE', 'TABLET')` * `partnerHotelId = 'AAA'` * `partnerHotelId in ('AAA', 'BBB')` * `partnerHotelDisplayName = 'hotel A'` * `partnerHotelDisplayName in ('Hotel A', 'HOTEL b')` * `userRegionCode = 'US'` * `userRegionCode in ('US', 'CA')`
   --page-size: int # The maximum number of participation results to return. The service may return fewer than this value. If unspecified, at most 10,000 results will be returned. The maximum value is 10,000; values above 10,000 will be coerced to 10,000.
   --page-token: string # A page token, received from a previous QueryParticipationReport request. Provide this to receive the subsequent page. When paginating, all other parameters provided to QueryParticipationReport must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, results: table<clickCount: string, date: record, deviceType: string, partnerHotelDisplayName: string, partnerHotelId: string, userRegionCode: string>> {
+]: nothing -> oneof<record<nextPageToken: string, results: table<clickCount: string, date: record, deviceType: string, partnerHotelDisplayName: string, partnerHotelId: string, userRegionCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -432,7 +452,7 @@ export def "travelpartner-accounts-participation-report-views-query" [
   --filter: string # The conditions (fields and expressions) used to filter the participation metrics for the account being queried. The syntax requires spaces surrounding the `in` operator. Otherwise, spaces can be omitted. Conditions can be joined using the `and` operator. The `date` field is required. All other fields are optional. Examples of valid conditions are as follows: * `advanceBookingWindow = 2` * `advanceBookingWindow >= 0` * `advanceBookingWindow <= 5` * `advanceBookingWindow between 1 and 5` * `checkinDate = '2020-10-01'` * `checkinDate >= '2020-10-01'` * `checkinDate <= '2020-10-01'` * `checkinDate between '2020-10-01' and '2020-10-05'` * `date = '2020-02-04'` * `date between '2020-02-04' and '2020-02-09'` * `deviceType = 'TABLET'` * `deviceType in ('MOBILE', 'TABLET')` * `hotelRegionCode = 'US'` * `hotelRegionCode in ('US', 'CA')` * `lengthOfStayDays = 2` * `lengthOfStayDays >= 0` * `lengthOfStayDays <= 5` * `lengthOfStayDays between 1 and 5` * `occupancy = 2` * `occupancy >= 0` * `occupancy <= 5` * `occupancy between 1 and 5` * `partnerHotelId = 'AAA'` * `partnerHotelId in ('AAA', 'BBB')` * `userRegionCode = 'US'` * `userRegionCode in ('US', 'CA')`
   --page-size: int # The maximum number of participation results to return. The service may return fewer than this value. If unspecified, at most 10,000 results will be returned. The maximum value is 10,000; values above 10,000 will be coerced to 10,000.
   --page-token: string # A page token, received from a previous QueryParticipationReport request. Provide this to receive the subsequent page. When paginating, all other parameters provided to QueryParticipationReport must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, results: table<key: record, missedParticipationCount: string, missedParticipationCountDetails: record, opportunityCount: string, participationCount: string, participationPercent: float, partnerHotelDisplayName: string>> {
+]: nothing -> oneof<record<nextPageToken: string, results: table<key: record, missedParticipationCount: string, missedParticipationCountDetails: record, opportunityCount: string, participationCount: string, participationPercent: float, partnerHotelDisplayName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -484,7 +504,7 @@ export def "travelpartner-accounts-property-performance-report-views-query" [
   --filter: string # The conditions (fields and expressions) used to filter the property performance metrics for the account being queried. The syntax requires spaces surrounding the `in` operator. Otherwise, spaces can be omitted. Conditions can be joined using the `and` operator. The `date` field is required. All other fields are optional. The `date` field values are inclusive and must be in YYYY-MM-DD format. The earliest acceptable date is 2021-03-09; earlier date values will be coerced to 2021-03-09. Values for `partnerPropertyDisplayName` and `brand` are matched case-insensitively. Examples of valid conditions are as follows: * `advanceBookingWindow = 'ADVANCE_BOOKING_WINDOW_SAME_DAY'` * `advanceBookingWindow in ('ADVANCE_BOOKING_WINDOW_SAME_DAY', 'ADVANCE_BOOKING_WINDOW_DAYS_61_TO_90')` * `brand = 'Brand A'` * `brand in ('Brand A', 'brand B')` * `date = '2021-12-03'` * `date between '2021-12-03' and '2021-12-08'` * `deviceType = 'TABLET'` * `deviceType in ('MOBILE', 'TABLET')` * `highIntentUsers = 'TRUE'` * `highIntentUsers = 'FALSE'` * `lengthOfStay = 'LENGTH_OF_STAY_NIGHTS_2'` * `lengthOfStay in ('LENGTH_OF_STAY_NIGHTS_2', 'LENGTH_OF_STAY_NIGHTS_4_TO_7')` * `propertyRegionCode = 'US'` * `propertyRegionCode in ('US', 'CA')` * `occupancy = 'OCCUPANCY_2'` * `occupancy in ('OCCUPANCY_2', 'OCCUPANCY_OVER_4')` * `partnerPropertyId = 'AAA'` * `partnerPropertyId in ('AAA', 'BBB')` * `partnerPropertyDisplayName = 'hotel A'` * `partnerPropertyDisplayName in ('Hotel A', 'HOTEL b')` * `userRegionCode = 'US'` * `userRegionCode in ('US', 'CA')`
   --page-size: int # The maximum number of participation results to return. The service may return fewer than this value. If unspecified, at most 10,000 results will be returned. The maximum value is 10,000; values above 10,000 will be coerced to 10,000.
   --page-token: string # A page token, received from a previous QueryParticipationReport request. Provide this to receive the subsequent page. When paginating, all other parameters provided to QueryParticipationReport must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, results: table<adsClickCount: string, adsClickthroughRate: float, adsImpressionCount: string, advanceBookingWindow: string, brand: string, clickCount: string, clickthroughRate: float, date: record, deviceType: string, highIntentUsers: bool, impressionCount: string, lengthOfStay: string, occupancy: string, partnerPropertyDisplayName: string, partnerPropertyId: string, propertyRegionCode: string, userRegionCode: string>> {
+]: nothing -> oneof<record<nextPageToken: string, results: table<adsClickCount: string, adsClickthroughRate: float, adsImpressionCount: string, advanceBookingWindow: string, brand: string, clickCount: string, clickthroughRate: float, date: record, deviceType: string, highIntentUsers: bool, impressionCount: string, lengthOfStay: string, occupancy: string, partnerPropertyDisplayName: string, partnerPropertyId: string, propertyRegionCode: string, userRegionCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -532,7 +552,7 @@ export def "travelpartner-accounts-account-links-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<accountLinks: table<accountLinkTarget: record, googleAdsCustomerName: string, name: string, status: string>> {
+]: nothing -> oneof<record<accountLinks: table<accountLinkTarget: record, googleAdsCustomerName: string, name: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -558,7 +578,6 @@ export def "travelpartner-accounts-account-links-list" [
 #
 # POST /v3/{parent}/accountLinks
 # operationId: travelpartner.accounts.accountLinks.create
-# --accountLinkTarget shape: {allHotels?: bool, hotelList?: record}
 export def "travelpartner-accounts-account-links-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -585,7 +604,7 @@ export def "travelpartner-accounts-account-links-create" [
   --google-ads-customer-name: string # Required for CREATE requests. The value representing the Google Ads customer ID in the format `customers/{google_ads_customer_id}`. For example: `customers/0123456789`. Note that the `googleAdsCustomerName` field is not returned in responses to GET requests.
   --name: string # The resource name for the account link in the format `accounts/{account_id}/accountLinks/{account_link_id}`.
   --status: string@status-completer # The current status of the account link.
-]: any -> record<accountLinkTarget: record<allHotels: bool, hotelList: record<partnerHotelIds: list>>, googleAdsCustomerName: string, name: string, status: string> {
+]: any -> oneof<record<accountLinkTarget: record<allHotels: bool, hotelList: record<partnerHotelIds: list>>, googleAdsCustomerName: string, name: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -636,7 +655,7 @@ export def "travelpartner-accounts-brands-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<brands: table<activeDisplayNames: list, activeIcon: string, activeIconUri: string, displayNameDisapprovalReason: list, displayNameState: string, displayNames: list, icon: string, iconDisapprovalReasons: list, iconState: string, name: string, propertyCount: string, submittedDisplayNames: list, submittedIcon: string>> {
+]: nothing -> oneof<record<brands: table<activeDisplayNames: list, activeIcon: string, activeIconUri: string, displayNameDisapprovalReason: list, displayNameState: string, displayNames: list, icon: string, iconDisapprovalReasons: list, iconState: string, name: string, propertyCount: string, submittedDisplayNames: list, submittedIcon: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -662,10 +681,6 @@ export def "travelpartner-accounts-brands-list" [
 #
 # POST /v3/{parent}/brands
 # operationId: travelpartner.accounts.brands.create
-# --activeDisplayNames item shape: {languageCode?: string, text?: string}
-# --displayNameDisapprovalReason item shape: {disapprovalReason?: "DISAPPROVAL_REASON_UNSPECIFIED"|"PUNCTUATION"|"MARKETING_LANGUAGE"|"LANDING_PAGE_NOT_MATCHED", languageCode?: string}
-# --displayNames item shape: {languageCode?: string, text?: string}
-# --submittedDisplayNames item shape: {languageCode?: string, text?: string}
 export def "travelpartner-accounts-brands-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -691,7 +706,7 @@ export def "travelpartner-accounts-brands-create" [
   --brand-id: string # Required. The partner-determined brand identifier.
   --display-names: list # Input only. The name Google displays for the brand's properties. Setting the display names is only necessary if you want to override the landing page display name or account-level display name for the brand. Google reviews the display names for appropriate content. When there are multiple languages, Google will only show the display names once Google approves all the languages. — item shape: {languageCode?: string, text?: string}
   --icon: string # Input only. The brand's [accounts.icon](/hotels/hotel-prices/api-reference/rest/v3/accounts.icons#resource:-iconresource) identifying the brand's icon. The value refers to the icons's resource name in the format `accounts/{account_id}/icons/{icon_id}`.
-]: any -> record<activeDisplayNames: table<languageCode: string, text: string>, activeIcon: string, activeIconUri: string, displayNameDisapprovalReason: table<disapprovalReason: string, languageCode: string>, displayNameState: string, displayNames: table<languageCode: string, text: string>, icon: string, iconDisapprovalReasons: list<string>, iconState: string, name: string, propertyCount: string, submittedDisplayNames: table<languageCode: string, text: string>, submittedIcon: string> {
+]: any -> oneof<record<activeDisplayNames: table<languageCode: string, text: string>, activeIcon: string, activeIconUri: string, displayNameDisapprovalReason: table<disapprovalReason: string, languageCode: string>, displayNameState: string, displayNames: table<languageCode: string, text: string>, icon: string, iconDisapprovalReasons: list<string>, iconState: string, name: string, propertyCount: string, submittedDisplayNames: table<languageCode: string, text: string>, submittedIcon: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -745,7 +760,7 @@ export def "travelpartner-accounts-hotel-views-list" [
   --filter: string # Optional. The conditions (fields and expressions) used to filter HotelViews. The syntax requires spaces surrounding the `in` operator. Otherwise, spaces can be omitted. Conditions cannot be joined. The `hotelId` field can be used to select specific hotels. The `liveOnGoogle` field can select properties that Google shows, or properties that are omitted in google search results. The `matchStatus` field can be used to filter the list of HotelViews returned for the account. Examples of valid conditions and their syntax are as follows: * `hotelId = 'hotel_ABC'` * `hotelId in ('hotel_ABC', 'hotel_XYZ')` * `liveOnGoogle = 'TRUE'` * `liveOnGoogle = 'FALSE'` * `matchStatus = 'NOT_MATCHED'` * `matchStatus in ('NOT_MATCHED', 'MATCHED', 'MAP_OVERLAP')`
   --page-size: int # Number of elements to retrieve in a single page.
   --page-token: string # Token of the page to retrieve.
-]: nothing -> record<hotelViews: table<dataIssueDetail: list, dataIssues: list, googleClusterId: string, googleHotelDisplayName: string, googleHotelId: string, liveOnGoogle: bool, matchStatus: string, overclusteredPartnerHotelIds: list, partnerHotelDisplayName: string, partnerHotelId: string, primaryOverclusteredPartnerHotelId: string, propertyDetails: string>, nextPageToken: string> {
+]: nothing -> oneof<record<hotelViews: table<dataIssueDetail: list, dataIssues: list, googleClusterId: string, googleHotelDisplayName: string, googleHotelId: string, liveOnGoogle: bool, matchStatus: string, overclusteredPartnerHotelIds: list, partnerHotelDisplayName: string, partnerHotelId: string, primaryOverclusteredPartnerHotelId: string, propertyDetails: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -793,7 +808,7 @@ export def "travelpartner-accounts-hotel-views-summarize" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<lastFeedSubmissionTime: string, lastManifestUpdateTime: string, liveOnGooglePropertyCount: string, matchedPropertyCount: string, overclusteredPropertyCount: string, overclusteredPropertyWithErrorsCount: string, unmatchedPropertyCount: string, unmatchedPropertyWithErrorsCount: string> {
+]: nothing -> oneof<record<lastFeedSubmissionTime: string, lastManifestUpdateTime: string, liveOnGooglePropertyCount: string, matchedPropertyCount: string, overclusteredPropertyCount: string, overclusteredPropertyWithErrorsCount: string, unmatchedPropertyCount: string, unmatchedPropertyWithErrorsCount: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -841,7 +856,7 @@ export def "travelpartner-accounts-icons-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<icons: table<disapprovalReasons: list, iconUri: string, imageData: string, name: string, reference: string, state: string>> {
+]: nothing -> oneof<record<icons: table<disapprovalReasons: list, iconUri: string, imageData: string, name: string, reference: string, state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -891,7 +906,7 @@ export def "travelpartner-accounts-icons-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --image-data: string # Required. Input only. The icon contents, which must be in PNG format, or convertible to PNG. (format: byte)
   --reference: string # Optional. Value for tracking the icon. It could be the primary key to your icon in your system, or the icon's filename. Google does not use this value.
-]: any -> record<disapprovalReasons: list<string>, iconUri: string, imageData: string, name: string, reference: string, state: string> {
+]: any -> oneof<record<disapprovalReasons: list<string>, iconUri: string, imageData: string, name: string, reference: string, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -943,7 +958,7 @@ export def "travelpartner-accounts-listings-verify" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xml-listing: string # A listing that follows the XML format specified in https://developers.google.com/hotels/hotel-prices/xml-reference/hotel-list-feed.
-]: any -> record<parsedListing: record<brand: string, category: list<record>, dataIssueDetail: list<record>, description: list<record>, image: list<record>, imprecisionRadiusMeters: int, isServed: bool, listingName: list<record>, location: record<latitude: float, longitude: float>, partnerListId: string, regionCode: string, review: list<record>, unitAttributes: record>> {
+]: any -> oneof<record<parsedListing: record<brand: string, category: list<record>, dataIssueDetail: list<record>, description: list<record>, image: list<record>, imprecisionRadiusMeters: int, isServed: bool, listingName: list<record>, location: record<latitude: float, longitude: float>, partnerListId: string, regionCode: string, review: list<record>, unitAttributes: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -994,7 +1009,7 @@ export def "travelpartner-accounts-price-accuracy-views-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<priceAccuracyViews: table<name: string, results: list>> {
+]: nothing -> oneof<record<priceAccuracyViews: table<name: string, results: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1042,7 +1057,7 @@ export def "travelpartner-accounts-price-accuracy-views-summarize" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<currentBookOnGoogleScore: string, currentOverallScore: string, currentScore: string, currentWebsiteScore: string, predictedBookOnGoogleScore: string, predictedOverallScore: string, predictedScore: string, predictedWebsiteScore: string, updateTime: string> {
+]: nothing -> oneof<record<currentBookOnGoogleScore: string, currentOverallScore: string, currentScore: string, currentWebsiteScore: string, predictedBookOnGoogleScore: string, predictedOverallScore: string, predictedScore: string, predictedWebsiteScore: string, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1090,7 +1105,7 @@ export def "travelpartner-accounts-price-coverage-views-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<priceCoverageViews: table<calculationDate: record, matchedPropertyCount: int, priceCoverageBinaryPercent: float, priceCoverageBuckets: list, priceCoveragePercent: float>> {
+]: nothing -> oneof<record<priceCoverageViews: table<calculationDate: record, matchedPropertyCount: int, priceCoverageBinaryPercent: float, priceCoverageBuckets: list, priceCoveragePercent: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1138,7 +1153,7 @@ export def "travelpartner-accounts-price-coverage-views-get-latest" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<calculationDate: record<day: int, month: int, year: int>, matchedPropertyCount: int, priceCoverageBinaryPercent: float, priceCoverageBuckets: table<advanceBookingWindowRange: string, availablePriceCount: string, lengthOfStayRange: string, priceCoveragePercent: float>, priceCoveragePercent: float> {
+]: nothing -> oneof<record<calculationDate: record<day: int, month: int, year: int>, matchedPropertyCount: int, priceCoverageBinaryPercent: float, priceCoverageBuckets: table<advanceBookingWindowRange: string, availablePriceCount: string, lengthOfStayRange: string, priceCoveragePercent: float>, priceCoveragePercent: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1188,7 +1203,7 @@ export def "travelpartner-accounts-reconciliation-reports-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --end-date: string # End of date range to fetch files for. Format is yyyy-mm-dd[THH[:MM[:SS]]]. If empty, reports until the end of time are fetched.
   --start-date: string # Beginning of date range to fetch files for. Format is yyyy-MM-dd[THH[:mm[:SS]]]. If empty, reports from the beginning of time onwards are fetched.
-]: nothing -> record<reconciliationReports: table<contents: string, fileName: string, name: string>> {
+]: nothing -> oneof<record<reconciliationReports: table<contents: string, fileName: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1239,7 +1254,7 @@ export def "travelpartner-accounts-reconciliation-reports-create" [
   --contents: string # Required. The contents of the commission report. Report contents must conform to the requirements specified in [Reconciliation reports] (//support.google.com/hotelprices/answer/7019060#creating).
   --file-name: string # Required. Desired filename of the reconciliation report.
   --name: string # Resource name in the format `accounts/{account_id}/reconciliationReports/{datetime}~{filename}`. The value for `{datetime}` must be from 0001-01-01T00:00:00 to 9999-12-31T23:59:59 inclusive.
-]: any -> record<issues: table<description: string, fieldName: string, lineNum: int>, reconciliationReport: record<contents: string, fileName: string, name: string>, successfulRecordCount: int> {
+]: any -> oneof<record<issues: table<description: string, fieldName: string, lineNum: int>, reconciliationReport: record<contents: string, fileName: string, name: string>, successfulRecordCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1293,7 +1308,7 @@ export def "travelpartner-accounts-reconciliation-reports-validate" [
   --contents: string # Required. The contents of the commission report. Report contents must conform to the requirements specified in [Reconciliation reports] (//support.google.com/hotelprices/answer/7019060#creating).
   --file-name: string # Required. Desired filename of the reconciliation report.
   --name: string # Resource name in the format `accounts/{account_id}/reconciliationReports/{datetime}~{filename}`. The value for `{datetime}` must be from 0001-01-01T00:00:00 to 9999-12-31T23:59:59 inclusive.
-]: any -> record<issues: table<description: string, fieldName: string, lineNum: int>, successfulRecordCount: int> {
+]: any -> oneof<record<issues: table<description: string, fieldName: string, lineNum: int>, successfulRecordCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -138,9 +162,9 @@ def type-completer-2 [] { ["ANONYMOUS" "GROUP" "INVITE" "ORGANIZATION" "USER"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "abort-document-version-upload" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["abort-document-version-upload" "get-document-version" "update-document-version" "activate-user" "deactivate-user" "add-resource-permissions" "describe-resource-permissions" "remove-all-resource-permissions" "create-comment" "create-custom-metadata" "delete-custom-metadata" "create-folder" "create-labels" "delete-labels" "create-notification-subscription" "describe-notification-subscriptions" "create-user" "describe-users" "delete-comment" "delete-document" "get-document" "update-document" "delete-document-version" "delete-folder" "get-folder" "update-folder" "delete-folder-contents" "describe-folder-contents" "delete-notification-subscription" "delete-user" "update-user" "describe-activities" "describe-comments" "describe-document-versions" "describe-groups" "describe-root-folders" "get-current-user" "get-document-path" "get-folder-path" "get-resources" "initiate-document-version-upload" "remove-resource-permission" "restore-document-versions" "search-resources" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -232,7 +256,7 @@ export def "get-document-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record<Metadata: record<Id: string, Name: string, ContentType: string, Size: int, Signature: string, Status: string, CreatedTimestamp: string, ModifiedTimestamp: string, ContentCreatedTimestamp: string, ContentModifiedTimestamp: string, CreatorId: string, Thumbnail: record, Source: record>, CustomMetadata: record> {
+]: nothing -> oneof<record<Metadata: record<Id: string, Name: string, ContentType: string, Size: int, Signature: string, Status: string, CreatedTimestamp: string, ModifiedTimestamp: string, ContentCreatedTimestamp: string, ContentModifiedTimestamp: string, CreatorId: string, Thumbnail: record, Source: record>, CustomMetadata: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'DocumentId' must be non-empty" } }
@@ -332,7 +356,7 @@ export def "activate-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record<User: record<Id: string, Username: string, EmailAddress: string, GivenName: string, Surname: string, OrganizationId: string, RootFolderId: string, RecycleBinFolderId: string, Status: string, Type: string, CreatedTimestamp: string, ModifiedTimestamp: string, TimeZoneId: string, Locale: string, Storage: record<StorageUtilizedInBytes: int, StorageRule: record>>> {
+]: nothing -> oneof<record<User: record<Id: string, Username: string, EmailAddress: string, GivenName: string, Surname: string, OrganizationId: string, RootFolderId: string, RecycleBinFolderId: string, Status: string, Type: string, CreatedTimestamp: string, ModifiedTimestamp: string, TimeZoneId: string, Locale: string, Storage: record<StorageUtilizedInBytes: int, StorageRule: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'UserId' must be non-empty" } }
@@ -405,8 +429,6 @@ export def "deactivate-user" [
 #
 # POST /api/v1/resources/{ResourceId}/permissions
 # operationId: AddResourcePermissions
-# --Principals item shape: {Id: string, Type: "USER"|"GROUP"|"INVITE"|"ANONYMOUS"|"ORGANIZATION", Role: "VIEWER"|"CONTRIBUTOR"|"OWNER"|"COOWNER"}
-# --NotificationOptions shape: {SendEmail?: bool, EmailMessage?: string}
 export def "add-resource-permissions" [
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -428,7 +450,7 @@ export def "add-resource-permissions" [
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
   principals: list # The users, groups, or organization being granted permission. — item shape: {Id: string, Type: "USER"|"GROUP"|"INVITE"|"ANONYMOUS"|"ORGANIZATION", Role: "VIEWER"|"CONTRIBUTOR"|"OWNER"|"COOWNER"}
   --notification-options: record # Set of options which defines notification preferences of given action. — shape: {SendEmail?: bool, EmailMessage?: string}
-]: any -> record<ShareResults: table<PrincipalId: string, InviteePrincipalId: string, Role: string, Status: string, ShareId: string, StatusMessage: string>> {
+]: any -> oneof<record<ShareResults: table<PrincipalId: string, InviteePrincipalId: string, Role: string, Status: string, ShareId: string, StatusMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -482,7 +504,7 @@ export def "describe-resource-permissions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record<Principals: table<Id: string, Type: string, Roles: list>, Marker: string> {
+]: nothing -> oneof<record<Principals: table<Id: string, Type: string, Roles: list>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'ResourceId' must be non-empty" } }
@@ -581,7 +603,7 @@ export def "create-comment" [
   text: string # The text of the comment. (format: password)
   --visibility: string@visibility-completer # The visibility of the comment. Options are either PRIVATE, where the comment is visible only to the comment author and document owner and co-owners, or PUBLIC, where the comment is visible to document owners, co-owners, and contributors.
   --notify-collaborators: oneof<nothing, bool> # Set this parameter to TRUE to send an email out to the document collaborators after the comment is created.
-]: any -> record<Comment: record<CommentId: string, ParentId: string, ThreadId: string, Text: string, Contributor: record<Id: string, Username: string, EmailAddress: string, GivenName: string, Surname: string, OrganizationId: string, RootFolderId: string, RecycleBinFolderId: string, Status: string, Type: string, CreatedTimestamp: string, ModifiedTimestamp: string, TimeZoneId: string, Locale: string, Storage: record>, CreatedTimestamp: string, Status: string, Visibility: string, RecipientId: string>> {
+]: any -> oneof<record<Comment: record<CommentId: string, ParentId: string, ThreadId: string, Text: string, Contributor: record<Id: string, Username: string, EmailAddress: string, GivenName: string, Surname: string, OrganizationId: string, RootFolderId: string, RecycleBinFolderId: string, Status: string, Type: string, CreatedTimestamp: string, ModifiedTimestamp: string, TimeZoneId: string, Locale: string, Storage: record>, CreatedTimestamp: string, Status: string, Visibility: string, RecipientId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -633,7 +655,7 @@ export def "create-custom-metadata" [
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
   custom_metadata: record # Custom metadata in the form of name-value pairs.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -686,7 +708,7 @@ export def "delete-custom-metadata" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'ResourceId' must be non-empty" } }
@@ -734,7 +756,7 @@ export def "create-folder" [
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
   --name: string # The name of the new folder. (format: password)
   parent_folder_id: string # The ID of the parent folder.
-]: any -> record<Metadata: record<Id: string, Name: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, ResourceState: string, Signature: string, Labels: list<string>, Size: int, LatestVersionSize: int>> {
+]: any -> oneof<record<Metadata: record<Id: string, Name: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, ResourceState: string, Signature: string, Labels: list<string>, Size: int, LatestVersionSize: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -783,7 +805,7 @@ export def "create-labels" [
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
   labels: list<string> # List of labels to add to the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -834,7 +856,7 @@ export def "delete-labels" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_id | is-empty) { error make --unspanned { msg: "path parameter 'ResourceId' must be non-empty" } }
@@ -883,7 +905,7 @@ export def "create-notification-subscription" [
   endpoint: string # The endpoint to receive the notifications. If the protocol is HTTPS, the endpoint is a URL that begins with https.
   protocol: string@protocol-completer # The protocol to use. The supported value is https, which delivers JSON-encoded messages using HTTPS POST.
   subscription_type: string@subscription-type-completer # The notification type.
-]: any -> record<Subscription: record<SubscriptionId: string, EndPoint: string, Protocol: string>> {
+]: any -> oneof<record<Subscription: record<SubscriptionId: string, EndPoint: string, Protocol: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -935,7 +957,7 @@ export def "describe-notification-subscriptions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Subscriptions: table<SubscriptionId: string, EndPoint: string, Protocol: string>, Marker: string> {
+]: nothing -> oneof<record<Subscriptions: table<SubscriptionId: string, EndPoint: string, Protocol: string>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organization_id | is-empty) { error make --unspanned { msg: "path parameter 'OrganizationId' must be non-empty" } }
@@ -963,7 +985,6 @@ export def "describe-notification-subscriptions" [
 #
 # POST /api/v1/users
 # operationId: CreateUser
-# --StorageRule shape: {StorageAllocatedInBytes?: int, StorageType?: "UNLIMITED"|"QUOTA"}
 export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -990,7 +1011,7 @@ export def "create-user" [
   password: string # The password of the user. (format: password)
   --time-zone-id: string # The time zone ID of the user.
   --storage-rule: record # Describes the storage for a user. — shape: {StorageAllocatedInBytes?: int, StorageType?: "UNLIMITED"|"QUOTA"}
-]: any -> record<User: record<Id: string, Username: string, EmailAddress: string, GivenName: string, Surname: string, OrganizationId: string, RootFolderId: string, RecycleBinFolderId: string, Status: string, Type: string, CreatedTimestamp: string, ModifiedTimestamp: string, TimeZoneId: string, Locale: string, Storage: record<StorageUtilizedInBytes: int, StorageRule: record>>> {
+]: any -> oneof<record<User: record<Id: string, Username: string, EmailAddress: string, GivenName: string, Surname: string, OrganizationId: string, RootFolderId: string, RecycleBinFolderId: string, Status: string, Type: string, CreatedTimestamp: string, ModifiedTimestamp: string, TimeZoneId: string, Locale: string, Storage: record<StorageUtilizedInBytes: int, StorageRule: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1048,7 +1069,7 @@ export def "describe-users" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record<Users: table<Id: string, Username: string, EmailAddress: string, GivenName: string, Surname: string, OrganizationId: string, RootFolderId: string, RecycleBinFolderId: string, Status: string, Type: string, CreatedTimestamp: string, ModifiedTimestamp: string, TimeZoneId: string, Locale: string, Storage: record>, TotalNumberOfUsers: int, Marker: string> {
+]: nothing -> oneof<record<Users: table<Id: string, Username: string, EmailAddress: string, GivenName: string, Surname: string, OrganizationId: string, RootFolderId: string, RecycleBinFolderId: string, Status: string, Type: string, CreatedTimestamp: string, ModifiedTimestamp: string, TimeZoneId: string, Locale: string, Storage: record>, TotalNumberOfUsers: int, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "organizationId" $organization_id "scalar") (serialize-qp "userIds" $user_ids "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "Limit" $limit_2 "scalar") (serialize-qp "Marker" $marker_2 "scalar")] | flatten | str join "&"
@@ -1191,7 +1212,7 @@ export def "get-document" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record<Metadata: record<Id: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, LatestVersionMetadata: record<Id: string, Name: string, ContentType: string, Size: int, Signature: string, Status: string, CreatedTimestamp: string, ModifiedTimestamp: string, ContentCreatedTimestamp: string, ContentModifiedTimestamp: string, CreatorId: string, Thumbnail: record, Source: record>, ResourceState: string, Labels: list<string>>, CustomMetadata: record> {
+]: nothing -> oneof<record<Metadata: record<Id: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, LatestVersionMetadata: record<Id: string, Name: string, ContentType: string, Size: int, Signature: string, Status: string, CreatedTimestamp: string, ModifiedTimestamp: string, ContentCreatedTimestamp: string, ContentModifiedTimestamp: string, CreatorId: string, Thumbnail: record, Source: record>, ResourceState: string, Labels: list<string>>, CustomMetadata: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'DocumentId' must be non-empty" } }
@@ -1388,7 +1409,7 @@ export def "get-folder" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record<Metadata: record<Id: string, Name: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, ResourceState: string, Signature: string, Labels: list<string>, Size: int, LatestVersionSize: int>, CustomMetadata: record> {
+]: nothing -> oneof<record<Metadata: record<Id: string, Name: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, ResourceState: string, Signature: string, Labels: list<string>, Size: int, LatestVersionSize: int>, CustomMetadata: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
@@ -1541,7 +1562,7 @@ export def "describe-folder-contents" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record<Folders: table<Id: string, Name: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, ResourceState: string, Signature: string, Labels: list, Size: int, LatestVersionSize: int>, Documents: table<Id: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, LatestVersionMetadata: record, ResourceState: string, Labels: list>, Marker: string> {
+]: nothing -> oneof<record<Folders: table<Id: string, Name: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, ResourceState: string, Signature: string, Labels: list, Size: int, LatestVersionSize: int>, Documents: table<Id: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, LatestVersionMetadata: record, ResourceState: string, Labels: list>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
@@ -1662,7 +1683,6 @@ export def "delete-user" [
 #
 # PATCH /api/v1/users/{UserId}
 # operationId: UpdateUser
-# --StorageRule shape: {StorageAllocatedInBytes?: int, StorageType?: "UNLIMITED"|"QUOTA"}
 export def "update-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1689,7 +1709,7 @@ export def "update-user" [
   --time-zone-id: string # The time zone ID of the user.
   --locale: string@locale-completer # The locale of the user.
   --grant-poweruser-privileges: string@grant-poweruser-privileges-completer # Boolean value to determine whether the user is granted Power user privileges.
-]: any -> record<User: record<Id: string, Username: string, EmailAddress: string, GivenName: string, Surname: string, OrganizationId: string, RootFolderId: string, RecycleBinFolderId: string, Status: string, Type: string, CreatedTimestamp: string, ModifiedTimestamp: string, TimeZoneId: string, Locale: string, Storage: record<StorageUtilizedInBytes: int, StorageRule: record>>> {
+]: any -> oneof<record<User: record<Id: string, Username: string, EmailAddress: string, GivenName: string, Surname: string, OrganizationId: string, RootFolderId: string, RecycleBinFolderId: string, Status: string, Type: string, CreatedTimestamp: string, ModifiedTimestamp: string, TimeZoneId: string, Locale: string, Storage: record<StorageUtilizedInBytes: int, StorageRule: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1748,7 +1768,7 @@ export def "describe-activities" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record<UserActivities: table<Type: string, TimeStamp: string, IsIndirectActivity: bool, OrganizationId: string, Initiator: record, Participants: record, ResourceMetadata: record, OriginalParent: record, CommentMetadata: record>, Marker: string> {
+]: nothing -> oneof<record<UserActivities: table<Type: string, TimeStamp: string, IsIndirectActivity: bool, OrganizationId: string, Initiator: record, Participants: record, ResourceMetadata: record, OriginalParent: record, CommentMetadata: record>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startTime" $start_time "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "organizationId" $organization_id "scalar") (serialize-qp "activityTypes" $activity_types "scalar") (serialize-qp "resourceId" $resource_id "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "includeIndirectActivities" $include_indirect_activities "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "Limit" $limit_2 "scalar") (serialize-qp "Marker" $marker_2 "scalar")] | flatten | str join "&"
@@ -1799,7 +1819,7 @@ export def "describe-comments" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record<Comments: table<CommentId: string, ParentId: string, ThreadId: string, Text: string, Contributor: record, CreatedTimestamp: string, Status: string, Visibility: string, RecipientId: string>, Marker: string> {
+]: nothing -> oneof<record<Comments: table<CommentId: string, ParentId: string, ThreadId: string, Text: string, Contributor: record, CreatedTimestamp: string, Status: string, Visibility: string, RecipientId: string>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'DocumentId' must be non-empty" } }
@@ -1853,7 +1873,7 @@ export def "describe-document-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record<DocumentVersions: table<Id: string, Name: string, ContentType: string, Size: int, Signature: string, Status: string, CreatedTimestamp: string, ModifiedTimestamp: string, ContentCreatedTimestamp: string, ContentModifiedTimestamp: string, CreatorId: string, Thumbnail: record, Source: record>, Marker: string> {
+]: nothing -> oneof<record<DocumentVersions: table<Id: string, Name: string, ContentType: string, Size: int, Signature: string, Status: string, CreatedTimestamp: string, ModifiedTimestamp: string, ContentCreatedTimestamp: string, ContentModifiedTimestamp: string, CreatorId: string, Thumbnail: record, Source: record>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'DocumentId' must be non-empty" } }
@@ -1905,7 +1925,7 @@ export def "describe-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record<Groups: table<Id: string, Name: string>, Marker: string> {
+]: nothing -> oneof<record<Groups: table<Id: string, Name: string>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search_query == null) { error make --unspanned { msg: "required query parameter 'searchQuery' missing: pass --search-query" } }
@@ -1955,7 +1975,7 @@ export def "describe-root-folders" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. (required, format: password)
-]: nothing -> record<Folders: table<Id: string, Name: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, ResourceState: string, Signature: string, Labels: list, Size: int, LatestVersionSize: int>, Marker: string> {
+]: nothing -> oneof<record<Folders: table<Id: string, Name: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, ResourceState: string, Signature: string, Labels: list, Size: int, LatestVersionSize: int>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($authentication == null) { error make --unspanned { msg: "required header parameter 'Authentication' missing: pass --authentication" } }
@@ -2001,7 +2021,7 @@ export def "get-current-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. (required, format: password)
-]: nothing -> record<User: record<Id: string, Username: string, EmailAddress: string, GivenName: string, Surname: string, OrganizationId: string, RootFolderId: string, RecycleBinFolderId: string, Status: string, Type: string, CreatedTimestamp: string, ModifiedTimestamp: string, TimeZoneId: string, Locale: string, Storage: record<StorageUtilizedInBytes: int, StorageRule: record>>> {
+]: nothing -> oneof<record<User: record<Id: string, Username: string, EmailAddress: string, GivenName: string, Surname: string, OrganizationId: string, RootFolderId: string, RecycleBinFolderId: string, Status: string, Type: string, CreatedTimestamp: string, ModifiedTimestamp: string, TimeZoneId: string, Locale: string, Storage: record<StorageUtilizedInBytes: int, StorageRule: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($authentication == null) { error make --unspanned { msg: "required header parameter 'Authentication' missing: pass --authentication" } }
@@ -2050,7 +2070,7 @@ export def "get-document-path" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record<Path: record<Components: list<record>>> {
+]: nothing -> oneof<record<Path: record<Components: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'DocumentId' must be non-empty" } }
@@ -2100,7 +2120,7 @@ export def "get-folder-path" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record<Path: record<Components: list<record>>> {
+]: nothing -> oneof<record<Path: record<Components: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'FolderId' must be non-empty" } }
@@ -2150,7 +2170,7 @@ export def "get-resources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --authentication: string # The Amazon WorkDocs authentication token. Not required when using Amazon Web Services administrator credentials to access the API. (format: password)
-]: nothing -> record<Folders: table<Id: string, Name: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, ResourceState: string, Signature: string, Labels: list, Size: int, LatestVersionSize: int>, Documents: table<Id: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, LatestVersionMetadata: record, ResourceState: string, Labels: list>, Marker: string> {
+]: nothing -> oneof<record<Folders: table<Id: string, Name: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, ResourceState: string, Signature: string, Labels: list, Size: int, LatestVersionSize: int>, Documents: table<Id: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, LatestVersionMetadata: record, ResourceState: string, Labels: list>, Marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "userId" $user_id "scalar") (serialize-qp "collectionType" $collection_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
@@ -2202,7 +2222,7 @@ export def "initiate-document-version-upload" [
   --content-type: string # The content type of the document.
   --document-size-in-bytes: int # The size of the document, in bytes.
   --parent-folder-id: string # The ID of the parent folder.
-]: any -> record<Metadata: record<Id: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, LatestVersionMetadata: record<Id: string, Name: string, ContentType: string, Size: int, Signature: string, Status: string, CreatedTimestamp: string, ModifiedTimestamp: string, ContentCreatedTimestamp: string, ContentModifiedTimestamp: string, CreatorId: string, Thumbnail: record, Source: record>, ResourceState: string, Labels: list<string>>, UploadMetadata: record<UploadUrl: string, SignedHeaders: record>> {
+]: any -> oneof<record<Metadata: record<Id: string, CreatorId: string, ParentFolderId: string, CreatedTimestamp: string, ModifiedTimestamp: string, LatestVersionMetadata: record<Id: string, Name: string, ContentType: string, Size: int, Signature: string, Status: string, CreatedTimestamp: string, ModifiedTimestamp: string, ContentCreatedTimestamp: string, ContentModifiedTimestamp: string, CreatorId: string, Thumbnail: record, Source: record>, ResourceState: string, Labels: list<string>>, UploadMetadata: record<UploadUrl: string, SignedHeaders: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2327,8 +2347,6 @@ export def "restore-document-versions" [
 #
 # POST /api/v1/search
 # operationId: SearchResources
-# --Filters shape: {TextLocales?: list<string>, ContentCategories?: list<string>, ResourceTypes?: list<string>, Labels?: list<string>, Principals?: list, AncestorIds?: list<string>, SearchCollectionTypes?: list<string>, SizeRange?: record, CreatedRange?: record, ModifiedRange?: record}
-# --OrderBy item shape: {Field?: "RELEVANCE"|"NAME"|"SIZE"|"CREATED_TIMESTAMP"|"MODIFIED_TIMESTAMP", Order?: "ASC"|"DESC"}
 export def "search-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2357,7 +2375,7 @@ export def "search-resources" [
   --order-by: list # Order by results in one or more categories. — item shape: {Field?: "RELEVANCE"|"NAME"|"SIZE"|"CREATED_TIMESTAMP"|"MODIFIED_TIMESTAMP", Order?: "ASC"|"DESC"}
   --limit-body: int # Max results count per page. (body field)
   --marker-body: string # The marker for the next set of results. (body field)
-]: any -> record<Items: table<ResourceType: string, WebUrl: string, DocumentMetadata: record, FolderMetadata: record, CommentMetadata: record, DocumentVersionMetadata: record>, Marker: string> {
+]: any -> oneof<record<Items: table<ResourceType: string, WebUrl: string, DocumentMetadata: record, FolderMetadata: record, CommentMetadata: record, DocumentVersionMetadata: record>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

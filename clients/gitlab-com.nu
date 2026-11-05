@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "private_header" => { {scheme: $scheme, headers: {"PRIVATE_HEADER": $token_val}, query: "", location: "header"} }
     "query-private_token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "private_token")=(encode-path-segment $token_val)", location: "query"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -173,9 +197,9 @@ def scope-completer-3 [] { ["active" "online" "paused"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-v3-application-settings" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-v3-application-settings" "put-v3-application-settings" "post-v3-ci-lint" "get-v3-deploy-keys" "get-v3-dockerfiles" "get-v3-dockerfiles-name" "get-v3-gitignores" "get-v3-gitignores-name" "get-v3-gitlab-ci-ymls" "get-v3-gitlab-ci-ymls-name" "get-v3-groups" "post-v3-groups" "get-v3-groups-owned" "delete-v3-groups-id" "get-v3-groups-id" "put-v3-groups-id" "get-v3-groups-id-access-requests" "post-v3-groups-id-access-requests" "delete-v3-groups-id-access-requests-user-id" "put-v3-groups-id-access-requests-user-id-approve" "get-v3-groups-id-issues" "get-v3-groups-id-members" "post-v3-groups-id-members" "delete-v3-groups-id-members-user-id" "get-v3-groups-id-members-user-id" "put-v3-groups-id-members-user-id" "get-v3-groups-id-notification-settings" "put-v3-groups-id-notification-settings" "get-v3-groups-id-projects" "post-v3-groups-id-projects-project-id" "get-v3-hooks" "post-v3-hooks" "delete-v3-hooks-id" "get-v3-hooks-id" "post-v3-internal-allowed" "get-v3-internal-broadcast-message" "get-v3-internal-check" "get-v3-internal-discover" "post-v3-internal-lfs-authenticate" "get-v3-internal-merge-request-urls" "post-v3-internal-two-factor-recovery-codes" "get-v3-issues" "get-v3-keys-id" "get-v3-licenses" "get-v3-licenses-name" "get-v3-namespaces" "get-v3-notification-settings" "put-v3-notification-settings" "get-v3-projects" "post-v3-projects" "get-v3-projects-all" "post-v3-projects-fork-id" "get-v3-projects-owned" "get-v3-projects-search-query" "get-v3-projects-starred" "post-v3-projects-user-user-id" "get-v3-projects-visible" "delete-v3-projects-id" "get-v3-projects-id" "put-v3-projects-id" "post-v3-projects-idref-reftrigger-builds" "get-v3-projects-id-access-requests" "post-v3-projects-id-access-requests" "delete-v3-projects-id-access-requests-user-id" "put-v3-projects-id-access-requests-user-id-approve" "post-v3-projects-id-archive" "get-v3-projects-id-boards" "get-v3-projects-id-boards-board-id-lists" "post-v3-projects-id-boards-board-id-lists" "delete-v3-projects-id-boards-board-id-lists-list-id" "get-v3-projects-id-boards-board-id-lists-list-id" "put-v3-projects-id-boards-board-id-lists-list-id" "get-v3-projects-id-builds" "get-v3-projects-id-builds-artifacts-ref-name-download" "get-v3-projects-id-builds-build-id" "get-v3-projects-id-builds-build-id-artifacts" "post-v3-projects-id-builds-build-id-artifacts-keep" "post-v3-projects-id-builds-build-id-cancel" "post-v3-projects-id-builds-build-id-erase" "post-v3-projects-id-builds-build-id-play" "post-v3-projects-id-builds-build-id-retry" "get-v3-projects-id-builds-build-id-trace" "get-v3-projects-id-deploy-keys" "post-v3-projects-id-deploy-keys" "delete-v3-projects-id-deploy-keys-key-id" "get-v3-projects-id-deploy-keys-key-id" "delete-v3-projects-id-deploy-keys-key-id-disable" "post-v3-projects-id-deploy-keys-key-id-enable" "get-v3-projects-id-deployments" "get-v3-projects-id-deployments-deployment-id" "get-v3-projects-id-environments" "post-v3-projects-id-environments" "delete-v3-projects-id-environments-environment-id" "put-v3-projects-id-environments-environment-id" "get-v3-projects-id-events" "delete-v3-projects-id-fork" "post-v3-projects-id-fork-forked-from-id" "get-v3-projects-id-hooks" "post-v3-projects-id-hooks" "delete-v3-projects-id-hooks-hook-id" "get-v3-projects-id-hooks-hook-id" "put-v3-projects-id-hooks-hook-id" "get-v3-projects-id-issues" "post-v3-projects-id-issues" "delete-v3-projects-id-issues-issue-id" "get-v3-projects-id-issues-issue-id" "put-v3-projects-id-issues-issue-id" "post-v3-projects-id-issues-issue-id-add-spent-time" "get-v3-projects-id-issues-issue-id-award-emoji" "post-v3-projects-id-issues-issue-id-award-emoji" "delete-v3-projects-id-issues-issue-id-award-emoji-award-id" "get-v3-projects-id-issues-issue-id-award-emoji-award-id" "post-v3-projects-id-issues-issue-id-move" "get-v3-projects-id-issues-issue-id-notes-note-id-award-emoji" "post-v3-projects-id-issues-issue-id-notes-note-id-award-emoji" "delete-v3-projects-id-issues-issue-id-notes-note-id-award-emoji-award-id" "get-v3-projects-id-issues-issue-id-notes-note-id-award-emoji-award-id" "post-v3-projects-id-issues-issue-id-reset-spent-time" "post-v3-projects-id-issues-issue-id-reset-time-estimate" "post-v3-projects-id-issues-issue-id-time-estimate" "get-v3-projects-id-issues-issue-id-time-stats" "post-v3-projects-id-issues-issue-id-todo" "get-v3-projects-id-issues-noteable-id-notes" "post-v3-projects-id-issues-noteable-id-notes" "delete-v3-projects-id-issues-noteable-id-notes-note-id" "get-v3-projects-id-issues-noteable-id-notes-note-id" "put-v3-projects-id-issues-noteable-id-notes-note-id" "delete-v3-projects-id-issues-subscribable-id-subscription" "post-v3-projects-id-issues-subscribable-id-subscription" "get-v3-projects-id-keys" "post-v3-projects-id-keys" "delete-v3-projects-id-keys-key-id" "get-v3-projects-id-keys-key-id" "delete-v3-projects-id-keys-key-id-disable" "post-v3-projects-id-keys-key-id-enable" "delete-v3-projects-id-labels" "get-v3-projects-id-labels" "post-v3-projects-id-labels" "put-v3-projects-id-labels" "delete-v3-projects-id-labels-subscribable-id-subscription" "post-v3-projects-id-labels-subscribable-id-subscription" "get-v3-projects-id-members" "post-v3-projects-id-members" "delete-v3-projects-id-members-user-id" "get-v3-projects-id-members-user-id" "put-v3-projects-id-members-user-id" "get-v3-projects-id-merge-request-merge-request-id" "put-v3-projects-id-merge-request-merge-request-id" "post-v3-projects-id-merge-request-merge-request-id-cancel-merge-when-build-succeeds" "get-v3-projects-id-merge-request-merge-request-id-changes" "get-v3-projects-id-merge-request-merge-request-id-closes-issues" "get-v3-projects-id-merge-request-merge-request-id-comments" "post-v3-projects-id-merge-request-merge-request-id-comments" "get-v3-projects-id-merge-request-merge-request-id-commits" "put-v3-projects-id-merge-request-merge-request-id-merge" "delete-v3-projects-id-merge-request-subscribable-id-subscription" "post-v3-projects-id-merge-request-subscribable-id-subscription" "get-v3-projects-id-merge-requests" "post-v3-projects-id-merge-requests" "delete-v3-projects-id-merge-requests-merge-request-id" "get-v3-projects-id-merge-requests-merge-request-id" "put-v3-projects-id-merge-requests-merge-request-id" "post-v3-projects-id-merge-requests-merge-request-id-add-spent-time" "get-v3-projects-id-merge-requests-merge-request-id-award-emoji" "post-v3-projects-id-merge-requests-merge-request-id-award-emoji" "delete-v3-projects-id-merge-requests-merge-request-id-award-emoji-award-id" "get-v3-projects-id-merge-requests-merge-request-id-award-emoji-award-id" "post-v3-projects-id-merge-requests-merge-request-id-cancel-merge-when-build-succeeds" "get-v3-projects-id-merge-requests-merge-request-id-changes" "get-v3-projects-id-merge-requests-merge-request-id-closes-issues" "get-v3-projects-id-merge-requests-merge-request-id-comments" "post-v3-projects-id-merge-requests-merge-request-id-comments" "get-v3-projects-id-merge-requests-merge-request-id-commits" "put-v3-projects-id-merge-requests-merge-request-id-merge" "get-v3-projects-id-merge-requests-merge-request-id-notes-note-id-award-emoji" "post-v3-projects-id-merge-requests-merge-request-id-notes-note-id-award-emoji" "delete-v3-projects-id-merge-requests-merge-request-id-notes-note-id-award-emoji-award-id" "get-v3-projects-id-merge-requests-merge-request-id-notes-note-id-award-emoji-award-id" "post-v3-projects-id-merge-requests-merge-request-id-reset-spent-time" "post-v3-projects-id-merge-requests-merge-request-id-reset-time-estimate" "post-v3-projects-id-merge-requests-merge-request-id-time-estimate" "get-v3-projects-id-merge-requests-merge-request-id-time-stats" "post-v3-projects-id-merge-requests-merge-request-id-todo" "get-v3-projects-id-merge-requests-merge-request-id-versions" "get-v3-projects-id-merge-requests-merge-request-id-versions-version-id" "get-v3-projects-id-merge-requests-noteable-id-notes" "post-v3-projects-id-merge-requests-noteable-id-notes" "delete-v3-projects-id-merge-requests-noteable-id-notes-note-id" "get-v3-projects-id-merge-requests-noteable-id-notes-note-id" "put-v3-projects-id-merge-requests-noteable-id-notes-note-id" "delete-v3-projects-id-merge-requests-subscribable-id-subscription" "post-v3-projects-id-merge-requests-subscribable-id-subscription" "get-v3-projects-id-milestones" "post-v3-projects-id-milestones" "get-v3-projects-id-milestones-milestone-id" "put-v3-projects-id-milestones-milestone-id" "get-v3-projects-id-milestones-milestone-id-issues" "get-v3-projects-id-notification-settings" "put-v3-projects-id-notification-settings" "post-v3-projects-id-pipeline" "get-v3-projects-id-pipelines" "get-v3-projects-id-pipelines-pipeline-id" "post-v3-projects-id-pipelines-pipeline-id-cancel" "post-v3-projects-id-pipelines-pipeline-id-retry" "get-v3-projects-id-repository-archive" "get-v3-projects-id-repository-blobs-sha" "get-v3-projects-id-repository-branches" "post-v3-projects-id-repository-branches" "delete-v3-projects-id-repository-branches-branch" "get-v3-projects-id-repository-branches-branch" "put-v3-projects-id-repository-branches-branch-protect" "put-v3-projects-id-repository-branches-branch-unprotect" "get-v3-projects-id-repository-commits" "post-v3-projects-id-repository-commits" "get-v3-projects-id-repository-commits-sha" "get-v3-projects-id-repository-commits-sha-blob" "get-v3-projects-id-repository-commits-sha-builds" "post-v3-projects-id-repository-commits-sha-cherry-pick" "get-v3-projects-id-repository-commits-sha-comments" "post-v3-projects-id-repository-commits-sha-comments" "get-v3-projects-id-repository-commits-sha-diff" "get-v3-projects-id-repository-commits-sha-statuses" "get-v3-projects-id-repository-compare" "get-v3-projects-id-repository-contributors" "delete-v3-projects-id-repository-files" "get-v3-projects-id-repository-files" "post-v3-projects-id-repository-files" "put-v3-projects-id-repository-files" "delete-v3-projects-id-repository-merged-branches" "get-v3-projects-id-repository-raw-blobs-sha" "get-v3-projects-id-repository-tags" "post-v3-projects-id-repository-tags" "delete-v3-projects-id-repository-tags-tag-name" "get-v3-projects-id-repository-tags-tag-name" "post-v3-projects-id-repository-tags-tag-name-release" "put-v3-projects-id-repository-tags-tag-name-release" "get-v3-projects-id-repository-tree" "get-v3-projects-id-runners" "post-v3-projects-id-runners" "delete-v3-projects-id-runners-runner-id" "put-v3-projects-id-services-asana" "put-v3-projects-id-services-assembla" "put-v3-projects-id-services-bamboo" "put-v3-projects-id-services-bugzilla" "put-v3-projects-id-services-buildkite" "put-v3-projects-id-services-builds-email" "put-v3-projects-id-services-campfire" "put-v3-projects-id-services-custom-issue-tracker" "put-v3-projects-id-services-drone-ci" "put-v3-projects-id-services-emails-on-push" "put-v3-projects-id-services-external-wiki" "put-v3-projects-id-services-flowdock" "put-v3-projects-id-services-gemnasium" "put-v3-projects-id-services-hipchat" "put-v3-projects-id-services-irker" "put-v3-projects-id-services-jira" "put-v3-projects-id-services-kubernetes" "put-v3-projects-id-services-mattermost" "put-v3-projects-id-services-mattermost-slash-commands" "post-v3-projects-id-services-mattermost-slash-commands-trigger" "put-v3-projects-id-services-pipelines-email" "put-v3-projects-id-services-pivotaltracker" "put-v3-projects-id-services-pushover" "put-v3-projects-id-services-redmine" "put-v3-projects-id-services-slack" "put-v3-projects-id-services-slack-slash-commands" "post-v3-projects-id-services-slack-slash-commands-trigger" "put-v3-projects-id-services-teamcity" "delete-v3-projects-id-services-service-slug" "get-v3-projects-id-services-service-slug" "post-v3-projects-id-share" "delete-v3-projects-id-share-group-id" "get-v3-projects-id-snippets" "post-v3-projects-id-snippets" "get-v3-projects-id-snippets-noteable-id-notes" "post-v3-projects-id-snippets-noteable-id-notes" "delete-v3-projects-id-snippets-noteable-id-notes-note-id" "get-v3-projects-id-snippets-noteable-id-notes-note-id" "put-v3-projects-id-snippets-noteable-id-notes-note-id" "delete-v3-projects-id-snippets-snippet-id" "get-v3-projects-id-snippets-snippet-id" "put-v3-projects-id-snippets-snippet-id" "get-v3-projects-id-snippets-snippet-id-award-emoji" "post-v3-projects-id-snippets-snippet-id-award-emoji" "delete-v3-projects-id-snippets-snippet-id-award-emoji-award-id" "get-v3-projects-id-snippets-snippet-id-award-emoji-award-id" "get-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji" "post-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji" "delete-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji-award-id" "get-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji-award-id" "get-v3-projects-id-snippets-snippet-id-raw" "delete-v3-projects-id-star" "post-v3-projects-id-star" "post-v3-projects-id-statuses-sha" "get-v3-projects-id-triggers" "post-v3-projects-id-triggers" "delete-v3-projects-id-triggers-token" "get-v3-projects-id-triggers-token" "post-v3-projects-id-unarchive" "post-v3-projects-id-uploads" "get-v3-projects-id-users" "get-v3-projects-id-variables" "post-v3-projects-id-variables" "delete-v3-projects-id-variables-key" "get-v3-projects-id-variables-key" "put-v3-projects-id-variables-key" "get-v3-runners" "get-v3-runners-all" "delete-v3-runners-id" "get-v3-runners-id" "put-v3-runners-id" "post-v3-session" "get-v3-sidekiq-compound-metrics" "get-v3-sidekiq-job-stats" "get-v3-sidekiq-process-metrics" "get-v3-sidekiq-queue-metrics" "get-v3-snippets" "post-v3-snippets" "get-v3-snippets-public" "delete-v3-snippets-id" "get-v3-snippets-id" "put-v3-snippets-id" "get-v3-snippets-id-raw" "get-v3-templates-dockerfiles" "get-v3-templates-dockerfiles-name" "get-v3-templates-gitignores" "get-v3-templates-gitignores-name" "get-v3-templates-gitlab-ci-ymls" "get-v3-templates-gitlab-ci-ymls-name" "get-v3-templates-licenses" "get-v3-templates-licenses-name" "delete-v3-todos" "get-v3-todos" "delete-v3-todos-id" "get-v3-user" "get-v3-user-emails" "post-v3-user-emails" "delete-v3-user-emails-email-id" "get-v3-user-emails-email-id" "get-v3-user-keys" "post-v3-user-keys" "delete-v3-user-keys-key-id" "get-v3-user-keys-key-id" "get-v3-users" "post-v3-users" "delete-v3-users-id" "get-v3-users-id" "put-v3-users-id" "put-v3-users-id-block" "get-v3-users-id-emails" "post-v3-users-id-emails" "delete-v3-users-id-emails-email-id" "get-v3-users-id-events" "get-v3-users-id-keys" "post-v3-users-id-keys" "delete-v3-users-id-keys-key-id" "put-v3-users-id-unblock" "get-v3-version" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -207,7 +231,7 @@ export def "get-v3-application-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<after_sign_out_path: string, after_sign_up_text: string, container_registry_token_expire_delay: string, created_at: string, default_branch_protection: string, default_group_visibility: string, default_project_visibility: string, default_projects_limit: string, default_snippet_visibility: string, domain_blacklist: string, domain_blacklist_enabled: string, domain_whitelist: string, gravatar_enabled: string, home_page_url: string, id: string, koding_enabled: string, koding_url: string, max_attachment_size: string, plantuml_enabled: string, plantuml_url: string, repository_storage: string, repository_storages: string, restricted_visibility_levels: string, session_expire_delay: string, sign_in_text: string, signin_enabled: string, signup_enabled: string, updated_at: string, user_oauth_applications: string> {
+]: nothing -> oneof<record<after_sign_out_path: string, after_sign_up_text: string, container_registry_token_expire_delay: string, created_at: string, default_branch_protection: string, default_group_visibility: string, default_project_visibility: string, default_projects_limit: string, default_snippet_visibility: string, domain_blacklist: string, domain_blacklist_enabled: string, domain_whitelist: string, gravatar_enabled: string, home_page_url: string, id: string, koding_enabled: string, koding_url: string, max_attachment_size: string, plantuml_enabled: string, plantuml_url: string, repository_storage: string, repository_storages: string, restricted_visibility_levels: string, session_expire_delay: string, sign_in_text: string, signin_enabled: string, signup_enabled: string, updated_at: string, user_oauth_applications: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/application/settings" $auth.query)
@@ -305,17 +329,17 @@ export def "put-v3-application-settings" [
   housekeeping_incremental_repack_period: int # Number of Git pushes after which an incremental 'git repack' is run.
   housekeeping_full_repack_period: int # Number of Git pushes after which a full 'git repack' is run.
   housekeeping_gc_period: int # Number of Git pushes after which 'git gc' is run.
-]: any -> record<after_sign_out_path: string, after_sign_up_text: string, container_registry_token_expire_delay: string, created_at: string, default_branch_protection: string, default_group_visibility: string, default_project_visibility: string, default_projects_limit: string, default_snippet_visibility: string, domain_blacklist: string, domain_blacklist_enabled: string, domain_whitelist: string, gravatar_enabled: string, home_page_url: string, id: string, koding_enabled: string, koding_url: string, max_attachment_size: string, plantuml_enabled: string, plantuml_url: string, repository_storage: string, repository_storages: string, restricted_visibility_levels: string, session_expire_delay: string, sign_in_text: string, signin_enabled: string, signup_enabled: string, updated_at: string, user_oauth_applications: string> {
+]: any -> oneof<record<after_sign_out_path: string, after_sign_up_text: string, container_registry_token_expire_delay: string, created_at: string, default_branch_protection: string, default_group_visibility: string, default_project_visibility: string, default_projects_limit: string, default_snippet_visibility: string, domain_blacklist: string, domain_blacklist_enabled: string, domain_whitelist: string, gravatar_enabled: string, home_page_url: string, id: string, koding_enabled: string, koding_url: string, max_attachment_size: string, plantuml_enabled: string, plantuml_url: string, repository_storage: string, repository_storages: string, restricted_visibility_levels: string, session_expire_delay: string, sign_in_text: string, signin_enabled: string, signup_enabled: string, updated_at: string, user_oauth_applications: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/application/settings" $auth.query)
-  let req_body = {"default_branch_protection": $default_branch_protection, "default_project_visibility": $default_project_visibility, "default_snippet_visibility": $default_snippet_visibility, "default_group_visibility": $default_group_visibility, "restricted_visibility_levels": (if ($restricted_visibility_levels | describe | str starts-with "list") { $restricted_visibility_levels | each { into string } | str join "," } else { $restricted_visibility_levels }), "import_sources": (if ($import_sources | describe | str starts-with "list") { $import_sources | each { into string } | str join "," } else { $import_sources }), "disabled_oauth_sign_in_sources": (if ($disabled_oauth_sign_in_sources | describe | str starts-with "list") { $disabled_oauth_sign_in_sources | each { into string } | str join "," } else { $disabled_oauth_sign_in_sources }), "enabled_git_access_protocol": $enabled_git_access_protocol, "gravatar_enabled": $gravatar_enabled, "default_projects_limit": $default_projects_limit, "max_attachment_size": $max_attachment_size, "session_expire_delay": $session_expire_delay, "user_oauth_applications": $user_oauth_applications, "user_default_external": $user_default_external, "signup_enabled": $signup_enabled, "send_user_confirmation_email": $send_user_confirmation_email, "domain_whitelist": $domain_whitelist, "domain_blacklist_enabled": $domain_blacklist_enabled, "domain_blacklist": $domain_blacklist, "after_sign_up_text": $after_sign_up_text, "signin_enabled": $signin_enabled, "require_two_factor_authentication": $require_two_factor_authentication, "two_factor_grace_period": $two_factor_grace_period, "home_page_url": $home_page_url, "after_sign_out_path": $after_sign_out_path, "sign_in_text": $sign_in_text, "help_page_text": $help_page_text, "shared_runners_enabled": $shared_runners_enabled, "shared_runners_text": $shared_runners_text, "max_artifacts_size": $max_artifacts_size, "container_registry_token_expire_delay": $container_registry_token_expire_delay, "metrics_enabled": $metrics_enabled, "metrics_host": $metrics_host, "metrics_port": $metrics_port, "metrics_pool_size": $metrics_pool_size, "metrics_timeout": $metrics_timeout, "metrics_method_call_threshold": $metrics_method_call_threshold, "metrics_sample_interval": $metrics_sample_interval, "metrics_packet_size": $metrics_packet_size, "sidekiq_throttling_enabled": $sidekiq_throttling_enabled, "sidekiq_throttling_queus": (if ($sidekiq_throttling_queus | describe | str starts-with "list") { $sidekiq_throttling_queus | each { into string } | str join "," } else { $sidekiq_throttling_queus }), "sidekiq_throttling_factor": $sidekiq_throttling_factor, "recaptcha_enabled": $recaptcha_enabled, "recaptcha_site_key": $recaptcha_site_key, "recaptcha_private_key": $recaptcha_private_key, "akismet_enabled": $akismet_enabled, "akismet_api_key": $akismet_api_key, "admin_notification_email": $admin_notification_email, "sentry_enabled": $sentry_enabled, "sentry_dsn": $sentry_dsn, "repository_storage": $repository_storage, "repository_checks_enabled": $repository_checks_enabled, "koding_enabled": $koding_enabled, "koding_url": $koding_url, "plantuml_enabled": $plantuml_enabled, "plantuml_url": $plantuml_url, "version_check_enabled": $version_check_enabled, "email_author_in_body": $email_author_in_body, "html_emails_enabled": $html_emails_enabled, "housekeeping_enabled": $housekeeping_enabled, "housekeeping_bitmaps_enabled": $housekeeping_bitmaps_enabled, "housekeeping_incremental_repack_period": $housekeeping_incremental_repack_period, "housekeeping_full_repack_period": $housekeeping_full_repack_period, "housekeeping_gc_period": $housekeeping_gc_period} | compact
+  let req_body = {"default_branch_protection": $default_branch_protection, "default_project_visibility": $default_project_visibility, "default_snippet_visibility": $default_snippet_visibility, "default_group_visibility": $default_group_visibility, "restricted_visibility_levels": (if ($restricted_visibility_levels | describe | str starts-with "list") { $restricted_visibility_levels | compact | each { into string } | str join "," } else { $restricted_visibility_levels }), "import_sources": (if ($import_sources | describe | str starts-with "list") { $import_sources | compact | each { into string } | str join "," } else { $import_sources }), "disabled_oauth_sign_in_sources": (if ($disabled_oauth_sign_in_sources | describe | str starts-with "list") { $disabled_oauth_sign_in_sources | compact | each { into string } | str join "," } else { $disabled_oauth_sign_in_sources }), "enabled_git_access_protocol": $enabled_git_access_protocol, "gravatar_enabled": $gravatar_enabled, "default_projects_limit": $default_projects_limit, "max_attachment_size": $max_attachment_size, "session_expire_delay": $session_expire_delay, "user_oauth_applications": $user_oauth_applications, "user_default_external": $user_default_external, "signup_enabled": $signup_enabled, "send_user_confirmation_email": $send_user_confirmation_email, "domain_whitelist": $domain_whitelist, "domain_blacklist_enabled": $domain_blacklist_enabled, "domain_blacklist": $domain_blacklist, "after_sign_up_text": $after_sign_up_text, "signin_enabled": $signin_enabled, "require_two_factor_authentication": $require_two_factor_authentication, "two_factor_grace_period": $two_factor_grace_period, "home_page_url": $home_page_url, "after_sign_out_path": $after_sign_out_path, "sign_in_text": $sign_in_text, "help_page_text": $help_page_text, "shared_runners_enabled": $shared_runners_enabled, "shared_runners_text": $shared_runners_text, "max_artifacts_size": $max_artifacts_size, "container_registry_token_expire_delay": $container_registry_token_expire_delay, "metrics_enabled": $metrics_enabled, "metrics_host": $metrics_host, "metrics_port": $metrics_port, "metrics_pool_size": $metrics_pool_size, "metrics_timeout": $metrics_timeout, "metrics_method_call_threshold": $metrics_method_call_threshold, "metrics_sample_interval": $metrics_sample_interval, "metrics_packet_size": $metrics_packet_size, "sidekiq_throttling_enabled": $sidekiq_throttling_enabled, "sidekiq_throttling_queus": (if ($sidekiq_throttling_queus | describe | str starts-with "list") { $sidekiq_throttling_queus | compact | each { into string } | str join "," } else { $sidekiq_throttling_queus }), "sidekiq_throttling_factor": $sidekiq_throttling_factor, "recaptcha_enabled": $recaptcha_enabled, "recaptcha_site_key": $recaptcha_site_key, "recaptcha_private_key": $recaptcha_private_key, "akismet_enabled": $akismet_enabled, "akismet_api_key": $akismet_api_key, "admin_notification_email": $admin_notification_email, "sentry_enabled": $sentry_enabled, "sentry_dsn": $sentry_dsn, "repository_storage": $repository_storage, "repository_checks_enabled": $repository_checks_enabled, "koding_enabled": $koding_enabled, "koding_url": $koding_url, "plantuml_enabled": $plantuml_enabled, "plantuml_url": $plantuml_url, "version_check_enabled": $version_check_enabled, "email_author_in_body": $email_author_in_body, "html_emails_enabled": $html_emails_enabled, "housekeeping_enabled": $housekeeping_enabled, "housekeeping_bitmaps_enabled": $housekeeping_bitmaps_enabled, "housekeeping_incremental_repack_period": $housekeeping_incremental_repack_period, "housekeeping_full_repack_period": $housekeeping_full_repack_period, "housekeeping_gc_period": $housekeeping_gc_period} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   if (($req_body | get -o "housekeeping_bitmaps_enabled") == null) { error make --unspanned { msg: "required body field 'housekeeping_bitmaps_enabled' missing: pass --housekeeping-bitmaps-enabled or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -354,7 +378,7 @@ export def "post-v3-ci-lint" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -416,7 +440,7 @@ export def "get-v3-dockerfiles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<name: string> {
+]: nothing -> oneof<record<name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/dockerfiles" $auth.query)
@@ -451,7 +475,7 @@ export def "get-v3-dockerfiles-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content: string, name: string> {
+]: nothing -> oneof<record<content: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -486,7 +510,7 @@ export def "get-v3-gitignores" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<name: string> {
+]: nothing -> oneof<record<name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/gitignores" $auth.query)
@@ -521,7 +545,7 @@ export def "get-v3-gitignores-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content: string, name: string> {
+]: nothing -> oneof<record<content: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -556,7 +580,7 @@ export def "get-v3-gitlab-ci-ymls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<name: string> {
+]: nothing -> oneof<record<name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/gitlab_ci_ymls" $auth.query)
@@ -591,7 +615,7 @@ export def "get-v3-gitlab-ci-ymls-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content: string, name: string> {
+]: nothing -> oneof<record<content: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -633,7 +657,7 @@ export def "get-v3-groups" [
   --sort: string@sort-completer # Sort by asc (ascending) or desc (descending) (default: asc)
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<avatar_url: string, description: string, id: string, lfs_enabled: string, name: string, path: string, request_access_enabled: string, statistics: string, visibility_level: string, web_url: string> {
+]: nothing -> oneof<record<avatar_url: string, description: string, id: string, lfs_enabled: string, name: string, path: string, request_access_enabled: string, statistics: string, visibility_level: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "statistics" $statistics "scalar") (serialize-qp "all_available" $all_available "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -674,7 +698,7 @@ export def "post-v3-groups" [
   --visibility-level: int # The visibility level of the group
   --lfs-enabled: oneof<nothing, bool> # Enable/disable LFS for the projects in this group
   --request-access-enabled: oneof<nothing, bool> # Allow users to request member access
-]: any -> record<avatar_url: string, description: string, id: string, lfs_enabled: string, name: string, path: string, request_access_enabled: string, statistics: string, visibility_level: string, web_url: string> {
+]: any -> oneof<record<avatar_url: string, description: string, id: string, lfs_enabled: string, name: string, path: string, request_access_enabled: string, statistics: string, visibility_level: string, web_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -683,7 +707,7 @@ export def "post-v3-groups" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -715,7 +739,7 @@ export def "get-v3-groups-owned" [
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
   --statistics: oneof<nothing, bool> # Include project statistics
-]: nothing -> record<avatar_url: string, description: string, id: string, lfs_enabled: string, name: string, path: string, request_access_enabled: string, statistics: string, visibility_level: string, web_url: string> {
+]: nothing -> oneof<record<avatar_url: string, description: string, id: string, lfs_enabled: string, name: string, path: string, request_access_enabled: string, statistics: string, visibility_level: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "statistics" $statistics "scalar")] | flatten | str join "&"
@@ -787,7 +811,7 @@ export def "get-v3-groups-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatar_url: string, description: string, id: string, lfs_enabled: string, name: string, path: string, projects: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, request_access_enabled: string, shared_projects: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, statistics: string, visibility_level: string, web_url: string> {
+]: nothing -> oneof<record<avatar_url: string, description: string, id: string, lfs_enabled: string, name: string, path: string, projects: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, request_access_enabled: string, shared_projects: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, statistics: string, visibility_level: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -829,7 +853,7 @@ export def "put-v3-groups-id" [
   --visibility-level: int # The visibility level of the group
   --lfs-enabled: oneof<nothing, bool> # Enable/disable LFS for the projects in this group
   --request-access-enabled: oneof<nothing, bool> # Allow users to request member access
-]: any -> record<avatar_url: string, description: string, id: string, lfs_enabled: string, name: string, path: string, request_access_enabled: string, statistics: string, visibility_level: string, web_url: string> {
+]: any -> oneof<record<avatar_url: string, description: string, id: string, lfs_enabled: string, name: string, path: string, request_access_enabled: string, statistics: string, visibility_level: string, web_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -839,7 +863,7 @@ export def "put-v3-groups-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -871,7 +895,7 @@ export def "get-v3-groups-id-access-requests" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<avatar_url: string, id: string, name: string, requested_at: string, state: string, username: string, web_url: string> {
+]: nothing -> oneof<record<avatar_url: string, id: string, name: string, requested_at: string, state: string, username: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -908,7 +932,7 @@ export def "post-v3-groups-id-access-requests" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatar_url: string, id: string, name: string, requested_at: string, state: string, username: string, web_url: string> {
+]: nothing -> oneof<record<avatar_url: string, id: string, name: string, requested_at: string, state: string, username: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -984,7 +1008,7 @@ export def "put-v3-groups-id-access-requests-user-id-approve" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-level: int # A valid access level (defaults: `30`, developer access level)
-]: any -> record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string> {
+]: any -> oneof<record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -995,7 +1019,7 @@ export def "put-v3-groups-id-access-requests-user-id-approve" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -1032,7 +1056,7 @@ export def "get-v3-groups-id-issues" [
   --sort: string@sort-completer # Return issues sorted in `asc` or `desc` order. (default: desc)
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1072,7 +1096,7 @@ export def "get-v3-groups-id-members" [
   --query: string # A query string to search for members
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string> {
+]: nothing -> oneof<record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1112,7 +1136,7 @@ export def "post-v3-groups-id-members" [
   user_id: int # The user ID of the new member
   access_level: int # A valid access level (defaults: `30`, developer access level)
   --expires-at: string # Date string in the format YEAR-MONTH-DAY
-]: any -> record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string> {
+]: any -> oneof<record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -1122,7 +1146,7 @@ export def "post-v3-groups-id-members" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1191,7 +1215,7 @@ export def "get-v3-groups-id-members-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string> {
+]: nothing -> oneof<record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1231,7 +1255,7 @@ export def "put-v3-groups-id-members-user-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   access_level: int # A valid access level
   --expires-at: string # Date string in the format YEAR-MONTH-DAY
-]: any -> record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string> {
+]: any -> oneof<record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -1242,7 +1266,7 @@ export def "put-v3-groups-id-members-user-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -1272,7 +1296,7 @@ export def "get-v3-groups-id-notification-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<events: string, level: string> {
+]: nothing -> oneof<record<events: string, level: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1321,7 +1345,7 @@ export def "put-v3-groups-id-notification-settings" [
   --merge-merge-request: oneof<nothing, bool> # Enable/disable this notification
   --failed-pipeline: oneof<nothing, bool> # Enable/disable this notification
   --success-pipeline: oneof<nothing, bool> # Enable/disable this notification
-]: any -> record<events: string, level: string> {
+]: any -> oneof<record<events: string, level: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -1331,7 +1355,7 @@ export def "put-v3-groups-id-notification-settings" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -1369,7 +1393,7 @@ export def "get-v3-groups-id-projects" [
   --simple: oneof<nothing, bool> # Return only the ID, URL, name, and path of each project
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string> {
+]: nothing -> oneof<record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1407,7 +1431,7 @@ export def "post-v3-groups-id-projects-project-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatar_url: string, description: string, id: string, lfs_enabled: string, name: string, path: string, projects: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, request_access_enabled: string, shared_projects: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, statistics: string, visibility_level: string, web_url: string> {
+]: nothing -> oneof<record<avatar_url: string, description: string, id: string, lfs_enabled: string, name: string, path: string, projects: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, request_access_enabled: string, shared_projects: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, statistics: string, visibility_level: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1443,7 +1467,7 @@ export def "get-v3-hooks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, enable_ssl_verification: string, id: string, push_events: string, tag_push_events: string, url: string> {
+]: nothing -> oneof<record<created_at: string, enable_ssl_verification: string, id: string, push_events: string, tag_push_events: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/hooks" $auth.query)
@@ -1482,7 +1506,7 @@ export def "post-v3-hooks" [
   --push-events: oneof<nothing, bool> # Trigger hook on push events
   --tag-push-events: oneof<nothing, bool> # Trigger hook on tag push events
   --enable-ssl-verification: oneof<nothing, bool> # Do SSL verification when triggering the hook
-]: any -> record<created_at: string, enable_ssl_verification: string, id: string, push_events: string, tag_push_events: string, url: string> {
+]: any -> oneof<record<created_at: string, enable_ssl_verification: string, id: string, push_events: string, tag_push_events: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -1491,7 +1515,7 @@ export def "post-v3-hooks" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1521,7 +1545,7 @@ export def "delete-v3-hooks-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, enable_ssl_verification: string, id: string, push_events: string, tag_push_events: string, url: string> {
+]: nothing -> oneof<record<created_at: string, enable_ssl_verification: string, id: string, push_events: string, tag_push_events: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1557,7 +1581,7 @@ export def "get-v3-hooks-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, enable_ssl_verification: string, id: string, push_events: string, tag_push_events: string, url: string> {
+]: nothing -> oneof<record<created_at: string, enable_ssl_verification: string, id: string, push_events: string, tag_push_events: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1830,7 +1854,7 @@ export def "get-v3-issues" [
   --sort: string@sort-completer # Return issues sorted in `asc` or `desc` order. (default: desc)
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "labels" $labels "scalar") (serialize-qp "milestone" $milestone "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -1866,7 +1890,7 @@ export def "get-v3-keys-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string, user: record<avatar_url: string, bio: string, can_create_group: string, can_create_project: string, color_scheme_id: string, confirmed_at: string, created_at: string, current_sign_in_at: string, email: string, external: string, id: string, identities: record<extern_uid: string, provider: string>, is_admin: string, last_sign_in_at: string, linkedin: string, location: string, name: string, organization: string, projects_limit: string, skype: string, state: string, theme_id: string, twitter: string, two_factor_enabled: string, username: string, web_url: string, website_url: string>> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string, user: record<avatar_url: string, bio: string, can_create_group: string, can_create_project: string, color_scheme_id: string, confirmed_at: string, created_at: string, current_sign_in_at: string, email: string, external: string, id: string, identities: record<extern_uid: string, provider: string>, is_admin: string, last_sign_in_at: string, linkedin: string, location: string, name: string, organization: string, projects_limit: string, skype: string, state: string, theme_id: string, twitter: string, two_factor_enabled: string, username: string, web_url: string, website_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1902,7 +1926,7 @@ export def "get-v3-licenses" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --popular: oneof<nothing, bool> # If passed, returns only popular licenses
-]: nothing -> record<conditions: string, content: string, description: string, html_url: string, key: string, limitations: string, name: string, nickname: string, permissions: string, popular: string, source_url: string> {
+]: nothing -> oneof<record<conditions: string, content: string, description: string, html_url: string, key: string, limitations: string, name: string, nickname: string, permissions: string, popular: string, source_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "popular" $popular "scalar")] | flatten | str join "&"
@@ -1938,7 +1962,7 @@ export def "get-v3-licenses-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<conditions: string, content: string, description: string, html_url: string, key: string, limitations: string, name: string, nickname: string, permissions: string, popular: string, source_url: string> {
+]: nothing -> oneof<record<conditions: string, content: string, description: string, html_url: string, key: string, limitations: string, name: string, nickname: string, permissions: string, popular: string, source_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1976,7 +2000,7 @@ export def "get-v3-namespaces" [
   --search: string # Search query for namespaces
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<id: string, kind: string, name: string, path: string> {
+]: nothing -> oneof<record<id: string, kind: string, name: string, path: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -2011,7 +2035,7 @@ export def "get-v3-notification-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<events: string, level: string, notification_email: string> {
+]: nothing -> oneof<record<events: string, level: string, notification_email: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/notification_settings" $auth.query)
@@ -2059,7 +2083,7 @@ export def "put-v3-notification-settings" [
   --merge-merge-request: oneof<nothing, bool> # Enable/disable this notification
   --failed-pipeline: oneof<nothing, bool> # Enable/disable this notification
   --success-pipeline: oneof<nothing, bool> # Enable/disable this notification
-]: any -> record<events: string, level: string, notification_email: string> {
+]: any -> oneof<record<events: string, level: string, notification_email: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -2068,7 +2092,7 @@ export def "put-v3-notification-settings" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -2105,7 +2129,7 @@ export def "get-v3-projects" [
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
   --simple: oneof<nothing, bool> # Return only the ID, URL, name, and path of each project
-]: nothing -> record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string> {
+]: nothing -> oneof<record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar")] | flatten | str join "&"
@@ -2159,7 +2183,7 @@ export def "post-v3-projects" [
   --only-allow-merge-if-all-discussions-are-resolved: oneof<nothing, bool> # Only allow to merge if all discussions are resolved
   --namespace-id: int # Namespace ID for the new project. Default to the user namespace.
   --import-url: string # URL from which the project is imported
-]: any -> record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string> {
+]: any -> oneof<record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -2168,7 +2192,7 @@ export def "post-v3-projects" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2206,7 +2230,7 @@ export def "get-v3-projects-all" [
   --per-page: int # Number of items per page (format: int32)
   --simple: oneof<nothing, bool> # Return only the ID, URL, name, and path of each project
   --statistics: oneof<nothing, bool> # Include project statistics
-]: nothing -> record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string> {
+]: nothing -> oneof<record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar") (serialize-qp "statistics" $statistics "scalar")] | flatten | str join "&"
@@ -2243,7 +2267,7 @@ export def "post-v3-projects-fork-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --namespace: string # The ID or name of the namespace that the project will be forked into
-]: any -> record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string> {
+]: any -> oneof<record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -2253,7 +2277,7 @@ export def "post-v3-projects-fork-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2291,7 +2315,7 @@ export def "get-v3-projects-owned" [
   --per-page: int # Number of items per page (format: int32)
   --simple: oneof<nothing, bool> # Return only the ID, URL, name, and path of each project
   --statistics: oneof<nothing, bool> # Include project statistics
-]: nothing -> record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string> {
+]: nothing -> oneof<record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar") (serialize-qp "statistics" $statistics "scalar")] | flatten | str join "&"
@@ -2331,7 +2355,7 @@ export def "get-v3-projects-search-query" [
   --sort: string@sort-completer # Return projects sorted in ascending and descending order (default: desc)
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string> {
+]: nothing -> oneof<record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
@@ -2375,7 +2399,7 @@ export def "get-v3-projects-starred" [
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
   --simple: oneof<nothing, bool> # Return only the ID, URL, name, and path of each project
-]: nothing -> record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string> {
+]: nothing -> oneof<record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar")] | flatten | str join "&"
@@ -2430,7 +2454,7 @@ export def "post-v3-projects-user-user-id" [
   --only-allow-merge-if-all-discussions-are-resolved: oneof<nothing, bool> # Only allow to merge if all discussions are resolved
   --namespace-id: int # Namespace ID for the new project. Default to the user namespace.
   --import-url: string # URL from which the project is imported
-]: any -> record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string> {
+]: any -> oneof<record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -2440,7 +2464,7 @@ export def "post-v3-projects-user-user-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2477,7 +2501,7 @@ export def "get-v3-projects-visible" [
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
   --simple: oneof<nothing, bool> # Return only the ID, URL, name, and path of each project
-]: nothing -> record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string> {
+]: nothing -> oneof<record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order_by" $order_by "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "visibility" $visibility "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "simple" $simple "scalar")] | flatten | str join "&"
@@ -2549,7 +2573,7 @@ export def "get-v3-projects-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, permissions: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string> {
+]: nothing -> oneof<record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, permissions: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2603,7 +2627,7 @@ export def "put-v3-projects-id" [
   --request-access-enabled: oneof<nothing, bool> # Allow users to request member access
   --only-allow-merge-if-build-succeeds: oneof<nothing, bool> # Only allow to merge if builds succeed
   --only-allow-merge-if-all-discussions-are-resolved: oneof<nothing, bool> # Only allow to merge if all discussions are resolved
-]: any -> record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string> {
+]: any -> oneof<record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -2613,7 +2637,7 @@ export def "put-v3-projects-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -2645,7 +2669,7 @@ export def "post-v3-projects-idref-reftrigger-builds" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-token: string # The unique token of trigger
-]: any -> record<id: string, variables: string> {
+]: any -> oneof<record<id: string, variables: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -2657,7 +2681,7 @@ export def "post-v3-projects-idref-reftrigger-builds" [
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2689,7 +2713,7 @@ export def "get-v3-projects-id-access-requests" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<avatar_url: string, id: string, name: string, requested_at: string, state: string, username: string, web_url: string> {
+]: nothing -> oneof<record<avatar_url: string, id: string, name: string, requested_at: string, state: string, username: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2726,7 +2750,7 @@ export def "post-v3-projects-id-access-requests" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatar_url: string, id: string, name: string, requested_at: string, state: string, username: string, web_url: string> {
+]: nothing -> oneof<record<avatar_url: string, id: string, name: string, requested_at: string, state: string, username: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2802,7 +2826,7 @@ export def "put-v3-projects-id-access-requests-user-id-approve" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --access-level: int # A valid access level (defaults: `30`, developer access level)
-]: any -> record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string> {
+]: any -> oneof<record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -2813,7 +2837,7 @@ export def "put-v3-projects-id-access-requests-user-id-approve" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -2843,7 +2867,7 @@ export def "post-v3-projects-id-archive" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string> {
+]: nothing -> oneof<record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2879,7 +2903,7 @@ export def "get-v3-projects-id-boards" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, lists: record<id: string, label: record<color: string, description: string, id: string, name: string>, position: string>> {
+]: nothing -> oneof<record<id: string, lists: record<id: string, label: record<color: string, description: string, id: string, name: string>, position: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2916,7 +2940,7 @@ export def "get-v3-projects-id-boards-board-id-lists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, label: record<color: string, description: string, id: string, name: string>, position: string> {
+]: nothing -> oneof<record<id: string, label: record<color: string, description: string, id: string, name: string>, position: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2955,7 +2979,7 @@ export def "post-v3-projects-id-boards-board-id-lists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   label_id: int # The ID of an existing label
-]: any -> record<id: string, label: record<color: string, description: string, id: string, name: string>, position: string> {
+]: any -> oneof<record<id: string, label: record<color: string, description: string, id: string, name: string>, position: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -2966,7 +2990,7 @@ export def "post-v3-projects-id-boards-board-id-lists" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2998,7 +3022,7 @@ export def "delete-v3-projects-id-boards-board-id-lists-list-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, label: record<color: string, description: string, id: string, name: string>, position: string> {
+]: nothing -> oneof<record<id: string, label: record<color: string, description: string, id: string, name: string>, position: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3038,7 +3062,7 @@ export def "get-v3-projects-id-boards-board-id-lists-list-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, label: record<color: string, description: string, id: string, name: string>, position: string> {
+]: nothing -> oneof<record<id: string, label: record<color: string, description: string, id: string, name: string>, position: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3079,7 +3103,7 @@ export def "put-v3-projects-id-boards-board-id-lists-list-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   position: int # The position of the list
-]: any -> record<id: string, label: record<color: string, description: string, id: string, name: string>, position: string> {
+]: any -> oneof<record<id: string, label: record<color: string, description: string, id: string, name: string>, position: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -3091,7 +3115,7 @@ export def "put-v3-projects-id-boards-board-id-lists-list-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -3124,7 +3148,7 @@ export def "get-v3-projects-id-builds" [
   --scope: string@scope-completer # The scope of builds to show
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>> {
+]: nothing -> oneof<record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3203,7 +3227,7 @@ export def "get-v3-projects-id-builds-build-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>> {
+]: nothing -> oneof<record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3279,7 +3303,7 @@ export def "post-v3-projects-id-builds-build-id-artifacts-keep" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>> {
+]: nothing -> oneof<record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3317,7 +3341,7 @@ export def "post-v3-projects-id-builds-build-id-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>> {
+]: nothing -> oneof<record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3355,7 +3379,7 @@ export def "post-v3-projects-id-builds-build-id-erase" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>> {
+]: nothing -> oneof<record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3393,7 +3417,7 @@ export def "post-v3-projects-id-builds-build-id-play" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>> {
+]: nothing -> oneof<record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3431,7 +3455,7 @@ export def "post-v3-projects-id-builds-build-id-retry" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>> {
+]: nothing -> oneof<record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3506,7 +3530,7 @@ export def "get-v3-projects-id-deploy-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3544,7 +3568,7 @@ export def "post-v3-projects-id-deploy-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   key: string # The new deploy key
   title: string # The name of the deploy key
-]: any -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: any -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -3554,7 +3578,7 @@ export def "post-v3-projects-id-deploy-keys" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3585,7 +3609,7 @@ export def "delete-v3-projects-id-deploy-keys-key-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3623,7 +3647,7 @@ export def "get-v3-projects-id-deploy-keys-key-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3661,7 +3685,7 @@ export def "delete-v3-projects-id-deploy-keys-key-id-disable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3699,7 +3723,7 @@ export def "post-v3-projects-id-deploy-keys-key-id-enable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3738,7 +3762,7 @@ export def "get-v3-projects-id-deployments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<created_at: string, deployable: record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>>, environment: record<external_url: string, id: string, name: string, slug: string>, id: string, iid: string, ref: string, sha: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<created_at: string, deployable: record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>>, environment: record<external_url: string, id: string, name: string, slug: string>, id: string, iid: string, ref: string, sha: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3776,7 +3800,7 @@ export def "get-v3-projects-id-deployments-deployment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, deployable: record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>>, environment: record<external_url: string, id: string, name: string, slug: string>, id: string, iid: string, ref: string, sha: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<created_at: string, deployable: record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>>, environment: record<external_url: string, id: string, name: string, slug: string>, id: string, iid: string, ref: string, sha: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3815,7 +3839,7 @@ export def "get-v3-projects-id-environments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<external_url: string, id: string, name: string, project: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, slug: string> {
+]: nothing -> oneof<record<external_url: string, id: string, name: string, project: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, slug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3855,7 +3879,7 @@ export def "post-v3-projects-id-environments" [
   name: string # The name of the environment to be created
   --external-url: string # URL on which this deployment is viewable
   --slug: string
-]: any -> record<external_url: string, id: string, name: string, project: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, slug: string> {
+]: any -> oneof<record<external_url: string, id: string, name: string, project: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -3865,7 +3889,7 @@ export def "post-v3-projects-id-environments" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3896,7 +3920,7 @@ export def "delete-v3-projects-id-environments-environment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<external_url: string, id: string, name: string, project: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, slug: string> {
+]: nothing -> oneof<record<external_url: string, id: string, name: string, project: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, slug: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3937,7 +3961,7 @@ export def "put-v3-projects-id-environments-environment-id" [
   --name: string # The new environment name
   --external-url: string # The new URL on which this deployment is viewable
   --slug: string
-]: any -> record<external_url: string, id: string, name: string, project: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, slug: string> {
+]: any -> oneof<record<external_url: string, id: string, name: string, project: record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, slug: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -3948,7 +3972,7 @@ export def "put-v3-projects-id-environments-environment-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -3980,7 +4004,7 @@ export def "get-v3-projects-id-events" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<action_name: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author_id: string, author_username: string, created_at: string, data: string, note: record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, project_id: string, target_id: string, target_title: string, target_type: string, title: string> {
+]: nothing -> oneof<record<action_name: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author_id: string, author_username: string, created_at: string, data: string, note: record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, project_id: string, target_id: string, target_title: string, target_type: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4093,7 +4117,7 @@ export def "get-v3-projects-id-hooks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<build_events: string, created_at: string, enable_ssl_verification: string, id: string, issues_events: string, merge_requests_events: string, note_events: string, pipeline_events: string, project_id: string, push_events: string, tag_push_events: string, url: string, wiki_page_events: string> {
+]: nothing -> oneof<record<build_events: string, created_at: string, enable_ssl_verification: string, id: string, issues_events: string, merge_requests_events: string, note_events: string, pipeline_events: string, project_id: string, push_events: string, tag_push_events: string, url: string, wiki_page_events: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4141,7 +4165,7 @@ export def "post-v3-projects-id-hooks" [
   --wiki-page-events: oneof<nothing, bool> # Trigger hook on wiki events
   --enable-ssl-verification: oneof<nothing, bool> # Do SSL verification when triggering the hook
   --body-token: string # Secret token to validate received payloads; this will not be returned in the response
-]: any -> record<build_events: string, created_at: string, enable_ssl_verification: string, id: string, issues_events: string, merge_requests_events: string, note_events: string, pipeline_events: string, project_id: string, push_events: string, tag_push_events: string, url: string, wiki_page_events: string> {
+]: any -> oneof<record<build_events: string, created_at: string, enable_ssl_verification: string, id: string, issues_events: string, merge_requests_events: string, note_events: string, pipeline_events: string, project_id: string, push_events: string, tag_push_events: string, url: string, wiki_page_events: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -4151,7 +4175,7 @@ export def "post-v3-projects-id-hooks" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -4182,7 +4206,7 @@ export def "delete-v3-projects-id-hooks-hook-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<build_events: string, created_at: string, enable_ssl_verification: string, id: string, issues_events: string, merge_requests_events: string, note_events: string, pipeline_events: string, project_id: string, push_events: string, tag_push_events: string, url: string, wiki_page_events: string> {
+]: nothing -> oneof<record<build_events: string, created_at: string, enable_ssl_verification: string, id: string, issues_events: string, merge_requests_events: string, note_events: string, pipeline_events: string, project_id: string, push_events: string, tag_push_events: string, url: string, wiki_page_events: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4220,7 +4244,7 @@ export def "get-v3-projects-id-hooks-hook-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<build_events: string, created_at: string, enable_ssl_verification: string, id: string, issues_events: string, merge_requests_events: string, note_events: string, pipeline_events: string, project_id: string, push_events: string, tag_push_events: string, url: string, wiki_page_events: string> {
+]: nothing -> oneof<record<build_events: string, created_at: string, enable_ssl_verification: string, id: string, issues_events: string, merge_requests_events: string, note_events: string, pipeline_events: string, project_id: string, push_events: string, tag_push_events: string, url: string, wiki_page_events: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4269,7 +4293,7 @@ export def "put-v3-projects-id-hooks-hook-id" [
   --wiki-page-events: oneof<nothing, bool> # Trigger hook on wiki events
   --enable-ssl-verification: oneof<nothing, bool> # Do SSL verification when triggering the hook
   --body-token: string # Secret token to validate received payloads; this will not be returned in the response
-]: any -> record<build_events: string, created_at: string, enable_ssl_verification: string, id: string, issues_events: string, merge_requests_events: string, note_events: string, pipeline_events: string, project_id: string, push_events: string, tag_push_events: string, url: string, wiki_page_events: string> {
+]: any -> oneof<record<build_events: string, created_at: string, enable_ssl_verification: string, id: string, issues_events: string, merge_requests_events: string, note_events: string, pipeline_events: string, project_id: string, push_events: string, tag_push_events: string, url: string, wiki_page_events: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -4280,7 +4304,7 @@ export def "put-v3-projects-id-hooks-hook-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -4318,7 +4342,7 @@ export def "get-v3-projects-id-issues" [
   --sort: string@sort-completer # Return issues sorted in `asc` or `desc` order. (default: desc)
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4364,7 +4388,7 @@ export def "post-v3-projects-id-issues" [
   --labels: string # Comma-separated list of label names
   --due-date: string # Date time string in the format YEAR-MONTH-DAY
   --confidential: oneof<nothing, bool> # Boolean parameter if the issue should be confidential
-]: any -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string> {
+]: any -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -4374,7 +4398,7 @@ export def "post-v3-projects-id-issues" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -4443,7 +4467,7 @@ export def "get-v3-projects-id-issues-issue-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4491,7 +4515,7 @@ export def "put-v3-projects-id-issues-issue-id" [
   --due-date: string # Date time string in the format YEAR-MONTH-DAY
   --confidential: oneof<nothing, bool> # Boolean parameter if the issue should be confidential
   --created-at: string
-]: any -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string> {
+]: any -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -4502,7 +4526,7 @@ export def "put-v3-projects-id-issues-issue-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -4545,7 +4569,7 @@ export def "post-v3-projects-id-issues-issue-id-add-spent-time" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -4578,7 +4602,7 @@ export def "get-v3-projects-id-issues-issue-id-award-emoji" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4618,7 +4642,7 @@ export def "post-v3-projects-id-issues-issue-id-award-emoji" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of a award_emoji (without colons)
-]: any -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: any -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -4629,7 +4653,7 @@ export def "post-v3-projects-id-issues-issue-id-award-emoji" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -4661,7 +4685,7 @@ export def "delete-v3-projects-id-issues-issue-id-award-emoji-award-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4701,7 +4725,7 @@ export def "get-v3-projects-id-issues-issue-id-award-emoji-award-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4741,7 +4765,7 @@ export def "post-v3-projects-id-issues-issue-id-move" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   to_project_id: int # The ID of the new project
-]: any -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string> {
+]: any -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -4752,7 +4776,7 @@ export def "post-v3-projects-id-issues-issue-id-move" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -4786,7 +4810,7 @@ export def "get-v3-projects-id-issues-issue-id-notes-note-id-award-emoji" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4828,7 +4852,7 @@ export def "post-v3-projects-id-issues-issue-id-notes-note-id-award-emoji" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of a award_emoji (without colons)
-]: any -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: any -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -4840,7 +4864,7 @@ export def "post-v3-projects-id-issues-issue-id-notes-note-id-award-emoji" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -4873,7 +4897,7 @@ export def "delete-v3-projects-id-issues-issue-id-notes-note-id-award-emoji-awar
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4915,7 +4939,7 @@ export def "get-v3-projects-id-issues-issue-id-notes-note-id-award-emoji-award-i
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5043,7 +5067,7 @@ export def "post-v3-projects-id-issues-issue-id-time-estimate" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -5112,7 +5136,7 @@ export def "post-v3-projects-id-issues-issue-id-todo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action_name: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, id: string, project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, state: string, target: string, target_type: string, target_url: string> {
+]: nothing -> oneof<record<action_name: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, id: string, project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, state: string, target: string, target_type: string, target_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5152,7 +5176,7 @@ export def "get-v3-projects-id-issues-noteable-id-notes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string> {
+]: nothing -> oneof<record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5193,7 +5217,7 @@ export def "post-v3-projects-id-issues-noteable-id-notes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string # The content of a note
   --created-at: string # The creation date of the note
-]: any -> record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string> {
+]: any -> oneof<record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -5204,7 +5228,7 @@ export def "post-v3-projects-id-issues-noteable-id-notes" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -5236,7 +5260,7 @@ export def "delete-v3-projects-id-issues-noteable-id-notes-note-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string> {
+]: nothing -> oneof<record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5276,7 +5300,7 @@ export def "get-v3-projects-id-issues-noteable-id-notes-note-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string> {
+]: nothing -> oneof<record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5317,7 +5341,7 @@ export def "put-v3-projects-id-issues-noteable-id-notes-note-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string # The content of a note
-]: any -> record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string> {
+]: any -> oneof<record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -5329,7 +5353,7 @@ export def "put-v3-projects-id-issues-noteable-id-notes-note-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -5360,7 +5384,7 @@ export def "delete-v3-projects-id-issues-subscribable-id-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5398,7 +5422,7 @@ export def "post-v3-projects-id-issues-subscribable-id-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5435,7 +5459,7 @@ export def "get-v3-projects-id-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5473,7 +5497,7 @@ export def "post-v3-projects-id-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   key: string # The new deploy key
   title: string # The name of the deploy key
-]: any -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: any -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -5483,7 +5507,7 @@ export def "post-v3-projects-id-keys" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -5514,7 +5538,7 @@ export def "delete-v3-projects-id-keys-key-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5552,7 +5576,7 @@ export def "get-v3-projects-id-keys-key-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5590,7 +5614,7 @@ export def "delete-v3-projects-id-keys-key-id-disable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5628,7 +5652,7 @@ export def "post-v3-projects-id-keys-key-id-enable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5666,7 +5690,7 @@ export def "delete-v3-projects-id-labels" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the label to be deleted (required)
-]: nothing -> record<closed_issues_count: string, color: string, description: string, id: string, name: string, open_issues_count: string, open_merge_requests_count: string, priority: string, subscribed: string> {
+]: nothing -> oneof<record<closed_issues_count: string, color: string, description: string, id: string, name: string, open_issues_count: string, open_merge_requests_count: string, priority: string, subscribed: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5704,7 +5728,7 @@ export def "get-v3-projects-id-labels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<closed_issues_count: string, color: string, description: string, id: string, name: string, open_issues_count: string, open_merge_requests_count: string, priority: string, subscribed: string> {
+]: nothing -> oneof<record<closed_issues_count: string, color: string, description: string, id: string, name: string, open_issues_count: string, open_merge_requests_count: string, priority: string, subscribed: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5744,7 +5768,7 @@ export def "post-v3-projects-id-labels" [
   color: string # The color of the label given in 6-digit hex notation with leading '#' sign (e.g. #FFAABB)
   --description: string # The description of label to be created
   --priority: int # The priority of the label
-]: any -> record<closed_issues_count: string, color: string, description: string, id: string, name: string, open_issues_count: string, open_merge_requests_count: string, priority: string, subscribed: string> {
+]: any -> oneof<record<closed_issues_count: string, color: string, description: string, id: string, name: string, open_issues_count: string, open_merge_requests_count: string, priority: string, subscribed: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -5754,7 +5778,7 @@ export def "post-v3-projects-id-labels" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -5789,7 +5813,7 @@ export def "put-v3-projects-id-labels" [
   --color: string # The new color of the label given in 6-digit hex notation with leading '#' sign (e.g. #FFAABB)
   --description: string # The new description of label
   --priority: int # The priority of the label
-]: any -> record<closed_issues_count: string, color: string, description: string, id: string, name: string, open_issues_count: string, open_merge_requests_count: string, priority: string, subscribed: string> {
+]: any -> oneof<record<closed_issues_count: string, color: string, description: string, id: string, name: string, open_issues_count: string, open_merge_requests_count: string, priority: string, subscribed: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -5799,7 +5823,7 @@ export def "put-v3-projects-id-labels" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -5830,7 +5854,7 @@ export def "delete-v3-projects-id-labels-subscribable-id-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<closed_issues_count: string, color: string, description: string, id: string, name: string, open_issues_count: string, open_merge_requests_count: string, priority: string, subscribed: string> {
+]: nothing -> oneof<record<closed_issues_count: string, color: string, description: string, id: string, name: string, open_issues_count: string, open_merge_requests_count: string, priority: string, subscribed: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5868,7 +5892,7 @@ export def "post-v3-projects-id-labels-subscribable-id-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<closed_issues_count: string, color: string, description: string, id: string, name: string, open_issues_count: string, open_merge_requests_count: string, priority: string, subscribed: string> {
+]: nothing -> oneof<record<closed_issues_count: string, color: string, description: string, id: string, name: string, open_issues_count: string, open_merge_requests_count: string, priority: string, subscribed: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5908,7 +5932,7 @@ export def "get-v3-projects-id-members" [
   --query: string # A query string to search for members
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string> {
+]: nothing -> oneof<record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5948,7 +5972,7 @@ export def "post-v3-projects-id-members" [
   user_id: int # The user ID of the new member
   access_level: int # A valid access level (defaults: `30`, developer access level)
   --expires-at: string # Date string in the format YEAR-MONTH-DAY
-]: any -> record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string> {
+]: any -> oneof<record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -5958,7 +5982,7 @@ export def "post-v3-projects-id-members" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -6027,7 +6051,7 @@ export def "get-v3-projects-id-members-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string> {
+]: nothing -> oneof<record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6067,7 +6091,7 @@ export def "put-v3-projects-id-members-user-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   access_level: int # A valid access level
   --expires-at: string # Date string in the format YEAR-MONTH-DAY
-]: any -> record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string> {
+]: any -> oneof<record<access_level: string, avatar_url: string, expires_at: string, id: string, name: string, state: string, username: string, web_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -6078,7 +6102,7 @@ export def "put-v3-projects-id-members-user-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -6109,7 +6133,7 @@ export def "get-v3-projects-id-merge-request-merge-request-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6155,7 +6179,7 @@ export def "put-v3-projects-id-merge-request-merge-request-id" [
   --milestone-id: int # The ID of a milestone to assign the merge request
   --labels: string # Comma-separated list of label names
   --remove-source-branch: oneof<nothing, bool> # Remove source branch when merging
-]: any -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: any -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -6166,7 +6190,7 @@ export def "put-v3-projects-id-merge-request-merge-request-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -6197,7 +6221,7 @@ export def "post-v3-projects-id-merge-request-merge-request-id-cancel-merge-when
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6235,7 +6259,7 @@ export def "get-v3-projects-id-merge-request-merge-request-id-changes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, changes: record<a_mode: string, b_mode: string, deleted_file: string, diff: string, new_file: string, new_path: string, old_path: string, renamed_file: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, changes: record<a_mode: string, b_mode: string, deleted_file: string, diff: string, new_file: string, new_path: string, old_path: string, renamed_file: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6275,7 +6299,7 @@ export def "get-v3-projects-id-merge-request-merge-request-id-closes-issues" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, note: string> {
+]: nothing -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, note: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6316,7 +6340,7 @@ export def "get-v3-projects-id-merge-request-merge-request-id-comments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, note: string> {
+]: nothing -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, note: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6356,7 +6380,7 @@ export def "post-v3-projects-id-merge-request-merge-request-id-comments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   note: string # The text of the comment
-]: any -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, note: string> {
+]: any -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, note: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -6367,7 +6391,7 @@ export def "post-v3-projects-id-merge-request-merge-request-id-comments" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -6398,7 +6422,7 @@ export def "get-v3-projects-id-merge-request-merge-request-id-commits" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string> {
+]: nothing -> oneof<record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6440,7 +6464,7 @@ export def "put-v3-projects-id-merge-request-merge-request-id-merge" [
   --should-remove-source-branch: oneof<nothing, bool> # When true, the source branch will be deleted if possible
   --merge-when-build-succeeds: oneof<nothing, bool> # When true, this merge request will be merged when the pipeline succeeds
   --sha: string # When present, must have the HEAD SHA of the source branch
-]: any -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: any -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -6451,7 +6475,7 @@ export def "put-v3-projects-id-merge-request-merge-request-id-merge" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -6482,7 +6506,7 @@ export def "delete-v3-projects-id-merge-request-subscribable-id-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6520,7 +6544,7 @@ export def "post-v3-projects-id-merge-request-subscribable-id-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6562,7 +6586,7 @@ export def "get-v3-projects-id-merge-requests" [
   --sort: string@sort-completer # Return merge requests sorted in `asc` or `desc` order. (default: desc)
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6608,7 +6632,7 @@ export def "post-v3-projects-id-merge-requests" [
   --milestone-id: int # The ID of a milestone to assign the merge request
   --labels: string # Comma-separated list of label names
   --remove-source-branch: oneof<nothing, bool> # Remove source branch when merging
-]: any -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: any -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -6618,7 +6642,7 @@ export def "post-v3-projects-id-merge-requests" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -6687,7 +6711,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6733,7 +6757,7 @@ export def "put-v3-projects-id-merge-requests-merge-request-id" [
   --milestone-id: int # The ID of a milestone to assign the merge request
   --labels: string # Comma-separated list of label names
   --remove-source-branch: oneof<nothing, bool> # Remove source branch when merging
-]: any -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: any -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -6744,7 +6768,7 @@ export def "put-v3-projects-id-merge-requests-merge-request-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -6787,7 +6811,7 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-add-spent-time" 
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -6820,7 +6844,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-award-emoji" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6860,7 +6884,7 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-award-emoji" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of a award_emoji (without colons)
-]: any -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: any -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -6871,7 +6895,7 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-award-emoji" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -6903,7 +6927,7 @@ export def "delete-v3-projects-id-merge-requests-merge-request-id-award-emoji-aw
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6943,7 +6967,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-award-emoji-award
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6982,7 +7006,7 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-cancel-merge-whe
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7020,7 +7044,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-changes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, changes: record<a_mode: string, b_mode: string, deleted_file: string, diff: string, new_file: string, new_path: string, old_path: string, renamed_file: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, changes: record<a_mode: string, b_mode: string, deleted_file: string, diff: string, new_file: string, new_path: string, old_path: string, renamed_file: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7060,7 +7084,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-closes-issues" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, note: string> {
+]: nothing -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, note: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7101,7 +7125,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-comments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, note: string> {
+]: nothing -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, note: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7141,7 +7165,7 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-comments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   note: string # The text of the comment
-]: any -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, note: string> {
+]: any -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, note: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -7152,7 +7176,7 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-comments" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -7183,7 +7207,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-commits" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string> {
+]: nothing -> oneof<record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7225,7 +7249,7 @@ export def "put-v3-projects-id-merge-requests-merge-request-id-merge" [
   --should-remove-source-branch: oneof<nothing, bool> # When true, the source branch will be deleted if possible
   --merge-when-build-succeeds: oneof<nothing, bool> # When true, this merge request will be merged when the pipeline succeeds
   --sha: string # When present, must have the HEAD SHA of the source branch
-]: any -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: any -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -7236,7 +7260,7 @@ export def "put-v3-projects-id-merge-requests-merge-request-id-merge" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -7270,7 +7294,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-notes-note-id-awa
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7312,7 +7336,7 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-notes-note-id-aw
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of a award_emoji (without colons)
-]: any -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: any -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -7324,7 +7348,7 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-notes-note-id-aw
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -7357,7 +7381,7 @@ export def "delete-v3-projects-id-merge-requests-merge-request-id-notes-note-id-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7399,7 +7423,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-notes-note-id-awa
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7527,7 +7551,7 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-time-estimate" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -7596,7 +7620,7 @@ export def "post-v3-projects-id-merge-requests-merge-request-id-todo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action_name: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, id: string, project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, state: string, target: string, target_type: string, target_url: string> {
+]: nothing -> oneof<record<action_name: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, id: string, project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, state: string, target: string, target_type: string, target_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7634,7 +7658,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-versions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<base_commit_sha: string, created_at: string, head_commit_sha: string, id: string, merge_request_id: string, real_size: string, start_commit_sha: string, state: string> {
+]: nothing -> oneof<record<base_commit_sha: string, created_at: string, head_commit_sha: string, id: string, merge_request_id: string, real_size: string, start_commit_sha: string, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7673,7 +7697,7 @@ export def "get-v3-projects-id-merge-requests-merge-request-id-versions-version-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<base_commit_sha: string, commits: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, created_at: string, diffs: record<a_mode: string, b_mode: string, deleted_file: string, diff: string, new_file: string, new_path: string, old_path: string, renamed_file: string>, head_commit_sha: string, id: string, merge_request_id: string, real_size: string, start_commit_sha: string, state: string> {
+]: nothing -> oneof<record<base_commit_sha: string, commits: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, created_at: string, diffs: record<a_mode: string, b_mode: string, deleted_file: string, diff: string, new_file: string, new_path: string, old_path: string, renamed_file: string>, head_commit_sha: string, id: string, merge_request_id: string, real_size: string, start_commit_sha: string, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7714,7 +7738,7 @@ export def "get-v3-projects-id-merge-requests-noteable-id-notes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string> {
+]: nothing -> oneof<record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7755,7 +7779,7 @@ export def "post-v3-projects-id-merge-requests-noteable-id-notes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string # The content of a note
   --created-at: string # The creation date of the note
-]: any -> record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string> {
+]: any -> oneof<record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -7766,7 +7790,7 @@ export def "post-v3-projects-id-merge-requests-noteable-id-notes" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -7798,7 +7822,7 @@ export def "delete-v3-projects-id-merge-requests-noteable-id-notes-note-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string> {
+]: nothing -> oneof<record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7838,7 +7862,7 @@ export def "get-v3-projects-id-merge-requests-noteable-id-notes-note-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string> {
+]: nothing -> oneof<record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7879,7 +7903,7 @@ export def "put-v3-projects-id-merge-requests-noteable-id-notes-note-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string # The content of a note
-]: any -> record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string> {
+]: any -> oneof<record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -7891,7 +7915,7 @@ export def "put-v3-projects-id-merge-requests-noteable-id-notes-note-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -7922,7 +7946,7 @@ export def "delete-v3-projects-id-merge-requests-subscribable-id-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7960,7 +7984,7 @@ export def "post-v3-projects-id-merge-requests-subscribable-id-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, downvotes: string, force_remove_source_branch: string, id: string, iid: string, labels: string, merge_commit_sha: string, merge_status: string, merge_when_build_succeeds: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, sha: string, should_remove_source_branch: string, source_branch: string, source_project_id: string, state: string, subscribed: string, target_branch: string, target_project_id: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string, work_in_progress: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8000,7 +8024,7 @@ export def "get-v3-projects-id-milestones" [
   --state: string@state-completer-2 # Return "active", "closed", or "all" milestones (default: all)
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8041,7 +8065,7 @@ export def "post-v3-projects-id-milestones" [
   --description: string # The description of the milestone
   --due-date: string # The due date of the milestone. The ISO 8601 date format (%Y-%m-%d)
   --start-date: string # The start date of the milestone. The ISO 8601 date format (%Y-%m-%d)
-]: any -> record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string> {
+]: any -> oneof<record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -8051,7 +8075,7 @@ export def "post-v3-projects-id-milestones" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -8082,7 +8106,7 @@ export def "get-v3-projects-id-milestones-milestone-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8125,7 +8149,7 @@ export def "put-v3-projects-id-milestones-milestone-id" [
   --description: string # The description of the milestone
   --due-date: string # The due date of the milestone. The ISO 8601 date format (%Y-%m-%d)
   --start-date: string # The start date of the milestone. The ISO 8601 date format (%Y-%m-%d)
-]: any -> record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string> {
+]: any -> oneof<record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -8136,7 +8160,7 @@ export def "put-v3-projects-id-milestones-milestone-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -8169,7 +8193,7 @@ export def "get-v3-projects-id-milestones-milestone-id-issues" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string> {
+]: nothing -> oneof<record<assignee: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, confidential: string, created_at: string, description: string, downvotes: string, due_date: string, id: string, iid: string, labels: string, milestone: record<created_at: string, description: string, due_date: string, id: string, iid: string, project_id: string, start_date: string, state: string, title: string, updated_at: string>, project_id: string, state: string, subscribed: string, title: string, updated_at: string, upvotes: string, user_notes_count: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8207,7 +8231,7 @@ export def "get-v3-projects-id-notification-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<events: string, level: string> {
+]: nothing -> oneof<record<events: string, level: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8256,7 +8280,7 @@ export def "put-v3-projects-id-notification-settings" [
   --merge-merge-request: oneof<nothing, bool> # Enable/disable this notification
   --failed-pipeline: oneof<nothing, bool> # Enable/disable this notification
   --success-pipeline: oneof<nothing, bool> # Enable/disable this notification
-]: any -> record<events: string, level: string> {
+]: any -> oneof<record<events: string, level: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -8266,7 +8290,7 @@ export def "put-v3-projects-id-notification-settings" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -8297,7 +8321,7 @@ export def "post-v3-projects-id-pipeline" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   ref: string # Reference
-]: any -> record<before_sha: string, committed_at: string, coverage: string, created_at: string, duration: string, finished_at: string, id: string, ref: string, sha: string, started_at: string, status: string, tag: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, yaml_errors: string> {
+]: any -> oneof<record<before_sha: string, committed_at: string, coverage: string, created_at: string, duration: string, finished_at: string, id: string, ref: string, sha: string, started_at: string, status: string, tag: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, yaml_errors: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -8307,7 +8331,7 @@ export def "post-v3-projects-id-pipeline" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -8340,7 +8364,7 @@ export def "get-v3-projects-id-pipelines" [
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
   --scope: string@scope-completer-1 # Either running, branches, or tags
-]: nothing -> record<before_sha: string, committed_at: string, coverage: string, created_at: string, duration: string, finished_at: string, id: string, ref: string, sha: string, started_at: string, status: string, tag: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, yaml_errors: string> {
+]: nothing -> oneof<record<before_sha: string, committed_at: string, coverage: string, created_at: string, duration: string, finished_at: string, id: string, ref: string, sha: string, started_at: string, status: string, tag: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, yaml_errors: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8378,7 +8402,7 @@ export def "get-v3-projects-id-pipelines-pipeline-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<before_sha: string, committed_at: string, coverage: string, created_at: string, duration: string, finished_at: string, id: string, ref: string, sha: string, started_at: string, status: string, tag: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, yaml_errors: string> {
+]: nothing -> oneof<record<before_sha: string, committed_at: string, coverage: string, created_at: string, duration: string, finished_at: string, id: string, ref: string, sha: string, started_at: string, status: string, tag: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, yaml_errors: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8416,7 +8440,7 @@ export def "post-v3-projects-id-pipelines-pipeline-id-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<before_sha: string, committed_at: string, coverage: string, created_at: string, duration: string, finished_at: string, id: string, ref: string, sha: string, started_at: string, status: string, tag: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, yaml_errors: string> {
+]: nothing -> oneof<record<before_sha: string, committed_at: string, coverage: string, created_at: string, duration: string, finished_at: string, id: string, ref: string, sha: string, started_at: string, status: string, tag: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, yaml_errors: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8454,7 +8478,7 @@ export def "post-v3-projects-id-pipelines-pipeline-id-retry" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<before_sha: string, committed_at: string, coverage: string, created_at: string, duration: string, finished_at: string, id: string, ref: string, sha: string, started_at: string, status: string, tag: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, yaml_errors: string> {
+]: nothing -> oneof<record<before_sha: string, committed_at: string, coverage: string, created_at: string, duration: string, finished_at: string, id: string, ref: string, sha: string, started_at: string, status: string, tag: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, yaml_errors: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8571,7 +8595,7 @@ export def "get-v3-projects-id-repository-branches" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commit: string, developers_can_merge: string, developers_can_push: string, merged: string, name: string, protected: string> {
+]: nothing -> oneof<record<commit: string, developers_can_merge: string, developers_can_push: string, merged: string, name: string, protected: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8609,7 +8633,7 @@ export def "post-v3-projects-id-repository-branches" [
   --dry-run(-n) # Return the request that would be sent without executing it
   branch_name: string # The name of the branch
   ref: string # Create branch from commit sha or existing branch
-]: any -> record<commit: string, developers_can_merge: string, developers_can_push: string, merged: string, name: string, protected: string> {
+]: any -> oneof<record<commit: string, developers_can_merge: string, developers_can_push: string, merged: string, name: string, protected: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -8619,7 +8643,7 @@ export def "post-v3-projects-id-repository-branches" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -8688,7 +8712,7 @@ export def "get-v3-projects-id-repository-branches-branch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commit: string, developers_can_merge: string, developers_can_push: string, merged: string, name: string, protected: string> {
+]: nothing -> oneof<record<commit: string, developers_can_merge: string, developers_can_push: string, merged: string, name: string, protected: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8728,7 +8752,7 @@ export def "put-v3-projects-id-repository-branches-branch-protect" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --developers-can-push: oneof<nothing, bool> # Flag if developers can push to that branch
   --developers-can-merge: oneof<nothing, bool> # Flag if developers can merge to that branch
-]: any -> record<commit: string, developers_can_merge: string, developers_can_push: string, merged: string, name: string, protected: string> {
+]: any -> oneof<record<commit: string, developers_can_merge: string, developers_can_push: string, merged: string, name: string, protected: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -8739,7 +8763,7 @@ export def "put-v3-projects-id-repository-branches-branch-protect" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -8770,7 +8794,7 @@ export def "put-v3-projects-id-repository-branches-branch-unprotect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commit: string, developers_can_merge: string, developers_can_push: string, merged: string, name: string, protected: string> {
+]: nothing -> oneof<record<commit: string, developers_can_merge: string, developers_can_push: string, merged: string, name: string, protected: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8813,7 +8837,7 @@ export def "get-v3-projects-id-repository-commits" [
   --page: int # The page for pagination (format: int32, default: 0)
   --per-page: int # The number of results per page (format: int32, default: 20)
   --path: string # The file path
-]: nothing -> record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string> {
+]: nothing -> oneof<record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8855,17 +8879,17 @@ export def "post-v3-projects-id-repository-commits" [
   actions: list # Actions to perform in commit
   --author-email: string # Author email for commit
   --author-name: string # Author name for commit
-]: any -> record<author_email: string, author_name: string, authored_date: string, committed_date: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, parent_ids: string, short_id: string, stats: record<additions: string, deletions: string, total: string>, status: string, title: string> {
+]: any -> oneof<record<author_email: string, author_name: string, authored_date: string, committed_date: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, parent_ids: string, short_id: string, stats: record<additions: string, deletions: string, total: string>, status: string, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/projects/{id}/repository/commits") $auth.query)
-  let req_body = {"branch_name": $branch_name, "commit_message": $commit_message, "actions": (if ($actions | describe | str starts-with "list") { $actions | each { into string } | str join "," } else { $actions }), "author_email": $author_email, "author_name": $author_name} | compact
+  let req_body = {"branch_name": $branch_name, "commit_message": $commit_message, "actions": (if ($actions | describe | str starts-with "list") { $actions | compact | each { into string } | str join "," } else { $actions }), "author_email": $author_email, "author_name": $author_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -8896,7 +8920,7 @@ export def "get-v3-projects-id-repository-commits-sha" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<author_email: string, author_name: string, authored_date: string, committed_date: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, parent_ids: string, short_id: string, stats: record<additions: string, deletions: string, total: string>, status: string, title: string> {
+]: nothing -> oneof<record<author_email: string, author_name: string, authored_date: string, committed_date: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, parent_ids: string, short_id: string, stats: record<additions: string, deletions: string, total: string>, status: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8978,7 +9002,7 @@ export def "get-v3-projects-id-repository-commits-sha-builds" [
   --scope: string@scope-completer # The scope of builds to show
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>> {
+]: nothing -> oneof<record<artifacts_file: record<filename: string, size: string>, commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, coverage: string, created_at: string, finished_at: string, id: string, name: string, pipeline: record<id: string, ref: string, sha: string, status: string>, ref: string, runner: record<active: string, description: string, id: string, is_shared: string, name: string>, stage: string, started_at: string, status: string, tag: string, user: record<avatar_url: string, bio: string, created_at: string, id: string, is_admin: string, linkedin: string, location: string, name: string, organization: string, skype: string, state: string, twitter: string, username: string, web_url: string, website_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9018,7 +9042,7 @@ export def "post-v3-projects-id-repository-commits-sha-cherry-pick" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   branch: string # The name of the branch
-]: any -> record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string> {
+]: any -> oneof<record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -9029,7 +9053,7 @@ export def "post-v3-projects-id-repository-commits-sha-cherry-pick" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -9062,7 +9086,7 @@ export def "get-v3-projects-id-repository-commits-sha-comments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, line: string, line_type: string, note: string, path: string> {
+]: nothing -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, line: string, line_type: string, note: string, path: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9105,7 +9129,7 @@ export def "post-v3-projects-id-repository-commits-sha-comments" [
   --path: string # The file path
   line: int # The line number
   line_type: string@line-type-completer # The type of the line
-]: any -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, line: string, line_type: string, note: string, path: string> {
+]: any -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, line: string, line_type: string, note: string, path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -9116,7 +9140,7 @@ export def "post-v3-projects-id-repository-commits-sha-comments" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -9191,7 +9215,7 @@ export def "get-v3-projects-id-repository-commits-sha-statuses" [
   --all: string # Show all statuses, default: false
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<allow_failure: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, finished_at: string, id: string, name: string, ref: string, sha: string, started_at: string, status: string, target_url: string> {
+]: nothing -> oneof<record<allow_failure: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, finished_at: string, id: string, name: string, ref: string, sha: string, started_at: string, status: string, target_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9231,7 +9255,7 @@ export def "get-v3-projects-id-repository-compare" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --from: string # The commit, branch name, or tag name to start comparison (required)
   --to: string # The commit, branch name, or tag name to stop comparison (required)
-]: nothing -> record<commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, commits: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, compare_same_ref: string, compare_timeout: string, diffs: record<a_mode: string, b_mode: string, deleted_file: string, diff: string, new_file: string, new_path: string, old_path: string, renamed_file: string>> {
+]: nothing -> oneof<record<commit: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, commits: record<author_email: string, author_name: string, committer_email: string, committer_name: string, created_at: string, id: string, message: string, short_id: string, title: string>, compare_same_ref: string, compare_timeout: string, diffs: record<a_mode: string, b_mode: string, deleted_file: string, diff: string, new_file: string, new_path: string, old_path: string, renamed_file: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9270,7 +9294,7 @@ export def "get-v3-projects-id-repository-contributors" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<additions: string, commits: string, deletions: string, email: string, name: string> {
+]: nothing -> oneof<record<additions: string, commits: string, deletions: string, email: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9409,7 +9433,7 @@ export def "post-v3-projects-id-repository-files" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -9456,7 +9480,7 @@ export def "put-v3-projects-id-repository-files" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -9559,7 +9583,7 @@ export def "get-v3-projects-id-repository-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commit: string, message: string, name: string, release: record<description: string, tag_name: string>> {
+]: nothing -> oneof<record<commit: string, message: string, name: string, release: record<description: string, tag_name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9599,7 +9623,7 @@ export def "post-v3-projects-id-repository-tags" [
   ref: string # The commit sha or branch name
   --message: string # Specifying a message creates an annotated tag
   --release-description: string # Specifying release notes stored in the GitLab database
-]: any -> record<commit: string, message: string, name: string, release: record<description: string, tag_name: string>> {
+]: any -> oneof<record<commit: string, message: string, name: string, release: record<description: string, tag_name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -9609,7 +9633,7 @@ export def "post-v3-projects-id-repository-tags" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -9678,7 +9702,7 @@ export def "get-v3-projects-id-repository-tags-tag-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<commit: string, message: string, name: string, release: record<description: string, tag_name: string>> {
+]: nothing -> oneof<record<commit: string, message: string, name: string, release: record<description: string, tag_name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9717,7 +9741,7 @@ export def "post-v3-projects-id-repository-tags-tag-name-release" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   description: string # Release notes with markdown support
-]: any -> record<description: string, tag_name: string> {
+]: any -> oneof<record<description: string, tag_name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -9728,7 +9752,7 @@ export def "post-v3-projects-id-repository-tags-tag-name-release" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -9760,7 +9784,7 @@ export def "put-v3-projects-id-repository-tags-tag-name-release" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   description: string # Release notes with markdown support
-]: any -> record<description: string, tag_name: string> {
+]: any -> oneof<record<description: string, tag_name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -9771,7 +9795,7 @@ export def "put-v3-projects-id-repository-tags-tag-name-release" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -9804,7 +9828,7 @@ export def "get-v3-projects-id-repository-tree" [
   --ref-name: string # The name of a repository branch or tag, if not given the default branch is used
   --path: string # The path of the tree
   --recursive: oneof<nothing, bool> # Used to get a recursive tree
-]: nothing -> record<id: string, mode: string, name: string, path: string, type: string> {
+]: nothing -> oneof<record<id: string, mode: string, name: string, path: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9844,7 +9868,7 @@ export def "get-v3-projects-id-runners" [
   --scope: string@scope-completer-2 # The scope of specific runners to show
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<active: string, description: string, id: string, is_shared: string, name: string> {
+]: nothing -> oneof<record<active: string, description: string, id: string, is_shared: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9882,7 +9906,7 @@ export def "post-v3-projects-id-runners" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   runner_id: int # The ID of the runner
-]: any -> record<active: string, description: string, id: string, is_shared: string, name: string> {
+]: any -> oneof<record<active: string, description: string, id: string, is_shared: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -9892,7 +9916,7 @@ export def "post-v3-projects-id-runners" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -9923,7 +9947,7 @@ export def "delete-v3-projects-id-runners-runner-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active: string, description: string, id: string, is_shared: string, name: string> {
+]: nothing -> oneof<record<active: string, description: string, id: string, is_shared: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9973,7 +9997,7 @@ export def "put-v3-projects-id-services-asana" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10017,7 +10041,7 @@ export def "put-v3-projects-id-services-assembla" [
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10062,7 +10086,7 @@ export def "put-v3-projects-id-services-bamboo" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10108,7 +10132,7 @@ export def "put-v3-projects-id-services-bugzilla" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10153,7 +10177,7 @@ export def "put-v3-projects-id-services-buildkite" [
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10197,7 +10221,7 @@ export def "put-v3-projects-id-services-builds-email" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10242,7 +10266,7 @@ export def "put-v3-projects-id-services-campfire" [
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10288,7 +10312,7 @@ export def "put-v3-projects-id-services-custom-issue-tracker" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10335,7 +10359,7 @@ export def "put-v3-projects-id-services-drone-ci" [
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10380,7 +10404,7 @@ export def "put-v3-projects-id-services-emails-on-push" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10421,7 +10445,7 @@ export def "put-v3-projects-id-services-external-wiki" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10464,7 +10488,7 @@ export def "put-v3-projects-id-services-flowdock" [
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10508,7 +10532,7 @@ export def "put-v3-projects-id-services-gemnasium" [
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10562,7 +10586,7 @@ export def "put-v3-projects-id-services-hipchat" [
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10608,7 +10632,7 @@ export def "put-v3-projects-id-services-irker" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10655,7 +10679,7 @@ export def "put-v3-projects-id-services-jira" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10700,7 +10724,7 @@ export def "put-v3-projects-id-services-kubernetes" [
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10750,7 +10774,7 @@ export def "put-v3-projects-id-services-mattermost" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10792,7 +10816,7 @@ export def "put-v3-projects-id-services-mattermost-slash-commands" [
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10834,7 +10858,7 @@ export def "post-v3-projects-id-services-mattermost-slash-commands-trigger" [
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -10877,7 +10901,7 @@ export def "put-v3-projects-id-services-pipelines-email" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10921,7 +10945,7 @@ export def "put-v3-projects-id-services-pivotaltracker" [
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -10967,7 +10991,7 @@ export def "put-v3-projects-id-services-pushover" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -11012,7 +11036,7 @@ export def "put-v3-projects-id-services-redmine" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -11064,7 +11088,7 @@ export def "put-v3-projects-id-services-slack" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -11106,7 +11130,7 @@ export def "put-v3-projects-id-services-slack-slash-commands" [
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -11148,7 +11172,7 @@ export def "post-v3-projects-id-services-slack-slash-commands-trigger" [
   if (($req_body | get -o "token") == null) { error make --unspanned { msg: "required body field 'token' missing: pass --body-token or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -11193,7 +11217,7 @@ export def "put-v3-projects-id-services-teamcity" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -11262,7 +11286,7 @@ export def "get-v3-projects-id-services-service-slug" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active: string, build_events: string, created_at: string, id: string, issues_events: string, merge_requests_events: string, note_events: string, pipeline_events: string, properties: string, push_events: string, tag_push_events: string, title: string, updated_at: string> {
+]: nothing -> oneof<record<active: string, build_events: string, created_at: string, id: string, issues_events: string, merge_requests_events: string, note_events: string, pipeline_events: string, properties: string, push_events: string, tag_push_events: string, title: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -11302,7 +11326,7 @@ export def "post-v3-projects-id-share" [
   group_id: int # The ID of a group
   group_access: int@group-access-completer # The group access level
   --expires-at: string # Share expiration date
-]: any -> record<expires_at: string, group_access: string, group_id: string, id: string, project_id: string> {
+]: any -> oneof<record<expires_at: string, group_access: string, group_id: string, id: string, project_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -11312,7 +11336,7 @@ export def "post-v3-projects-id-share" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -11381,7 +11405,7 @@ export def "get-v3-projects-id-snippets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, expires_at: string, file_name: string, id: string, title: string, updated_at: string, web_url: string> {
+]: nothing -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, expires_at: string, file_name: string, id: string, title: string, updated_at: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -11422,7 +11446,7 @@ export def "post-v3-projects-id-snippets" [
   file_name: string # The file name of the snippet
   code: string # The content of the snippet
   visibility_level: int@visibility-level-completer # The visibility level of the snippet
-]: any -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, expires_at: string, file_name: string, id: string, title: string, updated_at: string, web_url: string> {
+]: any -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, expires_at: string, file_name: string, id: string, title: string, updated_at: string, web_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -11432,7 +11456,7 @@ export def "post-v3-projects-id-snippets" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -11465,7 +11489,7 @@ export def "get-v3-projects-id-snippets-noteable-id-notes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string> {
+]: nothing -> oneof<record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -11506,7 +11530,7 @@ export def "post-v3-projects-id-snippets-noteable-id-notes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string # The content of a note
   --created-at: string # The creation date of the note
-]: any -> record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string> {
+]: any -> oneof<record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -11517,7 +11541,7 @@ export def "post-v3-projects-id-snippets-noteable-id-notes" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -11549,7 +11573,7 @@ export def "delete-v3-projects-id-snippets-noteable-id-notes-note-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string> {
+]: nothing -> oneof<record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -11589,7 +11613,7 @@ export def "get-v3-projects-id-snippets-noteable-id-notes-note-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string> {
+]: nothing -> oneof<record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -11630,7 +11654,7 @@ export def "put-v3-projects-id-snippets-noteable-id-notes-note-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   body: string # The content of a note
-]: any -> record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string> {
+]: any -> oneof<record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -11642,7 +11666,7 @@ export def "put-v3-projects-id-snippets-noteable-id-notes-note-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -11711,7 +11735,7 @@ export def "get-v3-projects-id-snippets-snippet-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, expires_at: string, file_name: string, id: string, title: string, updated_at: string, web_url: string> {
+]: nothing -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, expires_at: string, file_name: string, id: string, title: string, updated_at: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -11753,7 +11777,7 @@ export def "put-v3-projects-id-snippets-snippet-id" [
   --file-name: string # The file name of the snippet
   --code: string # The content of the snippet
   --visibility-level: int@visibility-level-completer # The visibility level of the snippet
-]: any -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, expires_at: string, file_name: string, id: string, title: string, updated_at: string, web_url: string> {
+]: any -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, expires_at: string, file_name: string, id: string, title: string, updated_at: string, web_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -11764,7 +11788,7 @@ export def "put-v3-projects-id-snippets-snippet-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -11797,7 +11821,7 @@ export def "get-v3-projects-id-snippets-snippet-id-award-emoji" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -11837,7 +11861,7 @@ export def "post-v3-projects-id-snippets-snippet-id-award-emoji" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of a award_emoji (without colons)
-]: any -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: any -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -11848,7 +11872,7 @@ export def "post-v3-projects-id-snippets-snippet-id-award-emoji" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -11880,7 +11904,7 @@ export def "delete-v3-projects-id-snippets-snippet-id-award-emoji-award-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -11920,7 +11944,7 @@ export def "get-v3-projects-id-snippets-snippet-id-award-emoji-award-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -11962,7 +11986,7 @@ export def "get-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12004,7 +12028,7 @@ export def "post-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of a award_emoji (without colons)
-]: any -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: any -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -12016,7 +12040,7 @@ export def "post-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -12049,7 +12073,7 @@ export def "delete-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12091,7 +12115,7 @@ export def "get-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji-awa
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>> {
+]: nothing -> oneof<record<awardable_id: string, awardable_type: string, created_at: string, id: string, name: string, updated_at: string, user: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12168,7 +12192,7 @@ export def "delete-v3-projects-id-star" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string> {
+]: nothing -> oneof<record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12204,7 +12228,7 @@ export def "post-v3-projects-id-star" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string> {
+]: nothing -> oneof<record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12247,7 +12271,7 @@ export def "post-v3-projects-id-statuses-sha" [
   --description: string # A short description of the status
   --name: string # A string label to differentiate this status from the status of other systems. Default: "default"
   --context: string # A string label to differentiate this status from the status of other systems. Default: "default"
-]: any -> record<allow_failure: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, finished_at: string, id: string, name: string, ref: string, sha: string, started_at: string, status: string, target_url: string> {
+]: any -> oneof<record<allow_failure: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, description: string, finished_at: string, id: string, name: string, ref: string, sha: string, started_at: string, status: string, target_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -12258,7 +12282,7 @@ export def "post-v3-projects-id-statuses-sha" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -12290,7 +12314,7 @@ export def "get-v3-projects-id-triggers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<created_at: string, deleted_at: string, last_used: string, token: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, deleted_at: string, last_used: string, token: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12327,7 +12351,7 @@ export def "post-v3-projects-id-triggers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, deleted_at: string, last_used: string, token: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, deleted_at: string, last_used: string, token: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12364,7 +12388,7 @@ export def "delete-v3-projects-id-triggers-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, deleted_at: string, last_used: string, token: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, deleted_at: string, last_used: string, token: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12402,7 +12426,7 @@ export def "get-v3-projects-id-triggers-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, deleted_at: string, last_used: string, token: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, deleted_at: string, last_used: string, token: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12439,7 +12463,7 @@ export def "post-v3-projects-id-unarchive" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string> {
+]: nothing -> oneof<record<archived: string, avatar_url: string, builds_enabled: string, container_registry_enabled: string, created_at: string, creator_id: string, default_branch: string, description: string, forked_from_project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, forks_count: string, http_url_to_repo: string, id: string, issues_enabled: string, last_activity_at: string, lfs_enabled: string, merge_requests_enabled: string, name: string, name_with_namespace: string, namespace: record<id: string, kind: string, name: string, path: string>, only_allow_merge_if_all_discussions_are_resolved: string, only_allow_merge_if_build_succeeds: string, open_issues_count: string, owner: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, path: string, path_with_namespace: string, public: string, public_builds: string, request_access_enabled: string, runners_token: string, shared_runners_enabled: string, shared_with_groups: string, snippets_enabled: string, ssh_url_to_repo: string, star_count: string, statistics: record<build_artifacts_size: string, commit_count: string, lfs_objects_size: string, repository_size: string, storage_size: string>, tag_list: string, visibility_level: string, web_url: string, wiki_enabled: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12520,7 +12544,7 @@ export def "get-v3-projects-id-users" [
   --search: string # Return list of users matching the search criteria
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string> {
+]: nothing -> oneof<record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12559,7 +12583,7 @@ export def "get-v3-projects-id-variables" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<key: string, value: string> {
+]: nothing -> oneof<record<key: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12598,7 +12622,7 @@ export def "post-v3-projects-id-variables" [
   --dry-run(-n) # Return the request that would be sent without executing it
   key: string # The key of the variable
   value: string # The value of the variable
-]: any -> record<key: string, value: string> {
+]: any -> oneof<record<key: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -12608,7 +12632,7 @@ export def "post-v3-projects-id-variables" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -12639,7 +12663,7 @@ export def "delete-v3-projects-id-variables-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<key: string, value: string> {
+]: nothing -> oneof<record<key: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12677,7 +12701,7 @@ export def "get-v3-projects-id-variables-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<key: string, value: string> {
+]: nothing -> oneof<record<key: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12716,7 +12740,7 @@ export def "put-v3-projects-id-variables-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --value: string # The value of the variable
-]: any -> record<key: string, value: string> {
+]: any -> oneof<record<key: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -12727,7 +12751,7 @@ export def "put-v3-projects-id-variables-key" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -12759,7 +12783,7 @@ export def "get-v3-runners" [
   --scope: string@scope-completer-3 # The scope of specific runners to show
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<active: string, description: string, id: string, is_shared: string, name: string> {
+]: nothing -> oneof<record<active: string, description: string, id: string, is_shared: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -12797,7 +12821,7 @@ export def "get-v3-runners-all" [
   --scope: string@scope-completer-2 # The scope of specific runners to show
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<active: string, description: string, id: string, is_shared: string, name: string> {
+]: nothing -> oneof<record<active: string, description: string, id: string, is_shared: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -12833,7 +12857,7 @@ export def "delete-v3-runners-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active: string, description: string, id: string, is_shared: string, name: string> {
+]: nothing -> oneof<record<active: string, description: string, id: string, is_shared: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12869,7 +12893,7 @@ export def "get-v3-runners-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active: string, architecture: string, contacted_at: string, description: string, id: string, is_shared: string, locked: string, name: string, platform: string, projects: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, revision: string, run_untagged: string, tag_list: string, token: string, version: string> {
+]: nothing -> oneof<record<active: string, architecture: string, contacted_at: string, description: string, id: string, is_shared: string, locked: string, name: string, platform: string, projects: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, revision: string, run_untagged: string, tag_list: string, token: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12910,17 +12934,17 @@ export def "put-v3-runners-id" [
   --tag-list: list<string> # The list of tags for a runner
   --run-untagged: oneof<nothing, bool> # Flag indicating the runner can execute untagged jobs
   --locked: oneof<nothing, bool> # Flag indicating the runner is locked
-]: any -> record<active: string, architecture: string, contacted_at: string, description: string, id: string, is_shared: string, locked: string, name: string, platform: string, projects: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, revision: string, run_untagged: string, tag_list: string, token: string, version: string> {
+]: any -> oneof<record<active: string, architecture: string, contacted_at: string, description: string, id: string, is_shared: string, locked: string, name: string, platform: string, projects: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, revision: string, run_untagged: string, tag_list: string, token: string, version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v3/runners/{id}") $auth.query)
-  let req_body = {"description": $description, "active": $active, "tag_list": (if ($tag_list | describe | str starts-with "list") { $tag_list | each { into string } | str join "," } else { $tag_list }), "run_untagged": $run_untagged, "locked": $locked} | compact
+  let req_body = {"description": $description, "active": $active, "tag_list": (if ($tag_list | describe | str starts-with "list") { $tag_list | compact | each { into string } | str join "," } else { $tag_list }), "run_untagged": $run_untagged, "locked": $locked} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -12952,7 +12976,7 @@ export def "post-v3-session" [
   --login: string # The username
   --email: string # The email of the user
   password: string # The password of the user
-]: any -> record<avatar_url: string, bio: string, can_create_group: string, can_create_project: string, color_scheme_id: string, confirmed_at: string, created_at: string, current_sign_in_at: string, email: string, external: string, id: string, identities: record<extern_uid: string, provider: string>, is_admin: string, last_sign_in_at: string, linkedin: string, location: string, name: string, organization: string, private_token: string, projects_limit: string, skype: string, state: string, theme_id: string, twitter: string, two_factor_enabled: string, username: string, web_url: string, website_url: string> {
+]: any -> oneof<record<avatar_url: string, bio: string, can_create_group: string, can_create_project: string, color_scheme_id: string, confirmed_at: string, created_at: string, current_sign_in_at: string, email: string, external: string, id: string, identities: record<extern_uid: string, provider: string>, is_admin: string, last_sign_in_at: string, linkedin: string, location: string, name: string, organization: string, private_token: string, projects_limit: string, skype: string, state: string, theme_id: string, twitter: string, two_factor_enabled: string, username: string, web_url: string, website_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -12961,7 +12985,7 @@ export def "post-v3-session" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -13128,7 +13152,7 @@ export def "get-v3-snippets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, file_name: string, id: string, raw_url: string, title: string, updated_at: string, web_url: string> {
+]: nothing -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, file_name: string, id: string, raw_url: string, title: string, updated_at: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -13167,7 +13191,7 @@ export def "post-v3-snippets" [
   file_name: string # The name of a snippet file
   content: string # The content of a snippet
   --visibility-level: int@visibility-level-completer # The visibility level of the snippet
-]: any -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, file_name: string, id: string, raw_url: string, title: string, updated_at: string, web_url: string> {
+]: any -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, file_name: string, id: string, raw_url: string, title: string, updated_at: string, web_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -13176,7 +13200,7 @@ export def "post-v3-snippets" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -13207,7 +13231,7 @@ export def "get-v3-snippets-public" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, file_name: string, id: string, raw_url: string, title: string, updated_at: string, web_url: string> {
+]: nothing -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, file_name: string, id: string, raw_url: string, title: string, updated_at: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -13243,7 +13267,7 @@ export def "delete-v3-snippets-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, file_name: string, id: string, raw_url: string, title: string, updated_at: string, web_url: string> {
+]: nothing -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, file_name: string, id: string, raw_url: string, title: string, updated_at: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -13279,7 +13303,7 @@ export def "get-v3-snippets-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, file_name: string, id: string, raw_url: string, title: string, updated_at: string, web_url: string> {
+]: nothing -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, file_name: string, id: string, raw_url: string, title: string, updated_at: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -13319,7 +13343,7 @@ export def "put-v3-snippets-id" [
   --file-name: string # The name of a snippet file
   --content: string # The content of a snippet
   --visibility-level: int@visibility-level-completer # The visibility level of the snippet
-]: any -> record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, file_name: string, id: string, raw_url: string, title: string, updated_at: string, web_url: string> {
+]: any -> oneof<record<author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, created_at: string, file_name: string, id: string, raw_url: string, title: string, updated_at: string, web_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -13329,7 +13353,7 @@ export def "put-v3-snippets-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -13394,7 +13418,7 @@ export def "get-v3-templates-dockerfiles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<name: string> {
+]: nothing -> oneof<record<name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/templates/dockerfiles" $auth.query)
@@ -13429,7 +13453,7 @@ export def "get-v3-templates-dockerfiles-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content: string, name: string> {
+]: nothing -> oneof<record<content: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -13464,7 +13488,7 @@ export def "get-v3-templates-gitignores" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<name: string> {
+]: nothing -> oneof<record<name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/templates/gitignores" $auth.query)
@@ -13499,7 +13523,7 @@ export def "get-v3-templates-gitignores-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content: string, name: string> {
+]: nothing -> oneof<record<content: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -13534,7 +13558,7 @@ export def "get-v3-templates-gitlab-ci-ymls" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<name: string> {
+]: nothing -> oneof<record<name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/templates/gitlab_ci_ymls" $auth.query)
@@ -13569,7 +13593,7 @@ export def "get-v3-templates-gitlab-ci-ymls-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content: string, name: string> {
+]: nothing -> oneof<record<content: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -13605,7 +13629,7 @@ export def "get-v3-templates-licenses" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --popular: oneof<nothing, bool> # If passed, returns only popular licenses
-]: nothing -> record<conditions: string, content: string, description: string, html_url: string, key: string, limitations: string, name: string, nickname: string, permissions: string, popular: string, source_url: string> {
+]: nothing -> oneof<record<conditions: string, content: string, description: string, html_url: string, key: string, limitations: string, name: string, nickname: string, permissions: string, popular: string, source_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "popular" $popular "scalar")] | flatten | str join "&"
@@ -13641,7 +13665,7 @@ export def "get-v3-templates-licenses-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<conditions: string, content: string, description: string, html_url: string, key: string, limitations: string, name: string, nickname: string, permissions: string, popular: string, source_url: string> {
+]: nothing -> oneof<record<conditions: string, content: string, description: string, html_url: string, key: string, limitations: string, name: string, nickname: string, permissions: string, popular: string, source_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -13712,7 +13736,7 @@ export def "get-v3-todos" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<action_name: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, id: string, project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, state: string, target: string, target_type: string, target_url: string> {
+]: nothing -> oneof<record<action_name: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, id: string, project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, state: string, target: string, target_type: string, target_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -13748,7 +13772,7 @@ export def "delete-v3-todos-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action_name: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, id: string, project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, state: string, target: string, target_type: string, target_url: string> {
+]: nothing -> oneof<record<action_name: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, id: string, project: record<http_url_to_repo: string, id: string, name: string, name_with_namespace: string, path: string, path_with_namespace: string, web_url: string>, state: string, target: string, target_type: string, target_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -13783,7 +13807,7 @@ export def "get-v3-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatar_url: string, bio: string, can_create_group: string, can_create_project: string, color_scheme_id: string, confirmed_at: string, created_at: string, current_sign_in_at: string, email: string, external: string, id: string, identities: record<extern_uid: string, provider: string>, is_admin: string, last_sign_in_at: string, linkedin: string, location: string, name: string, organization: string, projects_limit: string, skype: string, state: string, theme_id: string, twitter: string, two_factor_enabled: string, username: string, web_url: string, website_url: string> {
+]: nothing -> oneof<record<avatar_url: string, bio: string, can_create_group: string, can_create_project: string, color_scheme_id: string, confirmed_at: string, created_at: string, current_sign_in_at: string, email: string, external: string, id: string, identities: record<extern_uid: string, provider: string>, is_admin: string, last_sign_in_at: string, linkedin: string, location: string, name: string, organization: string, projects_limit: string, skype: string, state: string, theme_id: string, twitter: string, two_factor_enabled: string, username: string, web_url: string, website_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/user" $auth.query)
@@ -13817,7 +13841,7 @@ export def "get-v3-user-emails" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<email: string, id: string> {
+]: nothing -> oneof<record<email: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/user/emails" $auth.query)
@@ -13852,7 +13876,7 @@ export def "post-v3-user-emails" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The new email
-]: any -> record<email: string, id: string> {
+]: any -> oneof<record<email: string, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -13861,7 +13885,7 @@ export def "post-v3-user-emails" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -13927,7 +13951,7 @@ export def "get-v3-user-emails-email-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<email: string, id: string> {
+]: nothing -> oneof<record<email: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($email_id | is-empty) { error make --unspanned { msg: "path parameter 'email_id' must be non-empty" } }
@@ -13962,7 +13986,7 @@ export def "get-v3-user-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v3/user/keys" $auth.query)
@@ -13998,7 +14022,7 @@ export def "post-v3-user-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   key: string # The new SSH key
   title: string # The title of the new SSH key
-]: any -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: any -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -14007,7 +14031,7 @@ export def "post-v3-user-keys" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -14037,7 +14061,7 @@ export def "delete-v3-user-keys-key-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
@@ -14073,7 +14097,7 @@ export def "get-v3-user-keys-key-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
@@ -14115,7 +14139,7 @@ export def "get-v3-users" [
   --blocked: oneof<nothing, bool> # Filters only blocked users
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string> {
+]: nothing -> oneof<record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "external" $external "scalar") (serialize-qp "blocked" $blocked "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -14168,7 +14192,7 @@ export def "post-v3-users" [
   --can-create-group: oneof<nothing, bool> # Flag indicating the user can create groups
   --confirm: oneof<nothing, bool> # Flag indicating the account needs to be confirmed
   --external: oneof<nothing, bool> # Flag indicating the user is an external user
-]: any -> record<avatar_url: string, bio: string, can_create_group: string, can_create_project: string, color_scheme_id: string, confirmed_at: string, created_at: string, current_sign_in_at: string, email: string, external: string, id: string, identities: record<extern_uid: string, provider: string>, is_admin: string, last_sign_in_at: string, linkedin: string, location: string, name: string, organization: string, projects_limit: string, skype: string, state: string, theme_id: string, twitter: string, two_factor_enabled: string, username: string, web_url: string, website_url: string> {
+]: any -> oneof<record<avatar_url: string, bio: string, can_create_group: string, can_create_project: string, color_scheme_id: string, confirmed_at: string, created_at: string, current_sign_in_at: string, email: string, external: string, id: string, identities: record<extern_uid: string, provider: string>, is_admin: string, last_sign_in_at: string, linkedin: string, location: string, name: string, organization: string, projects_limit: string, skype: string, state: string, theme_id: string, twitter: string, two_factor_enabled: string, username: string, web_url: string, website_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -14177,7 +14201,7 @@ export def "post-v3-users" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -14207,7 +14231,7 @@ export def "delete-v3-users-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<email: string, id: string> {
+]: nothing -> oneof<record<email: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -14243,7 +14267,7 @@ export def "get-v3-users-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string> {
+]: nothing -> oneof<record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -14297,7 +14321,7 @@ export def "put-v3-users-id" [
   --can-create-group: oneof<nothing, bool> # Flag indicating the user can create groups
   --confirm: oneof<nothing, bool> # Flag indicating the account needs to be confirmed
   --external: oneof<nothing, bool> # Flag indicating the user is an external user
-]: any -> record<avatar_url: string, bio: string, can_create_group: string, can_create_project: string, color_scheme_id: string, confirmed_at: string, created_at: string, current_sign_in_at: string, email: string, external: string, id: string, identities: record<extern_uid: string, provider: string>, is_admin: string, last_sign_in_at: string, linkedin: string, location: string, name: string, organization: string, projects_limit: string, skype: string, state: string, theme_id: string, twitter: string, two_factor_enabled: string, username: string, web_url: string, website_url: string> {
+]: any -> oneof<record<avatar_url: string, bio: string, can_create_group: string, can_create_project: string, color_scheme_id: string, confirmed_at: string, created_at: string, current_sign_in_at: string, email: string, external: string, id: string, identities: record<extern_uid: string, provider: string>, is_admin: string, last_sign_in_at: string, linkedin: string, location: string, name: string, organization: string, projects_limit: string, skype: string, state: string, theme_id: string, twitter: string, two_factor_enabled: string, username: string, web_url: string, website_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -14307,7 +14331,7 @@ export def "put-v3-users-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -14373,7 +14397,7 @@ export def "get-v3-users-id-emails" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<email: string, id: string> {
+]: nothing -> oneof<record<email: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -14410,7 +14434,7 @@ export def "post-v3-users-id-emails" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email of the user
-]: any -> record<email: string, id: string> {
+]: any -> oneof<record<email: string, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -14420,7 +14444,7 @@ export def "post-v3-users-id-emails" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -14451,7 +14475,7 @@ export def "delete-v3-users-id-emails-email-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<email: string, id: string> {
+]: nothing -> oneof<record<email: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -14490,7 +14514,7 @@ export def "get-v3-users-id-events" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Current page number (format: int32)
   --per-page: int # Number of items per page (format: int32)
-]: nothing -> record<action_name: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author_id: string, author_username: string, created_at: string, data: string, note: record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, project_id: string, target_id: string, target_title: string, target_type: string, title: string> {
+]: nothing -> oneof<record<action_name: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, author_id: string, author_username: string, created_at: string, data: string, note: record<attachment: string, author: record<avatar_url: string, id: string, name: string, state: string, username: string, web_url: string>, body: string, created_at: string, downvote_: string, id: string, noteable_id: string, noteable_type: string, system: string, updated_at: string, upvote_: string>, project_id: string, target_id: string, target_title: string, target_type: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -14527,7 +14551,7 @@ export def "get-v3-users-id-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -14565,7 +14589,7 @@ export def "post-v3-users-id-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   key: string # The new SSH key
   title: string # The title of the new SSH key
-]: any -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: any -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
@@ -14575,7 +14599,7 @@ export def "post-v3-users-id-keys" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -14606,7 +14630,7 @@ export def "delete-v3-users-id-keys-key-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<can_push: string, created_at: string, id: string, key: string, title: string> {
+]: nothing -> oneof<record<can_push: string, created_at: string, id: string, key: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "private_header"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

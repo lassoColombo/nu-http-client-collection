@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -129,9 +153,9 @@ def destination-predefined-acl-completer [] { ["authenticatedRead" "bucketOwnerF
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "storage-buckets-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["storage-buckets-list" "storage-buckets-insert" "storage-buckets-delete" "storage-buckets-get" "storage-buckets-patch" "storage-buckets-update" "storage-bucket-access-controls-list" "storage-bucket-access-controls-insert" "storage-bucket-access-controls-delete" "storage-bucket-access-controls-get" "storage-bucket-access-controls-patch" "storage-bucket-access-controls-update" "storage-default-object-access-controls-list" "storage-default-object-access-controls-insert" "storage-default-object-access-controls-delete" "storage-default-object-access-controls-get" "storage-default-object-access-controls-patch" "storage-default-object-access-controls-update" "storage-buckets-get-iam-policy" "storage-buckets-set-iam-policy" "storage-buckets-test-iam-permissions" "storage-buckets-lock-retention-policy" "storage-notifications-list" "storage-notifications-insert" "storage-notifications-delete" "storage-notifications-get" "storage-objects-list" "storage-objects-insert" "storage-objects-watch-all" "storage-objects-delete" "storage-objects-get" "storage-objects-patch" "storage-objects-update" "storage-object-access-controls-list" "storage-object-access-controls-insert" "storage-object-access-controls-delete" "storage-object-access-controls-get" "storage-object-access-controls-patch" "storage-object-access-controls-update" "storage-objects-get-iam-policy" "storage-objects-set-iam-policy" "storage-objects-test-iam-permissions" "storage-objects-compose" "storage-objects-copy" "storage-objects-rewrite" "storage-channels-stop" "storage-projects-hmac-keys-list" "storage-projects-hmac-keys-create" "storage-projects-hmac-keys-delete" "storage-projects-hmac-keys-get" "storage-projects-hmac-keys-update" "storage-projects-service-account-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -177,7 +201,7 @@ export def "storage-buckets-list" [
   --prefix: string # Filter results to buckets whose names begin with this prefix.
   --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
   --user-project: string # The project to be billed for this request.
-]: nothing -> record<items: table<acl: list, autoclass: record, billing: record, cors: list, customPlacementConfig: record, defaultEventBasedHold: bool, defaultObjectAcl: list, encryption: record, etag: string, iamConfiguration: record, id: string, kind: string, labels: record, lifecycle: record, location: string, locationType: string, logging: record, metageneration: string, name: string, owner: record, projectNumber: string, retentionPolicy: record, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record, website: record>, kind: string, nextPageToken: string> {
+]: nothing -> oneof<record<items: table<acl: list, autoclass: record, billing: record, cors: list, customPlacementConfig: record, defaultEventBasedHold: bool, defaultObjectAcl: list, encryption: record, etag: string, iamConfiguration: record, id: string, kind: string, labels: record, lifecycle: record, location: string, locationType: string, logging: record, metageneration: string, name: string, owner: record, projectNumber: string, retentionPolicy: record, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record, website: record>, kind: string, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project == null) { error make --unspanned { msg: "required query parameter 'project' missing: pass --project" } }
@@ -203,20 +227,6 @@ export def "storage-buckets-list" [
 #
 # POST /b
 # operationId: storage.buckets.insert
-# --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, id?: string, kind?: string, projectTeam?: record, role?: string, selfLink?: string}
-# --autoclass shape: {enabled?: bool, toggleTime?: string}
-# --billing shape: {requesterPays?: bool}
-# --cors item shape: {maxAgeSeconds?: int, method?: list<string>, origin?: list<string>, responseHeader?: list<string>}
-# --customPlacementConfig shape: {dataLocations?: list<string>}
-# --defaultObjectAcl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
-# --encryption shape: {defaultKmsKeyName?: string}
-# --iamConfiguration shape: {bucketPolicyOnly?: record, publicAccessPrevention?: string, uniformBucketLevelAccess?: record}
-# --lifecycle shape: {rule?: list}
-# --logging shape: {logBucket?: string, logObjectPrefix?: string}
-# --owner shape: {entity?: string, entityId?: string}
-# --retentionPolicy shape: {effectiveTime?: string, isLocked?: bool, retentionPeriod?: string}
-# --versioning shape: {enabled?: bool}
-# --website shape: {mainPageSuffix?: string, notFoundPage?: string}
 export def "storage-buckets-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -270,7 +280,7 @@ export def "storage-buckets-insert" [
   --updated: string # The modification time of the bucket in RFC 3339 format. (format: date-time)
   --versioning: record # The bucket's versioning configuration. — shape: {enabled?: bool}
   --website: record # The bucket's website configuration, controlling how the service behaves when accessing bucket contents as a web site. See the Static Website Examples for more information. — shape: {mainPageSuffix?: string, notFoundPage?: string}
-]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
+]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -370,7 +380,7 @@ export def "storage-buckets-get" [
   --if-metageneration-not-match: string # Makes the return of the bucket metadata conditional on whether the bucket's current metageneration does not match the given value.
   --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
+]: nothing -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -396,20 +406,6 @@ export def "storage-buckets-get" [
 #
 # PATCH /b/{bucket}
 # operationId: storage.buckets.patch
-# --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, id?: string, kind?: string, projectTeam?: record, role?: string, selfLink?: string}
-# --autoclass shape: {enabled?: bool, toggleTime?: string}
-# --billing shape: {requesterPays?: bool}
-# --cors item shape: {maxAgeSeconds?: int, method?: list<string>, origin?: list<string>, responseHeader?: list<string>}
-# --customPlacementConfig shape: {dataLocations?: list<string>}
-# --defaultObjectAcl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
-# --encryption shape: {defaultKmsKeyName?: string}
-# --iamConfiguration shape: {bucketPolicyOnly?: record, publicAccessPrevention?: string, uniformBucketLevelAccess?: record}
-# --lifecycle shape: {rule?: list}
-# --logging shape: {logBucket?: string, logObjectPrefix?: string}
-# --owner shape: {entity?: string, entityId?: string}
-# --retentionPolicy shape: {effectiveTime?: string, isLocked?: bool, retentionPeriod?: string}
-# --versioning shape: {enabled?: bool}
-# --website shape: {mainPageSuffix?: string, notFoundPage?: string}
 export def "storage-buckets-patch" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -465,7 +461,7 @@ export def "storage-buckets-patch" [
   --updated: string # The modification time of the bucket in RFC 3339 format. (format: date-time)
   --versioning: record # The bucket's versioning configuration. — shape: {enabled?: bool}
   --website: record # The bucket's website configuration, controlling how the service behaves when accessing bucket contents as a web site. See the Static Website Examples for more information. — shape: {mainPageSuffix?: string, notFoundPage?: string}
-]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
+]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -494,20 +490,6 @@ export def "storage-buckets-patch" [
 #
 # PUT /b/{bucket}
 # operationId: storage.buckets.update
-# --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, id?: string, kind?: string, projectTeam?: record, role?: string, selfLink?: string}
-# --autoclass shape: {enabled?: bool, toggleTime?: string}
-# --billing shape: {requesterPays?: bool}
-# --cors item shape: {maxAgeSeconds?: int, method?: list<string>, origin?: list<string>, responseHeader?: list<string>}
-# --customPlacementConfig shape: {dataLocations?: list<string>}
-# --defaultObjectAcl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
-# --encryption shape: {defaultKmsKeyName?: string}
-# --iamConfiguration shape: {bucketPolicyOnly?: record, publicAccessPrevention?: string, uniformBucketLevelAccess?: record}
-# --lifecycle shape: {rule?: list}
-# --logging shape: {logBucket?: string, logObjectPrefix?: string}
-# --owner shape: {entity?: string, entityId?: string}
-# --retentionPolicy shape: {effectiveTime?: string, isLocked?: bool, retentionPeriod?: string}
-# --versioning shape: {enabled?: bool}
-# --website shape: {mainPageSuffix?: string, notFoundPage?: string}
 export def "storage-buckets-update" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -563,7 +545,7 @@ export def "storage-buckets-update" [
   --updated: string # The modification time of the bucket in RFC 3339 format. (format: date-time)
   --versioning: record # The bucket's versioning configuration. — shape: {enabled?: bool}
   --website: record # The bucket's website configuration, controlling how the service behaves when accessing bucket contents as a web site. See the Static Website Examples for more information. — shape: {mainPageSuffix?: string, notFoundPage?: string}
-]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
+]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -612,7 +594,7 @@ export def "storage-bucket-access-controls-list" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, kind: string> {
+]: nothing -> oneof<record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, kind: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -638,7 +620,6 @@ export def "storage-bucket-access-controls-list" [
 #
 # POST /b/{bucket}/acl
 # operationId: storage.bucketAccessControls.insert
-# --projectTeam shape: {projectNumber?: string, team?: string}
 export def "storage-bucket-access-controls-insert" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -670,7 +651,7 @@ export def "storage-bucket-access-controls-insert" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -768,7 +749,7 @@ export def "storage-bucket-access-controls-get" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+]: nothing -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -795,7 +776,6 @@ export def "storage-bucket-access-controls-get" [
 #
 # PATCH /b/{bucket}/acl/{entity}
 # operationId: storage.bucketAccessControls.patch
-# --projectTeam shape: {projectNumber?: string, team?: string}
 export def "storage-bucket-access-controls-patch" [
   bucket: string
   entity: string
@@ -828,7 +808,7 @@ export def "storage-bucket-access-controls-patch" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -858,7 +838,6 @@ export def "storage-bucket-access-controls-patch" [
 #
 # PUT /b/{bucket}/acl/{entity}
 # operationId: storage.bucketAccessControls.update
-# --projectTeam shape: {projectNumber?: string, team?: string}
 export def "storage-bucket-access-controls-update" [
   bucket: string
   entity: string
@@ -891,7 +870,7 @@ export def "storage-bucket-access-controls-update" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -943,7 +922,7 @@ export def "storage-default-object-access-controls-list" [
   --if-metageneration-match: string # If present, only return default ACL listing if the bucket's current metageneration matches this value.
   --if-metageneration-not-match: string # If present, only return default ACL listing if the bucket's current metageneration does not match the given value.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string> {
+]: nothing -> oneof<record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -969,7 +948,6 @@ export def "storage-default-object-access-controls-list" [
 #
 # POST /b/{bucket}/defaultObjectAcl
 # operationId: storage.defaultObjectAccessControls.insert
-# --projectTeam shape: {projectNumber?: string, team?: string}
 export def "storage-default-object-access-controls-insert" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1003,7 +981,7 @@ export def "storage-default-object-access-controls-insert" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1101,7 +1079,7 @@ export def "storage-default-object-access-controls-get" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+]: nothing -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -1128,7 +1106,6 @@ export def "storage-default-object-access-controls-get" [
 #
 # PATCH /b/{bucket}/defaultObjectAcl/{entity}
 # operationId: storage.defaultObjectAccessControls.patch
-# --projectTeam shape: {projectNumber?: string, team?: string}
 export def "storage-default-object-access-controls-patch" [
   bucket: string
   entity: string
@@ -1163,7 +1140,7 @@ export def "storage-default-object-access-controls-patch" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1193,7 +1170,6 @@ export def "storage-default-object-access-controls-patch" [
 #
 # PUT /b/{bucket}/defaultObjectAcl/{entity}
 # operationId: storage.defaultObjectAccessControls.update
-# --projectTeam shape: {projectNumber?: string, team?: string}
 export def "storage-default-object-access-controls-update" [
   bucket: string
   entity: string
@@ -1228,7 +1204,7 @@ export def "storage-default-object-access-controls-update" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1279,7 +1255,7 @@ export def "storage-buckets-get-iam-policy" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --options-requested-policy-version: int # The IAM policy format version to be returned. If the optionsRequestedPolicyVersion is for an older version that doesn't support part of the requested IAM policy, the request fails.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
+]: nothing -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -1305,7 +1281,6 @@ export def "storage-buckets-get-iam-policy" [
 #
 # PUT /b/{bucket}/iam
 # operationId: storage.buckets.setIamPolicy
-# --bindings item shape: {condition?: record, members?: list<string>, role?: string}
 export def "storage-buckets-set-iam-policy" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1331,7 +1306,7 @@ export def "storage-buckets-set-iam-policy" [
   --kind: string # The kind of item this is. For policies, this is always storage#policy. This field is ignored on input. (default: storage#policy)
   --resource-id: string # The ID of the resource to which this policy belongs. Will be of the form projects/_/buckets/bucket for buckets, and projects/_/buckets/bucket/objects/object for objects. A specific generation may be specified by appending #generationNumber to the end of the object name, e.g. projects/_/buckets/my-bucket/objects/data.txt#17. The current generation can be denoted with #0. This field is ignored on input.
   --version: int # The IAM policy format version. (format: int32)
-]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
+]: any -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1381,7 +1356,7 @@ export def "storage-buckets-test-iam-permissions" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --permissions: list<string> # Permissions to test. (required)
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> record<kind: string, permissions: list<string>> {
+]: nothing -> oneof<record<kind: string, permissions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -1429,7 +1404,7 @@ export def "storage-buckets-lock-retention-policy" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --if-metageneration-match: string # Makes the operation conditional on whether bucket's current metageneration matches the given value. (required)
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>> {
+]: nothing -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, id: string, kind: string, projectTeam: record, role: string, selfLink: string>, autoclass: record<enabled: bool, toggleTime: string>, billing: record<requesterPays: bool>, cors: table<maxAgeSeconds: int, method: list, origin: list, responseHeader: list>, customPlacementConfig: record<dataLocations: list<string>>, defaultEventBasedHold: bool, defaultObjectAcl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, encryption: record<defaultKmsKeyName: string>, etag: string, iamConfiguration: record<bucketPolicyOnly: record<enabled: bool, lockedTime: string>, publicAccessPrevention: string, uniformBucketLevelAccess: record<enabled: bool, lockedTime: string>>, id: string, kind: string, labels: record, lifecycle: record<rule: list<record>>, location: string, locationType: string, logging: record<logBucket: string, logObjectPrefix: string>, metageneration: string, name: string, owner: record<entity: string, entityId: string>, projectNumber: string, retentionPolicy: record<effectiveTime: string, isLocked: bool, retentionPeriod: string>, rpo: string, satisfiesPZS: bool, selfLink: string, storageClass: string, timeCreated: string, updated: string, versioning: record<enabled: bool>, website: record<mainPageSuffix: string, notFoundPage: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -1476,7 +1451,7 @@ export def "storage-notifications-list" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> record<items: table<custom_attributes: record, etag: string, event_types: list, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>, kind: string> {
+]: nothing -> oneof<record<items: table<custom_attributes: record, etag: string, event_types: list, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>, kind: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -1531,7 +1506,7 @@ export def "storage-notifications-insert" [
   --payload-format: string # The desired content of the Payload. (default: JSON_API_V1)
   --self-link: string # The canonical URL of this notification.
   --topic: string # The Cloud PubSub topic to which this subscription publishes. Formatted as: '//pubsub.googleapis.com/projects/{project-identifier}/topics/{my-topic}'
-]: any -> record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string> {
+]: any -> oneof<record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1629,7 +1604,7 @@ export def "storage-notifications-get" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string> {
+]: nothing -> oneof<record<custom_attributes: record, etag: string, event_types: list<string>, id: string, kind: string, object_name_prefix: string, payload_format: string, selfLink: string, topic: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -1686,7 +1661,7 @@ export def "storage-objects-list" [
   --start-offset: string # Filter results to objects whose names are lexicographically equal to or after startOffset. If endOffset is also set, the objects listed will have names between startOffset (inclusive) and endOffset (exclusive).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
   --versions: oneof<nothing, bool> # If true, lists all versions of an object as distinct results. The default is false. For more information, see Object Versioning.
-]: nothing -> record<items: table<acl: list, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, kind: string, nextPageToken: string, prefixes: list<string>> {
+]: nothing -> oneof<record<items: table<acl: list, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, kind: string, nextPageToken: string, prefixes: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -1742,7 +1717,7 @@ export def "storage-objects-insert" [
   --projection: string@projection-completer # Set of properties to return. Defaults to noAcl, unless the object resource specifies the acl property, when it defaults to full.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
   --body: any
-]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
+]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1810,7 +1785,7 @@ export def "storage-objects-watch-all" [
   --resource-uri: string # A version-specific identifier for the watched resource.
   --body-token: string # An arbitrary string delivered to the target address with each notification delivered over this channel. Optional.
   --type: string # The type of delivery mechanism used for this channel.
-]: any -> record<address: string, expiration: string, id: string, kind: string, params: record, payload: bool, resourceId: string, resourceUri: string, token: string, type: string> {
+]: any -> oneof<record<address: string, expiration: string, id: string, kind: string, params: record, payload: bool, resourceId: string, resourceUri: string, token: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1919,7 +1894,7 @@ export def "storage-objects-get" [
   --if-metageneration-not-match: string # Makes the operation conditional on whether the object's current metageneration does not match the given value.
   --projection: string@projection-completer # Set of properties to return. Defaults to noAcl.
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
+]: nothing -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -1946,9 +1921,6 @@ export def "storage-objects-get" [
 #
 # PATCH /b/{bucket}/o/{object}
 # operationId: storage.objects.patch
-# --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
-# --customerEncryption shape: {encryptionAlgorithm?: string, keySha256?: string}
-# --owner shape: {entity?: string, entityId?: string}
 export def "storage-objects-patch" [
   bucket: string
   object: string
@@ -2009,7 +1981,7 @@ export def "storage-objects-patch" [
   --time-deleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
   --time-storage-class-updated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
   --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
-]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
+]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2039,9 +2011,6 @@ export def "storage-objects-patch" [
 #
 # PUT /b/{bucket}/o/{object}
 # operationId: storage.objects.update
-# --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
-# --customerEncryption shape: {encryptionAlgorithm?: string, keySha256?: string}
-# --owner shape: {entity?: string, entityId?: string}
 export def "storage-objects-update" [
   bucket: string
   object: string
@@ -2102,7 +2071,7 @@ export def "storage-objects-update" [
   --time-deleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
   --time-storage-class-updated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
   --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
-]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
+]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2154,7 +2123,7 @@ export def "storage-object-access-controls-list" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string> {
+]: nothing -> oneof<record<items: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, kind: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -2181,7 +2150,6 @@ export def "storage-object-access-controls-list" [
 #
 # POST /b/{bucket}/o/{object}/acl
 # operationId: storage.objectAccessControls.insert
-# --projectTeam shape: {projectNumber?: string, team?: string}
 export def "storage-object-access-controls-insert" [
   bucket: string
   object: string
@@ -2217,7 +2185,7 @@ export def "storage-object-access-controls-insert" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2321,7 +2289,7 @@ export def "storage-object-access-controls-get" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+]: nothing -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -2349,7 +2317,6 @@ export def "storage-object-access-controls-get" [
 #
 # PATCH /b/{bucket}/o/{object}/acl/{entity}
 # operationId: storage.objectAccessControls.patch
-# --projectTeam shape: {projectNumber?: string, team?: string}
 export def "storage-object-access-controls-patch" [
   bucket: string
   object: string
@@ -2386,7 +2353,7 @@ export def "storage-object-access-controls-patch" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2417,7 +2384,6 @@ export def "storage-object-access-controls-patch" [
 #
 # PUT /b/{bucket}/o/{object}/acl/{entity}
 # operationId: storage.objectAccessControls.update
-# --projectTeam shape: {projectNumber?: string, team?: string}
 export def "storage-object-access-controls-update" [
   bucket: string
   object: string
@@ -2454,7 +2420,7 @@ export def "storage-object-access-controls-update" [
   --project-team: record # The project team associated with the entity, if any. — shape: {projectNumber?: string, team?: string}
   --role: string # The access permission for the entity.
   --self-link: string # The link to this access-control entry.
-]: any -> record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string> {
+]: any -> oneof<record<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record<projectNumber: string, team: string>, role: string, selfLink: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2507,7 +2473,7 @@ export def "storage-objects-get-iam-policy" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
+]: nothing -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -2534,7 +2500,6 @@ export def "storage-objects-get-iam-policy" [
 #
 # PUT /b/{bucket}/o/{object}/iam
 # operationId: storage.objects.setIamPolicy
-# --bindings item shape: {condition?: record, members?: list<string>, role?: string}
 export def "storage-objects-set-iam-policy" [
   bucket: string
   object: string
@@ -2562,7 +2527,7 @@ export def "storage-objects-set-iam-policy" [
   --kind: string # The kind of item this is. For policies, this is always storage#policy. This field is ignored on input. (default: storage#policy)
   --resource-id: string # The ID of the resource to which this policy belongs. Will be of the form projects/_/buckets/bucket for buckets, and projects/_/buckets/bucket/objects/object for objects. A specific generation may be specified by appending #generationNumber to the end of the object name, e.g. projects/_/buckets/my-bucket/objects/data.txt#17. The current generation can be denoted with #0. This field is ignored on input.
   --version: int # The IAM policy format version. (format: int32)
-]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int> {
+]: any -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, kind: string, resourceId: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2615,7 +2580,7 @@ export def "storage-objects-test-iam-permissions" [
   --permissions: list<string> # Permissions to test. (required)
   --generation: string # If present, selects a specific revision of this object (as opposed to the latest version, the default).
   --user-project: string # The project to be billed for this request. Required for Requester Pays buckets.
-]: nothing -> record<kind: string, permissions: list<string>> {
+]: nothing -> oneof<record<kind: string, permissions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'bucket' must be non-empty" } }
@@ -2643,8 +2608,6 @@ export def "storage-objects-test-iam-permissions" [
 #
 # POST /b/{destinationBucket}/o/{destinationObject}/compose
 # operationId: storage.objects.compose
-# --destination shape: {acl?: list, bucket?: string, cacheControl?: string, componentCount?: int, contentDisposition?: string, contentEncoding?: string, contentLanguage?: string, contentType?: string, crc32c?: string, customTime?: string, customerEncryption?: record, etag?: string, eventBasedHold?: bool, generation?: string, id?: string, kind?: string, kmsKeyName?: string, md5Hash?: string, mediaLink?: string, metadata?: record, metageneration?: string, name?: string, owner?: record, retentionExpirationTime?: string, ... (8 more fields)}
-# --sourceObjects item shape: {generation?: string, name?: string, objectPreconditions?: record}
 export def "storage-objects-compose" [
   destination_bucket: string
   destination_object: string
@@ -2673,7 +2636,7 @@ export def "storage-objects-compose" [
   --destination: record # An object. — shape: {acl?: list, bucket?: string, cacheControl?: string, componentCount?: int, contentDisposition?: string, contentEncoding?: string, contentLanguage?: string, contentType?: string, crc32c?: string, customTime?: string, customerEncryption?: record, etag?: string, eventBasedHold?: bool, generation?: string, id?: string, kind?: string, kmsKeyName?: string, md5Hash?: string, mediaLink?: string, metadata?: record, metageneration?: string, name?: string, owner?: record, retentionExpirationTime?: string, ... (8 more fields)}
   --kind: string # The kind of item this is. (default: storage#composeRequest)
   --source-objects: list # The list of source objects that will be concatenated into a single object. — item shape: {generation?: string, name?: string, objectPreconditions?: record}
-]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
+]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2703,9 +2666,6 @@ export def "storage-objects-compose" [
 #
 # POST /b/{sourceBucket}/o/{sourceObject}/copyTo/b/{destinationBucket}/o/{destinationObject}
 # operationId: storage.objects.copy
-# --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
-# --customerEncryption shape: {encryptionAlgorithm?: string, keySha256?: string}
-# --owner shape: {entity?: string, entityId?: string}
 export def "storage-objects-copy" [
   source_bucket: string
   source_object: string
@@ -2773,7 +2733,7 @@ export def "storage-objects-copy" [
   --time-deleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
   --time-storage-class-updated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
   --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
-]: any -> record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string> {
+]: any -> oneof<record<acl: table<bucket: string, domain: string, email: string, entity: string, entityId: string, etag: string, generation: string, id: string, kind: string, object: string, projectTeam: record, role: string, selfLink: string>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2805,9 +2765,6 @@ export def "storage-objects-copy" [
 #
 # POST /b/{sourceBucket}/o/{sourceObject}/rewriteTo/b/{destinationBucket}/o/{destinationObject}
 # operationId: storage.objects.rewrite
-# --acl item shape: {bucket?: string, domain?: string, email?: string, entity?: string, entityId?: string, etag?: string, generation?: string, id?: string, kind?: string, object?: string, projectTeam?: record, role?: string, selfLink?: string}
-# --customerEncryption shape: {encryptionAlgorithm?: string, keySha256?: string}
-# --owner shape: {entity?: string, entityId?: string}
 export def "storage-objects-rewrite" [
   source_bucket: string
   source_object: string
@@ -2877,7 +2834,7 @@ export def "storage-objects-rewrite" [
   --time-deleted: string # The deletion time of the object in RFC 3339 format. Will be returned if and only if this version of the object has been deleted. (format: date-time)
   --time-storage-class-updated: string # The time at which the object's storage class was last changed. When the object is initially created, it will be set to timeCreated. (format: date-time)
   --updated: string # The modification time of the object metadata in RFC 3339 format. Set initially to object creation time and then updated whenever any metadata of the object changes. This includes changes made by a requester, such as modifying custom metadata, as well as changes made by Cloud Storage on behalf of a requester, such as changing the storage class based on an Object Lifecycle Configuration. (format: date-time)
-]: any -> record<done: bool, kind: string, objectSize: string, resource: record<acl: list<record>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, rewriteToken: string, totalBytesRewritten: string> {
+]: any -> oneof<record<done: bool, kind: string, objectSize: string, resource: record<acl: list<record>, bucket: string, cacheControl: string, componentCount: int, contentDisposition: string, contentEncoding: string, contentLanguage: string, contentType: string, crc32c: string, customTime: string, customerEncryption: record<encryptionAlgorithm: string, keySha256: string>, etag: string, eventBasedHold: bool, generation: string, id: string, kind: string, kmsKeyName: string, md5Hash: string, mediaLink: string, metadata: record, metageneration: string, name: string, owner: record<entity: string, entityId: string>, retentionExpirationTime: string, selfLink: string, size: string, storageClass: string, temporaryHold: bool, timeCreated: string, timeDeleted: string, timeStorageClassUpdated: string, updated: string>, rewriteToken: string, totalBytesRewritten: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2989,7 +2946,7 @@ export def "storage-projects-hmac-keys-list" [
   --service-account-email: string # If present, only keys for the given service account are returned.
   --show-deleted-keys: oneof<nothing, bool> # Whether or not to show keys in the DELETED state.
   --user-project: string # The project to be billed for this request.
-]: nothing -> record<items: table<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, kind: string, nextPageToken: string> {
+]: nothing -> oneof<record<items: table<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, kind: string, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -3036,7 +2993,7 @@ export def "storage-projects-hmac-keys-create" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --service-account-email: string # Email address of the service account. (required)
   --user-project: string # The project to be billed for this request.
-]: nothing -> record<kind: string, metadata: record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, secret: string> {
+]: nothing -> oneof<record<kind: string, metadata: record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, secret: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -3132,7 +3089,7 @@ export def "storage-projects-hmac-keys-get" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request.
-]: nothing -> record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string> {
+]: nothing -> oneof<record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -3190,7 +3147,7 @@ export def "storage-projects-hmac-keys-update" [
   --state: string # The state of the key. Can be one of ACTIVE, INACTIVE, or DELETED.
   --time-created: string # The creation time of the HMAC key in RFC 3339 format. (format: date-time)
   --updated: string # The last modification time of the HMAC key metadata in RFC 3339 format. (format: date-time)
-]: any -> record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string> {
+]: any -> oneof<record<accessId: string, etag: string, id: string, kind: string, projectId: string, selfLink: string, serviceAccountEmail: string, state: string, timeCreated: string, updated: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3240,7 +3197,7 @@ export def "storage-projects-service-account-get" [
   --upload-type: string # Upload protocol for media (e.g. "media", "multipart", "resumable").
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --user-project: string # The project to be billed for this request.
-]: nothing -> record<email_address: string, kind: string> {
+]: nothing -> oneof<record<email_address: string, kind: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }

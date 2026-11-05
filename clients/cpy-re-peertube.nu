@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -168,6 +192,7 @@ def admin-flags-completer [] { ["0" "1"] }
 def role-completer [] { ["0" "1" "2"] }
 def display-nsfw-completer [] { ["both" "false" "true"] }
 def sort-completer-6 [] { ["-createdAt" "-state" "createdAt" "state"] }
+def grant-type-completer [] { ["password" "refresh_token"] }
 def privacy-completer [] { ["1" "2" "3"] }
 def type-completer [] { ["1" "2"] }
 def sort-completer-7 [] { ["-createdAt" "-dislikes" "-duration" "-id" "-likes" "-uuid" "-views" "name"] }
@@ -183,9 +208,9 @@ def accept-completer [] { ["application/atom+xml" "application/json" "applicatio
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-abuses" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-abuses" "post-api-v1-abuses" "delete-api-v1-abuses-abuse-id" "put-api-v1-abuses-abuse-id" "get-api-v1-abuses-abuse-id-messages" "post-api-v1-abuses-abuse-id-messages" "delete-api-v1-abuses-abuse-id-messages-abuse-message-id" "get-accounts" "get-account" "get-account-followers" "get-api-v1-accounts-name-ratings" "get-api-v1-accounts-name-video-channel-syncs" "get-api-v1-accounts-name-video-channels" "get-api-v1-accounts-name-video-playlists" "get-account-videos" "get-api-v1-blocklist-status" "get-config" "get-about" "del-custom-config" "get-custom-config" "put-custom-config" "get-api-v1-custom-pages-homepage-instance" "put-api-v1-custom-pages-homepage-instance" "post-api-v1-jobs-pause" "post-api-v1-jobs-resume" "get-jobs" "post-api-v1-metrics-playback" "get-o-auth-client" "get-plugins" "get-available-plugins" "add-plugin" "uninstall-plugin" "update-plugin" "get-plugin" "get-api-v1-plugins-npm-name-public-settings" "get-api-v1-plugins-npm-name-registered-settings" "put-api-v1-plugins-npm-name-settings" "search-channels" "search-playlists" "search-videos" "get-instance-audit-logs" "get-api-v1-server-blocklist-accounts" "post-api-v1-server-blocklist-accounts" "delete-api-v1-server-blocklist-accounts-account-name" "get-api-v1-server-blocklist-servers" "post-api-v1-server-blocklist-servers" "delete-api-v1-server-blocklist-servers-host" "get-api-v1-server-followers" "delete-api-v1-server-followers-name-with-host" "post-api-v1-server-followers-name-with-host-accept" "post-api-v1-server-followers-name-with-host-reject" "get-api-v1-server-following" "post-api-v1-server-following" "delete-api-v1-server-following-host-or-handle" "get-instance-logs" "send-client-log" "get-mirrored-videos" "put-mirrored-video" "del-mirrored-video" "put-api-v1-server-redundancy-host" "get-instance-stats" "get-users" "add-user" "resend-email-to-verify-user" "get-user-info" "put-user-info" "get-my-abuses" "delete-api-v1-users-me-avatar" "post-api-v1-users-me-avatar-pick" "get-api-v1-users-me-history-videos" "post-api-v1-users-me-history-videos-remove" "delete-api-v1-users-me-history-videos-video-id" "put-api-v1-users-me-notification-settings" "get-api-v1-users-me-notifications" "post-api-v1-users-me-notifications-read" "post-api-v1-users-me-notifications-read-all" "get-api-v1-users-me-subscriptions" "post-api-v1-users-me-subscriptions" "get-api-v1-users-me-subscriptions-exist" "get-api-v1-users-me-subscriptions-videos" "delete-api-v1-users-me-subscriptions-subscription-handle" "get-api-v1-users-me-subscriptions-subscription-handle" "get-api-v1-users-me-video-playlists-videos-exist" "get-api-v1-users-me-video-quota-used" "get-api-v1-users-me-videos" "get-api-v1-users-me-videos-imports" "get-api-v1-users-me-videos-video-id-rating" "register-user" "list-registrations" "resend-email-to-verify-registration" "request-registration" "delete-registration" "accept-registration" "reject-registration" "verify-registration-email" "revoke-o-auth-token" "get-o-auth-token" "del-user" "get-user" "put-user" "confirm-two-factor-request" "disable-two-factor" "request-two-factor" "verify-user" "add-video-channel-sync" "del-video-channel-sync" "trigger-video-channel-sync" "get-video-channels" "add-video-channel" "del-video-channel" "get-video-channel" "put-video-channel" "delete-api-v1-video-channels-channel-handle-avatar" "post-api-v1-video-channels-channel-handle-avatar-pick" "delete-api-v1-video-channels-channel-handle-banner" "post-api-v1-video-channels-channel-handle-banner-pick" "get-video-channel-followers" "post-api-v1-video-channels-channel-handle-import-videos" "get-api-v1-video-channels-channel-handle-video-playlists" "get-video-channel-videos" "get-playlists" "add-playlist" "get-playlist-privacy-policies" "delete-api-v1-video-playlists-playlist-id" "get-api-v1-video-playlists-playlist-id" "put-api-v1-video-playlists-playlist-id" "get-video-playlist-videos" "add-video-playlist-video" "reorder-video-playlist" "del-video-playlist-video" "put-video-playlist-video" "get-videos" "get-video-blocks" "get-categories" "import-video" "delete-api-v1-videos-imports-id" "post-api-v1-videos-imports-id-cancel" "get-languages" "get-licences" "add-live" "get-live-id" "update-live-id" "get-api-v1-videos-live-id-sessions" "get-api-v1-videos-ownership" "post-api-v1-videos-ownership-id-accept" "post-api-v1-videos-ownership-id-refuse" "get-privacy-policies" "upload-legacy" "upload-resumable-cancel" "upload-resumable-init" "upload-resumable" "del-video" "get-video" "put-video" "del-video-block" "add-video-block" "get-video-captions" "del-video-caption" "add-video-caption" "get-api-v1-videos-id-comment-threads" "post-api-v1-videos-id-comment-threads" "get-api-v1-videos-id-comment-threads-thread-id" "delete-api-v1-videos-id-comments-comment-id" "post-api-v1-videos-id-comments-comment-id" "get-video-desc" "post-api-v1-videos-id-give-ownership" "del-video-hls" "get-api-v1-videos-id-live-session" "put-api-v1-videos-id-rate" "get-video-source" "get-api-v1-videos-id-stats-overall" "get-api-v1-videos-id-stats-retention" "get-api-v1-videos-id-stats-timeseries-metric" "post-api-v1-videos-id-studio-edit" "request-video-token" "create-video-transcoding" "add-view" "put-api-v1-videos-id-watching" "del-video-web-torrent" "get-syndicated-subscription-videos" "get-syndicated-comments" "get-syndicated-videos" "get-static-streaming-playlists-hls-private-filename" "get-static-streaming-playlists-hls-filename" "get-static-webseed-private-filename" "get-static-webseed-filename" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -230,7 +255,7 @@ export def "get-abuses" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer # Sort abuses by criteria
-]: nothing -> record<data: table<createdAt: string, id: int, moderationComment: string, predefinedReasons: list, reason: string, reporterAccount: record, state: record, video: record>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, id: int, moderationComment: string, predefinedReasons: list, reason: string, reporterAccount: record, state: record, video: record>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "predefinedReason" $predefined_reason "multi") (serialize-qp "search" $search "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "searchReporter" $search_reporter "scalar") (serialize-qp "searchReportee" $search_reportee "scalar") (serialize-qp "searchVideo" $search_video "scalar") (serialize-qp "searchVideoChannel" $search_video_channel "scalar") (serialize-qp "videoIs" $video_is "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -254,9 +279,6 @@ export def "get-abuses" [
 # Report an abuse
 #
 # POST /api/v1/abuses
-# --account shape: {id?: int}
-# --comment shape: {id?: int}
-# --video shape: {endAt?: int, id?: int, startAt?: int}
 export def "post-api-v1-abuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -272,7 +294,7 @@ export def "post-api-v1-abuses" [
   --predefined-reasons: list<string> # Reason categories that help triage reports
   reason: string # Reason why the user reports this video
   --video: record # shape: {endAt?: int, id?: int, startAt?: int}
-]: any -> record<abuse: record<id: int>> {
+]: any -> oneof<record<abuse: record<id: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -384,7 +406,7 @@ export def "get-api-v1-abuses-abuse-id-messages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<account: record, byModerator: bool, createdAt: string, id: int, message: string>, total: int> {
+]: nothing -> oneof<record<data: table<account: record, byModerator: bool, createdAt: string, id: int, message: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($abuse_id | is-empty) { error make --unspanned { msg: "path parameter 'abuseId' must be non-empty" } }
@@ -498,7 +520,7 @@ export def "get-accounts" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int> {
+]: nothing -> oneof<table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -534,7 +556,7 @@ export def "get-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int> {
+]: nothing -> oneof<record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -574,7 +596,7 @@ export def "get-account-followers" [
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-1 # Sort followers by criteria
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
-]: nothing -> record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -614,7 +636,7 @@ export def "get-api-v1-accounts-name-ratings" [
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
   --rating: string@rating-completer # Optionally filter which ratings to retrieve
-]: nothing -> table<rating: string, video: record<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>> {
+]: nothing -> oneof<table<rating: string, video: record<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -653,7 +675,7 @@ export def "get-api-v1-accounts-name-video-channel-syncs" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<channel: record, createdAt: string, externalChannelUrl: string, id: int, lastSyncAt: string, state: record>, total: int> {
+]: nothing -> oneof<record<data: table<channel: record, createdAt: string, externalChannelUrl: string, id: int, lastSyncAt: string, state: record>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -693,7 +715,7 @@ export def "get-api-v1-accounts-name-video-channels" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -734,7 +756,7 @@ export def "get-api-v1-accounts-name-video-playlists" [
   --sort: string # Sort column (e.g. -createdAt)
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
   --playlist-type: int@playlist-type-completer
-]: nothing -> record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -787,7 +809,7 @@ export def "get-account-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-2
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
+]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -824,7 +846,7 @@ export def "get-api-v1-blocklist-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accounts: list<string> # Check if these accounts are blocked (e.g. [goofy@example.com, donald@example.com])
   --hosts: list<string> # Check if these hosts are blocked (e.g. [example.com])
-]: nothing -> record<accounts: record, hosts: record> {
+]: nothing -> oneof<record<accounts: record, hosts: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accounts" $accounts "multi") (serialize-qp "hosts" $hosts "multi")] | flatten | str join "&"
@@ -859,7 +881,7 @@ export def "get-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<autoBlacklist: record<videos: record<ofUsers: record>>, avatar: record<extensions: list<string>, file: record<size: record>>, contactForm: record<enabled: bool>, email: record<enabled: bool>, followings: record<instance: record<autoFollowIndex: record>>, homepage: record<enabled: bool>, import: record<videoChannelSynchronization: record<enabled: bool>, videos: record<http: record, torrent: record>>, instance: record<customizations: record<css: string, javascript: string>, defaultClientRoute: string, defaultNSFWPolicy: string, isNSFW: bool, name: string, shortDescription: string>, plugin: record<registered: list<string>>, search: record<remoteUri: record<anonymous: bool, users: bool>>, serverCommit: string, serverVersion: string, signup: record<allowed: bool, allowedForCurrentIP: bool, requiresEmailVerification: bool>, theme: record<registered: list<string>>, tracker: record<enabled: bool>, transcoding: record<enabledResolutions: list<int>, hls: record<enabled: bool>, webtorrent: record<enabled: bool>>, trending: record<videos: record<intervalDays: int>>, user: record<videoQuota: int, videoQuotaDaily: int>, video: record<file: record<extensions: list>, image: record<extensions: list, size: record>>, videoCaption: record<file: record<extensions: list, size: record>>> {
+]: nothing -> oneof<record<autoBlacklist: record<videos: record<ofUsers: record>>, avatar: record<extensions: list<string>, file: record<size: record>>, contactForm: record<enabled: bool>, email: record<enabled: bool>, followings: record<instance: record<autoFollowIndex: record>>, homepage: record<enabled: bool>, import: record<videoChannelSynchronization: record<enabled: bool>, videos: record<http: record, torrent: record>>, instance: record<customizations: record<css: string, javascript: string>, defaultClientRoute: string, defaultNSFWPolicy: string, isNSFW: bool, name: string, shortDescription: string>, plugin: record<registered: list<string>>, search: record<remoteUri: record<anonymous: bool, users: bool>>, serverCommit: string, serverVersion: string, signup: record<allowed: bool, allowedForCurrentIP: bool, requiresEmailVerification: bool>, theme: record<registered: list<string>>, tracker: record<enabled: bool>, transcoding: record<enabledResolutions: list<int>, hls: record<enabled: bool>, webtorrent: record<enabled: bool>>, trending: record<videos: record<intervalDays: int>>, user: record<videoQuota: int, videoQuotaDaily: int>, video: record<file: record<extensions: list>, image: record<extensions: list, size: record>>, videoCaption: record<file: record<extensions: list, size: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config" $auth.query)
@@ -893,7 +915,7 @@ export def "get-about" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<instance: record<description: string, name: string, shortDescription: string, terms: string>> {
+]: nothing -> oneof<record<instance: record<description: string, name: string, shortDescription: string, terms: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/about" $auth.query)
@@ -961,7 +983,7 @@ export def "get-custom-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<admin: record<email: string>, autoBlacklist: record<videos: record<ofUsers: record>>, cache: record<captions: record<size: int>, previews: record<size: int>>, contactForm: record<enabled: bool>, followers: record<instance: record<enabled: bool, manualApproval: bool>>, import: record<video_channel_synchronization: record<enabled: bool>, videos: record<http: record, torrent: record>>, instance: record<customizations: record<css: string, javascript: string>, defaultClientRoute: string, defaultNSFWPolicy: string, description: string, isNSFW: bool, name: string, shortDescription: string, terms: string>, services: record<twitter: record<username: string, whitelisted: bool>>, signup: record<enabled: bool, limit: int, requiresEmailVerification: bool>, theme: record<default: string>, transcoding: record<allowAdditionalExtensions: bool, allowAudioFiles: bool, concurrency: float, enabled: bool, hls: record<enabled: bool>, profile: string, resolutions: record<0p: bool, 1080p: bool, 1440p: bool, 144p: bool, 2160p: bool, 240p: bool, 360p: bool, 480p: bool, 720p: bool>, threads: int, webtorrent: record<enabled: bool>>, user: record<videoQuota: int, videoQuotaDaily: int>> {
+]: nothing -> oneof<record<admin: record<email: string>, autoBlacklist: record<videos: record<ofUsers: record>>, cache: record<captions: record<size: int>, previews: record<size: int>>, contactForm: record<enabled: bool>, followers: record<instance: record<enabled: bool, manualApproval: bool>>, import: record<video_channel_synchronization: record<enabled: bool>, videos: record<http: record, torrent: record>>, instance: record<customizations: record<css: string, javascript: string>, defaultClientRoute: string, defaultNSFWPolicy: string, description: string, isNSFW: bool, name: string, shortDescription: string, terms: string>, services: record<twitter: record<username: string, whitelisted: bool>>, signup: record<enabled: bool, limit: int, requiresEmailVerification: bool>, theme: record<default: string>, transcoding: record<allowAdditionalExtensions: bool, allowAudioFiles: bool, concurrency: float, enabled: bool, hls: record<enabled: bool>, profile: string, resolutions: record<0p: bool, 1080p: bool, 1440p: bool, 144p: bool, 2160p: bool, 240p: bool, 360p: bool, 480p: bool, 720p: bool>, threads: int, webtorrent: record<enabled: bool>>, user: record<videoQuota: int, videoQuotaDaily: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/config/custom" $auth.query)
@@ -1028,7 +1050,7 @@ export def "get-api-v1-custom-pages-homepage-instance" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content: string> {
+]: nothing -> oneof<record<content: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/custom-pages/homepage/instance" $auth.query)
@@ -1170,7 +1192,7 @@ export def "get-jobs" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<createdAt: string, data: record, error: record, finishedOn: string, id: int, processedOn: string, state: string, type: string>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, data: record, error: record, finishedOn: string, id: int, processedOn: string, state: string, type: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($state | is-empty) { error make --unspanned { msg: "path parameter 'state' must be non-empty" } }
@@ -1251,7 +1273,7 @@ export def "get-o-auth-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<client_id: string, client_secret: string> {
+]: nothing -> oneof<record<client_id: string, client_secret: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/oauth-clients/local" $auth.query)
@@ -1290,7 +1312,7 @@ export def "get-plugins" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pluginType" $plugin_type "scalar") (serialize-qp "uninstalled" $uninstalled "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -1331,7 +1353,7 @@ export def "get-available-plugins" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "pluginType" $plugin_type "scalar") (serialize-qp "currentPeerTubeEngine" $current_peer_tube_engine "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -1483,7 +1505,7 @@ export def "get-plugin" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string> {
+]: nothing -> oneof<record<createdAt: string, description: string, enabled: bool, homepage: string, latestVersion: string, name: string, peertubeEngine: string, settings: record, type: int, uninstalled: bool, updatedAt: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($npm_name | is-empty) { error make --unspanned { msg: "path parameter 'npmName' must be non-empty" } }
@@ -1518,7 +1540,7 @@ export def "get-api-v1-plugins-npm-name-public-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($npm_name | is-empty) { error make --unspanned { msg: "path parameter 'npmName' must be non-empty" } }
@@ -1553,7 +1575,7 @@ export def "get-api-v1-plugins-npm-name-registered-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($npm_name | is-empty) { error make --unspanned { msg: "path parameter 'npmName' must be non-empty" } }
@@ -1632,7 +1654,7 @@ export def "search-channels" [
   --count: int # Number of items to return (default: 15)
   --search-target: string@search-target-completer # If the administrator enabled search index support, you can override the default search target. **Warning**: If you choose to make an index search, PeerTube will get results from a third party service. It means the instance may not yet know the objects you fetched. If you want to load video/channel information: * If the current user has the ability to make a remote URI search (this information is available in the config endpoint), then reuse the search API to make a search using the object URI so PeerTube instance fetches the remote object and fill its database. After that, you can use the classic REST API endpoints to fetch the complete object or interact with it * If the current user doesn't have the ability to make a remote URI search, then redirect the user on the origin instance or fetch the data from the origin instance API
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
@@ -1673,7 +1695,7 @@ export def "search-playlists" [
   --count: int # Number of items to return (default: 15)
   --search-target: string@search-target-completer # If the administrator enabled search index support, you can override the default search target. **Warning**: If you choose to make an index search, PeerTube will get results from a third party service. It means the instance may not yet know the objects you fetched. If you want to load video/channel information: * If the current user has the ability to make a remote URI search (this information is available in the config endpoint), then reuse the search API to make a search using the object URI so PeerTube instance fetches the remote object and fill its database. After that, you can use the classic REST API endpoints to fetch the complete object or interact with it * If the current user doesn't have the ability to make a remote URI search, then redirect the user on the origin instance or fetch the data from the origin instance API
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
@@ -1734,7 +1756,7 @@ export def "search-videos" [
   --originally-published-end-date: string # Get videos that are originally published before this date (format: date-time)
   --duration-min: int # Get videos that have this minimum duration
   --duration-max: int # Get videos that have this maximum duration
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
+]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search == null) { error make --unspanned { msg: "required query parameter 'search' missing: pass --search" } }
@@ -1770,7 +1792,7 @@ export def "get-instance-audit-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/audit-logs" $auth.query)
@@ -2026,7 +2048,7 @@ export def "get-api-v1-server-followers" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "actorType" $actor_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -2170,7 +2192,7 @@ export def "get-api-v1-server-following" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "actorType" $actor_type "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -2278,7 +2300,7 @@ export def "get-instance-logs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/logs" $auth.query)
@@ -2359,7 +2381,7 @@ export def "get-mirrored-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-4 # Sort abuses by criteria
-]: nothing -> table<id: int, name: string, redundancies: record<files: list, streamingPlaylists: list>, url: string, uuid: string> {
+]: nothing -> oneof<table<id: int, name: string, redundancies: record<files: list, streamingPlaylists: list>, url: string, uuid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target == null) { error make --unspanned { msg: "required query parameter 'target' missing: pass --target" } }
@@ -2509,7 +2531,7 @@ export def "get-instance-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<activityPubMessagesProcessedPerSecond: float, totalActivityPubMessagesErrors: float, totalActivityPubMessagesProcessed: float, totalActivityPubMessagesSuccesses: float, totalActivityPubMessagesWaiting: float, totalDailyActiveUsers: float, totalInstanceFollowers: float, totalInstanceFollowing: float, totalLocalDailyActiveVideoChannels: float, totalLocalMonthlyActiveVideoChannels: float, totalLocalPlaylists: float, totalLocalVideoChannels: float, totalLocalVideoComments: float, totalLocalVideoFilesSize: float, totalLocalVideoViews: float, totalLocalVideos: float, totalLocalWeeklyActiveVideoChannels: float, totalMonthlyActiveUsers: float, totalUsers: float, totalVideoComments: float, totalVideos: float, totalWeeklyActiveUsers: float, videosRedundancy: table<strategy: string, totalSize: float, totalUsed: float, totalVideoFiles: float, totalVideos: float>> {
+]: nothing -> oneof<record<activityPubMessagesProcessedPerSecond: float, totalActivityPubMessagesErrors: float, totalActivityPubMessagesProcessed: float, totalActivityPubMessagesSuccesses: float, totalActivityPubMessagesWaiting: float, totalDailyActiveUsers: float, totalInstanceFollowers: float, totalInstanceFollowing: float, totalLocalDailyActiveVideoChannels: float, totalLocalMonthlyActiveVideoChannels: float, totalLocalPlaylists: float, totalLocalVideoChannels: float, totalLocalVideoComments: float, totalLocalVideoFilesSize: float, totalLocalVideoViews: float, totalLocalVideos: float, totalLocalWeeklyActiveVideoChannels: float, totalMonthlyActiveUsers: float, totalUsers: float, totalVideoComments: float, totalVideos: float, totalWeeklyActiveUsers: float, videosRedundancy: table<strategy: string, totalSize: float, totalUsed: float, totalVideoFiles: float, totalVideos: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/server/stats" $auth.query)
@@ -2548,7 +2570,7 @@ export def "get-users" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-5 # Sort users by criteria
-]: nothing -> table<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, autoPlayNextVideo: bool, autoPlayNextVideoPlaylist: bool, autoPlayVideo: bool, blocked: bool, blockedReason: string, createdAt: string, email: string, emailVerified: bool, id: int, lastLoginDate: string, noAccountSetupWarningModal: bool, noInstanceConfigWarningModal: bool, noWelcomeModal: bool, nsfwPolicy: string, p2pEnabled: bool, pluginAuth: string, role: record<id: int, label: string>, theme: string, username: string, videoChannels: list<record>, videoQuota: int, videoQuotaDaily: int> {
+]: nothing -> oneof<table<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, autoPlayNextVideo: bool, autoPlayNextVideoPlaylist: bool, autoPlayVideo: bool, blocked: bool, blockedReason: string, createdAt: string, email: string, emailVerified: bool, id: int, lastLoginDate: string, noAccountSetupWarningModal: bool, noInstanceConfigWarningModal: bool, noWelcomeModal: bool, nsfwPolicy: string, p2pEnabled: bool, pluginAuth: string, role: record<id: int, label: string>, theme: string, username: string, videoChannels: list<record>, videoQuota: int, videoQuotaDaily: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "blocked" $blocked "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -2591,7 +2613,7 @@ export def "add-user" [
   username: string # immutable name of the user, used to find or mention its actor (e.g. chocobozzz)
   video_quota: int # The user video quota in bytes (e.g. -1)
   video_quota_daily: int # The user daily video quota in bytes (e.g. -1)
-]: any -> record<user: record<account: record<id: int>, id: int>> {
+]: any -> oneof<record<user: record<account: record<id: int>, id: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2666,7 +2688,7 @@ export def "get-user-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, autoPlayNextVideo: bool, autoPlayNextVideoPlaylist: bool, autoPlayVideo: bool, blocked: bool, blockedReason: string, createdAt: string, email: string, emailVerified: bool, id: int, lastLoginDate: string, noAccountSetupWarningModal: bool, noInstanceConfigWarningModal: bool, noWelcomeModal: bool, nsfwPolicy: string, p2pEnabled: bool, pluginAuth: string, role: record<id: int, label: string>, theme: string, username: string, videoChannels: list<record>, videoQuota: int, videoQuotaDaily: int> {
+]: nothing -> oneof<table<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, autoPlayNextVideo: bool, autoPlayNextVideoPlaylist: bool, autoPlayVideo: bool, blocked: bool, blockedReason: string, createdAt: string, email: string, emailVerified: bool, id: int, lastLoginDate: string, noAccountSetupWarningModal: bool, noInstanceConfigWarningModal: bool, noWelcomeModal: bool, nsfwPolicy: string, p2pEnabled: bool, pluginAuth: string, role: record<id: int, label: string>, theme: string, username: string, videoChannels: list<record>, videoQuota: int, videoQuotaDaily: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me" $auth.query)
@@ -2757,7 +2779,7 @@ export def "get-my-abuses" [
   --sort: string@sort-completer # Sort abuses by criteria
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-]: nothing -> record<data: table<createdAt: string, id: int, moderationComment: string, predefinedReasons: list, reason: string, reporterAccount: record, state: record, video: record>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, id: int, moderationComment: string, predefinedReasons: list, reason: string, reporterAccount: record, state: record, video: record>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -2825,7 +2847,7 @@ export def "post-api-v1-users-me-avatar-pick" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --avatarfile: string # The file to upload (format: binary)
-]: any -> record<avatars: table<createdAt: string, path: string, updatedAt: string, width: int>> {
+]: any -> oneof<record<avatars: table<createdAt: string, path: string, updatedAt: string, width: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2866,7 +2888,7 @@ export def "get-api-v1-users-me-history-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
+]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -3026,7 +3048,7 @@ export def "get-api-v1-users-me-notifications" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<account: record, actorFollow: record, comment: record, createdAt: string, id: int, read: bool, type: int, updatedAt: string, video: record, videoAbuse: record, videoBlacklist: record, videoImport: record>, total: int> {
+]: nothing -> oneof<record<data: table<account: record, actorFollow: record, comment: record, createdAt: string, id: int, read: bool, type: int, updatedAt: string, video: record, videoAbuse: record, videoBlacklist: record, videoImport: record>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "unread" $unread "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -3133,7 +3155,7 @@ export def "get-api-v1-users-me-subscriptions" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -3205,7 +3227,7 @@ export def "get-api-v1-users-me-subscriptions-exist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --uris: list<string> # list of uris to check if each is part of the user subscriptions (required)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uris == null) { error make --unspanned { msg: "required query parameter 'uris' missing: pass --uris" } }
@@ -3256,7 +3278,7 @@ export def "get-api-v1-users-me-subscriptions-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-2
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
+]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -3326,7 +3348,7 @@ export def "get-api-v1-users-me-subscriptions-subscription-handle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string> {
+]: nothing -> oneof<record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_handle | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionHandle' must be non-empty" } }
@@ -3361,7 +3383,7 @@ export def "get-api-v1-users-me-video-playlists-videos-exist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --video-ids: list # The video ids to check (required)
-]: nothing -> record<videoId: table<playlistElementId: int, playlistId: int, startTimestamp: int, stopTimestamp: int>> {
+]: nothing -> oneof<record<videoId: table<playlistElementId: int, playlistId: int, startTimestamp: int, stopTimestamp: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_ids == null) { error make --unspanned { msg: "required query parameter 'videoIds' missing: pass --video-ids" } }
@@ -3396,7 +3418,7 @@ export def "get-api-v1-users-me-video-quota-used" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<videoQuotaUsed: float, videoQuotaUsedDaily: float> {
+]: nothing -> oneof<record<videoQuotaUsed: float, videoQuotaUsedDaily: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/me/video-quota-used" $auth.query)
@@ -3432,7 +3454,7 @@ export def "get-api-v1-users-me-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
+]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -3472,7 +3494,7 @@ export def "get-api-v1-users-me-videos-imports" [
   --target-url: string # Filter on import target URL
   --video-channel-sync-id: float # Filter on imports created by a specific channel synchronization
   --search: string # Search in video names
-]: nothing -> record<data: table<createdAt: string, error: string, id: int, magnetUri: string, state: record, targetUrl: string, torrentName: string, torrentfile: string, updatedAt: string, video: record>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, error: string, id: int, magnetUri: string, state: record, targetUrl: string, torrentName: string, torrentfile: string, updatedAt: string, video: record>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "targetUrl" $target_url "scalar") (serialize-qp "videoChannelSyncId" $video_channel_sync_id "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -3507,7 +3529,7 @@ export def "get-api-v1-users-me-videos-video-id-rating" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: int, rating: string> {
+]: nothing -> oneof<record<id: int, rating: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'videoId' must be non-empty" } }
@@ -3532,7 +3554,6 @@ export def "get-api-v1-users-me-videos-video-id-rating" [
 #
 # POST /api/v1/users/register
 # operationId: registerUser
-# --channel shape: {displayName?: string, name?: string}
 export def "register-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3589,7 +3610,7 @@ export def "list-registrations" [
   --count: int # Number of items to return (default: 15)
   --search: string
   --sort: string@sort-completer-6
-]: nothing -> record<data: table<accountDisplayName: string, channelDisplayName: string, channelHandle: string, createdAt: string, email: string, emailVerified: bool, id: int, moderationResponse: string, registrationReason: string, state: record, updatedAt: string, user: record, username: string>, total: int> {
+]: nothing -> oneof<record<data: table<accountDisplayName: string, channelDisplayName: string, channelHandle: string, createdAt: string, email: string, emailVerified: bool, id: int, moderationResponse: string, registrationReason: string, state: record, updatedAt: string, user: record, username: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -3652,7 +3673,6 @@ export def "resend-email-to-verify-registration" [
 #
 # POST /api/v1/users/registrations/request
 # operationId: requestRegistration
-# --channel shape: {displayName?: string, name?: string}
 export def "request-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3669,7 +3689,7 @@ export def "request-registration" [
   password: string # format: password
   username: string # immutable name of the user, used to find or mention its actor
   registration_reason: string # reason for the user to register on the instance
-]: any -> record<accountDisplayName: string, channelDisplayName: string, channelHandle: string, createdAt: string, email: string, emailVerified: bool, id: int, moderationResponse: string, registrationReason: string, state: record<id: int, label: string>, updatedAt: string, user: record<id: int>, username: string> {
+]: any -> oneof<record<accountDisplayName: string, channelDisplayName: string, channelHandle: string, createdAt: string, email: string, emailVerified: bool, id: int, moderationResponse: string, registrationReason: string, state: record<id: int, label: string>, updatedAt: string, user: record<id: int>, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3899,17 +3919,22 @@ export def "get-o-auth-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<access_token: string, expires_in: int, refresh_token: string, refresh_token_expires_in: int, token_type: string> {
+  client_id: string # e.g. v1ikx5hnfop4mdpnci8nsqh93c45rldf
+  client_secret: string # e.g. AjWiOapPltI6EnsWQwlFarRtLh4u8tDt
+  grant_type: string@grant-type-completer # default: password
+  --password: string # format: password
+  --username: string # immutable name of the user, used to find or mention its actor (e.g. chocobozzz)
+  --refresh-token: string # e.g. 2e0d675df9fc96d2e4ec8a3ebbbf45eca9137bb7
+]: any -> oneof<record<access_token: string, expires_in: int, refresh_token: string, refresh_token_expires_in: int, token_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/users/token" $auth.query)
-  let req_body = $body
+  let req_body = {"client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type, "password": $password, "username": $username, "refresh_token": $refresh_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -4142,7 +4167,7 @@ export def "request-two-factor" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --current-password: string # Password of the currently authenticated user
-]: any -> table<otpRequest: record<requestToken: string, secret: string, uri: string>> {
+]: any -> oneof<table<otpRequest: record<requestToken: string, secret: string, uri: string>>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4223,7 +4248,7 @@ export def "add-video-channel-sync" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --external-channel-url: string # e.g. https://youtube.com/c/UC_myfancychannel
   --video-channel-id: int # e.g. 42
-]: any -> record<videoChannelSync: record<channel: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, createdAt: string, externalChannelUrl: string, id: int, lastSyncAt: string, state: record<id: int, label: string>>> {
+]: any -> oneof<record<videoChannelSync: record<channel: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, createdAt: string, externalChannelUrl: string, id: int, lastSyncAt: string, state: record<id: int, label: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4335,7 +4360,7 @@ export def "get-video-channels" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
-]: nothing -> record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list, description: string, displayName: string, isLocal: bool, ownerAccount: record, support: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -4374,7 +4399,7 @@ export def "add-video-channel" [
   display_name: any # Channel display name
   --support: any # How to support/fund the channel
   name: string # username of the channel to create
-]: any -> record<videoChannel: record<id: int>> {
+]: any -> oneof<record<videoChannel: record<id: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4448,7 +4473,7 @@ export def "get-video-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string> {
+]: nothing -> oneof<record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: table<createdAt: string, path: string, updatedAt: string, width: int>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
@@ -4562,7 +4587,7 @@ export def "post-api-v1-video-channels-channel-handle-avatar-pick" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --avatarfile: string # The file to upload. (format: binary)
-]: any -> record<avatars: table<createdAt: string, path: string, updatedAt: string, width: int>> {
+]: any -> oneof<record<avatars: table<createdAt: string, path: string, updatedAt: string, width: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4638,7 +4663,7 @@ export def "post-api-v1-video-channels-channel-handle-banner-pick" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --bannerfile: string # The file to upload. (format: binary)
-]: any -> record<banners: table<createdAt: string, path: string, updatedAt: string, width: int>> {
+]: any -> oneof<record<banners: table<createdAt: string, path: string, updatedAt: string, width: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4683,7 +4708,7 @@ export def "get-video-channel-followers" [
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-1 # Sort followers by criteria
   --search: string # Plain text search, applied to various parts of the model depending on endpoint
-]: nothing -> record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, follower: record, following: record, id: int, score: float, state: string, updatedAt: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
@@ -4763,7 +4788,7 @@ export def "get-api-v1-video-channels-channel-handle-video-playlists" [
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
   --playlist-type: int@playlist-type-completer
-]: nothing -> record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
@@ -4816,7 +4841,7 @@ export def "get-video-channel-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-2
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
+]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_handle | is-empty) { error make --unspanned { msg: "path parameter 'channelHandle' must be non-empty" } }
@@ -4856,7 +4881,7 @@ export def "get-playlists" [
   --count: int # Number of items to return (default: 15)
   --sort: string # Sort column (e.g. -createdAt)
   --playlist-type: int@playlist-type-completer
-]: nothing -> record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record, privacy: record, shortUUID: string, thumbnailPath: string, type: record, updatedAt: string, uuid: string, videoChannel: record, videoLength: int>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "playlistType" $playlist_type "scalar")] | flatten | str join "&"
@@ -4896,7 +4921,7 @@ export def "add-playlist" [
   --privacy: int@privacy-completer # Video playlist privacy policy (see [/video-playlists/privacies])
   --thumbnailfile: string # Video playlist thumbnail file (format: binary)
   --video-channel-id: int # Video channel in which the playlist will be published
-]: any -> record<videoPlaylist: record<id: int, shortUUID: string, uuid: string>> {
+]: any -> oneof<record<videoPlaylist: record<id: int, shortUUID: string, uuid: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4935,7 +4960,7 @@ export def "get-playlist-privacy-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/video-playlists/privacies" $auth.query)
@@ -5004,7 +5029,7 @@ export def "get-api-v1-video-playlists-playlist-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, privacy: record<id: int, label: string>, shortUUID: string, thumbnailPath: string, type: record<id: int, label: string>, updatedAt: string, uuid: string, videoChannel: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, videoLength: int> {
+]: nothing -> oneof<record<createdAt: string, description: string, displayName: string, id: int, isLocal: bool, ownerAccount: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, privacy: record<id: int, label: string>, shortUUID: string, thumbnailPath: string, type: record<id: int, label: string>, updatedAt: string, uuid: string, videoChannel: record<avatars: list<record>, displayName: string, host: string, id: int, name: string, url: string>, videoLength: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
@@ -5087,7 +5112,7 @@ export def "get-video-playlist-videos" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
+]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlistId' must be non-empty" } }
@@ -5127,7 +5152,7 @@ export def "add-video-playlist-video" [
   --start-timestamp: int # Start the video at this specific timestamp (format: seconds)
   --stop-timestamp: int # Stop the video at this specific timestamp (format: seconds)
   video_id: any # Video to add in the playlist
-]: any -> record<videoPlaylistElement: record<id: int>> {
+]: any -> oneof<record<videoPlaylistElement: record<id: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5304,7 +5329,7 @@ export def "get-videos" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-2
-]: nothing -> record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int> {
+]: nothing -> oneof<record<data: table<account: record, blacklisted: bool, blacklistedReason: string, category: record, channel: record, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record, licence: record, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record, publishedAt: string, scheduledUpdate: record, shortUUID: string, state: record, thumbnailPath: string, updatedAt: string, userHistory: record, uuid: string, views: int, waitTranscoding: bool>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "categoryOneOf" $category_one_of "scalar") (serialize-qp "isLive" $is_live "scalar") (serialize-qp "tagsOneOf" $tags_one_of "scalar") (serialize-qp "tagsAllOf" $tags_all_of "scalar") (serialize-qp "licenceOneOf" $licence_one_of "scalar") (serialize-qp "languageOneOf" $language_one_of "scalar") (serialize-qp "nsfw" $nsfw "scalar") (serialize-qp "isLocal" $is_local "scalar") (serialize-qp "include" $include "scalar") (serialize-qp "privacyOneOf" $privacy_one_of "scalar") (serialize-qp "hasHLSFiles" $has_hls_files "scalar") (serialize-qp "hasWebtorrentFiles" $has_webtorrent_files "scalar") (serialize-qp "skipCount" $skip_count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -5344,7 +5369,7 @@ export def "get-video-blocks" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-7 # Sort blocklists by criteria
-]: nothing -> record<data: table<createdAt: string, description: string, dislikes: int, duration: int, id: int, likes: int, name: string, nsfw: bool, updatedAt: string, uuid: string, videoId: int, views: int>, total: int> {
+]: nothing -> oneof<record<data: table<createdAt: string, description: string, dislikes: int, duration: int, id: int, likes: int, name: string, nsfw: bool, updatedAt: string, uuid: string, videoId: int, views: int>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -5379,7 +5404,7 @@ export def "get-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/categories" $auth.query)
@@ -5403,7 +5428,6 @@ export def "get-categories" [
 #
 # POST /api/v1/videos/imports
 # operationId: importVideo
-# --scheduleUpdate shape: {privacy?: "1"|"2"|"3"|"4", updateAt: string}
 export def "import-video" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5431,7 +5455,7 @@ export def "import-video" [
   --tags: list<string> # Video tags (maximum 5 tags each between 2 and 30 characters) (e.g. [framasoft, peertube])
   --thumbnailfile: string # Video thumbnail file (format: binary)
   --wait-transcoding: oneof<nothing, bool> # Whether or not we wait transcoding before publish the video
-]: any -> record<video: record<id: int, shortUUID: string, uuid: string>> {
+]: any -> oneof<record<video: record<id: int, shortUUID: string, uuid: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5540,7 +5564,7 @@ export def "get-languages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/languages" $auth.query)
@@ -5574,7 +5598,7 @@ export def "get-licences" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/licences" $auth.query)
@@ -5625,7 +5649,7 @@ export def "add-live" [
   --support: string # A text tell the audience how to support the creator (e.g. Please support our work on https://soutenir.framasoft.org/en/ <3)
   --tags: list<string> # Live video/replay tags (maximum 5 tags each between 2 and 30 characters)
   --thumbnailfile: string # Live video/replay thumbnail file (format: binary)
-]: any -> record<video: record<id: int, shortUUID: string, uuid: string>> {
+]: any -> oneof<record<video: record<id: int, shortUUID: string, uuid: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5665,7 +5689,7 @@ export def "get-live-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<latencyMode: int, permanentLive: bool, rtmpUrl: string, rtmpsUrl: string, saveReplay: bool, streamKey: string> {
+]: nothing -> oneof<record<latencyMode: int, permanentLive: bool, rtmpUrl: string, rtmpsUrl: string, saveReplay: bool, streamKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5742,7 +5766,7 @@ export def "get-api-v1-videos-live-id-sessions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<endDate: string, error: int, id: int, replayVideo: record, startDate: string>, total: int> {
+]: nothing -> oneof<record<data: table<endDate: string, error: int, id: int, replayVideo: record, startDate: string>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5880,7 +5904,7 @@ export def "get-privacy-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/videos/privacies" $auth.query)
@@ -5904,7 +5928,6 @@ export def "get-privacy-policies" [
 #
 # POST /api/v1/videos/upload
 # operationId: uploadLegacy
-# --scheduleUpdate shape: {privacy?: "1"|"2"|"3"|"4", updateAt: string}
 export def "upload-legacy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5933,7 +5956,7 @@ export def "upload-legacy" [
   --thumbnailfile: string # Video thumbnail file (format: binary)
   --wait-transcoding: oneof<nothing, bool> # Whether or not we wait transcoding before publish the video
   videofile: string # Video file (format: binary)
-]: any -> record<video: record<id: int, shortUUID: string, uuid: string>> {
+]: any -> oneof<record<video: record<id: int, shortUUID: string, uuid: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6003,7 +6026,6 @@ export def "upload-resumable-cancel" [
 #
 # POST /api/v1/videos/upload-resumable
 # operationId: uploadResumableInit
-# --scheduleUpdate shape: {privacy?: "1"|"2"|"3"|"4", updateAt: string}
 export def "upload-resumable-init" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6079,7 +6101,7 @@ export def "upload-resumable" [
   --content-range: string # Specifies the bytes in the file that the request is uploading. For example, a value of `bytes 0-262143/1000000` shows that the request is sending the first 262144 bytes (256 x 1024) in a 2,469,036 byte file. (required, e.g. bytes 0-262143/2469036)
   --content-length: float # Size of the chunk that the request is sending. Remember that larger chunks are more efficient. PeerTube's web client uses chunks varying from 1048576 bytes (~1MB) and increases or reduces size depending on connection health. (required, e.g. 262144)
   --body: string
-]: any -> record<video: record<id: int, shortUUID: string, uuid: string>> {
+]: any -> oneof<record<video: record<id: int, shortUUID: string, uuid: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6159,7 +6181,7 @@ export def "get-video" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, blacklisted: bool, blacklistedReason: string, category: record<id: int, label: string>, channel: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list<record>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record<id: string, label: string>, licence: record<id: int, label: string>, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record<id: int, label: string>, publishedAt: string, scheduledUpdate: record<privacy: int, updateAt: string>, shortUUID: string, state: record<id: int, label: string>, thumbnailPath: string, updatedAt: string, userHistory: record<currentTime: int>, uuid: string, views: int, waitTranscoding: bool, commentsEnabled: bool, descriptionPath: string, downloadEnabled: bool, files: table<fileDownloadUrl: string, fileUrl: string, fps: float, id: int, magnetUri: string, metadataUrl: string, resolution: record, size: int, torrentDownloadUrl: string, torrentUrl: string>, streamingPlaylists: table<id: int, type: int, files: list, playlistUrl: string, redundancies: list, segmentsSha256Url: string>, support: string, tags: list<string>, trackerUrls: list<string>, viewers: int> {
+]: nothing -> oneof<record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, blacklisted: bool, blacklistedReason: string, category: record<id: int, label: string>, channel: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, banners: list<record>, description: string, displayName: string, isLocal: bool, ownerAccount: record<id: int, uuid: string>, support: string>, createdAt: string, description: string, dislikes: int, duration: int, embedPath: string, id: int, isLive: bool, isLocal: bool, language: record<id: string, label: string>, licence: record<id: int, label: string>, likes: int, name: string, nsfw: bool, originallyPublishedAt: string, previewPath: string, privacy: record<id: int, label: string>, publishedAt: string, scheduledUpdate: record<privacy: int, updateAt: string>, shortUUID: string, state: record<id: int, label: string>, thumbnailPath: string, updatedAt: string, userHistory: record<currentTime: int>, uuid: string, views: int, waitTranscoding: bool, commentsEnabled: bool, descriptionPath: string, downloadEnabled: bool, files: table<fileDownloadUrl: string, fileUrl: string, fps: float, id: int, magnetUri: string, metadataUrl: string, resolution: record, size: int, torrentDownloadUrl: string, torrentUrl: string>, streamingPlaylists: table<id: int, type: int, files: list, playlistUrl: string, redundancies: list, segmentsSha256Url: string>, support: string, tags: list<string>, trackerUrls: list<string>, viewers: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6184,7 +6206,6 @@ export def "get-video" [
 #
 # PUT /api/v1/videos/{id}
 # operationId: putVideo
-# --scheduleUpdate shape: {privacy?: "1"|"2"|"3"|"4", updateAt: string}
 export def "put-video" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6325,7 +6346,7 @@ export def "get-video-captions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<captionPath: string, language: record>, total: int> {
+]: nothing -> oneof<record<data: table<captionPath: string, language: record>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6445,7 +6466,7 @@ export def "get-api-v1-videos-id-comment-threads" [
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --sort: string@sort-completer-8 # Sort comments by criteria
-]: nothing -> record<data: table<account: record, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>, total: int> {
+]: nothing -> oneof<record<data: table<account: record, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6482,7 +6503,7 @@ export def "post-api-v1-videos-id-comment-threads" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   text: string # Text of the comment (format: markdown)
-]: any -> record<comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>> {
+]: any -> oneof<record<comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6521,7 +6542,7 @@ export def "get-api-v1-videos-id-comment-threads-thread-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<children: list<any>, comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>> {
+]: nothing -> oneof<record<children: list<any>, comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6596,7 +6617,7 @@ export def "post-api-v1-videos-id-comments-comment-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   text: string # Text of the comment (format: markdown)
-]: any -> record<comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>> {
+]: any -> oneof<record<comment: record<account: record<createdAt: string, followersCount: int, followingCount: int, host: string, hostRedundancyAllowed: bool, id: int, name: string, updatedAt: string, url: string, description: string, displayName: string, userId: int>, createdAt: string, deletedAt: string, id: int, inReplyToCommentId: int, isDeleted: bool, text: string, threadId: int, totalReplies: int, totalRepliesFromVideoAuthor: int, updatedAt: string, url: string, videoId: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6682,7 +6703,7 @@ export def "post-api-v1-videos-id-give-ownership" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -6747,7 +6768,7 @@ export def "get-api-v1-videos-id-live-session" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<endDate: string, error: int, id: int, replayVideo: record<id: float, shortUUID: string, uuid: string>, startDate: string> {
+]: nothing -> oneof<record<endDate: string, error: int, id: int, replayVideo: record<id: float, shortUUID: string, uuid: string>, startDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6822,7 +6843,7 @@ export def "get-video-source" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<filename: string> {
+]: nothing -> oneof<record<filename: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6859,7 +6880,7 @@ export def "get-api-v1-videos-id-stats-overall" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Filter stats by start date (format: date-time)
   --end-date: string # Filter stats by end date (format: date-time)
-]: nothing -> record<averageWatchTime: float, countries: table<isoCode: string, viewers: float>, totalWatchTime: float, viewersPeak: float, viewersPeakDate: string> {
+]: nothing -> oneof<record<averageWatchTime: float, countries: table<isoCode: string, viewers: float>, totalWatchTime: float, viewersPeak: float, viewersPeakDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6895,7 +6916,7 @@ export def "get-api-v1-videos-id-stats-retention" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<retentionPercent: float, second: float>> {
+]: nothing -> oneof<record<data: table<retentionPercent: float, second: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6933,7 +6954,7 @@ export def "get-api-v1-videos-id-stats-timeseries-metric" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Filter stats by start date (format: date-time)
   --end-date: string # Filter stats by end date (format: date-time)
-]: nothing -> record<data: table<date: string, value: float>> {
+]: nothing -> oneof<record<data: table<date: string, value: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6981,7 +7002,7 @@ export def "post-api-v1-videos-id-studio-edit" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -7011,7 +7032,7 @@ export def "request-video-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<files: record<expires: string, token: string>> {
+]: nothing -> oneof<record<files: record<expires: string, token: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7216,7 +7237,7 @@ export def "get-syndicated-subscription-videos" [
   --privacy-one-of: int@privacy-one-of-completer # **PeerTube >= 4.0** Display only videos in this specific privacy/privacies
   --has-hls-files: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have HLS files
   --has-webtorrent-files: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have WebTorrent files
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -7261,7 +7282,7 @@ export def "get-syndicated-comments" [
   --account-name: string # limit listing to a specific account
   --video-channel-id: string # limit listing to a specific video channel
   --video-channel-name: string # limit listing to a specific video channel
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
@@ -7310,7 +7331,7 @@ export def "get-syndicated-videos" [
   --privacy-one-of: int@privacy-one-of-completer # **PeerTube >= 4.0** Display only videos in this specific privacy/privacies
   --has-hls-files: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have HLS files
   --has-webtorrent-files: oneof<nothing, bool> # **PeerTube >= 4.0** Display only videos that have WebTorrent files
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }

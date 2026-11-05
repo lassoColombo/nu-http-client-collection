@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -153,9 +176,9 @@ def x-amz-target-completer-48 [] { ["GlobalAccelerator_V20180706.WithdrawByoipCi
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-custom-routing-endpoints" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-custom-routing-endpoints" "add-endpoints" "advertise-byoip-cidr" "allow-custom-routing-traffic" "create-accelerator" "create-custom-routing-accelerator" "create-custom-routing-endpoint-group" "create-custom-routing-listener" "create-endpoint-group" "create-listener" "delete-accelerator" "delete-custom-routing-accelerator" "delete-custom-routing-endpoint-group" "delete-custom-routing-listener" "delete-endpoint-group" "delete-listener" "deny-custom-routing-traffic" "deprovision-byoip-cidr" "describe-accelerator" "describe-accelerator-attributes" "describe-custom-routing-accelerator" "describe-custom-routing-accelerator-attributes" "describe-custom-routing-endpoint-group" "describe-custom-routing-listener" "describe-endpoint-group" "describe-listener" "list-accelerators" "list-byoip-cidrs" "list-custom-routing-accelerators" "list-custom-routing-endpoint-groups" "list-custom-routing-listeners" "list-custom-routing-port-mappings" "list-custom-routing-port-mappings-by-destination" "list-endpoint-groups" "list-listeners" "list-tags-for-resource" "provision-byoip-cidr" "remove-custom-routing-endpoints" "remove-endpoints" "tag-resource" "untag-resource" "update-accelerator" "update-accelerator-attributes" "update-custom-routing-accelerator" "update-custom-routing-accelerator-attributes" "update-custom-routing-listener" "update-endpoint-group" "update-listener" "withdraw-byoip-cidr" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -177,7 +200,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddCustomRoutingEndpoints
-# --EndpointConfigurations item shape: {EndpointId?: string}
 export def "add-custom-routing-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -198,7 +220,7 @@ export def "add-custom-routing-endpoints" [
   --x-amz-target: string@x-amz-target-completer # required
   endpoint_configurations: list # The list of endpoint objects to add to a custom routing accelerator. — item shape: {EndpointId?: string}
   endpoint_group_arn: string # The Amazon Resource Name (ARN) of the endpoint group for the custom routing endpoint.
-]: any -> record<EndpointDescriptions: table<EndpointId: string>, EndpointGroupArn: string> {
+]: any -> oneof<record<EndpointDescriptions: table<EndpointId: string>, EndpointGroupArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -228,7 +250,6 @@ export def "add-custom-routing-endpoints" [
 #
 # POST /
 # operationId: AddEndpoints
-# --EndpointConfigurations item shape: {EndpointId?: string, Weight?: int, ClientIPPreservationEnabled?: bool}
 export def "add-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -249,7 +270,7 @@ export def "add-endpoints" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   endpoint_configurations: list # The list of endpoint objects. — item shape: {EndpointId?: string, Weight?: int, ClientIPPreservationEnabled?: bool}
   endpoint_group_arn: string # The Amazon Resource Name (ARN) of the endpoint group.
-]: any -> record<EndpointDescriptions: table<EndpointId: string, Weight: int, HealthState: string, HealthReason: string, ClientIPPreservationEnabled: bool>, EndpointGroupArn: string> {
+]: any -> oneof<record<EndpointDescriptions: table<EndpointId: string, Weight: int, HealthState: string, HealthReason: string, ClientIPPreservationEnabled: bool>, EndpointGroupArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -298,7 +319,7 @@ export def "advertise-byoip-cidr" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-2 # required
   cidr: string # The address range, in CIDR notation. This must be the exact range that you provisioned. You can't advertise only a portion of the provisioned range.
-]: any -> record<ByoipCidr: record<Cidr: string, State: string, Events: list<record>>> {
+]: any -> oneof<record<ByoipCidr: record<Cidr: string, State: string, Events: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -381,7 +402,6 @@ export def "allow-custom-routing-traffic" [
 #
 # POST /
 # operationId: CreateAccelerator
-# --Tags item shape: {Key: string, Value: string}
 export def "create-accelerator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,7 +426,7 @@ export def "create-accelerator" [
   --enabled: oneof<nothing, bool> # Indicates whether an accelerator is enabled. The value is true or false. The default value is true. If the value is set to true, an accelerator cannot be deleted. If set to false, the accelerator can be deleted.
   idempotency_token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency—that is, the uniqueness—of an accelerator.
   --tags: list # Create tags for an accelerator. For more information, see Tagging in Global Accelerator (https://docs.aws.amazon.com/global-accelerator/latest/dg/tagging-in-global-accelerator.html) in the Global Accelerator Developer Guide. — item shape: {Key: string, Value: string}
-]: any -> record<Accelerator: record<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list<record>, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string, DualStackDnsName: string, Events: list<record>>> {
+]: any -> oneof<record<Accelerator: record<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list<record>, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string, DualStackDnsName: string, Events: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -436,7 +456,6 @@ export def "create-accelerator" [
 #
 # POST /
 # operationId: CreateCustomRoutingAccelerator
-# --Tags item shape: {Key: string, Value: string}
 export def "create-custom-routing-accelerator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -461,7 +480,7 @@ export def "create-custom-routing-accelerator" [
   --enabled: oneof<nothing, bool> # Indicates whether an accelerator is enabled. The value is true or false. The default value is true. If the value is set to true, an accelerator cannot be deleted. If set to false, the accelerator can be deleted.
   idempotency_token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency—that is, the uniqueness—of the request.
   --tags: list # Create tags for an accelerator. For more information, see Tagging in Global Accelerator (https://docs.aws.amazon.com/global-accelerator/latest/dg/tagging-in-global-accelerator.html) in the Global Accelerator Developer Guide. — item shape: {Key: string, Value: string}
-]: any -> record<Accelerator: record<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list<record>, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string>> {
+]: any -> oneof<record<Accelerator: record<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list<record>, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -491,7 +510,6 @@ export def "create-custom-routing-accelerator" [
 #
 # POST /
 # operationId: CreateCustomRoutingEndpointGroup
-# --DestinationConfigurations item shape: {FromPort: int, ToPort: int, Protocols: list<string>}
 export def "create-custom-routing-endpoint-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -514,7 +532,7 @@ export def "create-custom-routing-endpoint-group" [
   endpoint_group_region: string # The Amazon Web Services Region where the endpoint group is located. A listener can have only one endpoint group in a specific Region.
   destination_configurations: list # Sets the port range and protocol for all endpoints (virtual private cloud subnets) in a custom routing endpoint group to accept client traffic on. — item shape: {FromPort: int, ToPort: int, Protocols: list<string>}
   idempotency_token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency—that is, the uniqueness—of the request.
-]: any -> record<EndpointGroup: record<EndpointGroupArn: string, EndpointGroupRegion: string, DestinationDescriptions: list<record>, EndpointDescriptions: list<record>>> {
+]: any -> oneof<record<EndpointGroup: record<EndpointGroupArn: string, EndpointGroupRegion: string, DestinationDescriptions: list<record>, EndpointDescriptions: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -544,7 +562,6 @@ export def "create-custom-routing-endpoint-group" [
 #
 # POST /
 # operationId: CreateCustomRoutingListener
-# --PortRanges item shape: {FromPort?: int, ToPort?: int}
 export def "create-custom-routing-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -566,7 +583,7 @@ export def "create-custom-routing-listener" [
   accelerator_arn: string # The Amazon Resource Name (ARN) of the accelerator for a custom routing listener.
   port_ranges: list # The port range to support for connections from clients to your accelerator. Separately, you set port ranges for endpoints. For more information, see About endpoints for custom routing accelerators (https://docs.aws.amazon.com/global-accelerator/latest/dg/about-custom-routing-endpoints.html). — item shape: {FromPort?: int, ToPort?: int}
   idempotency_token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency—that is, the uniqueness—of the request.
-]: any -> record<Listener: record<ListenerArn: string, PortRanges: list<record>>> {
+]: any -> oneof<record<Listener: record<ListenerArn: string, PortRanges: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -596,8 +613,6 @@ export def "create-custom-routing-listener" [
 #
 # POST /
 # operationId: CreateEndpointGroup
-# --EndpointConfigurations item shape: {EndpointId?: string, Weight?: int, ClientIPPreservationEnabled?: bool}
-# --PortOverrides item shape: {ListenerPort?: int, EndpointPort?: int}
 export def "create-endpoint-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -627,7 +642,7 @@ export def "create-endpoint-group" [
   --threshold-count: int # The number of consecutive health checks required to set the state of a healthy endpoint to unhealthy, or to set an unhealthy endpoint to healthy. The default value is 3.
   idempotency_token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency—that is, the uniqueness—of the request.
   --port-overrides: list # Override specific listener ports used to route traffic to endpoints that are part of this endpoint group. For example, you can create a port override in which the listener receives user traffic on ports 80 and 443, but your accelerator routes that traffic to ports 1080 and 1443, respectively, on the endpoints. For more information, see Overriding listener ports (https://docs.aws.amazon.com/global-accelerator/latest/dg/about-endpoint-groups-port-override.html) in the Global Accelerator Developer Guide. — item shape: {ListenerPort?: int, EndpointPort?: int}
-]: any -> record<EndpointGroup: record<EndpointGroupArn: string, EndpointGroupRegion: string, EndpointDescriptions: list<record>, TrafficDialPercentage: float, HealthCheckPort: int, HealthCheckProtocol: string, HealthCheckPath: string, HealthCheckIntervalSeconds: int, ThresholdCount: int, PortOverrides: list<record>>> {
+]: any -> oneof<record<EndpointGroup: record<EndpointGroupArn: string, EndpointGroupRegion: string, EndpointDescriptions: list<record>, TrafficDialPercentage: float, HealthCheckPort: int, HealthCheckProtocol: string, HealthCheckPath: string, HealthCheckIntervalSeconds: int, ThresholdCount: int, PortOverrides: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -657,7 +672,6 @@ export def "create-endpoint-group" [
 #
 # POST /
 # operationId: CreateListener
-# --PortRanges item shape: {FromPort?: int, ToPort?: int}
 export def "create-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -681,7 +695,7 @@ export def "create-listener" [
   protocol: string@protocol-completer # The protocol for connections from clients to your accelerator.
   --client-affinity: string@client-affinity-completer # Client affinity lets you direct all requests from a user to the same endpoint, if you have stateful applications, regardless of the port and protocol of the client request. Client affinity gives you control over whether to always route each client to the same specific endpoint. Global Accelerator uses a consistent-flow hashing algorithm to choose the optimal endpoint for a connection. If client affinity is NONE, Global Accelerator uses the "five-tuple" (5-tuple) properties—source IP address, source port, destination IP address, destination port, and protocol—to select the hash value, and then chooses the best endpoint. However, with this setting, if someone uses different ports to connect to Global Accelerator, their connections might not be always routed to the same endpoint because the hash value changes. If you want a given client to always be routed to the same endpoint, set client affinity to SOURCE_IP instead. When you use the SOURCE_IP setting, Global Accelerator uses the "two-tuple" (2-tuple) properties— source (client) IP address and destination IP address—to select the hash value. The default value is NONE.
   idempotency_token: string # A unique, case-sensitive identifier that you provide to ensure the idempotency—that is, the uniqueness—of the request.
-]: any -> record<Listener: record<ListenerArn: string, PortRanges: list<record>, Protocol: string, ClientAffinity: string>> {
+]: any -> oneof<record<Listener: record<ListenerArn: string, PortRanges: list<record>, Protocol: string, ClientAffinity: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1077,7 +1091,7 @@ export def "deprovision-byoip-cidr" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-17 # required
   cidr: string # The address range, in CIDR notation. The prefix must be the same prefix that you specified when you provisioned the address range.
-]: any -> record<ByoipCidr: record<Cidr: string, State: string, Events: list<record>>> {
+]: any -> oneof<record<ByoipCidr: record<Cidr: string, State: string, Events: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1126,7 +1140,7 @@ export def "describe-accelerator" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   accelerator_arn: string # The Amazon Resource Name (ARN) of the accelerator to describe.
-]: any -> record<Accelerator: record<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list<record>, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string, DualStackDnsName: string, Events: list<record>>> {
+]: any -> oneof<record<Accelerator: record<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list<record>, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string, DualStackDnsName: string, Events: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1175,7 +1189,7 @@ export def "describe-accelerator-attributes" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   accelerator_arn: string # The Amazon Resource Name (ARN) of the accelerator with the attributes that you want to describe.
-]: any -> record<AcceleratorAttributes: record<FlowLogsEnabled: bool, FlowLogsS3Bucket: string, FlowLogsS3Prefix: string>> {
+]: any -> oneof<record<AcceleratorAttributes: record<FlowLogsEnabled: bool, FlowLogsS3Bucket: string, FlowLogsS3Prefix: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1224,7 +1238,7 @@ export def "describe-custom-routing-accelerator" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   accelerator_arn: string # The Amazon Resource Name (ARN) of the accelerator to describe.
-]: any -> record<Accelerator: record<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list<record>, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string>> {
+]: any -> oneof<record<Accelerator: record<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list<record>, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1273,7 +1287,7 @@ export def "describe-custom-routing-accelerator-attributes" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   accelerator_arn: string # The Amazon Resource Name (ARN) of the custom routing accelerator to describe the attributes for.
-]: any -> record<AcceleratorAttributes: record<FlowLogsEnabled: bool, FlowLogsS3Bucket: string, FlowLogsS3Prefix: string>> {
+]: any -> oneof<record<AcceleratorAttributes: record<FlowLogsEnabled: bool, FlowLogsS3Bucket: string, FlowLogsS3Prefix: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1322,7 +1336,7 @@ export def "describe-custom-routing-endpoint-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-22 # required
   endpoint_group_arn: string # The Amazon Resource Name (ARN) of the endpoint group to describe.
-]: any -> record<EndpointGroup: record<EndpointGroupArn: string, EndpointGroupRegion: string, DestinationDescriptions: list<record>, EndpointDescriptions: list<record>>> {
+]: any -> oneof<record<EndpointGroup: record<EndpointGroupArn: string, EndpointGroupRegion: string, DestinationDescriptions: list<record>, EndpointDescriptions: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1371,7 +1385,7 @@ export def "describe-custom-routing-listener" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   listener_arn: string # The Amazon Resource Name (ARN) of the listener to describe.
-]: any -> record<Listener: record<ListenerArn: string, PortRanges: list<record>>> {
+]: any -> oneof<record<Listener: record<ListenerArn: string, PortRanges: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1420,7 +1434,7 @@ export def "describe-endpoint-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-24 # required
   endpoint_group_arn: string # The Amazon Resource Name (ARN) of the endpoint group to describe.
-]: any -> record<EndpointGroup: record<EndpointGroupArn: string, EndpointGroupRegion: string, EndpointDescriptions: list<record>, TrafficDialPercentage: float, HealthCheckPort: int, HealthCheckProtocol: string, HealthCheckPath: string, HealthCheckIntervalSeconds: int, ThresholdCount: int, PortOverrides: list<record>>> {
+]: any -> oneof<record<EndpointGroup: record<EndpointGroupArn: string, EndpointGroupRegion: string, EndpointDescriptions: list<record>, TrafficDialPercentage: float, HealthCheckPort: int, HealthCheckProtocol: string, HealthCheckPath: string, HealthCheckIntervalSeconds: int, ThresholdCount: int, PortOverrides: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1469,7 +1483,7 @@ export def "describe-listener" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-25 # required
   listener_arn: string # The Amazon Resource Name (ARN) of the listener to describe.
-]: any -> record<Listener: record<ListenerArn: string, PortRanges: list<record>, Protocol: string, ClientAffinity: string>> {
+]: any -> oneof<record<Listener: record<ListenerArn: string, PortRanges: list<record>, Protocol: string, ClientAffinity: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1521,7 +1535,7 @@ export def "list-accelerators" [
   --x-amz-target: string@x-amz-target-completer-26 # required
   --max-results-body: int # The number of Global Accelerator objects that you want to return with this call. The default value is 10. (body field)
   --next-token-body: string # The token for the next set of results. You receive this token from a previous call. (body field)
-]: any -> record<Accelerators: table<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string, DualStackDnsName: string, Events: list>, NextToken: string> {
+]: any -> oneof<record<Accelerators: table<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string, DualStackDnsName: string, Events: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1574,7 +1588,7 @@ export def "list-byoip-cidrs" [
   --x-amz-target: string@x-amz-target-completer-27 # required
   --max-results-body: int # The maximum number of results to return with a single call. To retrieve the remaining results, make another call with the returned nextToken value. (body field)
   --next-token-body: string # The token for the next page of results. (body field)
-]: any -> record<ByoipCidrs: table<Cidr: string, State: string, Events: list>, NextToken: string> {
+]: any -> oneof<record<ByoipCidrs: table<Cidr: string, State: string, Events: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1627,7 +1641,7 @@ export def "list-custom-routing-accelerators" [
   --x-amz-target: string@x-amz-target-completer-28 # required
   --max-results-body: int # The number of custom routing Global Accelerator objects that you want to return with this call. The default value is 10. (body field)
   --next-token-body: string # The token for the next set of results. You receive this token from a previous call. (body field)
-]: any -> record<Accelerators: table<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string>, NextToken: string> {
+]: any -> oneof<record<Accelerators: table<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1681,7 +1695,7 @@ export def "list-custom-routing-endpoint-groups" [
   listener_arn: string # The Amazon Resource Name (ARN) of the listener to list endpoint groups for.
   --max-results-body: int # The number of endpoint group objects that you want to return with this call. The default value is 10. (body field)
   --next-token-body: string # The token for the next set of results. You receive this token from a previous call. (body field)
-]: any -> record<EndpointGroups: table<EndpointGroupArn: string, EndpointGroupRegion: string, DestinationDescriptions: list, EndpointDescriptions: list>, NextToken: string> {
+]: any -> oneof<record<EndpointGroups: table<EndpointGroupArn: string, EndpointGroupRegion: string, DestinationDescriptions: list, EndpointDescriptions: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1735,7 +1749,7 @@ export def "list-custom-routing-listeners" [
   accelerator_arn: string # The Amazon Resource Name (ARN) of the accelerator to list listeners for.
   --max-results-body: int # The number of listener objects that you want to return with this call. The default value is 10. (body field)
   --next-token-body: string # The token for the next set of results. You receive this token from a previous call. (body field)
-]: any -> record<Listeners: table<ListenerArn: string, PortRanges: list>, NextToken: string> {
+]: any -> oneof<record<Listeners: table<ListenerArn: string, PortRanges: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1790,7 +1804,7 @@ export def "list-custom-routing-port-mappings" [
   --endpoint-group-arn: string # The Amazon Resource Name (ARN) of the endpoint group to list the custom routing port mappings for.
   --max-results-body: int # The number of destination port mappings that you want to return with this call. The default value is 10. (body field)
   --next-token-body: string # The token for the next set of results. You receive this token from a previous call. (body field)
-]: any -> record<PortMappings: table<AcceleratorPort: int, EndpointGroupArn: string, EndpointId: string, DestinationSocketAddress: record, Protocols: list, DestinationTrafficState: string>, NextToken: string> {
+]: any -> oneof<record<PortMappings: table<AcceleratorPort: int, EndpointGroupArn: string, EndpointId: string, DestinationSocketAddress: record, Protocols: list, DestinationTrafficState: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1845,7 +1859,7 @@ export def "list-custom-routing-port-mappings-by-destination" [
   destination_address: string # The endpoint IP address in a virtual private cloud (VPC) subnet for which you want to receive back port mappings.
   --max-results-body: int # The number of destination port mappings that you want to return with this call. The default value is 10. (body field)
   --next-token-body: string # The token for the next set of results. You receive this token from a previous call. (body field)
-]: any -> record<DestinationPortMappings: table<AcceleratorArn: string, AcceleratorSocketAddresses: list, EndpointGroupArn: string, EndpointId: string, EndpointGroupRegion: string, DestinationSocketAddress: record, IpAddressType: string, DestinationTrafficState: string>, NextToken: string> {
+]: any -> oneof<record<DestinationPortMappings: table<AcceleratorArn: string, AcceleratorSocketAddresses: list, EndpointGroupArn: string, EndpointId: string, EndpointGroupRegion: string, DestinationSocketAddress: record, IpAddressType: string, DestinationTrafficState: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1899,7 +1913,7 @@ export def "list-endpoint-groups" [
   listener_arn: string # The Amazon Resource Name (ARN) of the listener.
   --max-results-body: int # The number of endpoint group objects that you want to return with this call. The default value is 10. (body field)
   --next-token-body: string # The token for the next set of results. You receive this token from a previous call. (body field)
-]: any -> record<EndpointGroups: table<EndpointGroupArn: string, EndpointGroupRegion: string, EndpointDescriptions: list, TrafficDialPercentage: float, HealthCheckPort: int, HealthCheckProtocol: string, HealthCheckPath: string, HealthCheckIntervalSeconds: int, ThresholdCount: int, PortOverrides: list>, NextToken: string> {
+]: any -> oneof<record<EndpointGroups: table<EndpointGroupArn: string, EndpointGroupRegion: string, EndpointDescriptions: list, TrafficDialPercentage: float, HealthCheckPort: int, HealthCheckProtocol: string, HealthCheckPath: string, HealthCheckIntervalSeconds: int, ThresholdCount: int, PortOverrides: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1953,7 +1967,7 @@ export def "list-listeners" [
   accelerator_arn: string # The Amazon Resource Name (ARN) of the accelerator for which you want to list listener objects.
   --max-results-body: int # The number of listener objects that you want to return with this call. The default value is 10. (body field)
   --next-token-body: string # The token for the next set of results. You receive this token from a previous call. (body field)
-]: any -> record<Listeners: table<ListenerArn: string, PortRanges: list, Protocol: string, ClientAffinity: string>, NextToken: string> {
+]: any -> oneof<record<Listeners: table<ListenerArn: string, PortRanges: list, Protocol: string, ClientAffinity: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2003,7 +2017,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-35 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the accelerator to list tags for. An ARN uniquely identifies an accelerator.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2033,7 +2047,6 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: ProvisionByoipCidr
-# --CidrAuthorizationContext shape: {Message: string, Signature: string}
 export def "provision-byoip-cidr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2054,7 +2067,7 @@ export def "provision-byoip-cidr" [
   --x-amz-target: string@x-amz-target-completer-36 # required
   cidr: string # The public IPv4 address range, in CIDR notation. The most specific IP prefix that you can specify is /24. The address range cannot overlap with another address range that you've brought to this or another Region.
   cidr_authorization_context: record # Provides authorization for Amazon to bring a specific IP address range to a specific Amazon Web Services account using bring your own IP addresses (BYOIP). For more information, see Bring your own IP addresses (BYOIP) (https://docs.aws.amazon.com/global-accelerator/latest/dg/using-byoip.html) in the Global Accelerator Developer Guide. — shape: {Message: string, Signature: string}
-]: any -> record<ByoipCidr: record<Cidr: string, State: string, Events: list<record>>> {
+]: any -> oneof<record<ByoipCidr: record<Cidr: string, State: string, Events: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2134,7 +2147,6 @@ export def "remove-custom-routing-endpoints" [
 #
 # POST /
 # operationId: RemoveEndpoints
-# --EndpointIdentifiers item shape: {EndpointId: string, ClientIPPreservationEnabled?: bool}
 export def "remove-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2185,7 +2197,6 @@ export def "remove-endpoints" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2206,7 +2217,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-39 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the Global Accelerator resource to add tags to. An ARN uniquely identifies a resource.
   tags: list # The tags to add to a resource. A tag consists of a key and a value that you define. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2256,7 +2267,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-40 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the Global Accelerator resource to remove tags from. An ARN uniquely identifies a resource.
   tag_keys: list<string> # The tag key pairs that you want to remove from the specified resources.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2308,7 +2319,7 @@ export def "update-accelerator" [
   --name: string # The name of the accelerator. The name can have a maximum of 64 characters, must contain only alphanumeric characters, periods (.), or hyphens (-), and must not begin or end with a hyphen or period.
   --ip-address-type: string@ip-address-type-completer # The IP address type that an accelerator supports. For a standard accelerator, the value can be IPV4 or DUAL_STACK.
   --enabled: oneof<nothing, bool> # Indicates whether an accelerator is enabled. The value is true or false. The default value is true. If the value is set to true, the accelerator cannot be deleted. If set to false, the accelerator can be deleted.
-]: any -> record<Accelerator: record<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list<record>, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string, DualStackDnsName: string, Events: list<record>>> {
+]: any -> oneof<record<Accelerator: record<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list<record>, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string, DualStackDnsName: string, Events: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2360,7 +2371,7 @@ export def "update-accelerator-attributes" [
   --flow-logs-enabled: oneof<nothing, bool> # Update whether flow logs are enabled. The default value is false. If the value is true, FlowLogsS3Bucket and FlowLogsS3Prefix must be specified. For more information, see Flow Logs (https://docs.aws.amazon.com/global-accelerator/latest/dg/monitoring-global-accelerator.flow-logs.html) in the Global Accelerator Developer Guide.
   --flow-logs-s3-bucket: string # The name of the Amazon S3 bucket for the flow logs. Attribute is required if FlowLogsEnabled is true. The bucket must exist and have a bucket policy that grants Global Accelerator permission to write to the bucket.
   --flow-logs-s3-prefix: string # Update the prefix for the location in the Amazon S3 bucket for the flow logs. Attribute is required if FlowLogsEnabled is true. If you specify slash (/) for the S3 bucket prefix, the log file bucket folder structure will include a double slash (//), like the following: s3-bucket_name//AWSLogs/aws_account_id
-]: any -> record<AcceleratorAttributes: record<FlowLogsEnabled: bool, FlowLogsS3Bucket: string, FlowLogsS3Prefix: string>> {
+]: any -> oneof<record<AcceleratorAttributes: record<FlowLogsEnabled: bool, FlowLogsS3Bucket: string, FlowLogsS3Prefix: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2412,7 +2423,7 @@ export def "update-custom-routing-accelerator" [
   --name: string # The name of the accelerator. The name can have a maximum of 64 characters, must contain only alphanumeric characters, periods (.), or hyphens (-), and must not begin or end with a hyphen or period.
   --ip-address-type: string@ip-address-type-completer # The IP address type that an accelerator supports. For a custom routing accelerator, the value must be IPV4.
   --enabled: oneof<nothing, bool> # Indicates whether an accelerator is enabled. The value is true or false. The default value is true. If the value is set to true, the accelerator cannot be deleted. If set to false, the accelerator can be deleted.
-]: any -> record<Accelerator: record<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list<record>, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string>> {
+]: any -> oneof<record<Accelerator: record<AcceleratorArn: string, Name: string, IpAddressType: string, Enabled: bool, IpSets: list<record>, DnsName: string, Status: string, CreatedTime: string, LastModifiedTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2464,7 +2475,7 @@ export def "update-custom-routing-accelerator-attributes" [
   --flow-logs-enabled: oneof<nothing, bool> # Update whether flow logs are enabled. The default value is false. If the value is true, FlowLogsS3Bucket and FlowLogsS3Prefix must be specified. For more information, see Flow logs (https://docs.aws.amazon.com/global-accelerator/latest/dg/monitoring-global-accelerator.flow-logs.html) in the Global Accelerator Developer Guide.
   --flow-logs-s3-bucket: string # The name of the Amazon S3 bucket for the flow logs. Attribute is required if FlowLogsEnabled is true. The bucket must exist and have a bucket policy that grants Global Accelerator permission to write to the bucket.
   --flow-logs-s3-prefix: string # Update the prefix for the location in the Amazon S3 bucket for the flow logs. Attribute is required if FlowLogsEnabled is true. If you don’t specify a prefix, the flow logs are stored in the root of the bucket. If you specify slash (/) for the S3 bucket prefix, the log file bucket folder structure will include a double slash (//), like the following: DOC-EXAMPLE-BUCKET//AWSLogs/aws_account_id
-]: any -> record<AcceleratorAttributes: record<FlowLogsEnabled: bool, FlowLogsS3Bucket: string, FlowLogsS3Prefix: string>> {
+]: any -> oneof<record<AcceleratorAttributes: record<FlowLogsEnabled: bool, FlowLogsS3Bucket: string, FlowLogsS3Prefix: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2494,7 +2505,6 @@ export def "update-custom-routing-accelerator-attributes" [
 #
 # POST /
 # operationId: UpdateCustomRoutingListener
-# --PortRanges item shape: {FromPort?: int, ToPort?: int}
 export def "update-custom-routing-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2515,7 +2525,7 @@ export def "update-custom-routing-listener" [
   --x-amz-target: string@x-amz-target-completer-45 # required
   listener_arn: string # The Amazon Resource Name (ARN) of the listener to update.
   port_ranges: list # The updated port range to support for connections from clients to your accelerator. If you remove ports that are currently being used by a subnet endpoint, the call fails. Separately, you set port ranges for endpoints. For more information, see About endpoints for custom routing accelerators (https://docs.aws.amazon.com/global-accelerator/latest/dg/about-custom-routing-endpoints.html). — item shape: {FromPort?: int, ToPort?: int}
-]: any -> record<Listener: record<ListenerArn: string, PortRanges: list<record>>> {
+]: any -> oneof<record<Listener: record<ListenerArn: string, PortRanges: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2545,8 +2555,6 @@ export def "update-custom-routing-listener" [
 #
 # POST /
 # operationId: UpdateEndpointGroup
-# --EndpointConfigurations item shape: {EndpointId?: string, Weight?: int, ClientIPPreservationEnabled?: bool}
-# --PortOverrides item shape: {ListenerPort?: int, EndpointPort?: int}
 export def "update-endpoint-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2574,7 +2582,7 @@ export def "update-endpoint-group" [
   --health-check-interval-seconds: int # The time—10 seconds or 30 seconds—between each health check for an endpoint. The default value is 30.
   --threshold-count: int # The number of consecutive health checks required to set the state of a healthy endpoint to unhealthy, or to set an unhealthy endpoint to healthy. The default value is 3.
   --port-overrides: list # Override specific listener ports used to route traffic to endpoints that are part of this endpoint group. For example, you can create a port override in which the listener receives user traffic on ports 80 and 443, but your accelerator routes that traffic to ports 1080 and 1443, respectively, on the endpoints. For more information, see Overriding listener ports (https://docs.aws.amazon.com/global-accelerator/latest/dg/about-endpoint-groups-port-override.html) in the Global Accelerator Developer Guide. — item shape: {ListenerPort?: int, EndpointPort?: int}
-]: any -> record<EndpointGroup: record<EndpointGroupArn: string, EndpointGroupRegion: string, EndpointDescriptions: list<record>, TrafficDialPercentage: float, HealthCheckPort: int, HealthCheckProtocol: string, HealthCheckPath: string, HealthCheckIntervalSeconds: int, ThresholdCount: int, PortOverrides: list<record>>> {
+]: any -> oneof<record<EndpointGroup: record<EndpointGroupArn: string, EndpointGroupRegion: string, EndpointDescriptions: list<record>, TrafficDialPercentage: float, HealthCheckPort: int, HealthCheckProtocol: string, HealthCheckPath: string, HealthCheckIntervalSeconds: int, ThresholdCount: int, PortOverrides: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2604,7 +2612,6 @@ export def "update-endpoint-group" [
 #
 # POST /
 # operationId: UpdateListener
-# --PortRanges item shape: {FromPort?: int, ToPort?: int}
 export def "update-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2627,7 +2634,7 @@ export def "update-listener" [
   --port-ranges: list # The updated list of port ranges for the connections from clients to the accelerator. — item shape: {FromPort?: int, ToPort?: int}
   --protocol: string@protocol-completer # The updated protocol for the connections from clients to the accelerator.
   --client-affinity: string@client-affinity-completer # Client affinity lets you direct all requests from a user to the same endpoint, if you have stateful applications, regardless of the port and protocol of the client request. Client affinity gives you control over whether to always route each client to the same specific endpoint. Global Accelerator uses a consistent-flow hashing algorithm to choose the optimal endpoint for a connection. If client affinity is NONE, Global Accelerator uses the "five-tuple" (5-tuple) properties—source IP address, source port, destination IP address, destination port, and protocol—to select the hash value, and then chooses the best endpoint. However, with this setting, if someone uses different ports to connect to Global Accelerator, their connections might not be always routed to the same endpoint because the hash value changes. If you want a given client to always be routed to the same endpoint, set client affinity to SOURCE_IP instead. When you use the SOURCE_IP setting, Global Accelerator uses the "two-tuple" (2-tuple) properties— source (client) IP address and destination IP address—to select the hash value. The default value is NONE.
-]: any -> record<Listener: record<ListenerArn: string, PortRanges: list<record>, Protocol: string, ClientAffinity: string>> {
+]: any -> oneof<record<Listener: record<ListenerArn: string, PortRanges: list<record>, Protocol: string, ClientAffinity: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2676,7 +2683,7 @@ export def "withdraw-byoip-cidr" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-48 # required
   cidr: string # The address range, in CIDR notation.
-]: any -> record<ByoipCidr: record<Cidr: string, State: string, Events: list<record>>> {
+]: any -> oneof<record<ByoipCidr: record<Cidr: string, State: string, Events: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

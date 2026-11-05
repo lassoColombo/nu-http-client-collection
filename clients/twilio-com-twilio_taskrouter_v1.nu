@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def wait-method-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-workspace" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-workspace" "create-workspace" "delete-workspace" "fetch-workspace" "update-workspace" "list-activity" "create-activity" "delete-activity" "fetch-activity" "update-activity" "fetch-workspace-cumulative-statistics" "list-event" "fetch-event" "fetch-workspace-real-time-statistics" "fetch-workspace-statistics" "list-task-channel" "create-task-channel" "delete-task-channel" "fetch-task-channel" "update-task-channel" "list-task-queue" "create-task-queue" "list-task-queues-statistics" "delete-task-queue" "fetch-task-queue" "update-task-queue" "fetch-task-queue-cumulative-statistics" "fetch-task-queue-real-time-statistics" "fetch-task-queue-statistics" "list-task" "create-task" "delete-task" "fetch-task" "update-task" "list-task-reservation" "fetch-task-reservation" "update-task-reservation" "list-worker" "create-worker" "fetch-workers-cumulative-statistics" "fetch-workers-real-time-statistics" "fetch-worker-statistics" "delete-worker" "fetch-worker" "update-worker" "list-worker-channel" "fetch-worker-channel" "update-worker-channel" "list-worker-reservation" "fetch-worker-reservation" "update-worker-reservation" "fetch-worker-instance-statistics" "list-workflow" "create-workflow" "delete-workflow" "fetch-workflow" "update-workflow" "fetch-workflow-cumulative-statistics" "fetch-workflow-real-time-statistics" "fetch-workflow-statistics" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -159,7 +183,7 @@ export def "list-workspace" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, workspaces: table<account_sid: string, date_created: string, date_updated: string, default_activity_name: string, default_activity_sid: string, event_callback_url: string, events_filter: string, friendly_name: string, links: record, multi_task_enabled: bool, prioritize_queue_order: string, sid: string, timeout_activity_name: string, timeout_activity_sid: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, workspaces: table<account_sid: string, date_created: string, date_updated: string, default_activity_name: string, default_activity_sid: string, event_callback_url: string, events_filter: string, friendly_name: string, links: record, multi_task_enabled: bool, prioritize_queue_order: string, sid: string, timeout_activity_name: string, timeout_activity_sid: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   let qp = [(serialize-qp "FriendlyName" $friendly_name "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
@@ -199,7 +223,7 @@ export def "create-workspace" [
   --multi-task-enabled: oneof<nothing, bool> # Whether to enable multi-tasking. Can be: `true` to enable multi-tasking, or `false` to disable it. However, all workspaces should be created as multi-tasking. The default is `true`. Multi-tasking allows Workers to handle multiple Tasks simultaneously. When enabled (`true`), each Worker can receive parallel reservations up to the per-channel maximums defined in the Workers section. In single-tasking mode (legacy mode), each Worker will only receive a new reservation when the previous task is completed. Learn more at [Multitasking](https://www.twilio.com/docs/taskrouter/multitasking).
   --prioritize-queue-order: string@prioritize-queue-order-completer
   --template: string # An available template name. Can be: `NONE` or `FIFO` and the default is `NONE`. Pre-configures the Workspace with the Workflow and Activities specified in the template. `NONE` will create a Workspace with only a set of default activities. `FIFO` will configure TaskRouter with a set of default activities and a single TaskQueue for first-in, first-out distribution, which can be useful when you are getting started with TaskRouter.
-]: any -> record<account_sid: string, date_created: string, date_updated: string, default_activity_name: string, default_activity_sid: string, event_callback_url: string, events_filter: string, friendly_name: string, links: record, multi_task_enabled: bool, prioritize_queue_order: string, sid: string, timeout_activity_name: string, timeout_activity_sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, default_activity_name: string, default_activity_sid: string, event_callback_url: string, events_filter: string, friendly_name: string, links: record, multi_task_enabled: bool, prioritize_queue_order: string, sid: string, timeout_activity_name: string, timeout_activity_sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -208,7 +232,7 @@ export def "create-workspace" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -272,7 +296,7 @@ export def "fetch-workspace" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, date_created: string, date_updated: string, default_activity_name: string, default_activity_sid: string, event_callback_url: string, events_filter: string, friendly_name: string, links: record, multi_task_enabled: bool, prioritize_queue_order: string, sid: string, timeout_activity_name: string, timeout_activity_sid: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, default_activity_name: string, default_activity_sid: string, event_callback_url: string, events_filter: string, friendly_name: string, links: record, multi_task_enabled: bool, prioritize_queue_order: string, sid: string, timeout_activity_name: string, timeout_activity_sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
@@ -314,7 +338,7 @@ export def "update-workspace" [
   --multi-task-enabled: oneof<nothing, bool> # Whether to enable multi-tasking. Can be: `true` to enable multi-tasking, or `false` to disable it. However, all workspaces should be maintained as multi-tasking. There is no default when omitting this parameter. A multi-tasking Workspace can't be updated to single-tasking unless it is not a Flex Project and another (legacy) single-tasking Workspace exists. Multi-tasking allows Workers to handle multiple Tasks simultaneously. In multi-tasking mode, each Worker can receive parallel reservations up to the per-channel maximums defined in the Workers section. In single-tasking mode (legacy mode), each Worker will only receive a new reservation when the previous task is completed. Learn more at [Multitasking](https://www.twilio.com/docs/taskrouter/multitasking).
   --prioritize-queue-order: string@prioritize-queue-order-completer
   --timeout-activity-sid: string # The SID of the Activity that will be assigned to a Worker when a Task reservation times out without a response.
-]: any -> record<account_sid: string, date_created: string, date_updated: string, default_activity_name: string, default_activity_sid: string, event_callback_url: string, events_filter: string, friendly_name: string, links: record, multi_task_enabled: bool, prioritize_queue_order: string, sid: string, timeout_activity_name: string, timeout_activity_sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, default_activity_name: string, default_activity_sid: string, event_callback_url: string, events_filter: string, friendly_name: string, links: record, multi_task_enabled: bool, prioritize_queue_order: string, sid: string, timeout_activity_name: string, timeout_activity_sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -324,7 +348,7 @@ export def "update-workspace" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -358,7 +382,7 @@ export def "list-activity" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<activities: table<account_sid: string, available: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<activities: table<account_sid: string, available: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -396,7 +420,7 @@ export def "create-activity" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --available: oneof<nothing, bool> # Whether the Worker should be eligible to receive a Task when it occupies the Activity. A value of `true`, `1`, or `yes` specifies the Activity is available. All other values specify that it is not. The value cannot be changed after the Activity is created.
   friendly_name: string # A descriptive string that you create to describe the Activity resource. It can be up to 64 characters long. These names are used to calculate and expose statistics about Workers, and provide visibility into the state of each Worker. Examples of friendly names include: `on-call`, `break`, and `email`.
-]: any -> record<account_sid: string, available: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string> {
+]: any -> oneof<record<account_sid: string, available: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -406,7 +430,7 @@ export def "create-activity" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -473,7 +497,7 @@ export def "fetch-activity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, available: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, available: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -511,7 +535,7 @@ export def "update-activity" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --friendly-name: string # A descriptive string that you create to describe the Activity resource. It can be up to 64 characters long. These names are used to calculate and expose statistics about Workers, and provide visibility into the state of each Worker. Examples of friendly names include: `on-call`, `break`, and `email`.
-]: any -> record<account_sid: string, available: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string> {
+]: any -> oneof<record<account_sid: string, available: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -522,7 +546,7 @@ export def "update-activity" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -556,7 +580,7 @@ export def "fetch-workspace-cumulative-statistics" [
   --start-date: string # Only calculate statistics from this date and time and later, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
   --task-channel: string # Only calculate cumulative statistics on this TaskChannel. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
   --split-by-wait-time: string # A comma separated list of values that describes the thresholds, in seconds, to calculate statistics on. For each threshold specified, the number of Tasks canceled and reservations accepted above and below the specified thresholds in seconds are computed. For example, `5,30` would show splits of Tasks that were canceled or accepted before and after 5 seconds and before and after 30 seconds. This can be used to show short abandoned Tasks or Tasks that failed to meet an SLA. TaskRouter will calculate statistics on up to 10,000 Tasks for any given threshold.
-]: nothing -> record<account_sid: string, avg_task_acceptance_time: int, end_time: string, reservations_accepted: int, reservations_canceled: int, reservations_created: int, reservations_rejected: int, reservations_rescinded: int, reservations_timed_out: int, split_by_wait_time: any, start_time: string, tasks_canceled: int, tasks_completed: int, tasks_created: int, tasks_deleted: int, tasks_moved: int, tasks_timed_out_in_workflow: int, url: string, wait_duration_until_accepted: any, wait_duration_until_canceled: any, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, avg_task_acceptance_time: int, end_time: string, reservations_accepted: int, reservations_canceled: int, reservations_created: int, reservations_rejected: int, reservations_rescinded: int, reservations_timed_out: int, split_by_wait_time: any, start_time: string, tasks_canceled: int, tasks_completed: int, tasks_created: int, tasks_deleted: int, tasks_moved: int, tasks_timed_out_in_workflow: int, url: string, wait_duration_until_accepted: any, wait_duration_until_canceled: any, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -606,7 +630,7 @@ export def "list-event" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<events: table<account_sid: string, actor_sid: string, actor_type: string, actor_url: string, description: string, event_data: any, event_date: string, event_date_ms: int, event_type: string, resource_sid: string, resource_type: string, resource_url: string, sid: string, source: string, source_ip_address: string, url: string, workspace_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<events: table<account_sid: string, actor_sid: string, actor_type: string, actor_url: string, description: string, event_data: any, event_date: string, event_date_ms: int, event_type: string, resource_sid: string, resource_type: string, resource_url: string, sid: string, source: string, source_ip_address: string, url: string, workspace_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -643,7 +667,7 @@ export def "fetch-event" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, actor_sid: string, actor_type: string, actor_url: string, description: string, event_data: any, event_date: string, event_date_ms: int, event_type: string, resource_sid: string, resource_type: string, resource_url: string, sid: string, source: string, source_ip_address: string, url: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, actor_sid: string, actor_type: string, actor_url: string, description: string, event_data: any, event_date: string, event_date_ms: int, event_type: string, resource_sid: string, resource_type: string, resource_url: string, sid: string, source: string, source_ip_address: string, url: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -680,7 +704,7 @@ export def "fetch-workspace-real-time-statistics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --task-channel: string # Only calculate real-time statistics on this TaskChannel. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
-]: nothing -> record<account_sid: string, activity_statistics: list<any>, longest_task_waiting_age: int, longest_task_waiting_sid: string, tasks_by_priority: any, tasks_by_status: any, total_tasks: int, total_workers: int, url: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, activity_statistics: list<any>, longest_task_waiting_age: int, longest_task_waiting_sid: string, tasks_by_priority: any, tasks_by_status: any, total_tasks: int, total_workers: int, url: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -721,7 +745,7 @@ export def "fetch-workspace-statistics" [
   --end-date: string # Only calculate statistics from this date and time and earlier, specified in GMT as an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time. (format: date-time)
   --task-channel: string # Only calculate statistics on this TaskChannel. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
   --split-by-wait-time: string # A comma separated list of values that describes the thresholds, in seconds, to calculate statistics on. For each threshold specified, the number of Tasks canceled and reservations accepted above and below the specified thresholds in seconds are computed. For example, `5,30` would show splits of Tasks that were canceled or accepted before and after 5 seconds and before and after 30 seconds. This can be used to show short abandoned Tasks or Tasks that failed to meet an SLA.
-]: nothing -> record<account_sid: string, cumulative: any, realtime: any, url: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, cumulative: any, realtime: any, url: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -760,7 +784,7 @@ export def "list-task-channel" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<channels: table<account_sid: string, channel_optimized_routing: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string, workspace_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<channels: table<account_sid: string, channel_optimized_routing: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string, workspace_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -799,7 +823,7 @@ export def "create-task-channel" [
   --channel-optimized-routing: oneof<nothing, bool> # Whether the Task Channel should prioritize Workers that have been idle. If `true`, Workers that have been idle the longest are prioritized.
   friendly_name: string # A descriptive string that you create to describe the Task Channel. It can be up to 64 characters long.
   unique_name: string # An application-defined string that uniquely identifies the Task Channel, such as `voice` or `sms`.
-]: any -> record<account_sid: string, channel_optimized_routing: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string, workspace_sid: string> {
+]: any -> oneof<record<account_sid: string, channel_optimized_routing: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string, workspace_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -809,7 +833,7 @@ export def "create-task-channel" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -876,7 +900,7 @@ export def "fetch-task-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, channel_optimized_routing: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, channel_optimized_routing: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -915,7 +939,7 @@ export def "update-task-channel" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --channel-optimized-routing: oneof<nothing, bool> # Whether the TaskChannel should prioritize Workers that have been idle. If `true`, Workers that have been idle the longest are prioritized.
   --friendly-name: string # A descriptive string that you create to describe the Task Channel. It can be up to 64 characters long.
-]: any -> record<account_sid: string, channel_optimized_routing: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string, workspace_sid: string> {
+]: any -> oneof<record<account_sid: string, channel_optimized_routing: bool, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, unique_name: string, url: string, workspace_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -926,7 +950,7 @@ export def "update-task-channel" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -962,7 +986,7 @@ export def "list-task-queue" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, task_queues: table<account_sid: string, assignment_activity_name: string, assignment_activity_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, max_reserved_workers: int, reservation_activity_name: string, reservation_activity_sid: string, sid: string, target_workers: string, task_order: string, url: string, workspace_sid: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, task_queues: table<account_sid: string, assignment_activity_name: string, assignment_activity_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, max_reserved_workers: int, reservation_activity_name: string, reservation_activity_sid: string, sid: string, target_workers: string, task_order: string, url: string, workspace_sid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -1004,7 +1028,7 @@ export def "create-task-queue" [
   --reservation-activity-sid: string # The SID of the Activity to assign Workers when a task is reserved for them.
   --target-workers: string # A string that describes the Worker selection criteria for any Tasks that enter the TaskQueue. For example, `'"language" == "spanish"'`. The default value is `1==1`. If this value is empty, Tasks will wait in the TaskQueue until they are deleted or moved to another TaskQueue. For more information about Worker selection, see [Describing Worker selection criteria](https://www.twilio.com/docs/taskrouter/api/taskqueues#target-workers).
   --task-order: string@task-order-completer
-]: any -> record<account_sid: string, assignment_activity_name: string, assignment_activity_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, max_reserved_workers: int, reservation_activity_name: string, reservation_activity_sid: string, sid: string, target_workers: string, task_order: string, url: string, workspace_sid: string> {
+]: any -> oneof<record<account_sid: string, assignment_activity_name: string, assignment_activity_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, max_reserved_workers: int, reservation_activity_name: string, reservation_activity_sid: string, sid: string, target_workers: string, task_order: string, url: string, workspace_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -1014,7 +1038,7 @@ export def "create-task-queue" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1052,7 +1076,7 @@ export def "list-task-queues-statistics" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, task_queues_statistics: table<account_sid: string, cumulative: any, realtime: any, task_queue_sid: string, workspace_sid: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, task_queues_statistics: table<account_sid: string, cumulative: any, realtime: any, task_queue_sid: string, workspace_sid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -1126,7 +1150,7 @@ export def "fetch-task-queue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, assignment_activity_name: string, assignment_activity_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, max_reserved_workers: int, reservation_activity_name: string, reservation_activity_sid: string, sid: string, target_workers: string, task_order: string, url: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, assignment_activity_name: string, assignment_activity_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, max_reserved_workers: int, reservation_activity_name: string, reservation_activity_sid: string, sid: string, target_workers: string, task_order: string, url: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -1169,7 +1193,7 @@ export def "update-task-queue" [
   --reservation-activity-sid: string # The SID of the Activity to assign Workers when a task is reserved for them.
   --target-workers: string # A string describing the Worker selection criteria for any Tasks that enter the TaskQueue. For example '"language" == "spanish"' If no TargetWorkers parameter is provided, Tasks will wait in the queue until they are either deleted or moved to another queue. Additional examples on how to describing Worker selection criteria below.
   --task-order: string@task-order-completer
-]: any -> record<account_sid: string, assignment_activity_name: string, assignment_activity_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, max_reserved_workers: int, reservation_activity_name: string, reservation_activity_sid: string, sid: string, target_workers: string, task_order: string, url: string, workspace_sid: string> {
+]: any -> oneof<record<account_sid: string, assignment_activity_name: string, assignment_activity_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, max_reserved_workers: int, reservation_activity_name: string, reservation_activity_sid: string, sid: string, target_workers: string, task_order: string, url: string, workspace_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -1180,7 +1204,7 @@ export def "update-task-queue" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1215,7 +1239,7 @@ export def "fetch-task-queue-cumulative-statistics" [
   --start-date: string # Only calculate statistics from this date and time and later, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
   --task-channel: string # Only calculate cumulative statistics on this TaskChannel. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
   --split-by-wait-time: string # A comma separated list of values that describes the thresholds, in seconds, to calculate statistics on. For each threshold specified, the number of Tasks canceled and reservations accepted above and below the specified thresholds in seconds are computed. TaskRouter will calculate statistics on up to 10,000 Tasks/Reservations for any given threshold.
-]: nothing -> record<account_sid: string, avg_task_acceptance_time: int, end_time: string, reservations_accepted: int, reservations_canceled: int, reservations_created: int, reservations_rejected: int, reservations_rescinded: int, reservations_timed_out: int, split_by_wait_time: any, start_time: string, task_queue_sid: string, tasks_canceled: int, tasks_completed: int, tasks_deleted: int, tasks_entered: int, tasks_moved: int, url: string, wait_duration_in_queue_until_accepted: any, wait_duration_until_accepted: any, wait_duration_until_canceled: any, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, avg_task_acceptance_time: int, end_time: string, reservations_accepted: int, reservations_canceled: int, reservations_created: int, reservations_rejected: int, reservations_rescinded: int, reservations_timed_out: int, split_by_wait_time: any, start_time: string, task_queue_sid: string, tasks_canceled: int, tasks_completed: int, tasks_deleted: int, tasks_entered: int, tasks_moved: int, url: string, wait_duration_in_queue_until_accepted: any, wait_duration_until_accepted: any, wait_duration_until_canceled: any, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -1254,7 +1278,7 @@ export def "fetch-task-queue-real-time-statistics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --task-channel: string # The TaskChannel for which to fetch statistics. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
-]: nothing -> record<account_sid: string, activity_statistics: list<any>, longest_relative_task_age_in_queue: int, longest_relative_task_sid_in_queue: string, longest_task_waiting_age: int, longest_task_waiting_sid: string, task_queue_sid: string, tasks_by_priority: any, tasks_by_status: any, total_available_workers: int, total_eligible_workers: int, total_tasks: int, url: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, activity_statistics: list<any>, longest_relative_task_age_in_queue: int, longest_relative_task_sid_in_queue: string, longest_task_waiting_age: int, longest_task_waiting_sid: string, task_queue_sid: string, tasks_by_priority: any, tasks_by_status: any, total_available_workers: int, total_eligible_workers: int, total_tasks: int, url: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -1297,7 +1321,7 @@ export def "fetch-task-queue-statistics" [
   --start-date: string # Only calculate statistics from this date and time and later, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
   --task-channel: string # Only calculate real-time and cumulative statistics for the specified TaskChannel. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
   --split-by-wait-time: string # A comma separated list of values that describes the thresholds, in seconds, to calculate statistics on. For each threshold specified, the number of Tasks canceled and reservations accepted above and below the specified thresholds in seconds are computed.
-]: nothing -> record<account_sid: string, cumulative: any, realtime: any, task_queue_sid: string, url: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, cumulative: any, realtime: any, task_queue_sid: string, url: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -1346,7 +1370,7 @@ export def "list-task" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, tasks: table<account_sid: string, addons: string, age: int, assignment_status: string, attributes: string, date_created: string, date_updated: string, links: record, priority: int, reason: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, task_queue_entered_date: string, task_queue_friendly_name: string, task_queue_sid: string, timeout: int, url: string, workflow_friendly_name: string, workflow_sid: string, workspace_sid: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, tasks: table<account_sid: string, addons: string, age: int, assignment_status: string, attributes: string, date_created: string, date_updated: string, links: record, priority: int, reason: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, task_queue_entered_date: string, task_queue_friendly_name: string, task_queue_sid: string, timeout: int, url: string, workflow_friendly_name: string, workflow_sid: string, workspace_sid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -1387,7 +1411,7 @@ export def "create-task" [
   --task-channel: string # When MultiTasking is enabled, specify the TaskChannel by passing either its `unique_name` or `sid`. Default value is `default`.
   --timeout: int # The amount of time in seconds the new task can live before being assigned. Can be up to a maximum of 2 weeks (1,209,600 seconds). The default value is 24 hours (86,400 seconds). On timeout, the `task.canceled` event will fire with description `Task TTL Exceeded`.
   --workflow-sid: string # The SID of the Workflow that you would like to handle routing for the new Task. If there is only one Workflow defined for the Workspace that you are posting the new task to, this parameter is optional.
-]: any -> record<account_sid: string, addons: string, age: int, assignment_status: string, attributes: string, date_created: string, date_updated: string, links: record, priority: int, reason: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, task_queue_entered_date: string, task_queue_friendly_name: string, task_queue_sid: string, timeout: int, url: string, workflow_friendly_name: string, workflow_sid: string, workspace_sid: string> {
+]: any -> oneof<record<account_sid: string, addons: string, age: int, assignment_status: string, attributes: string, date_created: string, date_updated: string, links: record, priority: int, reason: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, task_queue_entered_date: string, task_queue_friendly_name: string, task_queue_sid: string, timeout: int, url: string, workflow_friendly_name: string, workflow_sid: string, workspace_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -1397,7 +1421,7 @@ export def "create-task" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1467,7 +1491,7 @@ export def "fetch-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, addons: string, age: int, assignment_status: string, attributes: string, date_created: string, date_updated: string, links: record, priority: int, reason: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, task_queue_entered_date: string, task_queue_friendly_name: string, task_queue_sid: string, timeout: int, url: string, workflow_friendly_name: string, workflow_sid: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, addons: string, age: int, assignment_status: string, attributes: string, date_created: string, date_updated: string, links: record, priority: int, reason: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, task_queue_entered_date: string, task_queue_friendly_name: string, task_queue_sid: string, timeout: int, url: string, workflow_friendly_name: string, workflow_sid: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -1510,7 +1534,7 @@ export def "update-task" [
   --priority: int # The Task's new priority value. When supplied, the Task takes on the specified priority unless it matches a Workflow Target with a Priority set. Value can be 0 to 2^31^ (2,147,483,647).
   --reason: string # The reason that the Task was canceled or completed. This parameter is required only if the Task is canceled or completed. Setting this value queues the task for deletion and logs the reason.
   --task-channel: string # When MultiTasking is enabled, specify the TaskChannel with the task to update. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
-]: any -> record<account_sid: string, addons: string, age: int, assignment_status: string, attributes: string, date_created: string, date_updated: string, links: record, priority: int, reason: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, task_queue_entered_date: string, task_queue_friendly_name: string, task_queue_sid: string, timeout: int, url: string, workflow_friendly_name: string, workflow_sid: string, workspace_sid: string> {
+]: any -> oneof<record<account_sid: string, addons: string, age: int, assignment_status: string, attributes: string, date_created: string, date_updated: string, links: record, priority: int, reason: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, task_queue_entered_date: string, task_queue_friendly_name: string, task_queue_sid: string, timeout: int, url: string, workflow_friendly_name: string, workflow_sid: string, workspace_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -1523,7 +1547,7 @@ export def "update-task" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1558,7 +1582,7 @@ export def "list-task-reservation" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, reservations: table<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, reservations: table<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -1597,7 +1621,7 @@ export def "fetch-task-reservation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -1690,7 +1714,7 @@ export def "update-task-reservation" [
   --wait-method: string@wait-method-completer # The HTTP method we should use to call `wait_url`. Can be `GET` or `POST` and the default is `POST`. When using a static audio file, this should be `GET` so that we can cache the file. (format: http-method)
   --wait-url: string # The URL we should call using the `wait_method` for the music to play while participants are waiting for the conference to start. The default value is the URL of our standard hold music. [Learn more about hold music](https://www.twilio.com/labs/twimlets/holdmusic). (format: uri)
   --worker-activity-sid: string # The new worker activity SID if rejecting a reservation.
-]: any -> record<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -1704,7 +1728,7 @@ export def "update-task-reservation" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1744,7 +1768,7 @@ export def "list-worker" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, workers: table<account_sid: string, activity_name: string, activity_sid: string, attributes: string, available: bool, date_created: string, date_status_changed: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, workers: table<account_sid: string, activity_name: string, activity_sid: string, attributes: string, available: bool, date_created: string, date_status_changed: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -1783,7 +1807,7 @@ export def "create-worker" [
   --activity-sid: string # The SID of a valid Activity that will describe the new Worker's initial state. See [Activities](https://www.twilio.com/docs/taskrouter/api/activity) for more information. If not provided, the new Worker's initial state is the `default_activity_sid` configured on the Workspace.
   --attributes: string # A valid JSON string that describes the new Worker. For example: `{ "email": "Bob@example.com", "phone": "+5095551234" }`. This data is passed to the `assignment_callback_url` when TaskRouter assigns a Task to the Worker. Defaults to {}.
   friendly_name: string # A descriptive string that you create to describe the new Worker. It can be up to 64 characters long.
-]: any -> record<account_sid: string, activity_name: string, activity_sid: string, attributes: string, available: bool, date_created: string, date_status_changed: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string> {
+]: any -> oneof<record<account_sid: string, activity_name: string, activity_sid: string, attributes: string, available: bool, date_created: string, date_status_changed: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -1793,7 +1817,7 @@ export def "create-worker" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1826,7 +1850,7 @@ export def "fetch-workers-cumulative-statistics" [
   --minutes: int # Only calculate statistics since this many minutes in the past. The default 15 minutes. This is helpful for displaying statistics for the last 15 minutes, 240 minutes (4 hours), and 480 minutes (8 hours) to see trends.
   --start-date: string # Only calculate statistics from this date and time and later, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
   --task-channel: string # Only calculate cumulative statistics on this TaskChannel. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
-]: nothing -> record<account_sid: string, activity_durations: list<any>, end_time: string, reservations_accepted: int, reservations_canceled: int, reservations_created: int, reservations_rejected: int, reservations_rescinded: int, reservations_timed_out: int, start_time: string, url: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, activity_durations: list<any>, end_time: string, reservations_accepted: int, reservations_canceled: int, reservations_created: int, reservations_rejected: int, reservations_rescinded: int, reservations_timed_out: int, start_time: string, url: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -1863,7 +1887,7 @@ export def "fetch-workers-real-time-statistics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --task-channel: string # Only calculate real-time statistics on this TaskChannel. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
-]: nothing -> record<account_sid: string, activity_statistics: list<any>, total_workers: int, url: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, activity_statistics: list<any>, total_workers: int, url: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -1906,7 +1930,7 @@ export def "fetch-worker-statistics" [
   --task-queue-name: string # The `friendly_name` of the TaskQueue for which to fetch Worker statistics.
   --friendly-name: string # Only include Workers with `friendly_name` values that match this parameter.
   --task-channel: string # Only calculate statistics on this TaskChannel. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
-]: nothing -> record<account_sid: string, cumulative: any, realtime: any, url: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, cumulative: any, realtime: any, url: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -1983,7 +2007,7 @@ export def "fetch-worker" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, activity_name: string, activity_sid: string, attributes: string, available: bool, date_created: string, date_status_changed: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, activity_name: string, activity_sid: string, attributes: string, available: bool, date_created: string, date_status_changed: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -2025,7 +2049,7 @@ export def "update-worker" [
   --attributes: string # The JSON string that describes the Worker. For example: `{ "email": "Bob@example.com", "phone": "+5095551234" }`. This data is passed to the `assignment_callback_url` when TaskRouter assigns a Task to the Worker. Defaults to {}.
   --friendly-name: string # A descriptive string that you create to describe the Worker. It can be up to 64 characters long.
   --reject-pending-reservations: oneof<nothing, bool> # Whether to reject the Worker's pending reservations. This option is only valid if the Worker's new [Activity](https://www.twilio.com/docs/taskrouter/api/activity) resource has its `availability` property set to `False`.
-]: any -> record<account_sid: string, activity_name: string, activity_sid: string, attributes: string, available: bool, date_created: string, date_status_changed: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string> {
+]: any -> oneof<record<account_sid: string, activity_name: string, activity_sid: string, attributes: string, available: bool, date_created: string, date_status_changed: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string, workspace_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -2038,7 +2062,7 @@ export def "update-worker" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2071,7 +2095,7 @@ export def "list-worker-channel" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<channels: table<account_sid: string, assigned_tasks: int, available: bool, available_capacity_percentage: int, configured_capacity: int, date_created: string, date_updated: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, url: string, worker_sid: string, workspace_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<channels: table<account_sid: string, assigned_tasks: int, available: bool, available_capacity_percentage: int, configured_capacity: int, date_created: string, date_updated: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, url: string, worker_sid: string, workspace_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -2110,7 +2134,7 @@ export def "fetch-worker-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, assigned_tasks: int, available: bool, available_capacity_percentage: int, configured_capacity: int, date_created: string, date_updated: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, url: string, worker_sid: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, assigned_tasks: int, available: bool, available_capacity_percentage: int, configured_capacity: int, date_created: string, date_updated: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, url: string, worker_sid: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -2151,7 +2175,7 @@ export def "update-worker-channel" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --available: oneof<nothing, bool> # Whether the WorkerChannel is available. Set to `false` to prevent the Worker from receiving any new Tasks of this TaskChannel type.
   --capacity: int # The total number of Tasks that the Worker should handle for the TaskChannel type. TaskRouter creates reservations for Tasks of this TaskChannel type up to the specified capacity. If the capacity is 0, no new reservations will be created.
-]: any -> record<account_sid: string, assigned_tasks: int, available: bool, available_capacity_percentage: int, configured_capacity: int, date_created: string, date_updated: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, url: string, worker_sid: string, workspace_sid: string> {
+]: any -> oneof<record<account_sid: string, assigned_tasks: int, available: bool, available_capacity_percentage: int, configured_capacity: int, date_created: string, date_updated: string, sid: string, task_channel_sid: string, task_channel_unique_name: string, url: string, worker_sid: string, workspace_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -2163,7 +2187,7 @@ export def "update-worker-channel" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2197,7 +2221,7 @@ export def "list-worker-reservation" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, reservations: table<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, reservations: table<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -2236,7 +2260,7 @@ export def "fetch-worker-reservation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -2327,7 +2351,7 @@ export def "update-worker-reservation" [
   --wait-method: string@wait-method-completer # The HTTP method we should use to call `wait_url`. Can be `GET` or `POST` and the default is `POST`. When using a static audio file, this should be `GET` so that we can cache the file. (format: http-method)
   --wait-url: string # The URL we should call using the `wait_method` for the music to play while participants are waiting for the conference to start. The default value is the URL of our standard hold music. [Learn more about hold music](https://www.twilio.com/labs/twimlets/holdmusic). (format: uri)
   --worker-activity-sid: string # The new worker activity SID if rejecting a reservation.
-]: any -> record<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, links: record, reservation_status: string, sid: string, task_sid: string, url: string, worker_name: string, worker_sid: string, workspace_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -2341,7 +2365,7 @@ export def "update-worker-reservation" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2375,7 +2399,7 @@ export def "fetch-worker-instance-statistics" [
   --start-date: string # Only calculate statistics from this date and time and later, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
   --end-date: string # Only include usage that occurred on or before this date, specified in GMT as an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time. (format: date-time)
   --task-channel: string # Only calculate statistics on this TaskChannel. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
-]: nothing -> record<account_sid: string, cumulative: any, url: string, worker_sid: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, cumulative: any, url: string, worker_sid: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -2416,7 +2440,7 @@ export def "list-workflow" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, workflows: table<account_sid: string, assignment_callback_url: string, configuration: string, date_created: string, date_updated: string, document_content_type: string, fallback_assignment_callback_url: string, friendly_name: string, links: record, sid: string, task_reservation_timeout: int, url: string, workspace_sid: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, workflows: table<account_sid: string, assignment_callback_url: string, configuration: string, date_created: string, date_updated: string, document_content_type: string, fallback_assignment_callback_url: string, friendly_name: string, links: record, sid: string, task_reservation_timeout: int, url: string, workspace_sid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -2457,7 +2481,7 @@ export def "create-workflow" [
   --fallback-assignment-callback-url: string # The URL that we should call when a call to the `assignment_callback_url` fails. (format: uri)
   friendly_name: string # A descriptive string that you create to describe the Workflow resource. For example, `Inbound Call Workflow` or `2014 Outbound Campaign`.
   --task-reservation-timeout: int # How long TaskRouter will wait for a confirmation response from your application after it assigns a Task to a Worker. Can be up to `86,400` (24 hours) and the default is `120`.
-]: any -> record<account_sid: string, assignment_callback_url: string, configuration: string, date_created: string, date_updated: string, document_content_type: string, fallback_assignment_callback_url: string, friendly_name: string, links: record, sid: string, task_reservation_timeout: int, url: string, workspace_sid: string> {
+]: any -> oneof<record<account_sid: string, assignment_callback_url: string, configuration: string, date_created: string, date_updated: string, document_content_type: string, fallback_assignment_callback_url: string, friendly_name: string, links: record, sid: string, task_reservation_timeout: int, url: string, workspace_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -2467,7 +2491,7 @@ export def "create-workflow" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2534,7 +2558,7 @@ export def "fetch-workflow" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, assignment_callback_url: string, configuration: string, date_created: string, date_updated: string, document_content_type: string, fallback_assignment_callback_url: string, friendly_name: string, links: record, sid: string, task_reservation_timeout: int, url: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, assignment_callback_url: string, configuration: string, date_created: string, date_updated: string, document_content_type: string, fallback_assignment_callback_url: string, friendly_name: string, links: record, sid: string, task_reservation_timeout: int, url: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -2577,7 +2601,7 @@ export def "update-workflow" [
   --friendly-name: string # A descriptive string that you create to describe the Workflow resource. For example, `Inbound Call Workflow` or `2014 Outbound Campaign`.
   --re-evaluate-tasks: string # Whether or not to re-evaluate Tasks. The default is `false`, which means Tasks in the Workflow will not be processed through the assignment loop again.
   --task-reservation-timeout: int # How long TaskRouter will wait for a confirmation response from your application after it assigns a Task to a Worker. Can be up to `86,400` (24 hours) and the default is `120`.
-]: any -> record<account_sid: string, assignment_callback_url: string, configuration: string, date_created: string, date_updated: string, document_content_type: string, fallback_assignment_callback_url: string, friendly_name: string, links: record, sid: string, task_reservation_timeout: int, url: string, workspace_sid: string> {
+]: any -> oneof<record<account_sid: string, assignment_callback_url: string, configuration: string, date_created: string, date_updated: string, document_content_type: string, fallback_assignment_callback_url: string, friendly_name: string, links: record, sid: string, task_reservation_timeout: int, url: string, workspace_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
@@ -2588,7 +2612,7 @@ export def "update-workflow" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2623,7 +2647,7 @@ export def "fetch-workflow-cumulative-statistics" [
   --start-date: string # Only calculate statistics from this date and time and later, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. (format: date-time)
   --task-channel: string # Only calculate cumulative statistics on this TaskChannel. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
   --split-by-wait-time: string # A comma separated list of values that describes the thresholds, in seconds, to calculate statistics on. For each threshold specified, the number of Tasks canceled and reservations accepted above and below the specified thresholds in seconds are computed. For example, `5,30` would show splits of Tasks that were canceled or accepted before and after 5 seconds and before and after 30 seconds. This can be used to show short abandoned Tasks or Tasks that failed to meet an SLA. TaskRouter will calculate statistics on up to 10,000 Tasks for any given threshold.
-]: nothing -> record<account_sid: string, avg_task_acceptance_time: int, end_time: string, reservations_accepted: int, reservations_canceled: int, reservations_created: int, reservations_rejected: int, reservations_rescinded: int, reservations_timed_out: int, split_by_wait_time: any, start_time: string, tasks_canceled: int, tasks_completed: int, tasks_deleted: int, tasks_entered: int, tasks_moved: int, tasks_timed_out_in_workflow: int, url: string, wait_duration_until_accepted: any, wait_duration_until_canceled: any, workflow_sid: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, avg_task_acceptance_time: int, end_time: string, reservations_accepted: int, reservations_canceled: int, reservations_created: int, reservations_rejected: int, reservations_rescinded: int, reservations_timed_out: int, split_by_wait_time: any, start_time: string, tasks_canceled: int, tasks_completed: int, tasks_deleted: int, tasks_entered: int, tasks_moved: int, tasks_timed_out_in_workflow: int, url: string, wait_duration_until_accepted: any, wait_duration_until_canceled: any, workflow_sid: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -2662,7 +2686,7 @@ export def "fetch-workflow-real-time-statistics" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --task-channel: string # Only calculate real-time statistics on this TaskChannel. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
-]: nothing -> record<account_sid: string, longest_task_waiting_age: int, longest_task_waiting_sid: string, tasks_by_priority: any, tasks_by_status: any, total_tasks: int, url: string, workflow_sid: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, longest_task_waiting_age: int, longest_task_waiting_sid: string, tasks_by_priority: any, tasks_by_status: any, total_tasks: int, url: string, workflow_sid: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }
@@ -2705,7 +2729,7 @@ export def "fetch-workflow-statistics" [
   --end-date: string # Only calculate statistics from this date and time and earlier, specified in GMT as an [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time. (format: date-time)
   --task-channel: string # Only calculate real-time statistics on this TaskChannel. Can be the TaskChannel's SID or its `unique_name`, such as `voice`, `sms`, or `default`.
   --split-by-wait-time: string # A comma separated list of values that describes the thresholds, in seconds, to calculate statistics on. For each threshold specified, the number of Tasks canceled and reservations accepted above and below the specified thresholds in seconds are computed. For example, `5,30` would show splits of Tasks that were canceled or accepted before and after 5 seconds and before and after 30 seconds. This can be used to show short abandoned Tasks or Tasks that failed to meet an SLA.
-]: nothing -> record<account_sid: string, cumulative: any, realtime: any, url: string, workflow_sid: string, workspace_sid: string> {
+]: nothing -> oneof<record<account_sid: string, cumulative: any, realtime: any, url: string, workflow_sid: string, workspace_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://taskrouter.twilio.com")
   if ($workspace_sid | is-empty) { error make --unspanned { msg: "path parameter 'WorkspaceSid' must be non-empty" } }

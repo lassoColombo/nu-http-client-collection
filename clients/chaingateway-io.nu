@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -98,9 +121,9 @@ def auth-scheme-completer [] { ["none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clear-address" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["clear-address" "delete-address" "export-address" "get-block" "get-ethereum-balance" "get-exchange-rate" "get-gas-price" "get-last-block-number" "get-token" "get-token-balance" "get-transactions" "import-address" "list-addresses" "list-failed-ip-ns" "list-subscribed-addresses" "new-address" "resend-failed-ipn" "send-ethereum" "send-token" "subscribe-address" "unsubscribe-address" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -136,7 +159,7 @@ export def "clear-address" [
   ethereumaddress: string
   newaddress: string
   password: string
-]: any -> record<amount: float, ethereumaddress: string, gas: float, newaddress: string, ok: bool, total: string, txid: string> {
+]: any -> oneof<record<amount: float, ethereumaddress: string, gas: float, newaddress: string, ok: bool, total: string, txid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -179,7 +202,7 @@ export def "delete-address" [
   --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   ethereumaddress: string
   password: string
-]: any -> record<deleted: bool, ethereumaddress: string, ok: bool> {
+]: any -> oneof<record<deleted: bool, ethereumaddress: string, ok: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -222,7 +245,7 @@ export def "export-address" [
   --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   ethaddress: string
   password: string
-]: any -> record<content: string, filename: string, ok: bool> {
+]: any -> oneof<record<content: string, filename: string, ok: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -264,7 +287,7 @@ export def "get-block" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   block: string
-]: any -> record<block_number: string, difficulty: string, gas_limit: string, gas_used: string, hash: string, miner: string, ok: bool, parent_hash: string, size_in_bytes: string, time_stamp: string, transactions_count: string> {
+]: any -> oneof<record<block_number: string, difficulty: string, gas_limit: string, gas_used: string, hash: string, miner: string, ok: bool, parent_hash: string, size_in_bytes: string, time_stamp: string, transactions_count: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -306,7 +329,7 @@ export def "get-ethereum-balance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   ethereumaddress: string
-]: any -> record<balance: float, ethereumaddress: string, ok: bool> {
+]: any -> oneof<record<balance: float, ethereumaddress: string, ok: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -348,7 +371,7 @@ export def "get-exchange-rate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   currency: string
-]: any -> record<currency: string, ok: bool, rate: float> {
+]: any -> oneof<record<currency: string, ok: bool, rate: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -390,7 +413,7 @@ export def "get-gas-price" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # required, e.g. application/json
   --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
-]: nothing -> record<gasprice: int, ok: bool> {
+]: nothing -> oneof<record<gasprice: int, ok: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
@@ -429,7 +452,7 @@ export def "get-last-block-number" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # required, e.g. application/json
   --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
-]: nothing -> record<blocknumber: int, ok: bool> {
+]: nothing -> oneof<record<blocknumber: int, ok: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
@@ -468,7 +491,7 @@ export def "get-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   contractaddress: string
-]: any -> record<contractaddress: string, decimals: int, name: string, ok: bool, supply: int, symbol: string> {
+]: any -> oneof<record<contractaddress: string, decimals: int, name: string, ok: bool, supply: int, symbol: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -511,7 +534,7 @@ export def "get-token-balance" [
   --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   contractaddress: string
   ethereumaddress: string
-]: any -> record<balance: int, contractaddress: string, ethereumaddress: string, ok: bool> {
+]: any -> oneof<record<balance: int, contractaddress: string, ethereumaddress: string, ok: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -553,7 +576,7 @@ export def "get-transactions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   txid: string
-]: any -> record<ok: bool, transactions: table<amount: string, block_number: string, contract_address: string, from: string, gas: string, gas_price: string, to: string, token_decimals: string, token_name: string, token_supply: string, token_symbol: string, txid: string, type: string>> {
+]: any -> oneof<record<ok: bool, transactions: table<amount: string, block_number: string, contract_address: string, from: string, gas: string, gas_price: string, to: string, token_decimals: string, token_name: string, token_supply: string, token_symbol: string, txid: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -583,7 +606,6 @@ export def "get-transactions" [
 #
 # POST /importAddress
 # operationId: importAddress
-# --content shape: {address: string, crypto: record, id: string, version: int}
 export def "import-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -598,7 +620,7 @@ export def "import-address" [
   content: record # e.g. {address: 71892889ed4d79d88ab6ea3783b571b8ece9bef4, crypto: {cipher: aes-128-ctr, cipherparams: {iv: 76e6f2497b9f2a8e024fc752a5418a6d}, ciphertext: 9d74262517b984f9b0560b8f23b5e3340f7be0f56b70cd91ff445dcaf5b1968f, kdf: scrypt, kdfparams: {dklen: 32, n: 131072, p: 1, r: 8, salt: d11d996a7cc4bfad730d4c9b9057eff2c0fb3940b5bfc59db62ae218c14a54f4}, mac: dcc342bbbbb8eea97c89b47bafc23de568fc1a48e0bd21ae8d776a95c4704ac9}, id: 85b790ff-408e-42b8-b123-bec9523964dc, version: 3} — shape: {address: string, crypto: record, id: string, version: int}
   filename: string
   password: string
-]: any -> record<ethaddress: string, filename: string, ok: bool> {
+]: any -> oneof<record<ethaddress: string, filename: string, ok: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -640,7 +662,7 @@ export def "list-addresses" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # required, e.g. application/json
   --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
-]: nothing -> record<addresses: table<ethereumaddress: string>, ok: bool> {
+]: nothing -> oneof<record<addresses: table<ethereumaddress: string>, ok: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
@@ -679,7 +701,7 @@ export def "list-failed-ip-ns" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # required, e.g. application/json
   --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
-]: nothing -> record<failed_ipns: table<action: string, amount: string, contractaddress: string, ethereumaddress: string, id: string, timestamp: string, url: string>, ok: bool> {
+]: nothing -> oneof<record<failed_ipns: table<action: string, amount: string, contractaddress: string, ethereumaddress: string, id: string, timestamp: string, url: string>, ok: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
@@ -718,7 +740,7 @@ export def "list-subscribed-addresses" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # required, e.g. application/json
   --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
-]: nothing -> record<ipns: table<contractaddress: string, ethereumaddress: string, url: string>, ok: bool> {
+]: nothing -> oneof<record<ipns: table<contractaddress: string, ethereumaddress: string, url: string>, ok: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
@@ -757,7 +779,7 @@ export def "new-address" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   password: string
-]: any -> record<ethereumaddress: string, ok: bool, password: string> {
+]: any -> oneof<record<ethereumaddress: string, ok: bool, password: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -799,7 +821,7 @@ export def "resend-failed-ipn" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # API Key (required, e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
   id: int # format: int32
-]: any -> record<id: int, ok: bool> {
+]: any -> oneof<record<id: int, ok: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -844,7 +866,7 @@ export def "send-ethereum" [
   from: string
   password: string
   to: string
-]: any -> record<amount: string, from: string, ok: bool, to: string, txid: string> {
+]: any -> oneof<record<amount: string, from: string, ok: bool, to: string, txid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -891,7 +913,7 @@ export def "send-token" [
   identifier: string
   password: string
   to: string
-]: any -> record<amount: int, contractaddress: string, from: string, identifier: string, ok: bool, to: string, txid: string> {
+]: any -> oneof<record<amount: int, contractaddress: string, from: string, identifier: string, ok: bool, to: string, txid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -935,7 +957,7 @@ export def "subscribe-address" [
   contractaddress: string
   ethereumaddress: string
   url: string
-]: any -> record<contractaddress: string, ethereumaddress: string, ok: bool, url: string> {
+]: any -> oneof<record<contractaddress: string, ethereumaddress: string, ok: bool, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -979,7 +1001,7 @@ export def "unsubscribe-address" [
   contractaddress: string
   ethereumaddress: string
   url: string
-]: any -> record<contractaddress: string, deleted: bool, ethereumaddress: string, ok: bool, url: string> {
+]: any -> oneof<record<contractaddress: string, deleted: bool, ethereumaddress: string, ok: bool, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)

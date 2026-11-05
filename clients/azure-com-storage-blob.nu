@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def blob-services-name-completer [] { ["default"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "blob-services-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["blob-services-list" "blob-containers-list" "blob-containers-delete" "blob-containers-get" "blob-containers-update" "blob-containers-create" "blob-containers-clear-legal-hold" "blob-containers-extend-immutability-policy" "blob-containers-lock-immutability-policy" "blob-containers-delete-immutability-policy" "blob-containers-get-immutability-policy" "blob-containers-create-or-update-immutability-policy" "blob-containers-lease" "blob-containers-set-legal-hold" "blob-services-get-service-properties" "blob-services-set-service-properties" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -164,7 +188,7 @@ export def "blob-services-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -210,7 +234,7 @@ export def "blob-containers-list" [
   --skip-token: string # Optional. Continuation token for the list operation.
   --maxpagesize: string # Optional. Specified maximum number of containers that can be included in the list.
   --filter: string # Optional. When specified, only container names starting with the filter will be listed.
-]: nothing -> record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, etag: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -299,7 +323,7 @@ export def "blob-containers-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<properties: record<hasImmutabilityPolicy: bool, hasLegalHold: bool, immutabilityPolicy: record<etag: string, properties: record, updateHistory: list>, lastModifiedTime: string, leaseDuration: string, leaseState: string, leaseStatus: string, legalHold: record<hasLegalHold: bool, tags: list>, metadata: record, publicAccess: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<hasImmutabilityPolicy: bool, hasLegalHold: bool, immutabilityPolicy: record<etag: string, properties: record, updateHistory: list>, lastModifiedTime: string, leaseDuration: string, leaseState: string, leaseStatus: string, legalHold: record<hasLegalHold: bool, tags: list>, metadata: record, publicAccess: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -329,7 +353,6 @@ export def "blob-containers-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}
 # operationId: BlobContainers_Update
-# --properties shape: {immutabilityPolicy?: any, legalHold?: any, metadata?: record, publicAccess?: "Container"|"Blob"|"None"}
 export def "blob-containers-update" [
   subscription_id: string
   resource_group_name: string
@@ -346,7 +369,7 @@ export def "blob-containers-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
   --properties: any # The properties of a container. — shape: {immutabilityPolicy?: any, legalHold?: any, metadata?: record, publicAccess?: "Container"|"Blob"|"None"}
-]: any -> record<properties: record<hasImmutabilityPolicy: bool, hasLegalHold: bool, immutabilityPolicy: record<etag: string, properties: record, updateHistory: list>, lastModifiedTime: string, leaseDuration: string, leaseState: string, leaseStatus: string, legalHold: record<hasLegalHold: bool, tags: list>, metadata: record, publicAccess: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<hasImmutabilityPolicy: bool, hasLegalHold: bool, immutabilityPolicy: record<etag: string, properties: record, updateHistory: list>, lastModifiedTime: string, leaseDuration: string, leaseState: string, leaseStatus: string, legalHold: record<hasLegalHold: bool, tags: list>, metadata: record, publicAccess: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -379,7 +402,6 @@ export def "blob-containers-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}
 # operationId: BlobContainers_Create
-# --properties shape: {immutabilityPolicy?: any, legalHold?: any, metadata?: record, publicAccess?: "Container"|"Blob"|"None"}
 export def "blob-containers-create" [
   subscription_id: string
   resource_group_name: string
@@ -396,7 +418,7 @@ export def "blob-containers-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
   --properties: any # The properties of a container. — shape: {immutabilityPolicy?: any, legalHold?: any, metadata?: record, publicAccess?: "Container"|"Blob"|"None"}
-]: any -> record<properties: record<hasImmutabilityPolicy: bool, hasLegalHold: bool, immutabilityPolicy: record<etag: string, properties: record, updateHistory: list>, lastModifiedTime: string, leaseDuration: string, leaseState: string, leaseStatus: string, legalHold: record<hasLegalHold: bool, tags: list>, metadata: record, publicAccess: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<hasImmutabilityPolicy: bool, hasLegalHold: bool, immutabilityPolicy: record<etag: string, properties: record, updateHistory: list>, lastModifiedTime: string, leaseDuration: string, leaseState: string, leaseStatus: string, legalHold: record<hasLegalHold: bool, tags: list>, metadata: record, publicAccess: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -445,7 +467,7 @@ export def "blob-containers-clear-legal-hold" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
   tags: list<string> # Each tag should be 3 to 23 alphanumeric characters and is normalized to lower case at SRP.
-]: any -> record<hasLegalHold: bool, tags: list<string>> {
+]: any -> oneof<record<hasLegalHold: bool, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -478,7 +500,6 @@ export def "blob-containers-clear-legal-hold" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/immutabilityPolicies/default/extend
 # operationId: BlobContainers_ExtendImmutabilityPolicy
-# --properties shape: {immutabilityPeriodSinceCreationInDays: int}
 export def "blob-containers-extend-immutability-policy" [
   subscription_id: string
   resource_group_name: string
@@ -496,7 +517,7 @@ export def "blob-containers-extend-immutability-policy" [
   --api-version: string # The API version to use for this operation. (required)
   --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied. (required)
   properties: any # The properties of an ImmutabilityPolicy of a blob container. — shape: {immutabilityPeriodSinceCreationInDays: int}
-]: any -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -548,7 +569,7 @@ export def "blob-containers-lock-immutability-policy" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
   --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied. (required)
-]: nothing -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -598,7 +619,7 @@ export def "blob-containers-delete-immutability-policy" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
   --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied. (required)
-]: nothing -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -649,7 +670,7 @@ export def "blob-containers-get-immutability-policy" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
   --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
-]: nothing -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -682,7 +703,6 @@ export def "blob-containers-get-immutability-policy" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/immutabilityPolicies/{immutabilityPolicyName}
 # operationId: BlobContainers_CreateOrUpdateImmutabilityPolicy
-# --properties shape: {immutabilityPeriodSinceCreationInDays: int}
 export def "blob-containers-create-or-update-immutability-policy" [
   subscription_id: string
   resource_group_name: string
@@ -701,7 +721,7 @@ export def "blob-containers-create-or-update-immutability-policy" [
   --api-version: string # The API version to use for this operation. (required)
   --if-match: string # The entity state (ETag) version of the immutability policy to update. A value of "*" can be used to apply the operation only if the immutability policy already exists. If omitted, this operation will always be applied.
   properties: any # The properties of an ImmutabilityPolicy of a blob container. — shape: {immutabilityPeriodSinceCreationInDays: int}
-]: any -> record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<immutabilityPeriodSinceCreationInDays: int, state: string>, etag: string, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -757,7 +777,7 @@ export def "blob-containers-lease" [
   --lease-duration: int # Required for acquire. Specifies the duration of the lease, in seconds, or negative one (-1) for a lease that never expires.
   --lease-id: string # Identifies the lease. Can be specified in any valid GUID string format.
   --proposed-lease-id: string # Optional for acquire, required for change. Proposed lease ID, in a GUID string format.
-]: any -> record<leaseId: string, leaseTimeSeconds: string> {
+]: any -> oneof<record<leaseId: string, leaseTimeSeconds: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -806,7 +826,7 @@ export def "blob-containers-set-legal-hold" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
   tags: list<string> # Each tag should be 3 to 23 alphanumeric characters and is normalized to lower case at SRP.
-]: any -> record<hasLegalHold: bool, tags: list<string>> {
+]: any -> oneof<record<hasLegalHold: bool, tags: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -854,7 +874,7 @@ export def "blob-services-get-service-properties" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
-]: nothing -> record<properties: record<automaticSnapshotPolicyEnabled: bool, changeFeed: record<enabled: bool>, cors: record<corsRules: list>, defaultServiceVersion: string, deleteRetentionPolicy: record<days: int, enabled: bool>>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<automaticSnapshotPolicyEnabled: bool, changeFeed: record<enabled: bool>, cors: record<corsRules: list>, defaultServiceVersion: string, deleteRetentionPolicy: record<days: int, enabled: bool>>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -884,7 +904,6 @@ export def "blob-services-get-service-properties" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/{BlobServicesName}
 # operationId: BlobServices_SetServiceProperties
-# --properties shape: {automaticSnapshotPolicyEnabled?: bool, changeFeed?: any, cors?: any, defaultServiceVersion?: string, deleteRetentionPolicy?: any}
 export def "blob-services-set-service-properties" [
   subscription_id: string
   resource_group_name: string
@@ -901,7 +920,7 @@ export def "blob-services-set-service-properties" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API version to use for this operation. (required)
   --properties: any # The properties of a storage account’s Blob service. — shape: {automaticSnapshotPolicyEnabled?: bool, changeFeed?: any, cors?: any, defaultServiceVersion?: string, deleteRetentionPolicy?: any}
-]: any -> record<properties: record<automaticSnapshotPolicyEnabled: bool, changeFeed: record<enabled: bool>, cors: record<corsRules: list>, defaultServiceVersion: string, deleteRetentionPolicy: record<days: int, enabled: bool>>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<automaticSnapshotPolicyEnabled: bool, changeFeed: record<enabled: bool>, cors: record<corsRules: list>, defaultServiceVersion: string, deleteRetentionPolicy: record<days: int, enabled: bool>>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

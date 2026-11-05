@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -121,9 +145,9 @@ def include-external-completer [] { ["audio"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-multiple-albums" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-multiple-albums" "get-an-album" "get-an-albums-tracks" "get-multiple-artists" "get-an-artist" "get-an-artists-albums" "get-an-artists-related-artists" "get-an-artists-top-tracks" "get-audio-analysis" "get-several-audio-features" "get-audio-features" "get-multiple-audiobooks" "get-an-audiobook" "get-audiobook-chapters" "get-categories" "get-a-category" "get-a-categories-playlists" "get-featured-playlists" "get-new-releases" "get-several-chapters" "get-a-chapter" "get-multiple-episodes" "get-an-episode" "get-available-markets" "get-current-users-profile" "remove-albums-user" "get-users-saved-albums" "save-albums-user" "check-users-saved-albums" "remove-audiobooks-user" "get-users-saved-audiobooks" "save-audiobooks-user" "check-users-saved-audiobooks" "remove-episodes-user" "get-users-saved-episodes" "save-episodes-user" "check-users-saved-episodes" "unfollow-artists-users" "get-followed" "follow-artists-users" "check-current-user-follows" "get-information-about-the-users-current-playback" "transfer-a-users-playback" "get-the-users-currently-playing-track" "get-a-users-available-devices" "skip-users-playback-to-next-track" "pause-a-users-playback" "start-a-users-playback" "skip-users-playback-to-previous-track" "get-queue" "add-to-queue" "get-recently-played" "set-repeat-mode-on-users-playback" "seek-to-position-in-currently-playing-track" "toggle-shuffle-for-users-playback" "set-volume-for-users-playback" "get-a-list-of-current-users-playlists" "remove-shows-user" "get-users-saved-shows" "save-shows-user" "check-users-saved-shows" "get-users-top-artists-and-tracks" "remove-tracks-user" "get-users-saved-tracks" "save-tracks-user" "check-users-saved-tracks" "get-playlist" "change-playlist-details" "unfollow-playlist" "follow-playlist" "check-if-user-follows-playlist" "get-playlist-cover" "upload-custom-playlist-cover" "remove-tracks-playlist" "get-playlists-tracks" "add-tracks-to-playlist" "reorder-or-replace-playlists-tracks" "get-recommendations" "get-recommendation-genres" "search" "get-multiple-shows" "get-a-show" "get-a-shows-episodes" "get-several-tracks" "get-track" "get-users-profile" "get-list-users-playlists" "create-playlist" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -157,7 +181,7 @@ export def "get-multiple-albums" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # required, e.g. 382ObEPsp2rxGrnsizN5TX,1A2GTWGtFfWp7KSQTwWOyo,2noRn2Aes5aoNVsU6iWThc
   --market: string # e.g. ES
-]: nothing -> record<albums: table<album_type: string, available_markets: list, copyrights: list, external_ids: record, external_urls: record, genres: list, href: string, id: string, images: list, label: string, name: string, popularity: int, release_date: string, release_date_precision: string, restrictions: record, total_tracks: int, type: string, uri: string, artists: list, tracks: record>> {
+]: nothing -> oneof<record<albums: table<album_type: string, available_markets: list, copyrights: list, external_ids: record, external_urls: record, genres: list, href: string, id: string, images: list, label: string, name: string, popularity: int, release_date: string, release_date_precision: string, restrictions: record, total_tracks: int, type: string, uri: string, artists: list, tracks: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -195,7 +219,7 @@ export def "get-an-album" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-]: nothing -> record<album_type: string, available_markets: list<string>, copyrights: table<text: string, type: string>, external_ids: record<ean: string, isrc: string, upc: string>, external_urls: record<spotify: string>, genres: list<string>, href: string, id: string, images: table<height: int, url: string, width: int>, label: string, name: string, popularity: int, release_date: string, release_date_precision: string, restrictions: record<reason: string>, total_tracks: int, type: string, uri: string, artists: table<external_urls: record, followers: record, genres: list, href: string, id: string, images: list, name: string, popularity: int, type: string, uri: string>, tracks: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>> {
+]: nothing -> oneof<record<album_type: string, available_markets: list<string>, copyrights: table<text: string, type: string>, external_ids: record<ean: string, isrc: string, upc: string>, external_urls: record<spotify: string>, genres: list<string>, href: string, id: string, images: table<height: int, url: string, width: int>, label: string, name: string, popularity: int, release_date: string, release_date_precision: string, restrictions: record<reason: string>, total_tracks: int, type: string, uri: string, artists: table<external_urls: record, followers: record, genres: list, href: string, id: string, images: list, name: string, popularity: int, type: string, uri: string>, tracks: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -235,7 +259,7 @@ export def "get-an-albums-tracks" [
   --market: string # e.g. ES
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<artists: list, available_markets: list, disc_number: int, duration_ms: int, explicit: bool, external_urls: record, href: string, id: string, is_local: bool, is_playable: bool, linked_from: record, name: string, preview_url: string, restrictions: record, track_number: int, type: string, uri: string>> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<artists: list, available_markets: list, disc_number: int, duration_ms: int, explicit: bool, external_urls: record, href: string, id: string, is_local: bool, is_playable: bool, linked_from: record, name: string, preview_url: string, restrictions: record, track_number: int, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -272,7 +296,7 @@ export def "get-multiple-artists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # required, e.g. 2CIMQHirSU0MQqyYHq0eOx,57dN52uHvrHOxijzpIgu3E,1vCWHaC5f2uS3yhpwWbIA6
-]: nothing -> record<artists: table<external_urls: record, followers: record, genres: list, href: string, id: string, images: list, name: string, popularity: int, type: string, uri: string>> {
+]: nothing -> oneof<record<artists: table<external_urls: record, followers: record, genres: list, href: string, id: string, images: list, name: string, popularity: int, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -309,7 +333,7 @@ export def "get-an-artist" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<external_urls: record<spotify: string>, followers: record<href: string, total: int>, genres: list<string>, href: string, id: string, images: table<height: int, url: string, width: int>, name: string, popularity: int, type: string, uri: string> {
+]: nothing -> oneof<record<external_urls: record<spotify: string>, followers: record<href: string, total: int>, genres: list<string>, href: string, id: string, images: table<height: int, url: string, width: int>, name: string, popularity: int, type: string, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -349,7 +373,7 @@ export def "get-an-artists-albums" [
   --market: string # e.g. ES
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<album_type: string, available_markets: list, copyrights: list, external_ids: record, external_urls: record, genres: list, href: string, id: string, images: list, label: string, name: string, popularity: int, release_date: string, release_date_precision: string, restrictions: record, total_tracks: int, type: string, uri: string, album_group: string, artists: list>> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<album_type: string, available_markets: list, copyrights: list, external_ids: record, external_urls: record, genres: list, href: string, id: string, images: list, label: string, name: string, popularity: int, release_date: string, release_date_precision: string, restrictions: record, total_tracks: int, type: string, uri: string, album_group: string, artists: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -386,7 +410,7 @@ export def "get-an-artists-related-artists" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<artists: table<external_urls: record, followers: record, genres: list, href: string, id: string, images: list, name: string, popularity: int, type: string, uri: string>> {
+]: nothing -> oneof<record<artists: table<external_urls: record, followers: record, genres: list, href: string, id: string, images: list, name: string, popularity: int, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -423,7 +447,7 @@ export def "get-an-artists-top-tracks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-]: nothing -> record<tracks: table<album: record, artists: list, available_markets: list, disc_number: int, duration_ms: int, explicit: bool, external_ids: record, external_urls: record, href: string, id: string, is_local: bool, is_playable: bool, linked_from: record, name: string, popularity: int, preview_url: string, restrictions: record, track_number: int, type: string, uri: string>> {
+]: nothing -> oneof<record<tracks: table<album: record, artists: list, available_markets: list, disc_number: int, duration_ms: int, explicit: bool, external_ids: record, external_urls: record, href: string, id: string, is_local: bool, is_playable: bool, linked_from: record, name: string, popularity: int, preview_url: string, restrictions: record, track_number: int, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -460,7 +484,7 @@ export def "get-audio-analysis" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bars: table<confidence: float, duration: float, start: float>, beats: table<confidence: float, duration: float, start: float>, meta: record<analysis_time: float, analyzer_version: string, detailed_status: string, input_process: string, platform: string, status_code: int, timestamp: int>, sections: table<confidence: float, duration: float, key: int, key_confidence: float, loudness: float, mode: float, mode_confidence: float, start: float, tempo: float, tempo_confidence: float, time_signature: int, time_signature_confidence: float>, segments: table<confidence: float, duration: float, loudness_end: float, loudness_max: float, loudness_max_time: float, loudness_start: float, pitches: list, start: float, timbre: list>, tatums: table<confidence: float, duration: float, start: float>, track: record<analysis_channels: int, analysis_sample_rate: int, code_version: float, codestring: string, duration: float, echoprint_version: float, echoprintstring: string, end_of_fade_in: float, key: int, key_confidence: float, loudness: float, mode: int, mode_confidence: float, num_samples: int, offset_seconds: int, rhythm_version: float, rhythmstring: string, sample_md5: string, start_of_fade_out: float, synch_version: float, synchstring: string, tempo: float, tempo_confidence: float, time_signature: int, time_signature_confidence: float, window_seconds: int>> {
+]: nothing -> oneof<record<bars: table<confidence: float, duration: float, start: float>, beats: table<confidence: float, duration: float, start: float>, meta: record<analysis_time: float, analyzer_version: string, detailed_status: string, input_process: string, platform: string, status_code: int, timestamp: int>, sections: table<confidence: float, duration: float, key: int, key_confidence: float, loudness: float, mode: float, mode_confidence: float, start: float, tempo: float, tempo_confidence: float, time_signature: int, time_signature_confidence: float>, segments: table<confidence: float, duration: float, loudness_end: float, loudness_max: float, loudness_max_time: float, loudness_start: float, pitches: list, start: float, timbre: list>, tatums: table<confidence: float, duration: float, start: float>, track: record<analysis_channels: int, analysis_sample_rate: int, code_version: float, codestring: string, duration: float, echoprint_version: float, echoprintstring: string, end_of_fade_in: float, key: int, key_confidence: float, loudness: float, mode: int, mode_confidence: float, num_samples: int, offset_seconds: int, rhythm_version: float, rhythmstring: string, sample_md5: string, start_of_fade_out: float, synch_version: float, synchstring: string, tempo: float, tempo_confidence: float, time_signature: int, time_signature_confidence: float, window_seconds: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -496,7 +520,7 @@ export def "get-several-audio-features" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # required, e.g. 7ouMYWpwJ422jRcDASZB7P,4VqPOruhp5EdPBeR92t6lQ,2takcwOaAZWiXQijPHIx7B
-]: nothing -> record<audio_features: table<acousticness: float, analysis_url: string, danceability: float, duration_ms: int, energy: float, id: string, instrumentalness: float, key: int, liveness: float, loudness: float, mode: int, speechiness: float, tempo: float, time_signature: int, track_href: string, type: string, uri: string, valence: float>> {
+]: nothing -> oneof<record<audio_features: table<acousticness: float, analysis_url: string, danceability: float, duration_ms: int, energy: float, id: string, instrumentalness: float, key: int, liveness: float, loudness: float, mode: int, speechiness: float, tempo: float, time_signature: int, track_href: string, type: string, uri: string, valence: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -533,7 +557,7 @@ export def "get-audio-features" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<acousticness: float, analysis_url: string, danceability: float, duration_ms: int, energy: float, id: string, instrumentalness: float, key: int, liveness: float, loudness: float, mode: int, speechiness: float, tempo: float, time_signature: int, track_href: string, type: string, uri: string, valence: float> {
+]: nothing -> oneof<record<acousticness: float, analysis_url: string, danceability: float, duration_ms: int, energy: float, id: string, instrumentalness: float, key: int, liveness: float, loudness: float, mode: int, speechiness: float, tempo: float, time_signature: int, track_href: string, type: string, uri: string, valence: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -570,7 +594,7 @@ export def "get-multiple-audiobooks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # required, e.g. 18yVqkdbdRvS24c0Ilj2ci,1HGw3J3NxZO1TP1BTtVhpZ,7iHfbu1YPACw6oZPAFJtqe
   --market: string # e.g. ES
-]: nothing -> record<audiobooks: table<authors: list, available_markets: list, copyrights: list, description: string, edition: string, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, languages: list, media_type: string, name: string, narrators: list, publisher: string, total_chapters: int, type: string, uri: string, chapters: record>> {
+]: nothing -> oneof<record<audiobooks: table<authors: list, available_markets: list, copyrights: list, description: string, edition: string, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, languages: list, media_type: string, name: string, narrators: list, publisher: string, total_chapters: int, type: string, uri: string, chapters: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -608,7 +632,7 @@ export def "get-an-audiobook" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-]: nothing -> record<authors: table<name: string>, available_markets: list<string>, copyrights: table<text: string, type: string>, description: string, edition: string, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: table<height: int, url: string, width: int>, languages: list<string>, media_type: string, name: string, narrators: table<name: string>, publisher: string, total_chapters: int, type: string, uri: string, chapters: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>> {
+]: nothing -> oneof<record<authors: table<name: string>, available_markets: list<string>, copyrights: table<text: string, type: string>, description: string, edition: string, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: table<height: int, url: string, width: int>, languages: list<string>, media_type: string, name: string, narrators: table<name: string>, publisher: string, total_chapters: int, type: string, uri: string, chapters: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -648,7 +672,7 @@ export def "get-audiobook-chapters" [
   --market: string # e.g. ES
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<audio_preview_url: string, available_markets: list, chapter_number: int, description: string, duration_ms: int, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, is_playable: bool, languages: list, name: string, release_date: string, release_date_precision: string, restrictions: record, resume_point: record, type: string, uri: string>> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<audio_preview_url: string, available_markets: list, chapter_number: int, description: string, duration_ms: int, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, is_playable: bool, languages: list, name: string, release_date: string, release_date_precision: string, restrictions: record, resume_point: record, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -688,7 +712,7 @@ export def "get-categories" [
   --locale: string # e.g. sv_SE
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> record<categories: record<href: string, limit: int, next: string, offset: int, previous: string, total: int>> {
+]: nothing -> oneof<record<categories: record<href: string, limit: int, next: string, offset: int, previous: string, total: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -726,7 +750,7 @@ export def "get-a-category" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --country: string # e.g. SE
   --locale: string # e.g. sv_SE
-]: nothing -> record<href: string, icons: table<height: int, url: string, width: int>, id: string, name: string> {
+]: nothing -> oneof<record<href: string, icons: table<height: int, url: string, width: int>, id: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'category_id' must be non-empty" } }
@@ -766,7 +790,7 @@ export def "get-a-categories-playlists" [
   --country: string # e.g. SE
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> record<message: string, playlists: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>> {
+]: nothing -> oneof<record<message: string, playlists: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'category_id' must be non-empty" } }
@@ -807,7 +831,7 @@ export def "get-featured-playlists" [
   --timestamp: string # e.g. 2014-10-23T09:00:00
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> record<message: string, playlists: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>> {
+]: nothing -> oneof<record<message: string, playlists: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "locale" $locale "scalar") (serialize-qp "timestamp" $timestamp "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -845,7 +869,7 @@ export def "get-new-releases" [
   --country: string # e.g. SE
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> record<albums: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>> {
+]: nothing -> oneof<record<albums: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -882,7 +906,7 @@ export def "get-several-chapters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # required, e.g. 0IsXVP0JmcB2adSE338GkK,3ZXb8FKZGU0EHALYX6uCzU,0D5wENdkdwbqlrHoaJ9g29
   --market: string # e.g. ES
-]: nothing -> record<chapters: table<audio_preview_url: string, available_markets: list, chapter_number: int, description: string, duration_ms: int, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, is_playable: bool, languages: list, name: string, release_date: string, release_date_precision: string, restrictions: record, resume_point: record, type: string, uri: string, audiobook: record>> {
+]: nothing -> oneof<record<chapters: table<audio_preview_url: string, available_markets: list, chapter_number: int, description: string, duration_ms: int, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, is_playable: bool, languages: list, name: string, release_date: string, release_date_precision: string, restrictions: record, resume_point: record, type: string, uri: string, audiobook: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -920,7 +944,7 @@ export def "get-a-chapter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-]: nothing -> record<audio_preview_url: string, available_markets: list<string>, chapter_number: int, description: string, duration_ms: int, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: table<height: int, url: string, width: int>, is_playable: bool, languages: list<string>, name: string, release_date: string, release_date_precision: string, restrictions: record<reason: string>, resume_point: record<fully_played: bool, resume_position_ms: int>, type: string, uri: string, audiobook: record<authors: list<record>, available_markets: list<string>, copyrights: list<record>, description: string, edition: string, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: list<record>, languages: list<string>, media_type: string, name: string, narrators: list<record>, publisher: string, total_chapters: int, type: string, uri: string>> {
+]: nothing -> oneof<record<audio_preview_url: string, available_markets: list<string>, chapter_number: int, description: string, duration_ms: int, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: table<height: int, url: string, width: int>, is_playable: bool, languages: list<string>, name: string, release_date: string, release_date_precision: string, restrictions: record<reason: string>, resume_point: record<fully_played: bool, resume_position_ms: int>, type: string, uri: string, audiobook: record<authors: list<record>, available_markets: list<string>, copyrights: list<record>, description: string, edition: string, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: list<record>, languages: list<string>, media_type: string, name: string, narrators: list<record>, publisher: string, total_chapters: int, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -958,7 +982,7 @@ export def "get-multiple-episodes" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # required, e.g. 77o6BIVlYM3msb4MMIL1jH,0Q86acNRm6V9GYx55SXKwf
   --market: string # e.g. ES
-]: nothing -> record<episodes: table<audio_preview_url: string, description: string, duration_ms: int, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, is_externally_hosted: bool, is_playable: bool, language: string, languages: list, name: string, release_date: string, release_date_precision: string, restrictions: record, resume_point: record, type: string, uri: string, show: record>> {
+]: nothing -> oneof<record<episodes: table<audio_preview_url: string, description: string, duration_ms: int, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, is_externally_hosted: bool, is_playable: bool, language: string, languages: list, name: string, release_date: string, release_date_precision: string, restrictions: record, resume_point: record, type: string, uri: string, show: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -996,7 +1020,7 @@ export def "get-an-episode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-]: nothing -> record<audio_preview_url: string, description: string, duration_ms: int, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: table<height: int, url: string, width: int>, is_externally_hosted: bool, is_playable: bool, language: string, languages: list<string>, name: string, release_date: string, release_date_precision: string, restrictions: record<reason: string>, resume_point: record<fully_played: bool, resume_position_ms: int>, type: string, uri: string, show: record<available_markets: list<string>, copyrights: list<record>, description: string, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: list<record>, is_externally_hosted: bool, languages: list<string>, media_type: string, name: string, publisher: string, total_episodes: int, type: string, uri: string>> {
+]: nothing -> oneof<record<audio_preview_url: string, description: string, duration_ms: int, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: table<height: int, url: string, width: int>, is_externally_hosted: bool, is_playable: bool, language: string, languages: list<string>, name: string, release_date: string, release_date_precision: string, restrictions: record<reason: string>, resume_point: record<fully_played: bool, resume_position_ms: int>, type: string, uri: string, show: record<available_markets: list<string>, copyrights: list<record>, description: string, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: list<record>, is_externally_hosted: bool, languages: list<string>, media_type: string, name: string, publisher: string, total_episodes: int, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1032,7 +1056,7 @@ export def "get-available-markets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<markets: list<string>> {
+]: nothing -> oneof<record<markets: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/markets" $auth.query)
@@ -1066,7 +1090,7 @@ export def "get-current-users-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<country: string, display_name: string, email: string, explicit_content: record<filter_enabled: bool, filter_locked: bool>, external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, images: table<height: int, url: string, width: int>, product: string, type: string, uri: string> {
+]: nothing -> oneof<record<country: string, display_name: string, email: string, explicit_content: record<filter_enabled: bool, filter_locked: bool>, external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, images: table<height: int, url: string, width: int>, product: string, type: string, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me" $auth.query)
@@ -1144,7 +1168,7 @@ export def "get-users-saved-albums" [
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
   --market: string # e.g. ES
-]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<added_at: string, album: record>> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<added_at: string, album: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "market" $market "scalar")] | flatten | str join "&"
@@ -1221,7 +1245,7 @@ export def "check-users-saved-albums" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # required, e.g. 382ObEPsp2rxGrnsizN5TX,1A2GTWGtFfWp7KSQTwWOyo,2noRn2Aes5aoNVsU6iWThc
-]: nothing -> list<bool> {
+]: nothing -> oneof<list<bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -1296,7 +1320,7 @@ export def "get-users-saved-audiobooks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<authors: list, available_markets: list, copyrights: list, description: string, edition: string, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, languages: list, media_type: string, name: string, narrators: list, publisher: string, total_chapters: int, type: string, uri: string>> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<authors: list, available_markets: list, copyrights: list, description: string, edition: string, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, languages: list, media_type: string, name: string, narrators: list, publisher: string, total_chapters: int, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -1369,7 +1393,7 @@ export def "check-users-saved-audiobooks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # required, e.g. 18yVqkdbdRvS24c0Ilj2ci,1HGw3J3NxZO1TP1BTtVhpZ,7iHfbu1YPACw6oZPAFJtqe
-]: nothing -> list<bool> {
+]: nothing -> oneof<list<bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -1449,7 +1473,7 @@ export def "get-users-saved-episodes" [
   --market: string # e.g. ES
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<added_at: string, episode: record>> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<added_at: string, episode: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -1526,7 +1550,7 @@ export def "check-users-saved-episodes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # required, e.g. 77o6BIVlYM3msb4MMIL1jH,0Q86acNRm6V9GYx55SXKwf
-]: nothing -> list<bool> {
+]: nothing -> oneof<list<bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -1608,7 +1632,7 @@ export def "get-followed" [
   --type: string@type-completer-1 # required, e.g. artist
   --after: string # e.g. 0I2XqVXqHScXjHhk6AYYRe
   --limit: int # default: 20, e.g. 10
-]: nothing -> record<artists: record<cursors: record<after: string, before: string>, href: string, limit: int, next: string, total: int, items: list<record>>> {
+]: nothing -> oneof<record<artists: record<cursors: record<after: string, before: string>, href: string, limit: int, next: string, total: int, items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let type = ($type | default "artist")
@@ -1690,7 +1714,7 @@ export def "check-current-user-follows" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string@type-completer # required, e.g. artist
   --ids: string # required, e.g. 2CIMQHirSU0MQqyYHq0eOx,57dN52uHvrHOxijzpIgu3E,1vCWHaC5f2uS3yhpwWbIA6
-]: nothing -> list<bool> {
+]: nothing -> oneof<list<bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type == null) { error make --unspanned { msg: "required query parameter 'type' missing: pass --type" } }
@@ -1729,7 +1753,7 @@ export def "get-information-about-the-users-current-playback" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
   --additional-types: string
-]: nothing -> record<actions: record<interrupting_playback: bool, pausing: bool, resuming: bool, seeking: bool, skipping_next: bool, skipping_prev: bool, toggling_repeat_context: bool, toggling_repeat_track: bool, toggling_shuffle: bool, transferring_playback: bool>, context: record<external_urls: record<spotify: string>, href: string, type: string, uri: string>, currently_playing_type: string, device: record<id: string, is_active: bool, is_private_session: bool, is_restricted: bool, name: string, type: string, volume_percent: int>, is_playing: bool, item: any, progress_ms: int, repeat_state: string, shuffle_state: bool, timestamp: int> {
+]: nothing -> oneof<record<actions: record<interrupting_playback: bool, pausing: bool, resuming: bool, seeking: bool, skipping_next: bool, skipping_prev: bool, toggling_repeat_context: bool, toggling_repeat_track: bool, toggling_shuffle: bool, transferring_playback: bool>, context: record<external_urls: record<spotify: string>, href: string, type: string, uri: string>, currently_playing_type: string, device: record<id: string, is_active: bool, is_private_session: bool, is_restricted: bool, name: string, type: string, volume_percent: int>, is_playing: bool, item: any, progress_ms: int, repeat_state: string, shuffle_state: bool, timestamp: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "additional_types" $additional_types "scalar")] | flatten | str join "&"
@@ -1805,7 +1829,7 @@ export def "get-the-users-currently-playing-track" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
   --additional-types: string
-]: nothing -> record<actions: record<interrupting_playback: bool, pausing: bool, resuming: bool, seeking: bool, skipping_next: bool, skipping_prev: bool, toggling_repeat_context: bool, toggling_repeat_track: bool, toggling_shuffle: bool, transferring_playback: bool>, context: record<external_urls: record<spotify: string>, href: string, type: string, uri: string>, currently_playing_type: string, device: record<id: string, is_active: bool, is_private_session: bool, is_restricted: bool, name: string, type: string, volume_percent: int>, is_playing: bool, item: any, progress_ms: int, repeat_state: string, shuffle_state: bool, timestamp: int> {
+]: nothing -> oneof<record<actions: record<interrupting_playback: bool, pausing: bool, resuming: bool, seeking: bool, skipping_next: bool, skipping_prev: bool, toggling_repeat_context: bool, toggling_repeat_track: bool, toggling_shuffle: bool, transferring_playback: bool>, context: record<external_urls: record<spotify: string>, href: string, type: string, uri: string>, currently_playing_type: string, device: record<id: string, is_active: bool, is_private_session: bool, is_restricted: bool, name: string, type: string, volume_percent: int>, is_playing: bool, item: any, progress_ms: int, repeat_state: string, shuffle_state: bool, timestamp: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "additional_types" $additional_types "scalar")] | flatten | str join "&"
@@ -1840,7 +1864,7 @@ export def "get-a-users-available-devices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<devices: table<id: string, is_active: bool, is_private_session: bool, is_restricted: bool, name: string, type: string, volume_percent: int>> {
+]: nothing -> oneof<record<devices: table<id: string, is_active: bool, is_private_session: bool, is_restricted: bool, name: string, type: string, volume_percent: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/player/devices" $auth.query)
@@ -2025,7 +2049,7 @@ export def "get-queue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<currently_playing: any, queue: list<any>> {
+]: nothing -> oneof<record<currently_playing: any, queue: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/player/queue" $auth.query)
@@ -2100,7 +2124,7 @@ export def "get-recently-played" [
   --limit: int # default: 20, e.g. 10
   --after: int # e.g. 1484811043508
   --before: int
-]: nothing -> record<cursors: record<after: string, before: string>, href: string, limit: int, next: string, total: int, items: table<context: record, played_at: string, track: record>> {
+]: nothing -> oneof<record<cursors: record<after: string, before: string>, href: string, limit: int, next: string, total: int, items: table<context: record, played_at: string, track: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "before" $before "scalar")] | flatten | str join "&"
@@ -2289,7 +2313,7 @@ export def "get-a-list-of-current-users-playlists" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<collaborative: bool, description: string, external_urls: record, href: string, id: string, images: list, name: string, owner: record, public: bool, snapshot_id: string, tracks: record, type: string, uri: string>> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<collaborative: bool, description: string, external_urls: record, href: string, id: string, images: list, name: string, owner: record, public: bool, snapshot_id: string, tracks: record, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2364,7 +2388,7 @@ export def "get-users-saved-shows" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<added_at: string, show: record>> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<added_at: string, show: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2437,7 +2461,7 @@ export def "check-users-saved-shows" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # required, e.g. 5CfCWKI5pZ28U0uOzXkDHe,5as3aKmN2k11yfDDDSrvaZ
-]: nothing -> list<bool> {
+]: nothing -> oneof<list<bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -2477,7 +2501,7 @@ export def "get-users-top-artists-and-tracks" [
   --time-range: string # default: medium_term, e.g. medium_term
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -2557,7 +2581,7 @@ export def "get-users-saved-tracks" [
   --market: string # e.g. ES
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<added_at: string, track: record>> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<added_at: string, track: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "market" $market "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2634,7 +2658,7 @@ export def "check-users-saved-tracks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # required, e.g. 7ouMYWpwJ422jRcDASZB7P,4VqPOruhp5EdPBeR92t6lQ,2takcwOaAZWiXQijPHIx7B
-]: nothing -> list<bool> {
+]: nothing -> oneof<list<bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -2674,7 +2698,7 @@ export def "get-playlist" [
   --market: string # e.g. ES
   --fields: string # e.g. items(added_by.id,track(name,href,album(name,href)))
   --additional-types: string
-]: nothing -> record<collaborative: bool, description: string, external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, images: table<height: int, url: string, width: int>, name: string, owner: record<external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, type: string, uri: string, display_name: string>, public: bool, snapshot_id: string, tracks: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, type: string, uri: string> {
+]: nothing -> oneof<record<collaborative: bool, description: string, external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, images: table<height: int, url: string, width: int>, name: string, owner: record<external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, type: string, uri: string, display_name: string>, public: bool, snapshot_id: string, tracks: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, type: string, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
@@ -2831,7 +2855,7 @@ export def "check-if-user-follows-playlist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string # required, e.g. jmperezperez,thelinmichael,wizzler
-]: nothing -> list<bool> {
+]: nothing -> oneof<list<bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
@@ -2869,7 +2893,7 @@ export def "get-playlist-cover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<height: int, url: string, width: int> {
+]: nothing -> oneof<table<height: int, url: string, width: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
@@ -2930,7 +2954,6 @@ export def "upload-custom-playlist-cover" [
 #
 # DELETE /playlists/{playlist_id}/tracks
 # operationId: remove-tracks-playlist
-# --tracks item shape: {uri?: string}
 export def "remove-tracks-playlist" [
   playlist_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2944,7 +2967,7 @@ export def "remove-tracks-playlist" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --snapshot-id: string # The playlist's snapshot ID against which you want to make the changes. The API will validate that the specified items exist and in the specified positions and make the changes, even if more recent changes have been made to the playlist.
   tracks: list # An array of objects containing [Spotify URIs](https://developer.spotify.com/documentation/web-api/#spotify-uris-and-ids) of the tracks or episodes to remove. For example: `{ "tracks": [{ "uri": "spotify:track:4iV5W9uYEdYUVa79Axb7Rh" },{ "uri": "spotify:track:1301WleyT98MSxVHPZCA6M" }] }`. A maximum of 100 objects can be sent at once. — item shape: {uri?: string}
-]: any -> record<snapshot_id: string> {
+]: any -> oneof<record<snapshot_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2988,7 +3011,7 @@ export def "get-playlists-tracks" [
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
   --additional-types: string
-]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<added_at: string, added_by: record, is_local: bool, track: any>> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<added_at: string, added_by: record, is_local: bool, track: any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
@@ -3029,7 +3052,7 @@ export def "add-tracks-to-playlist" [
   --uris: string # e.g. spotify:track:4iV5W9uYEdYUVa79Axb7Rh,spotify:track:1301WleyT98MSxVHPZCA6M
   --position-body: int # The position to insert the items, a zero-based index. For example, to insert the items in the first position: `position=0` ; to insert the items in the third position: `position=2`. If omitted, the items will be appended to the playlist. Items are added in the order they appear in the uris array. For example: `{"uris": ["spotify:track:4iV5W9uYEdYUVa79Axb7Rh","spotify:track:1301WleyT98MSxVHPZCA6M"], "position": 3}` (body field)
   --uris-body: list<string> # A JSON array of the [Spotify URIs](/documentation/web-api/#spotify-uris-and-ids) to add. For example: `{"uris": ["spotify:track:4iV5W9uYEdYUVa79Axb7Rh","spotify:track:1301WleyT98MSxVHPZCA6M", "spotify:episode:512ojhOuo1ktJprKbVcKyQ"]}`A maximum of 100 items can be added in one request. _**Note**: if the `uris` parameter is present in the query string, any URIs listed here in the body will be ignored._ (body field)
-]: any -> record<snapshot_id: string> {
+]: any -> oneof<record<snapshot_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3075,7 +3098,7 @@ export def "reorder-or-replace-playlists-tracks" [
   --range-start: int # The position of the first item to be reordered.
   --snapshot-id: string # The playlist's snapshot ID against which you want to make the changes.
   --uris-body: list<string> # (body field)
-]: any -> record<snapshot_id: string> {
+]: any -> oneof<record<snapshot_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3161,7 +3184,7 @@ export def "get-recommendations" [
   --min-valence: float
   --max-valence: float
   --target-valence: float
-]: nothing -> record<seeds: table<afterFilteringSize: int, afterRelinkingSize: int, href: string, id: string, initialPoolSize: int, type: string>, tracks: table<album: record, artists: list, available_markets: list, disc_number: int, duration_ms: int, explicit: bool, external_ids: record, external_urls: record, href: string, id: string, is_local: bool, is_playable: bool, linked_from: record, name: string, popularity: int, preview_url: string, restrictions: record, track_number: int, type: string, uri: string>> {
+]: nothing -> oneof<record<seeds: table<afterFilteringSize: int, afterRelinkingSize: int, href: string, id: string, initialPoolSize: int, type: string>, tracks: table<album: record, artists: list, available_markets: list, disc_number: int, duration_ms: int, explicit: bool, external_ids: record, external_urls: record, href: string, id: string, is_local: bool, is_playable: bool, linked_from: record, name: string, popularity: int, preview_url: string, restrictions: record, track_number: int, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($seed_artists == null) { error make --unspanned { msg: "required query parameter 'seed_artists' missing: pass --seed-artists" } }
@@ -3199,7 +3222,7 @@ export def "get-recommendation-genres" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<genres: list<string>> {
+]: nothing -> oneof<record<genres: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/recommendations/available-genre-seeds" $auth.query)
@@ -3239,7 +3262,7 @@ export def "search" [
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
   --include-external: string@include-external-completer
-]: nothing -> record<albums: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, artists: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, audiobooks: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, episodes: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, playlists: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, shows: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, tracks: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>> {
+]: nothing -> oneof<record<albums: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, artists: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, audiobooks: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, episodes: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, playlists: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, shows: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, tracks: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($q == null) { error make --unspanned { msg: "required query parameter 'q' missing: pass --q" } }
@@ -3278,7 +3301,7 @@ export def "get-multiple-shows" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
   --ids: string # required, e.g. 5CfCWKI5pZ28U0uOzXkDHe,5as3aKmN2k11yfDDDSrvaZ
-]: nothing -> record<shows: table<available_markets: list, copyrights: list, description: string, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, is_externally_hosted: bool, languages: list, media_type: string, name: string, publisher: string, total_episodes: int, type: string, uri: string>> {
+]: nothing -> oneof<record<shows: table<available_markets: list, copyrights: list, description: string, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, is_externally_hosted: bool, languages: list, media_type: string, name: string, publisher: string, total_episodes: int, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -3316,7 +3339,7 @@ export def "get-a-show" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-]: nothing -> record<available_markets: list<string>, copyrights: table<text: string, type: string>, description: string, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: table<height: int, url: string, width: int>, is_externally_hosted: bool, languages: list<string>, media_type: string, name: string, publisher: string, total_episodes: int, type: string, uri: string, episodes: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>> {
+]: nothing -> oneof<record<available_markets: list<string>, copyrights: table<text: string, type: string>, description: string, explicit: bool, external_urls: record<spotify: string>, href: string, html_description: string, id: string, images: table<height: int, url: string, width: int>, is_externally_hosted: bool, languages: list<string>, media_type: string, name: string, publisher: string, total_episodes: int, type: string, uri: string, episodes: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3356,7 +3379,7 @@ export def "get-a-shows-episodes" [
   --market: string # e.g. ES
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<audio_preview_url: string, description: string, duration_ms: int, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, is_externally_hosted: bool, is_playable: bool, language: string, languages: list, name: string, release_date: string, release_date_precision: string, restrictions: record, resume_point: record, type: string, uri: string>> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<audio_preview_url: string, description: string, duration_ms: int, explicit: bool, external_urls: record, href: string, html_description: string, id: string, images: list, is_externally_hosted: bool, is_playable: bool, language: string, languages: list, name: string, release_date: string, release_date_precision: string, restrictions: record, resume_point: record, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3394,7 +3417,7 @@ export def "get-several-tracks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
   --ids: string # required, e.g. 7ouMYWpwJ422jRcDASZB7P,4VqPOruhp5EdPBeR92t6lQ,2takcwOaAZWiXQijPHIx7B
-]: nothing -> record<tracks: table<album: record, artists: list, available_markets: list, disc_number: int, duration_ms: int, explicit: bool, external_ids: record, external_urls: record, href: string, id: string, is_local: bool, is_playable: bool, linked_from: record, name: string, popularity: int, preview_url: string, restrictions: record, track_number: int, type: string, uri: string>> {
+]: nothing -> oneof<record<tracks: table<album: record, artists: list, available_markets: list, disc_number: int, duration_ms: int, explicit: bool, external_ids: record, external_urls: record, href: string, id: string, is_local: bool, is_playable: bool, linked_from: record, name: string, popularity: int, preview_url: string, restrictions: record, track_number: int, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ids == null) { error make --unspanned { msg: "required query parameter 'ids' missing: pass --ids" } }
@@ -3432,7 +3455,7 @@ export def "get-track" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --market: string # e.g. ES
-]: nothing -> record<album: record<album_type: string, available_markets: list<string>, copyrights: list<record>, external_ids: record<ean: string, isrc: string, upc: string>, external_urls: record<spotify: string>, genres: list<string>, href: string, id: string, images: list<record>, label: string, name: string, popularity: int, release_date: string, release_date_precision: string, restrictions: record<reason: string>, total_tracks: int, type: string, uri: string, album_group: string, artists: list<record>>, artists: table<external_urls: record, followers: record, genres: list, href: string, id: string, images: list, name: string, popularity: int, type: string, uri: string>, available_markets: list<string>, disc_number: int, duration_ms: int, explicit: bool, external_ids: record<ean: string, isrc: string, upc: string>, external_urls: record<spotify: string>, href: string, id: string, is_local: bool, is_playable: bool, linked_from: record, name: string, popularity: int, preview_url: string, restrictions: record<reason: string>, track_number: int, type: string, uri: string> {
+]: nothing -> oneof<record<album: record<album_type: string, available_markets: list<string>, copyrights: list<record>, external_ids: record<ean: string, isrc: string, upc: string>, external_urls: record<spotify: string>, genres: list<string>, href: string, id: string, images: list<record>, label: string, name: string, popularity: int, release_date: string, release_date_precision: string, restrictions: record<reason: string>, total_tracks: int, type: string, uri: string, album_group: string, artists: list<record>>, artists: table<external_urls: record, followers: record, genres: list, href: string, id: string, images: list, name: string, popularity: int, type: string, uri: string>, available_markets: list<string>, disc_number: int, duration_ms: int, explicit: bool, external_ids: record<ean: string, isrc: string, upc: string>, external_urls: record<spotify: string>, href: string, id: string, is_local: bool, is_playable: bool, linked_from: record, name: string, popularity: int, preview_url: string, restrictions: record<reason: string>, track_number: int, type: string, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3469,7 +3492,7 @@ export def "get-users-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<display_name: string, external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, images: table<height: int, url: string, width: int>, type: string, uri: string> {
+]: nothing -> oneof<record<display_name: string, external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, images: table<height: int, url: string, width: int>, type: string, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -3507,7 +3530,7 @@ export def "get-list-users-playlists" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # default: 20, e.g. 10
   --offset: int # default: 0, e.g. 5
-]: nothing -> record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<collaborative: bool, description: string, external_urls: record, href: string, id: string, images: list, name: string, owner: record, public: bool, snapshot_id: string, tracks: record, type: string, uri: string>> {
+]: nothing -> oneof<record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: table<collaborative: bool, description: string, external_urls: record, href: string, id: string, images: list, name: string, owner: record, public: bool, snapshot_id: string, tracks: record, type: string, uri: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -3548,7 +3571,7 @@ export def "create-playlist" [
   --description: string # value for playlist description as displayed in Spotify Clients and in the Web API.
   name: string # The name for the new playlist, for example `"Your Coolest Playlist"`. This name does not need to be unique; a user may have several playlists with the same name.
   --public: oneof<nothing, bool> # Defaults to `true`. If `true` the playlist will be public, if `false` it will be private. To be able to create private playlists, the user must have granted the `playlist-modify-private` [scope](/documentation/general/guides/authorization-guide/#list-of-scopes)
-]: any -> record<collaborative: bool, description: string, external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, images: table<height: int, url: string, width: int>, name: string, owner: record<external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, type: string, uri: string, display_name: string>, public: bool, snapshot_id: string, tracks: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, type: string, uri: string> {
+]: any -> oneof<record<collaborative: bool, description: string, external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, images: table<height: int, url: string, width: int>, name: string, owner: record<external_urls: record<spotify: string>, followers: record<href: string, total: int>, href: string, id: string, type: string, uri: string, display_name: string>, public: bool, snapshot_id: string, tracks: record<href: string, limit: int, next: string, offset: int, previous: string, total: int, items: list<record>>, type: string, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def key-type-completer [] { ["Primary" "Secondary"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assets-list-query" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["assets-list-query" "assets-create" "assets-delete" "assets-query-by-id" "assets-patch" "profiles-list-query" "profiles-create" "profiles-query-by-id" "ml-models-list-query" "ml-models-register" "ml-models-delete" "ml-models-query-by-id" "ml-models-patch" "ml-models-get-metrics" "operations-get" "services-list-query" "services-create" "services-delete" "services-query-by-id" "services-patch" "services-list-service-keys" "services-regenerate-service-keys" "services-get-service-token" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -166,7 +190,7 @@ export def "assets-list-query" [
   --tags: string # A set of tags with which to filter the returned models. It is a comma separated string of tags key or tags key=value Example: tagKey1,tagKey2,tagKey3=value3
   --properties: string # A set of properties with which to filter the returned models. It is a comma separated string of properties key and/or properties key=value Example: propKey1,propKey2,propKey3=value3
   --orderby: string@orderby-completer # An option for specifying how to order the list. (default: CreatedAtDesc)
-]: nothing -> record<nextLink: string, value: table<artifacts: list, createdTime: string, description: string, id: string, kvTags: record, meta: record, name: string, properties: record, runid: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<artifacts: list, createdTime: string, description: string, id: string, kvTags: record, meta: record, name: string, properties: record, runid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -194,7 +218,6 @@ export def "assets-list-query" [
 #
 # POST /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/assets
 # operationId: Assets_Create
-# --artifacts item shape: {id?: string, prefix?: string}
 export def "assets-create" [
   subscription_id: string
   resource_group: string
@@ -216,7 +239,7 @@ export def "assets-create" [
   name: string # The name of the Asset.
   --properties: record # The Asset property dictionary. Properties are immutable.
   --runid: string # The RunId associated with this Asset.
-]: any -> record<artifacts: table<id: string, prefix: string>, createdTime: string, description: string, id: string, kvTags: record, meta: record, name: string, properties: record, runid: string> {
+]: any -> oneof<record<artifacts: table<id: string, prefix: string>, createdTime: string, description: string, id: string, kvTags: record, meta: record, name: string, properties: record, runid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -302,7 +325,7 @@ export def "assets-query-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<artifacts: table<id: string, prefix: string>, createdTime: string, description: string, id: string, kvTags: record, meta: record, name: string, properties: record, runid: string> {
+]: nothing -> oneof<record<artifacts: table<id: string, prefix: string>, createdTime: string, description: string, id: string, kvTags: record, meta: record, name: string, properties: record, runid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -345,7 +368,7 @@ export def "assets-patch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<artifacts: table<id: string, prefix: string>, createdTime: string, description: string, id: string, kvTags: record, meta: record, name: string, properties: record, runid: string> {
+]: any -> oneof<record<artifacts: table<id: string, prefix: string>, createdTime: string, description: string, id: string, kvTags: record, meta: record, name: string, properties: record, runid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -397,7 +420,7 @@ export def "profiles-list-query" [
   --count: int # The number of items to retrieve in a page. (format: int32)
   --skip-token: string # The continuation token to retrieve the next page.
   --order-by: string@order-by-completer # The option to order the response. (default: CreatedAtDesc)
-]: nothing -> record<nextLink: string, value: table<createdTime: string, description: string, error: record, imageId: string, inputData: string, kvTags: record, name: string, profileRunResult: string, profilingErrorLogs: string, properties: record, recommendationLatencyInMs: float, recommendedCpu: float, recommendedMemoryInGB: float, state: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<createdTime: string, description: string, error: record, imageId: string, inputData: string, kvTags: record, name: string, profileRunResult: string, profilingErrorLogs: string, properties: record, recommendationLatencyInMs: float, recommendedCpu: float, recommendedMemoryInGB: float, state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -491,7 +514,7 @@ export def "profiles-query-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdTime: string, description: string, error: record<code: string, details: list<record>, message: string, statusCode: int>, imageId: string, inputData: string, kvTags: record, name: string, profileRunResult: string, profilingErrorLogs: string, properties: record, recommendationLatencyInMs: float, recommendedCpu: float, recommendedMemoryInGB: float, state: string> {
+]: nothing -> oneof<record<createdTime: string, description: string, error: record<code: string, details: list<record>, message: string, statusCode: int>, imageId: string, inputData: string, kvTags: record, name: string, profileRunResult: string, profilingErrorLogs: string, properties: record, recommendationLatencyInMs: float, recommendedCpu: float, recommendedMemoryInGB: float, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -542,7 +565,7 @@ export def "ml-models-list-query" [
   --properties: string # A set of properties with which to filter the returned models. It is a comma separated string of properties key and/or properties key=value Example: propKey1,propKey2,propKey3=value3
   --run-id: string # The runId which created the model.
   --order-by: string@order-by-completer # An option to specify how the models are ordered in the response. (default: CreatedAtDesc)
-]: nothing -> record<nextLink: string, value: table<createdTime: string, datasets: list, description: string, experimentName: string, framework: string, frameworkVersion: string, id: string, kvTags: record, mimeType: string, modifiedTime: string, name: string, parentModelId: string, properties: record, runId: string, unpack: bool, url: string, version: int>> {
+]: nothing -> oneof<record<nextLink: string, value: table<createdTime: string, datasets: list, description: string, experimentName: string, framework: string, frameworkVersion: string, id: string, kvTags: record, mimeType: string, modifiedTime: string, name: string, parentModelId: string, properties: record, runId: string, unpack: bool, url: string, version: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -570,7 +593,6 @@ export def "ml-models-list-query" [
 #
 # POST /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/models
 # operationId: MLModels_Register
-# --datasets item shape: {id?: string, name?: string}
 export def "ml-models-register" [
   subscription_id: string
   resource_group: string
@@ -599,7 +621,7 @@ export def "ml-models-register" [
   --unpack: oneof<nothing, bool> # Indicates whether we need to unpack the Model during docker Image creation.
   url: string # The URL of the Model. Usually a SAS URL.
   --version: int # The Model version assigned by Model Management Service. (format: int64, e.g. 1)
-]: any -> record<createdTime: string, datasets: table<id: string, name: string>, description: string, experimentName: string, framework: string, frameworkVersion: string, id: string, kvTags: record, mimeType: string, modifiedTime: string, name: string, parentModelId: string, properties: record, runId: string, unpack: bool, url: string, version: int> {
+]: any -> oneof<record<createdTime: string, datasets: table<id: string, name: string>, description: string, experimentName: string, framework: string, frameworkVersion: string, id: string, kvTags: record, mimeType: string, modifiedTime: string, name: string, parentModelId: string, properties: record, runId: string, unpack: bool, url: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -685,7 +707,7 @@ export def "ml-models-query-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdTime: string, datasets: table<id: string, name: string>, description: string, experimentName: string, framework: string, frameworkVersion: string, id: string, kvTags: record, mimeType: string, modifiedTime: string, name: string, parentModelId: string, properties: record, runId: string, unpack: bool, url: string, version: int> {
+]: nothing -> oneof<record<createdTime: string, datasets: table<id: string, name: string>, description: string, experimentName: string, framework: string, frameworkVersion: string, id: string, kvTags: record, mimeType: string, modifiedTime: string, name: string, parentModelId: string, properties: record, runId: string, unpack: bool, url: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -728,7 +750,7 @@ export def "ml-models-patch" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<createdTime: string, datasets: table<id: string, name: string>, description: string, experimentName: string, framework: string, frameworkVersion: string, id: string, kvTags: record, mimeType: string, modifiedTime: string, name: string, parentModelId: string, properties: record, runId: string, unpack: bool, url: string, version: int> {
+]: any -> oneof<record<createdTime: string, datasets: table<id: string, name: string>, description: string, experimentName: string, framework: string, frameworkVersion: string, id: string, kvTags: record, mimeType: string, modifiedTime: string, name: string, parentModelId: string, properties: record, runId: string, unpack: bool, url: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -775,7 +797,7 @@ export def "ml-models-get-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # The start date from which to retrieve metrics, ISO 8601 literal format.
   --end-date: string # The end date from which to retrieve metrics, ISO 8601 literal format.
-]: nothing -> record<deploymentSummary: record<successfulDeployments: int, unsuccessfulDeployments: int>, endTime: string, startTime: string> {
+]: nothing -> oneof<record<deploymentSummary: record<successfulDeployments: int, unsuccessfulDeployments: int>, endTime: string, startTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -818,7 +840,7 @@ export def "operations-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdTime: string, endTime: string, error: record<code: string, details: list<record>, message: string, statusCode: int>, id: string, operationDetails: record<subOperationState: string, subOperationType: string>, operationLog: string, operationType: string, parentRequestId: string, resourceLocation: string, state: string> {
+]: nothing -> oneof<record<createdTime: string, endTime: string, error: record<code: string, details: list<record>, message: string, statusCode: int>, id: string, operationDetails: record<subOperationState: string, subOperationType: string>, operationLog: string, operationType: string, parentRequestId: string, resourceLocation: string, state: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -871,7 +893,7 @@ export def "services-list-query" [
   --properties: string # A set of properties with which to filter the returned models. It is a comma separated string of properties key and/or properties key=value Example: propKey1,propKey2,propKey3=value3
   --expand: oneof<nothing, bool> # Set to True to include Model details. (default: false)
   --orderby: string@orderby-completer # The option to order the response. (default: UpdatedAtDesc)
-]: nothing -> record<nextLink: string, value: table<computeType: string, createdTime: string, deploymentType: string, description: string, error: record, id: string, kvTags: record, name: string, operationId: string, properties: record, state: string, updatedTime: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<computeType: string, createdTime: string, deploymentType: string, description: string, error: record, id: string, kvTags: record, name: string, operationId: string, properties: record, state: string, updatedTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -900,8 +922,6 @@ export def "services-list-query" [
 # POST /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services
 # Discriminator (request): computeType
 # operationId: Services_Create
-# --environmentImageRequest shape: {assets?: list, driverProgram?: string, environment?: record, modelIds?: list<string>}
-# --keys shape: {primaryKey?: string, secondaryKey?: string}
 export def "services-create" [
   subscription_id: string
   resource_group: string
@@ -996,6 +1016,7 @@ export def "services-delete" [
 # Get a Service.
 #
 # GET /modelmanagement/v1.0/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.MachineLearningServices/workspaces/{workspace}/services/{id}
+# Discriminator (response): computeType
 # operationId: Services_QueryById
 export def "services-query-by-id" [
   subscription_id: string
@@ -1012,7 +1033,7 @@ export def "services-query-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: oneof<nothing, bool> # Set to True to include Model details. (default: false)
-]: nothing -> record<computeType: string, createdTime: string, deploymentType: string, description: string, error: record<code: string, details: list<record>, message: string, statusCode: int>, id: string, kvTags: record, name: string, operationId: string, properties: record, state: string, updatedTime: string> {
+]: nothing -> oneof<record<computeType: string, createdTime: string, deploymentType: string, description: string, error: record<code: string, details: list<record>, message: string, statusCode: int>, id: string, kvTags: record, name: string, operationId: string, properties: record, state: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1101,7 +1122,7 @@ export def "services-list-service-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<primaryKey: string, secondaryKey: string> {
+]: nothing -> oneof<record<primaryKey: string, secondaryKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1145,7 +1166,7 @@ export def "services-regenerate-service-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key-type: int@key-type-completer # Specification for which type of key to generate. (format: int32, e.g. Primary)
   --key-value: string # The value the key is set to.
-]: any -> record<primaryKey: string, secondaryKey: string> {
+]: any -> oneof<record<primaryKey: string, secondaryKey: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1190,7 +1211,7 @@ export def "services-get-service-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accessToken: string, expiryOn: int, refreshAfter: int, tokenType: string> {
+]: nothing -> oneof<record<accessToken: string, expiryOn: int, refreshAfter: int, tokenType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }

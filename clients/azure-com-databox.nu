@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -127,9 +151,9 @@ def validation-category-completer [] { ["JobCreationValidation"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["operations-list" "jobs-list" "service-list-available-skus" "service-region-configuration" "service-validate-address" "service-validate-inputs" "jobs-list-by-resource-group" "jobs-delete" "jobs-get" "jobs-update" "jobs-create" "jobs-book-shipment-pick-up" "jobs-cancel" "jobs-list-credentials" "service-list-available-skus-by-resource-group" "service-validate-inputs-by-resource-group" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -162,7 +186,7 @@ export def "operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API Version (required)
-]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -201,7 +225,7 @@ export def "jobs-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API Version (required)
   --skip-token: string # $skipToken is supported on Get list of jobs, which provides the next page in the list of jobs.
-]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string, location: string, sku: record, tags: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, name: string, properties: record, type: string, location: string, sku: record, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -245,7 +269,7 @@ export def "service-list-available-skus" [
   --body-location: string # Location for data transfer. For locations check: https://management.azure.com/subscriptions/SUBSCRIPTIONID/locations?api-version=2018-01-01
   --sku-names: list<string> # Sku Names to filter for available skus
   transfer_type: string@transfer-type-completer # Type of the transfer.
-]: any -> record<nextLink: string, value: table<enabled: bool, properties: record, sku: record>> {
+]: any -> oneof<record<nextLink: string, value: table<enabled: bool, properties: record, sku: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -277,8 +301,6 @@ export def "service-list-available-skus" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataBox/locations/{location}/regionConfiguration
 # operationId: Service_RegionConfiguration
-# --scheduleAvailabilityRequest shape: {skuName: "DataBox"|"DataBoxDisk"|"DataBoxHeavy", storageLocation: string}
-# --transportAvailabilityRequest shape: {skuName?: "DataBox"|"DataBoxDisk"|"DataBoxHeavy"}
 export def "service-region-configuration" [
   subscription_id: string
   location: string
@@ -294,7 +316,7 @@ export def "service-region-configuration" [
   --api-version: string # The API Version (required)
   --schedule-availability-request: record # Request body to get the availability for scheduling orders. — shape: {skuName: "DataBox"|"DataBoxDisk"|"DataBoxHeavy", storageLocation: string}
   --transport-availability-request: record # Request body to get the transport availability for given sku. — shape: {skuName?: "DataBox"|"DataBoxDisk"|"DataBoxHeavy"}
-]: any -> record<scheduleAvailabilityResponse: record<availableDates: list<string>>, transportAvailabilityResponse: record<transportAvailabilityDetails: list<record>>> {
+]: any -> oneof<record<scheduleAvailabilityResponse: record<availableDates: list<string>>, transportAvailabilityResponse: record<transportAvailabilityDetails: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -326,8 +348,6 @@ export def "service-region-configuration" [
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataBox/locations/{location}/validateAddress
 # DEPRECATED
 # operationId: Service_ValidateAddress
-# --shippingAddress shape: {addressType?: "None"|"Residential"|"Commercial", city?: string, companyName?: string, country: string, postalCode: string, stateOrProvince?: string, streetAddress1: string, streetAddress2?: string, streetAddress3?: string, zipExtendedCode?: string}
-# --transportPreferences shape: {preferredShipmentType: "CustomerManaged"|"MicrosoftManaged"}
 @deprecated
 export def "service-validate-address" [
   subscription_id: string
@@ -346,7 +366,7 @@ export def "service-validate-address" [
   shipping_address: record # Shipping address where customer wishes to receive the device. — shape: {addressType?: "None"|"Residential"|"Commercial", city?: string, companyName?: string, country: string, postalCode: string, stateOrProvince?: string, streetAddress1: string, streetAddress2?: string, streetAddress3?: string, zipExtendedCode?: string}
   --transport-preferences: record # Preferences related to the shipment logistics of the sku — shape: {preferredShipmentType: "CustomerManaged"|"MicrosoftManaged"}
   validation_type: string@validation-type-completer # Identifies the type of validation request.
-]: any -> record<properties: record<alternateAddresses: list<record>, validationStatus: string, error: record<code: string, message: string>, validationType: string>> {
+]: any -> oneof<record<properties: record<alternateAddresses: list<record>, validationStatus: string, error: record<code: string, message: string>, validationType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -378,7 +398,6 @@ export def "service-validate-address" [
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DataBox/locations/{location}/validateInputs
 # Discriminator (request): validationCategory
 # operationId: Service_ValidateInputs
-# --individualRequestDetails item shape: {validationType: "ValidateAddress"|"ValidateDataDestinationDetails"|"ValidateSubscriptionIsAllowedToCreateJob"|"ValidatePreferences"|"ValidateCreateOrderLimit"|"ValidateSkuAvailability"}
 export def "service-validate-inputs" [
   subscription_id: string
   location: string
@@ -394,7 +413,7 @@ export def "service-validate-inputs" [
   --api-version: string # The API Version (required)
   individual_request_details: list # List of request details contain validationType and its request as key and value respectively. — item shape: {validationType: "ValidateAddress"|"ValidateDataDestinationDetails"|"ValidateSubscriptionIsAllowedToCreateJob"|"ValidatePreferences"|"ValidateCreateOrderLimit"|"ValidateSkuAvailability"}
   validation_category: string@validation-category-completer # Identify the nature of validation.
-]: any -> record<properties: record<individualResponseDetails: list<record>, status: string>> {
+]: any -> oneof<record<properties: record<individualResponseDetails: list<record>, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -439,7 +458,7 @@ export def "jobs-list-by-resource-group" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API Version (required)
   --skip-token: string # $skipToken is supported on Get list of jobs, which provides the next page in the list of jobs.
-]: nothing -> record<nextLink: string, value: table<id: string, name: string, properties: record, type: string, location: string, sku: record, tags: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, name: string, properties: record, type: string, location: string, sku: record, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -525,7 +544,7 @@ export def "jobs-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API Version (required)
   --expand: string # $expand is supported on details parameter for job, which provides details on the job stages.
-]: nothing -> record<id: string, name: string, properties: record<cancellationReason: string, deliveryInfo: record<scheduledDateTime: string>, deliveryType: string, details: record<chainOfCustodySasKey: string, contactDetails: record, copyLogDetails: list, deliveryPackage: record, destinationAccountDetails: list, errorDetails: list, expectedDataSizeInTerabytes: int, jobDetailsType: string, jobStages: list, preferences: record, returnPackage: record, reverseShipmentLabelSasKey: string, shippingAddress: record>, error: record<code: string, message: string>, isCancellable: bool, isCancellableWithoutFee: bool, isDeletable: bool, isShippingAddressEditable: bool, startTime: string, status: string>, type: string, location: string, sku: record<displayName: string, family: string, name: string>, tags: record> {
+]: nothing -> oneof<record<id: string, name: string, properties: record<cancellationReason: string, deliveryInfo: record<scheduledDateTime: string>, deliveryType: string, details: record<chainOfCustodySasKey: string, contactDetails: record, copyLogDetails: list, deliveryPackage: record, destinationAccountDetails: list, errorDetails: list, expectedDataSizeInTerabytes: int, jobDetailsType: string, jobStages: list, preferences: record, returnPackage: record, reverseShipmentLabelSasKey: string, shippingAddress: record>, error: record<code: string, message: string>, isCancellable: bool, isCancellableWithoutFee: bool, isDeletable: bool, isShippingAddressEditable: bool, startTime: string, status: string>, type: string, location: string, sku: record<displayName: string, family: string, name: string>, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -554,7 +573,6 @@ export def "jobs-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBox/jobs/{jobName}
 # operationId: Jobs_Update
-# --properties shape: {destinationAccountDetails?: list, details?: record}
 export def "jobs-update" [
   subscription_id: string
   resource_group_name: string
@@ -572,7 +590,7 @@ export def "jobs-update" [
   --if-match: string # Defines the If-Match condition. The patch will be performed only if the ETag of the job on the server matches this value.
   --properties: record # Job Properties for update — shape: {destinationAccountDetails?: list, details?: record}
   --tags: record # The list of key value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups).
-]: any -> record<id: string, name: string, properties: record<cancellationReason: string, deliveryInfo: record<scheduledDateTime: string>, deliveryType: string, details: record<chainOfCustodySasKey: string, contactDetails: record, copyLogDetails: list, deliveryPackage: record, destinationAccountDetails: list, errorDetails: list, expectedDataSizeInTerabytes: int, jobDetailsType: string, jobStages: list, preferences: record, returnPackage: record, reverseShipmentLabelSasKey: string, shippingAddress: record>, error: record<code: string, message: string>, isCancellable: bool, isCancellableWithoutFee: bool, isDeletable: bool, isShippingAddressEditable: bool, startTime: string, status: string>, type: string, location: string, sku: record<displayName: string, family: string, name: string>, tags: record> {
+]: any -> oneof<record<id: string, name: string, properties: record<cancellationReason: string, deliveryInfo: record<scheduledDateTime: string>, deliveryType: string, details: record<chainOfCustodySasKey: string, contactDetails: record, copyLogDetails: list, deliveryPackage: record, destinationAccountDetails: list, errorDetails: list, expectedDataSizeInTerabytes: int, jobDetailsType: string, jobStages: list, preferences: record, returnPackage: record, reverseShipmentLabelSasKey: string, shippingAddress: record>, error: record<code: string, message: string>, isCancellable: bool, isCancellableWithoutFee: bool, isDeletable: bool, isShippingAddressEditable: bool, startTime: string, status: string>, type: string, location: string, sku: record<displayName: string, family: string, name: string>, tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -606,8 +624,6 @@ export def "jobs-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBox/jobs/{jobName}
 # operationId: Jobs_Create
-# --properties shape: {deliveryInfo?: record, deliveryType?: "NonScheduled"|"Scheduled", details?: record, error?: record}
-# --sku shape: {displayName?: string, family?: string, name: "DataBox"|"DataBoxDisk"|"DataBoxHeavy"}
 export def "jobs-create" [
   subscription_id: string
   resource_group_name: string
@@ -626,7 +642,7 @@ export def "jobs-create" [
   location: string # The location of the resource. This will be one of the supported and registered Azure Regions (e.g. West US, East US, Southeast Asia, etc.). The region of a resource cannot be changed once it is created, but if an identical region is specified on update the request will succeed.
   sku: record # The Sku. — shape: {displayName?: string, family?: string, name: "DataBox"|"DataBoxDisk"|"DataBoxHeavy"}
   --tags: record # The list of key value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups).
-]: any -> record<id: string, name: string, properties: record<cancellationReason: string, deliveryInfo: record<scheduledDateTime: string>, deliveryType: string, details: record<chainOfCustodySasKey: string, contactDetails: record, copyLogDetails: list, deliveryPackage: record, destinationAccountDetails: list, errorDetails: list, expectedDataSizeInTerabytes: int, jobDetailsType: string, jobStages: list, preferences: record, returnPackage: record, reverseShipmentLabelSasKey: string, shippingAddress: record>, error: record<code: string, message: string>, isCancellable: bool, isCancellableWithoutFee: bool, isDeletable: bool, isShippingAddressEditable: bool, startTime: string, status: string>, type: string, location: string, sku: record<displayName: string, family: string, name: string>, tags: record> {
+]: any -> oneof<record<id: string, name: string, properties: record<cancellationReason: string, deliveryInfo: record<scheduledDateTime: string>, deliveryType: string, details: record<chainOfCustodySasKey: string, contactDetails: record, copyLogDetails: list, deliveryPackage: record, destinationAccountDetails: list, errorDetails: list, expectedDataSizeInTerabytes: int, jobDetailsType: string, jobStages: list, preferences: record, returnPackage: record, reverseShipmentLabelSasKey: string, shippingAddress: record>, error: record<code: string, message: string>, isCancellable: bool, isCancellableWithoutFee: bool, isDeletable: bool, isShippingAddressEditable: bool, startTime: string, status: string>, type: string, location: string, sku: record<displayName: string, family: string, name: string>, tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -675,7 +691,7 @@ export def "jobs-book-shipment-pick-up" [
   end_time: string # Maximum date before which the pick up should commence, this must be in local time of pick up area. (format: date-time)
   shipment_location: string # Shipment Location in the pickup place. Eg.front desk
   start_time: string # Minimum date after which the pick up should commence, this must be in local time of pick up area. (format: date-time)
-]: any -> record<confirmationNumber: string, readyByTime: string> {
+]: any -> oneof<record<confirmationNumber: string, readyByTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -768,7 +784,7 @@ export def "jobs-list-credentials" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The API Version (required)
-]: nothing -> record<nextLink: string, value: table<jobName: string, jobSecrets: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<jobName: string, jobSecrets: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -815,7 +831,7 @@ export def "service-list-available-skus-by-resource-group" [
   --body-location: string # Location for data transfer. For locations check: https://management.azure.com/subscriptions/SUBSCRIPTIONID/locations?api-version=2018-01-01
   --sku-names: list<string> # Sku Names to filter for available skus
   transfer_type: string@transfer-type-completer # Type of the transfer.
-]: any -> record<nextLink: string, value: table<enabled: bool, properties: record, sku: record>> {
+]: any -> oneof<record<nextLink: string, value: table<enabled: bool, properties: record, sku: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -849,7 +865,6 @@ export def "service-list-available-skus-by-resource-group" [
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DataBox/locations/{location}/validateInputs
 # Discriminator (request): validationCategory
 # operationId: Service_ValidateInputsByResourceGroup
-# --individualRequestDetails item shape: {validationType: "ValidateAddress"|"ValidateDataDestinationDetails"|"ValidateSubscriptionIsAllowedToCreateJob"|"ValidatePreferences"|"ValidateCreateOrderLimit"|"ValidateSkuAvailability"}
 export def "service-validate-inputs-by-resource-group" [
   subscription_id: string
   resource_group_name: string
@@ -866,7 +881,7 @@ export def "service-validate-inputs-by-resource-group" [
   --api-version: string # The API Version (required)
   individual_request_details: list # List of request details contain validationType and its request as key and value respectively. — item shape: {validationType: "ValidateAddress"|"ValidateDataDestinationDetails"|"ValidateSubscriptionIsAllowedToCreateJob"|"ValidatePreferences"|"ValidateCreateOrderLimit"|"ValidateSkuAvailability"}
   validation_category: string@validation-category-completer # Identify the nature of validation.
-]: any -> record<properties: record<individualResponseDetails: list<record>, status: string>> {
+]: any -> oneof<record<properties: record<individualResponseDetails: list<record>, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

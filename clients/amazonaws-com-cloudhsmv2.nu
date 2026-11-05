@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -115,9 +138,9 @@ def x-amz-target-completer-14 [] { ["BaldrApiService.UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "copy-backup-to-region" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["copy-backup-to-region" "create-cluster" "create-hsm" "delete-backup" "delete-cluster" "delete-hsm" "describe-backups" "describe-clusters" "initialize-cluster" "list-tags" "modify-backup-attributes" "modify-cluster" "restore-backup" "tag-resource" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -139,7 +162,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CopyBackupToRegion
-# --TagList item shape: {Key: string, Value: string}
 export def "copy-backup-to-region" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,7 +183,7 @@ export def "copy-backup-to-region" [
   destination_region: string # The AWS region that will contain your copied CloudHSM cluster backup.
   backup_id: string # The ID of the backup that will be copied to the destination region.
   --tag-list: list # Tags to apply to the destination backup during creation. If you specify tags, only these tags will be applied to the destination backup. If you do not specify tags, the service copies tags from the source backup to the destination backup. — item shape: {Key: string, Value: string}
-]: any -> record<DestinationBackup: record<CreateTimestamp: string, SourceRegion: string, SourceBackup: string, SourceCluster: string>> {
+]: any -> oneof<record<DestinationBackup: record<CreateTimestamp: string, SourceRegion: string, SourceBackup: string, SourceCluster: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -191,8 +213,6 @@ export def "copy-backup-to-region" [
 #
 # POST /
 # operationId: CreateCluster
-# --BackupRetentionPolicy shape: {Type?: "DAYS", Value?: string}
-# --TagList item shape: {Key: string, Value: string}
 export def "create-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,7 +236,7 @@ export def "create-cluster" [
   --source-backup-id: string # The identifier (ID) of the cluster backup to restore. Use this value to restore the cluster from a backup instead of creating a new cluster. To find the backup ID, use DescribeBackups.
   subnet_ids: list<string> # The identifiers (IDs) of the subnets where you are creating the cluster. You must specify at least one subnet. If you specify multiple subnets, they must meet the following criteria: All subnets must be in the same virtual private cloud (VPC). You can specify only one subnet per Availability Zone.
   --tag-list: list # Tags to apply to the CloudHSM cluster during creation. — item shape: {Key: string, Value: string}
-]: any -> record<Cluster: record<BackupPolicy: string, BackupRetentionPolicy: record<Type: string, Value: string>, ClusterId: string, CreateTimestamp: string, Hsms: list<record>, HsmType: string, PreCoPassword: string, SecurityGroup: string, SourceBackupId: string, State: string, StateMessage: string, SubnetMapping: record, VpcId: string, Certificates: record<ClusterCsr: string, HsmCertificate: string, AwsHardwareCertificate: string, ManufacturerHardwareCertificate: string, ClusterCertificate: string>, TagList: list<record>>> {
+]: any -> oneof<record<Cluster: record<BackupPolicy: string, BackupRetentionPolicy: record<Type: string, Value: string>, ClusterId: string, CreateTimestamp: string, Hsms: list<record>, HsmType: string, PreCoPassword: string, SecurityGroup: string, SourceBackupId: string, State: string, StateMessage: string, SubnetMapping: record, VpcId: string, Certificates: record<ClusterCsr: string, HsmCertificate: string, AwsHardwareCertificate: string, ManufacturerHardwareCertificate: string, ClusterCertificate: string>, TagList: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -267,7 +287,7 @@ export def "create-hsm" [
   cluster_id: string # The identifier (ID) of the HSM's cluster. To find the cluster ID, use DescribeClusters.
   availability_zone: string # The Availability Zone where you are creating the HSM. To find the cluster's Availability Zones, use DescribeClusters.
   --ip-address: string # The HSM's IP address. If you specify an IP address, use an available address from the subnet that maps to the Availability Zone where you are creating the HSM. If you don't specify an IP address, one is chosen for you from that subnet.
-]: any -> record<Hsm: record<AvailabilityZone: string, ClusterId: string, SubnetId: string, EniId: string, EniIp: string, HsmId: string, State: string, StateMessage: string>> {
+]: any -> oneof<record<Hsm: record<AvailabilityZone: string, ClusterId: string, SubnetId: string, EniId: string, EniIp: string, HsmId: string, State: string, StateMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -316,7 +336,7 @@ export def "delete-backup" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   backup_id: string # The ID of the backup to be deleted. To find the ID of a backup, use the DescribeBackups operation.
-]: any -> record<Backup: record<BackupId: string, BackupState: string, ClusterId: string, CreateTimestamp: string, CopyTimestamp: string, NeverExpires: bool, SourceRegion: string, SourceBackup: string, SourceCluster: string, DeleteTimestamp: string, TagList: list<record>>> {
+]: any -> oneof<record<Backup: record<BackupId: string, BackupState: string, ClusterId: string, CreateTimestamp: string, CopyTimestamp: string, NeverExpires: bool, SourceRegion: string, SourceBackup: string, SourceCluster: string, DeleteTimestamp: string, TagList: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -365,7 +385,7 @@ export def "delete-cluster" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   cluster_id: string # The identifier (ID) of the cluster that you are deleting. To find the cluster ID, use DescribeClusters.
-]: any -> record<Cluster: record<BackupPolicy: string, BackupRetentionPolicy: record<Type: string, Value: string>, ClusterId: string, CreateTimestamp: string, Hsms: list<record>, HsmType: string, PreCoPassword: string, SecurityGroup: string, SourceBackupId: string, State: string, StateMessage: string, SubnetMapping: record, VpcId: string, Certificates: record<ClusterCsr: string, HsmCertificate: string, AwsHardwareCertificate: string, ManufacturerHardwareCertificate: string, ClusterCertificate: string>, TagList: list<record>>> {
+]: any -> oneof<record<Cluster: record<BackupPolicy: string, BackupRetentionPolicy: record<Type: string, Value: string>, ClusterId: string, CreateTimestamp: string, Hsms: list<record>, HsmType: string, PreCoPassword: string, SecurityGroup: string, SourceBackupId: string, State: string, StateMessage: string, SubnetMapping: record, VpcId: string, Certificates: record<ClusterCsr: string, HsmCertificate: string, AwsHardwareCertificate: string, ManufacturerHardwareCertificate: string, ClusterCertificate: string>, TagList: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -417,7 +437,7 @@ export def "delete-hsm" [
   --hsm-id: string # The identifier (ID) of the HSM that you are deleting.
   --eni-id: string # The identifier (ID) of the elastic network interface (ENI) of the HSM that you are deleting.
   --eni-ip: string # The IP address of the elastic network interface (ENI) of the HSM that you are deleting.
-]: any -> record<HsmId: string> {
+]: any -> oneof<record<HsmId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -471,7 +491,7 @@ export def "describe-backups" [
   --max-results-body: int # The maximum number of backups to return in the response. When there are more backups than the number you specify, the response contains a NextToken value. (body field)
   --filters: record # One or more filters to limit the items returned in the response. Use the backupIds filter to return only the specified backups. Specify backups by their backup identifier (ID). Use the sourceBackupIds filter to return only the backups created from a source backup. The sourceBackupID of a source backup is returned by the CopyBackupToRegion operation. Use the clusterIds filter to return only the backups for the specified clusters. Specify clusters by their cluster identifier (ID). Use the states filter to return only backups that match the specified state. Use the neverExpires filter to return backups filtered by the value in the neverExpires parameter. True returns all backups exempt from the backup retention policy. False returns all backups with a backup retention policy defined at the cluster.
   --sort-ascending: oneof<nothing, bool> # Designates whether or not to sort the return backups by ascending chronological order of generation.
-]: any -> record<Backups: table<BackupId: string, BackupState: string, ClusterId: string, CreateTimestamp: string, CopyTimestamp: string, NeverExpires: bool, SourceRegion: string, SourceBackup: string, SourceCluster: string, DeleteTimestamp: string, TagList: list>, NextToken: string> {
+]: any -> oneof<record<Backups: table<BackupId: string, BackupState: string, ClusterId: string, CreateTimestamp: string, CopyTimestamp: string, NeverExpires: bool, SourceRegion: string, SourceBackup: string, SourceCluster: string, DeleteTimestamp: string, TagList: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -525,7 +545,7 @@ export def "describe-clusters" [
   --filters: record # One or more filters to limit the items returned in the response. Use the clusterIds filter to return only the specified clusters. Specify clusters by their cluster identifier (ID). Use the vpcIds filter to return only the clusters in the specified virtual private clouds (VPCs). Specify VPCs by their VPC identifier (ID). Use the states filter to return only clusters that match the specified state.
   --next-token-body: string # The NextToken value that you received in the previous response. Use this value to get more clusters. (body field)
   --max-results-body: int # The maximum number of clusters to return in the response. When there are more clusters than the number you specify, the response contains a NextToken value. (body field)
-]: any -> record<Clusters: table<BackupPolicy: string, BackupRetentionPolicy: record, ClusterId: string, CreateTimestamp: string, Hsms: list, HsmType: string, PreCoPassword: string, SecurityGroup: string, SourceBackupId: string, State: string, StateMessage: string, SubnetMapping: record, VpcId: string, Certificates: record, TagList: list>, NextToken: string> {
+]: any -> oneof<record<Clusters: table<BackupPolicy: string, BackupRetentionPolicy: record, ClusterId: string, CreateTimestamp: string, Hsms: list, HsmType: string, PreCoPassword: string, SecurityGroup: string, SourceBackupId: string, State: string, StateMessage: string, SubnetMapping: record, VpcId: string, Certificates: record, TagList: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -577,7 +597,7 @@ export def "initialize-cluster" [
   cluster_id: string # The identifier (ID) of the cluster that you are claiming. To find the cluster ID, use DescribeClusters.
   signed_cert: string # The cluster certificate issued (signed) by your issuing certificate authority (CA). The certificate must be in PEM format and can contain a maximum of 5000 characters.
   trust_anchor: string # The issuing certificate of the issuing certificate authority (CA) that issued (signed) the cluster certificate. You must use a self-signed certificate. The certificate used to sign the HSM CSR must be directly available, and thus must be the root certificate. The certificate must be in PEM format and can contain a maximum of 5000 characters.
-]: any -> record<State: string, StateMessage: string> {
+]: any -> oneof<record<State: string, StateMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -630,7 +650,7 @@ export def "list-tags" [
   resource_id: string # The cluster identifier (ID) for the cluster whose tags you are getting. To find the cluster ID, use DescribeClusters.
   --next-token-body: string # The NextToken value that you received in the previous response. Use this value to get more tags. (body field)
   --max-results-body: int # The maximum number of tags to return in the response. When there are more tags than the number you specify, the response contains a NextToken value. (body field)
-]: any -> record<TagList: table<Key: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<TagList: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -681,7 +701,7 @@ export def "modify-backup-attributes" [
   --x-amz-target: string@x-amz-target-completer-10 # required
   backup_id: string # The identifier (ID) of the backup to modify. To find the ID of a backup, use the DescribeBackups operation.
   --never-expires: oneof<nothing, bool> # Specifies whether the service should exempt a backup from the retention policy for the cluster. True exempts a backup from the retention policy. False means the service applies the backup retention policy defined at the cluster.
-]: any -> record<Backup: record<BackupId: string, BackupState: string, ClusterId: string, CreateTimestamp: string, CopyTimestamp: string, NeverExpires: bool, SourceRegion: string, SourceBackup: string, SourceCluster: string, DeleteTimestamp: string, TagList: list<record>>> {
+]: any -> oneof<record<Backup: record<BackupId: string, BackupState: string, ClusterId: string, CreateTimestamp: string, CopyTimestamp: string, NeverExpires: bool, SourceRegion: string, SourceBackup: string, SourceCluster: string, DeleteTimestamp: string, TagList: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -712,7 +732,6 @@ export def "modify-backup-attributes" [
 #
 # POST /
 # operationId: ModifyCluster
-# --BackupRetentionPolicy shape: {Type?: "DAYS", Value?: string}
 export def "modify-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -733,7 +752,7 @@ export def "modify-cluster" [
   --x-amz-target: string@x-amz-target-completer-11 # required
   backup_retention_policy: record # A policy that defines the number of days to retain backups. — shape: {Type?: "DAYS", Value?: string}
   cluster_id: string # The identifier (ID) of the cluster that you want to modify. To find the cluster ID, use DescribeClusters.
-]: any -> record<Cluster: record<BackupPolicy: string, BackupRetentionPolicy: record<Type: string, Value: string>, ClusterId: string, CreateTimestamp: string, Hsms: list<record>, HsmType: string, PreCoPassword: string, SecurityGroup: string, SourceBackupId: string, State: string, StateMessage: string, SubnetMapping: record, VpcId: string, Certificates: record<ClusterCsr: string, HsmCertificate: string, AwsHardwareCertificate: string, ManufacturerHardwareCertificate: string, ClusterCertificate: string>, TagList: list<record>>> {
+]: any -> oneof<record<Cluster: record<BackupPolicy: string, BackupRetentionPolicy: record<Type: string, Value: string>, ClusterId: string, CreateTimestamp: string, Hsms: list<record>, HsmType: string, PreCoPassword: string, SecurityGroup: string, SourceBackupId: string, State: string, StateMessage: string, SubnetMapping: record, VpcId: string, Certificates: record<ClusterCsr: string, HsmCertificate: string, AwsHardwareCertificate: string, ManufacturerHardwareCertificate: string, ClusterCertificate: string>, TagList: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -782,7 +801,7 @@ export def "restore-backup" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   backup_id: string # The ID of the backup to be restored. To find the ID of a backup, use the DescribeBackups operation.
-]: any -> record<Backup: record<BackupId: string, BackupState: string, ClusterId: string, CreateTimestamp: string, CopyTimestamp: string, NeverExpires: bool, SourceRegion: string, SourceBackup: string, SourceCluster: string, DeleteTimestamp: string, TagList: list<record>>> {
+]: any -> oneof<record<Backup: record<BackupId: string, BackupState: string, ClusterId: string, CreateTimestamp: string, CopyTimestamp: string, NeverExpires: bool, SourceRegion: string, SourceBackup: string, SourceCluster: string, DeleteTimestamp: string, TagList: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -812,7 +831,6 @@ export def "restore-backup" [
 #
 # POST /
 # operationId: TagResource
-# --TagList item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -833,7 +851,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-13 # required
   resource_id: string # The cluster identifier (ID) for the cluster that you are tagging. To find the cluster ID, use DescribeClusters.
   tag_list: list # A list of one or more tags. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -883,7 +901,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   resource_id: string # The cluster identifier (ID) for the cluster whose tags you are removing. To find the cluster ID, use DescribeClusters.
   tag_key_list: list<string> # A list of one or more tag keys for the tags that you are removing. Specify only the tag keys, not the tag values.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

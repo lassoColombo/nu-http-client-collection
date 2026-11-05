@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -125,9 +149,9 @@ def status-code-class-completer [] { ["0" "100" "200" "300" "400" "500"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-applications-api-v1-app-get" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-applications-api-v1-app-get" "create-application-api-v1-app-post" "delete-application-api-v1-app-app-id-delete" "get-application-api-v1-app-app-id-get" "update-application-api-v1-app-app-id-put" "list-attempts-by-endpoint-api-v1-app-app-id-attempt-endpoint-endpoint-id-get" "list-attempts-by-msg-api-v1-app-app-id-attempt-msg-msg-id-get" "list-endpoints-api-v1-app-app-id-endpoint-get" "create-endpoint-api-v1-app-app-id-endpoint-post" "delete-endpoint-api-v1-app-app-id-endpoint-endpoint-id-delete" "get-endpoint-api-v1-app-app-id-endpoint-endpoint-id-get" "update-endpoint-api-v1-app-app-id-endpoint-endpoint-id-put" "get-endpoint-headers-api-v1-app-app-id-endpoint-endpoint-id-headers-get" "patch-endpoint-headers-api-v1-app-app-id-endpoint-endpoint-id-headers-patch" "update-endpoint-headers-api-v1-app-app-id-endpoint-endpoint-id-headers-put" "list-attempted-messages-api-v1-app-app-id-endpoint-endpoint-id-msg-get" "recover-failed-webhooks-api-v1-app-app-id-endpoint-endpoint-id-recover-post" "replay-missing-webhooks-api-v1-app-app-id-endpoint-endpoint-id-replay-missing-post" "get-endpoint-secret-api-v1-app-app-id-endpoint-endpoint-id-secret-get" "rotate-endpoint-secret-api-v1-app-app-id-endpoint-endpoint-id-secret-rotate-post" "get-endpoint-stats-api-v1-app-app-id-endpoint-endpoint-id-stats-get" "get-endpoint-transformation-api-v1-app-app-id-endpoint-endpoint-id-transformation-get" "set-endpoint-transformation-api-v1-app-app-id-endpoint-endpoint-id-transformation-patch" "list-integrations-api-v1-app-app-id-integration-get" "create-integration-api-v1-app-app-id-integration-post" "delete-integration-api-v1-app-app-id-integration-integ-id-delete" "get-integration-api-v1-app-app-id-integration-integ-id-get" "update-integration-api-v1-app-app-id-integration-integ-id-put" "get-integration-key-api-v1-app-app-id-integration-integ-id-key-get" "rotate-integration-key-api-v1-app-app-id-integration-integ-id-key-rotate-post" "list-messages-api-v1-app-app-id-msg-get" "create-message-api-v1-app-app-id-msg-post" "get-message-api-v1-app-app-id-msg-msg-id-get" "list-attempts-api-v1-app-app-id-msg-msg-id-attempt-get" "get-attempt-api-v1-app-app-id-msg-msg-id-attempt-attempt-id-get" "expunge-attempt-content-api-v1-app-app-id-msg-msg-id-attempt-attempt-id-content-delete" "expunge-message-payload-api-v1-app-app-id-msg-msg-id-content-delete" "list-attempted-destinations-api-v1-app-app-id-msg-msg-id-endpoint-get" "list-attempts-for-endpoint-api-v1-app-app-id-msg-msg-id-endpoint-endpoint-id-attempt-get" "resend-webhook-api-v1-app-app-id-msg-msg-id-endpoint-endpoint-id-resend-post" "get-app-portal-access-api-v1-auth-app-portal-access-app-id-post" "expire-all-api-v1-auth-app-app-id-expire-all-post" "get-dashboard-access-api-v1-auth-dashboard-access-app-id-post" "logout-api-v1-auth-logout-post" "list-background-tasks-api-v1-background-task-get" "get-background-task-api-v1-background-task-task-id-get" "list-event-types-api-v1-event-type-get" "create-event-type-api-v1-event-type-post" "delete-event-type-api-v1-event-type-event-type-name-delete" "get-event-type-api-v1-event-type-event-type-name-get" "update-event-type-api-v1-event-type-event-type-name-put" "health-api-v1-health-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -163,7 +187,7 @@ export def "list-applications-api-v1-app-get" [
   --limit: int # default: 50
   --order: string # default: descending
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<data: table<createdAt: string, id: string, metadata: record, name: string, rateLimit: int, uid: string, updatedAt: string>, done: bool, iterator: string, prevIterator: string> {
+]: nothing -> oneof<record<data: table<createdAt: string, id: string, metadata: record, name: string, rateLimit: int, uid: string, updatedAt: string>, done: bool, iterator: string, prevIterator: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
@@ -206,7 +230,7 @@ export def "create-application-api-v1-app-post" [
   name: string # e.g. My first application
   --rate-limit: int # nullable, e.g. 1000
   --uid: string # Optional unique identifier for the application (nullable, e.g. unique-app-identifier)
-]: any -> record<createdAt: string, id: string, metadata: record, name: string, rateLimit: int, uid: string, updatedAt: string> {
+]: any -> oneof<record<createdAt: string, id: string, metadata: record, name: string, rateLimit: int, uid: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -287,7 +311,7 @@ export def "get-application-api-v1-app-app-id-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<createdAt: string, id: string, metadata: record, name: string, rateLimit: int, uid: string, updatedAt: string> {
+]: nothing -> oneof<record<createdAt: string, id: string, metadata: record, name: string, rateLimit: int, uid: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -330,7 +354,7 @@ export def "update-application-api-v1-app-app-id-put" [
   name: string # e.g. My first application
   --rate-limit: int # nullable, e.g. 1000
   --uid: string # Optional unique identifier for the application (nullable, e.g. unique-app-identifier)
-]: any -> record<createdAt: string, id: string, metadata: record, name: string, rateLimit: int, uid: string, updatedAt: string> {
+]: any -> oneof<record<createdAt: string, id: string, metadata: record, name: string, rateLimit: int, uid: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -381,7 +405,7 @@ export def "list-attempts-by-endpoint-api-v1-app-app-id-attempt-endpoint-endpoin
   --before: string # nullable, format: date-time
   --after: string # nullable, format: date-time
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<data: table<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string>, done: bool, iterator: string, prevIterator: string> {
+]: nothing -> oneof<record<data: table<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string>, done: bool, iterator: string, prevIterator: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -432,7 +456,7 @@ export def "list-attempts-by-msg-api-v1-app-app-id-attempt-msg-msg-id-get" [
   --before: string # nullable, format: date-time
   --after: string # nullable, format: date-time
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<data: table<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string>, done: bool, iterator: string, prevIterator: string> {
+]: nothing -> oneof<record<data: table<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string>, done: bool, iterator: string, prevIterator: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -476,7 +500,7 @@ export def "list-endpoints-api-v1-app-app-id-endpoint-get" [
   --limit: int # default: 50
   --order: string # default: descending
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<data: table<channels: list, createdAt: string, description: string, disabled: bool, filterTypes: list, id: string, metadata: record, rateLimit: int, uid: string, updatedAt: string, url: string, version: int>, done: bool, iterator: string, prevIterator: string> {
+]: nothing -> oneof<record<data: table<channels: list, createdAt: string, description: string, disabled: bool, filterTypes: list, id: string, metadata: record, rateLimit: int, uid: string, updatedAt: string, url: string, version: int>, done: bool, iterator: string, prevIterator: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -526,7 +550,7 @@ export def "create-endpoint-api-v1-app-app-id-endpoint-post" [
   --uid: string # Optional unique identifier for the endpoint (nullable, e.g. unique-endpoint-identifier)
   url: string # format: uri, e.g. https://example.com/webhook/
   version: int # e.g. 1
-]: any -> record<channels: list<string>, createdAt: string, description: string, disabled: bool, filterTypes: list<string>, id: string, metadata: record, rateLimit: int, uid: string, updatedAt: string, url: string, version: int> {
+]: any -> oneof<record<channels: list<string>, createdAt: string, description: string, disabled: bool, filterTypes: list<string>, id: string, metadata: record, rateLimit: int, uid: string, updatedAt: string, url: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -610,7 +634,7 @@ export def "get-endpoint-api-v1-app-app-id-endpoint-endpoint-id-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<channels: list<string>, createdAt: string, description: string, disabled: bool, filterTypes: list<string>, id: string, metadata: record, rateLimit: int, uid: string, updatedAt: string, url: string, version: int> {
+]: nothing -> oneof<record<channels: list<string>, createdAt: string, description: string, disabled: bool, filterTypes: list<string>, id: string, metadata: record, rateLimit: int, uid: string, updatedAt: string, url: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -660,7 +684,7 @@ export def "update-endpoint-api-v1-app-app-id-endpoint-endpoint-id-put" [
   --uid: string # Optional unique identifier for the endpoint (nullable, e.g. unique-endpoint-identifier)
   url: string # format: uri, e.g. https://example.com/webhook/
   version: int # e.g. 1
-]: any -> record<channels: list<string>, createdAt: string, description: string, disabled: bool, filterTypes: list<string>, id: string, metadata: record, rateLimit: int, uid: string, updatedAt: string, url: string, version: int> {
+]: any -> oneof<record<channels: list<string>, createdAt: string, description: string, disabled: bool, filterTypes: list<string>, id: string, metadata: record, rateLimit: int, uid: string, updatedAt: string, url: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -704,7 +728,7 @@ export def "get-endpoint-headers-api-v1-app-app-id-endpoint-endpoint-id-headers-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<headers: record, sensitive: list<string>> {
+]: nothing -> oneof<record<headers: record, sensitive: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -841,7 +865,7 @@ export def "list-attempted-messages-api-v1-app-app-id-endpoint-endpoint-id-msg-g
   --before: string # nullable, format: date-time
   --after: string # nullable, format: date-time
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<data: table<channels: list, eventId: string, eventType: string, id: string, nextAttempt: string, payload: record, status: int, timestamp: string>, done: bool, iterator: string, prevIterator: string> {
+]: nothing -> oneof<record<data: table<channels: list, eventId: string, eventType: string, id: string, nextAttempt: string, payload: record, status: int, timestamp: string>, done: bool, iterator: string, prevIterator: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -885,7 +909,7 @@ export def "recover-failed-webhooks-api-v1-app-app-id-endpoint-endpoint-id-recov
   --idempotency-key: string # The request's idempotency key (nullable)
   since: string # format: date-time
   --until: string # nullable, format: date-time
-]: any -> record<id: string, status: string, task: string> {
+]: any -> oneof<record<id: string, status: string, task: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -931,7 +955,7 @@ export def "replay-missing-webhooks-api-v1-app-app-id-endpoint-endpoint-id-repla
   --idempotency-key: string # The request's idempotency key (nullable)
   since: string # format: date-time
   --until: string # nullable, format: date-time
-]: any -> record<id: string, status: string, task: string> {
+]: any -> oneof<record<id: string, status: string, task: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -975,7 +999,7 @@ export def "get-endpoint-secret-api-v1-app-app-id-endpoint-endpoint-id-secret-ge
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<key: string> {
+]: nothing -> oneof<record<key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -1063,7 +1087,7 @@ export def "get-endpoint-stats-api-v1-app-app-id-endpoint-endpoint-id-stats-get"
   --since: string # nullable, format: date-time
   --until: string # nullable, format: date-time
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<fail: int, pending: int, sending: int, success: int> {
+]: nothing -> oneof<record<fail: int, pending: int, sending: int, success: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -1105,7 +1129,7 @@ export def "get-endpoint-transformation-api-v1-app-app-id-endpoint-endpoint-id-t
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<code: string, enabled: bool> {
+]: nothing -> oneof<record<code: string, enabled: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -1193,7 +1217,7 @@ export def "list-integrations-api-v1-app-app-id-integration-get" [
   --iterator: string # nullable, e.g. integ_1srOrx2ZWZBpBUvZwXKQmoEYga2
   --limit: int # default: 50
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<data: table<createdAt: string, id: string, name: string, updatedAt: string>, done: bool, iterator: string> {
+]: nothing -> oneof<record<data: table<createdAt: string, id: string, name: string, updatedAt: string>, done: bool, iterator: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -1234,7 +1258,7 @@ export def "create-integration-api-v1-app-app-id-integration-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
   name: string # e.g. Example Integration
-]: any -> record<createdAt: string, id: string, name: string, updatedAt: string> {
+]: any -> oneof<record<createdAt: string, id: string, name: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1318,7 +1342,7 @@ export def "get-integration-api-v1-app-app-id-integration-integ-id-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<createdAt: string, id: string, name: string, updatedAt: string> {
+]: nothing -> oneof<record<createdAt: string, id: string, name: string, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -1360,7 +1384,7 @@ export def "update-integration-api-v1-app-app-id-integration-integ-id-put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
   name: string # e.g. Example Integration
-]: any -> record<createdAt: string, id: string, name: string, updatedAt: string> {
+]: any -> oneof<record<createdAt: string, id: string, name: string, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1404,7 +1428,7 @@ export def "get-integration-key-api-v1-app-app-id-integration-integ-id-key-get" 
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<key: string> {
+]: nothing -> oneof<record<key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -1445,7 +1469,7 @@ export def "rotate-integration-key-api-v1-app-app-id-integration-integ-id-key-ro
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<key: string> {
+]: nothing -> oneof<record<key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -1491,7 +1515,7 @@ export def "list-messages-api-v1-app-app-id-msg-get" [
   --before: string # nullable, format: date-time
   --after: string # nullable, format: date-time
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<data: table<channels: list, eventId: string, eventType: string, id: string, payload: record, timestamp: string>, done: bool, iterator: string, prevIterator: string> {
+]: nothing -> oneof<record<data: table<channels: list, eventId: string, eventType: string, id: string, payload: record, timestamp: string>, done: bool, iterator: string, prevIterator: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -1519,7 +1543,6 @@ export def "list-messages-api-v1-app-app-id-msg-get" [
 #
 # POST /api/v1/app/{app_id}/msg/
 # operationId: create_message_api_v1_app__app_id__msg__post
-# --application shape: {metadata?: record, name: string, rateLimit?: int, uid?: string}
 export def "create-message-api-v1-app-app-id-msg-post" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1539,7 +1562,7 @@ export def "create-message-api-v1-app-app-id-msg-post" [
   event_type: string # e.g. user.signup
   payload: record # e.g. {email: test@example.com, username: test_user}
   --payload-retention-period: int # The retention period for the payload (in days). (default: 90, e.g. 90)
-]: any -> record<channels: list<string>, eventId: string, eventType: string, id: string, payload: record, timestamp: string> {
+]: any -> oneof<record<channels: list<string>, eventId: string, eventType: string, id: string, payload: record, timestamp: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1583,7 +1606,7 @@ export def "get-message-api-v1-app-app-id-msg-msg-id-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<channels: list<string>, eventId: string, eventType: string, id: string, payload: record, timestamp: string> {
+]: nothing -> oneof<record<channels: list<string>, eventId: string, eventType: string, id: string, payload: record, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -1634,7 +1657,7 @@ export def "list-attempts-api-v1-app-app-id-msg-msg-id-attempt-get" [
   --before: string # nullable, format: date-time
   --after: string # nullable, format: date-time
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<data: table<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string>, done: bool, iterator: string, prevIterator: string> {
+]: nothing -> oneof<record<data: table<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string>, done: bool, iterator: string, prevIterator: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -1677,7 +1700,7 @@ export def "get-attempt-api-v1-app-app-id-msg-msg-id-attempt-attempt-id-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string> {
+]: nothing -> oneof<record<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -1805,7 +1828,7 @@ export def "list-attempted-destinations-api-v1-app-app-id-msg-msg-id-endpoint-ge
   --iterator: string # nullable, e.g. msgep_1srOrx2ZWZBpBUvZwXKQmoEYga2
   --limit: int # default: 50
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<data: table<channels: list, createdAt: string, description: string, disabled: bool, filterTypes: list, id: string, metadata: record, nextAttempt: string, rateLimit: int, status: int, uid: string, url: string, version: int>, done: bool, iterator: string> {
+]: nothing -> oneof<record<data: table<channels: list, createdAt: string, description: string, disabled: bool, filterTypes: list, id: string, metadata: record, nextAttempt: string, rateLimit: int, status: int, uid: string, url: string, version: int>, done: bool, iterator: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -1857,7 +1880,7 @@ export def "list-attempts-for-endpoint-api-v1-app-app-id-msg-msg-id-endpoint-end
   --before: string # nullable, format: date-time
   --after: string # nullable, format: date-time
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<data: table<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string>, done: bool, iterator: string, prevIterator: string> {
+]: nothing -> oneof<record<data: table<endpointId: string, id: string, msgId: string, response: string, responseStatusCode: int, status: int, timestamp: string, triggerType: int, url: string>, done: bool, iterator: string, prevIterator: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -1943,7 +1966,7 @@ export def "get-app-portal-access-api-v1-auth-app-portal-access-app-id-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
   --feature-flags: list<string> # default: [], e.g. []
-]: any -> record<token: string, url: string> {
+]: any -> oneof<record<token: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2030,7 +2053,7 @@ export def "get-dashboard-access-api-v1-auth-dashboard-access-app-id-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<token: string, url: string> {
+]: nothing -> oneof<record<token: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'app_id' must be non-empty" } }
@@ -2108,7 +2131,7 @@ export def "list-background-tasks-api-v1-background-task-get" [
   --limit: int # default: 50
   --order: string # default: descending
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<data: table<data: record, id: string, status: string, task: string>, done: bool, iterator: string, prevIterator: string> {
+]: nothing -> oneof<record<data: table<data: record, id: string, status: string, task: string>, done: bool, iterator: string, prevIterator: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "order" $order "scalar")] | flatten | str join "&"
@@ -2147,7 +2170,7 @@ export def "get-background-task-api-v1-background-task-task-id-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<data: record, id: string, status: string, task: string> {
+]: nothing -> oneof<record<data: record, id: string, status: string, task: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
@@ -2189,7 +2212,7 @@ export def "list-event-types-api-v1-event-type-get" [
   --with-content: oneof<nothing, bool> # default: false
   --include-archived: oneof<nothing, bool> # default: false
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<data: table<archived: bool, createdAt: string, description: string, featureFlag: string, name: string, schemas: record, updatedAt: string>, done: bool, iterator: string, prevIterator: string> {
+]: nothing -> oneof<record<data: table<archived: bool, createdAt: string, description: string, featureFlag: string, name: string, schemas: record, updatedAt: string>, done: bool, iterator: string, prevIterator: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iterator" $iterator "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "with_content" $with_content "scalar") (serialize-qp "include_archived" $include_archived "scalar")] | flatten | str join "&"
@@ -2232,7 +2255,7 @@ export def "create-event-type-api-v1-event-type-post" [
   --feature-flag: string # nullable, e.g. cool-new-feature
   name: string # e.g. user.signup
   --schemas: record # The schema for the event type for a specific version as a JSON schema. (nullable, e.g. {1: {description: An invoice was paid by a user, properties: {invoiceId: {description: The invoice id, type: string}, userId: {description: The user id, type: string}}, required: [invoiceId, userId], title: Invoice Paid Event, type: object}})
-]: any -> record<archived: bool, createdAt: string, description: string, featureFlag: string, name: string, schemas: record, updatedAt: string> {
+]: any -> oneof<record<archived: bool, createdAt: string, description: string, featureFlag: string, name: string, schemas: record, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2314,7 +2337,7 @@ export def "get-event-type-api-v1-event-type-event-type-name-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --idempotency-key: string # The request's idempotency key (nullable)
-]: nothing -> record<archived: bool, createdAt: string, description: string, featureFlag: string, name: string, schemas: record, updatedAt: string> {
+]: nothing -> oneof<record<archived: bool, createdAt: string, description: string, featureFlag: string, name: string, schemas: record, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_type_name | is-empty) { error make --unspanned { msg: "path parameter 'event_type_name' must be non-empty" } }
@@ -2357,7 +2380,7 @@ export def "update-event-type-api-v1-event-type-event-type-name-put" [
   description: string # e.g. A user has signed up
   --feature-flag: string # nullable, e.g. cool-new-feature
   --schemas: record # The schema for the event type for a specific version as a JSON schema. (nullable, e.g. {1: {description: An invoice was paid by a user, properties: {invoiceId: {description: The invoice id, type: string}, userId: {description: The user id, type: string}}, required: [invoiceId, userId], title: Invoice Paid Event, type: object}})
-]: any -> record<archived: bool, createdAt: string, description: string, featureFlag: string, name: string, schemas: record, updatedAt: string> {
+]: any -> oneof<record<archived: bool, createdAt: string, description: string, featureFlag: string, name: string, schemas: record, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

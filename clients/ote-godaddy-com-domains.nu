@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -133,9 +157,9 @@ def status-completer [] { ["ACTIVE" "CANCELLED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list" "get-agreement" "available" "available-bulk" "contacts-validate" "purchase" "get-v1-domains-purchase-schema-tld" "validate" "suggest" "tlds" "cancel" "get-v1-domains-domain" "patch-v1-domains-domain" "update-contacts" "cancel-privacy" "purchase-privacy" "record-add" "record-replace" "record-replace-type" "record-delete-type-name" "record-get" "record-replace-type-name" "renew" "transfer-in" "verify-email" "domains-forwards-delete" "domains-forwards-get" "domains-forwards-post" "domains-forwards-put" "get-v2-customers-customer-id-domains-notifications" "get-v2-customers-customer-id-domains-notifications-opt-in" "put-v2-customers-customer-id-domains-notifications-opt-in" "get-v2-customers-customer-id-domains-notifications-schemas-type" "post-v2-customers-customer-id-domains-notifications-notification-id-acknowledge" "get-v2-customers-customer-id-domains-domain" "get-v2-customers-customer-id-domains-domain-actions" "delete-v2-customers-customer-id-domains-domain-actions-type" "get-v2-customers-customer-id-domains-domain-actions-type" "post-v2-customers-customer-id-domains-domain-redeem" "post-v2-customers-customer-id-domains-domain-transfer-out" "get-v2-domains-maintenances" "get-v2-domains-maintenances-maintenance-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -175,7 +199,7 @@ export def "list" [
   --includes: list<string> # Optional details to be included in the response
   --modified-date: string # Only include results that have been modified since the specified date (format: iso-datetime)
   --x-shopper-id: string # Shopper ID whose domains are to be retrieved
-]: nothing -> table<authCode: string, contactAdmin: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactBilling: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactRegistrant: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactTech: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, createdAt: string, deletedAt: string, domain: string, domainId: float, expirationProtected: bool, expires: string, exposeWhois: bool, holdRegistrar: bool, locked: bool, nameServers: list<string>, privacy: bool, registrarCreatedAt: string, renewAuto: bool, renewDeadline: string, renewable: bool, status: string, transferAwayEligibleAt: string, transferProtected: bool> {
+]: nothing -> oneof<table<authCode: string, contactAdmin: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactBilling: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactRegistrant: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactTech: record<addressMailing: record, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, createdAt: string, deletedAt: string, domain: string, domainId: float, expirationProtected: bool, expires: string, exposeWhois: bool, holdRegistrar: bool, locked: bool, nameServers: list<string>, privacy: bool, registrarCreatedAt: string, renewAuto: bool, renewDeadline: string, renewable: bool, status: string, transferAwayEligibleAt: string, transferProtected: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "statuses" $statuses "csv") (serialize-qp "statusGroups" $status_groups "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "includes" $includes "csv") (serialize-qp "modifiedDate" $modified_date "scalar")] | flatten | str join "&"
@@ -217,7 +241,7 @@ export def "get-agreement" [
   --privacy: oneof<nothing, bool> # Whether or not privacy has been requested (required)
   --for-transfer: oneof<nothing, bool> # Whether or not domain tranfer has been requested
   --x-market-id: string # Unique identifier of the Market used to retrieve/translate Legal Agreements (format: bcp-47, default: en-US)
-]: nothing -> table<agreementKey: string, content: string, title: string, url: string> {
+]: nothing -> oneof<table<agreementKey: string, content: string, title: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tlds == null) { error make --unspanned { msg: "required query parameter 'tlds' missing: pass --tlds" } }
@@ -260,7 +284,7 @@ export def "available" [
   --domain: string # Domain name whose availability is to be checked (required)
   --check-type: string@check-type-completer # Optimize for time ('FAST') or accuracy ('FULL') (default: FAST)
   --for-transfer: oneof<nothing, bool> # Whether or not to include domains available for transfer. If set to True, checkType is ignored (default: false)
-]: nothing -> record<available: bool, currency: string, definitive: bool, domain: string, period: int, price: int> {
+]: nothing -> oneof<record<available: bool, currency: string, definitive: bool, domain: string, period: int, price: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -299,7 +323,7 @@ export def "available-bulk" [
   --accept: string@accept-completer # Response content type
   --check-type: string@check-type-completer # Optimize for time ('FAST') or accuracy ('FULL') (default: FAST)
   --body: list
-]: any -> record<domains: table<available: bool, currency: string, definitive: bool, domain: string, period: int, price: int>> {
+]: any -> oneof<record<domains: table<available: bool, currency: string, definitive: bool, domain: string, period: int, price: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -327,11 +351,6 @@ export def "available-bulk" [
 #
 # POST /v1/domains/contacts/validate
 # operationId: ContactsValidate
-# --contactAdmin shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactBilling shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactPresence shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactRegistrant shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactTech shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 export def "contacts-validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,11 +400,6 @@ export def "contacts-validate" [
 #
 # POST /v1/domains/purchase
 # operationId: purchase
-# --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
-# --contactAdmin shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactBilling shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactRegistrant shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactTech shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 export def "purchase" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -408,7 +422,7 @@ export def "purchase" [
   --period: int # format: integer-positive, default: 1
   --privacy: oneof<nothing, bool> # default: false
   --renew-auto: oneof<nothing, bool> # default: true
-]: any -> record<currency: string, itemCount: int, orderId: int, total: int> {
+]: any -> oneof<record<currency: string, itemCount: int, orderId: int, total: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -449,7 +463,7 @@ export def "get-v1-domains-purchase-schema-tld" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: string, models: record, properties: record, required: list<string>> {
+]: nothing -> oneof<record<id: string, models: record, properties: record, required: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tld | is-empty) { error make --unspanned { msg: "path parameter 'tld' must be non-empty" } }
@@ -474,11 +488,6 @@ export def "get-v1-domains-purchase-schema-tld" [
 #
 # POST /v1/domains/purchase/validate
 # operationId: validate
-# --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
-# --contactAdmin shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactBilling shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactRegistrant shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactTech shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 export def "validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -547,7 +556,7 @@ export def "suggest" [
   --limit: int # Maximum number of suggestions to return
   --wait-ms: int # Maximum amount of time, in milliseconds, to wait for responses If elapses, return the results compiled up to that point (format: integer-positive, default: 1000)
   --x-shopper-id: string # Shopper ID for which the suggestions are being generated
-]: nothing -> table<domain: string> {
+]: nothing -> oneof<table<domain: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "sources" $sources "csv") (serialize-qp "tlds" $tlds "csv") (serialize-qp "lengthMax" $length_max "scalar") (serialize-qp "lengthMin" $length_min "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "waitMs" $wait_ms "scalar")] | flatten | str join "&"
@@ -585,7 +594,7 @@ export def "tlds" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<name: string, type: string> {
+]: nothing -> oneof<table<name: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/domains/tlds" $auth.query)
@@ -658,7 +667,7 @@ export def "get-v1-domains-domain" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --x-shopper-id: string # Shopper ID expected to own the specified domain
-]: nothing -> record<authCode: string, contactAdmin: record<addressMailing: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactBilling: record<addressMailing: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactRegistrant: record<addressMailing: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactTech: record<addressMailing: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, createdAt: string, deletedAt: string, domain: string, domainId: float, expirationProtected: bool, expires: string, exposeWhois: bool, holdRegistrar: bool, locked: bool, nameServers: list<string>, privacy: bool, registrarCreatedAt: string, renewAuto: bool, renewDeadline: string, status: string, subaccountId: string, transferAwayEligibleAt: string, transferProtected: bool, verifications: record<domainName: record<status: string>, realName: record<status: string>>> {
+]: nothing -> oneof<record<authCode: string, contactAdmin: record<addressMailing: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactBilling: record<addressMailing: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactRegistrant: record<addressMailing: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, contactTech: record<addressMailing: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, email: string, fax: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string>, createdAt: string, deletedAt: string, domain: string, domainId: float, expirationProtected: bool, expires: string, exposeWhois: bool, holdRegistrar: bool, locked: bool, nameServers: list<string>, privacy: bool, registrarCreatedAt: string, renewAuto: bool, renewDeadline: string, status: string, subaccountId: string, transferAwayEligibleAt: string, transferProtected: bool, verifications: record<domainName: record<status: string>, realName: record<status: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
@@ -685,7 +694,6 @@ export def "get-v1-domains-domain" [
 #
 # PATCH /v1/domains/{domain}
 # operationId: update
-# --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
 export def "patch-v1-domains-domain" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -734,10 +742,6 @@ export def "patch-v1-domains-domain" [
 #
 # PATCH /v1/domains/{domain}/contacts
 # operationId: updateContacts
-# --contactAdmin shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactBilling shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactRegistrant shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactTech shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 export def "update-contacts" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -823,7 +827,6 @@ export def "cancel-privacy" [
 #
 # POST /v1/domains/{domain}/privacy/purchase
 # operationId: purchasePrivacy
-# --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
 export def "purchase-privacy" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -838,7 +841,7 @@ export def "purchase-privacy" [
   --accept: string@accept-completer # Response content type
   --x-shopper-id: string # Shopper ID of the owner of the domain
   consent: any # shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
-]: any -> record<currency: string, itemCount: int, orderId: int, total: int> {
+]: any -> oneof<record<currency: string, itemCount: int, orderId: int, total: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1059,7 +1062,7 @@ export def "record-get" [
   --offset: int # Number of results to skip for pagination
   --limit: int # Maximum number of items to return
   --x-shopper-id: string # Shopper ID which owns the domain. NOTE: This is only required if you are a Reseller managing a domain purchased outside the scope of your reseller account. For instance, if you're a Reseller, but purchased a Domain via http://www.godaddy.com
-]: nothing -> table<data: string, name: string, port: int, priority: int, protocol: string, service: string, ttl: int, type: string, weight: int> {
+]: nothing -> oneof<table<data: string, name: string, port: int, priority: int, protocol: string, service: string, ttl: int, type: string, weight: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain | is-empty) { error make --unspanned { msg: "path parameter 'domain' must be non-empty" } }
@@ -1150,7 +1153,7 @@ export def "renew" [
   --accept: string@accept-completer # Response content type
   --x-shopper-id: string # Shopper for whom Domain is to be renewed. NOTE: This is only required if you are a Reseller managing a domain purchased outside the scope of your reseller account. For instance, if you're a Reseller, but purchased a Domain via http://www.godaddy.com
   --period: int # Number of years to extend the Domain. Must not exceed maximum for TLD. When omitted, defaults to `period` specified during original purchase (format: integer-positive)
-]: any -> record<currency: string, itemCount: int, orderId: int, total: int> {
+]: any -> oneof<record<currency: string, itemCount: int, orderId: int, total: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1180,11 +1183,6 @@ export def "renew" [
 #
 # POST /v1/domains/{domain}/transfer
 # operationId: transferIn
-# --consent shape: {agreedAt: string, agreedBy: string, agreementKeys: list<string>}
-# --contactAdmin shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactBilling shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactRegistrant shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
-# --contactTech shape: {addressMailing: any, email: string, fax?: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, organization?: string, phone: string}
 export def "transfer-in" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1207,7 +1205,7 @@ export def "transfer-in" [
   --period: int # Can be more than 1 but no more than 10 years total including current registration length (format: integer-positive, default: 1)
   --privacy: oneof<nothing, bool> # Whether or not privacy has been requested (default: false)
   --renew-auto: oneof<nothing, bool> # Whether or not the domain should be configured to automatically renew (default: true)
-]: any -> record<currency: string, itemCount: int, orderId: int, total: int> {
+]: any -> oneof<record<currency: string, itemCount: int, orderId: int, total: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1327,7 +1325,7 @@ export def "domains-forwards-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-subs: oneof<nothing, bool> # Optionally include all sub domains if the fqdn specified is a domain and not a sub domain.
-]: nothing -> table<fqdn: string, mask: record<description: string, keywords: string, title: string>, type: string, url: string> {
+]: nothing -> oneof<table<fqdn: string, mask: record<description: string, keywords: string, title: string>, type: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -1354,7 +1352,6 @@ export def "domains-forwards-get" [
 #
 # POST /v2/customers/{customerId}/domains/forwards/{fqdn}
 # operationId: domainsForwardsPost
-# --mask shape: {description?: string, keywords?: string, title?: string}
 export def "domains-forwards-post" [
   customer_id: string
   fqdn: string
@@ -1399,7 +1396,6 @@ export def "domains-forwards-post" [
 #
 # PUT /v2/customers/{customerId}/domains/forwards/{fqdn}
 # operationId: domainsForwardsPut
-# --mask shape: {description?: string, keywords?: string, title?: string}
 export def "domains-forwards-put" [
   customer_id: string
   fqdn: string
@@ -1455,7 +1451,7 @@ export def "get-v2-customers-customer-id-domains-notifications" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # A client provided identifier for tracking this request.
-]: nothing -> record<addedAt: string, metadata: record, notificationId: string, requestId: string, resource: string, resourceType: string, status: string, type: string> {
+]: nothing -> oneof<record<addedAt: string, metadata: record, notificationId: string, requestId: string, resource: string, resourceType: string, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -1493,7 +1489,7 @@ export def "get-v2-customers-customer-id-domains-notifications-opt-in" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # A client provided identifier for tracking this request.
-]: nothing -> table<addedAt: string, metadata: record, notificationId: string, requestId: string, resource: string, resourceType: string, status: string, type: string> {
+]: nothing -> oneof<table<addedAt: string, metadata: record, notificationId: string, requestId: string, resource: string, resourceType: string, status: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -1573,7 +1569,7 @@ export def "get-v2-customers-customer-id-domains-notifications-schemas-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # A client provided identifier for tracking this request.
-]: nothing -> record<id: string, models: record, properties: record, required: list<string>> {
+]: nothing -> oneof<record<id: string, models: record, properties: record, required: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -1654,7 +1650,7 @@ export def "get-v2-customers-customer-id-domains-domain" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --includes: list<string> # Optional details to be included in the response
   --x-request-id: string # A client provided identifier for tracking this request.
-]: nothing -> record<actions: table<completedAt: string, createdAt: string, modifiedAt: string, origination: string, reason: record, requestId: string, startedAt: string, status: string, type: string>, authCode: string, contacts: record<admin: record<_createdAt: string, _deleted: bool, _modifiedAt: string, _revision: int, addressMailing: record, contactId: string, email: string, encoding: string, exposeWhois: bool, fax: string, jobTitle: string, metadata: record, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string, tlds: list>, billing: record<_createdAt: string, _deleted: bool, _modifiedAt: string, _revision: int, addressMailing: record, contactId: string, email: string, encoding: string, exposeWhois: bool, fax: string, jobTitle: string, metadata: record, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string, tlds: list>, registrant: record<_createdAt: string, _deleted: bool, _modifiedAt: string, _revision: int, addressMailing: record, contactId: string, email: string, encoding: string, exposeWhois: bool, fax: string, jobTitle: string, metadata: record, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string, tlds: list>, tech: record<_createdAt: string, _deleted: bool, _modifiedAt: string, _revision: int, addressMailing: record, contactId: string, email: string, encoding: string, exposeWhois: bool, fax: string, jobTitle: string, metadata: record, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string, tlds: list>>, createdAt: string, deletedAt: string, dnssecRecords: table<algorithm: string, digest: string, digestType: string, flags: string, keyTag: int, maxSignatureLife: int, publicKey: string>, domain: string, domainId: string, expirationProtected: bool, expiresAt: string, holdRegistrar: bool, hostnames: list<string>, locked: bool, modifiedAt: string, nameServers: list<string>, privacy: bool, registrarCreatedAt: string, registryStatusCodes: list<string>, renewAuto: bool, renewDeadline: string, renewal: record<currency: string, price: int, renewable: bool>, status: string, subaccountId: string, transferAwayEligibleAt: string, transferProtected: bool, verifications: record<domainName: string, icann: string, realName: string>> {
+]: nothing -> oneof<record<actions: table<completedAt: string, createdAt: string, modifiedAt: string, origination: string, reason: record, requestId: string, startedAt: string, status: string, type: string>, authCode: string, contacts: record<admin: record<_createdAt: string, _deleted: bool, _modifiedAt: string, _revision: int, addressMailing: record, contactId: string, email: string, encoding: string, exposeWhois: bool, fax: string, jobTitle: string, metadata: record, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string, tlds: list>, billing: record<_createdAt: string, _deleted: bool, _modifiedAt: string, _revision: int, addressMailing: record, contactId: string, email: string, encoding: string, exposeWhois: bool, fax: string, jobTitle: string, metadata: record, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string, tlds: list>, registrant: record<_createdAt: string, _deleted: bool, _modifiedAt: string, _revision: int, addressMailing: record, contactId: string, email: string, encoding: string, exposeWhois: bool, fax: string, jobTitle: string, metadata: record, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string, tlds: list>, tech: record<_createdAt: string, _deleted: bool, _modifiedAt: string, _revision: int, addressMailing: record, contactId: string, email: string, encoding: string, exposeWhois: bool, fax: string, jobTitle: string, metadata: record, nameFirst: string, nameLast: string, nameMiddle: string, organization: string, phone: string, tlds: list>>, createdAt: string, deletedAt: string, dnssecRecords: table<algorithm: string, digest: string, digestType: string, flags: string, keyTag: int, maxSignatureLife: int, publicKey: string>, domain: string, domainId: string, expirationProtected: bool, expiresAt: string, holdRegistrar: bool, hostnames: list<string>, locked: bool, modifiedAt: string, nameServers: list<string>, privacy: bool, registrarCreatedAt: string, registryStatusCodes: list<string>, renewAuto: bool, renewDeadline: string, renewal: record<currency: string, price: int, renewable: bool>, status: string, subaccountId: string, transferAwayEligibleAt: string, transferProtected: bool, verifications: record<domainName: string, icann: string, realName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -1695,7 +1691,7 @@ export def "get-v2-customers-customer-id-domains-domain-actions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # A client provided identifier for tracking this request.
-]: nothing -> table<completedAt: string, createdAt: string, modifiedAt: string, origination: string, reason: record<code: string, fields: list, message: string>, requestId: string, startedAt: string, status: string, type: string> {
+]: nothing -> oneof<table<completedAt: string, createdAt: string, modifiedAt: string, origination: string, reason: record<code: string, fields: list, message: string>, requestId: string, startedAt: string, status: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -1778,7 +1774,7 @@ export def "get-v2-customers-customer-id-domains-domain-actions-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # A client provided identifier for tracking this request.
-]: nothing -> record<completedAt: string, createdAt: string, modifiedAt: string, origination: string, reason: record<code: string, fields: list<record>, message: string>, requestId: string, startedAt: string, status: string, type: string> {
+]: nothing -> oneof<record<completedAt: string, createdAt: string, modifiedAt: string, origination: string, reason: record<code: string, fields: list<record>, message: string>, requestId: string, startedAt: string, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -1806,7 +1802,6 @@ export def "get-v2-customers-customer-id-domains-domain-actions-type" [
 # Purchase a restore for the given domain to bring it out of redemption
 #
 # POST /v2/customers/{customerId}/domains/{domain}/redeem
-# --consent shape: {agreedAt: string, agreedBy: string, currency: string, fee: int, price: int}
 export def "post-v2-customers-customer-id-domains-domain-redeem" [
   customer_id: string
   domain: string
@@ -1909,7 +1904,7 @@ export def "get-v2-domains-maintenances" [
   --starts-at-after: string # Only include results with `startsAt` after the supplied date (format: iso-datetime)
   --limit: int # Maximum number of results to return (default: 100)
   --x-request-id: string # A client provided identifier for tracking this request.
-]: nothing -> record<createdAt: string, endsAt: string, environment: string, maintenanceId: string, modifiedAt: string, reason: string, startsAt: string, status: string, summary: string, tlds: list<string>, type: string> {
+]: nothing -> oneof<record<createdAt: string, endsAt: string, environment: string, maintenanceId: string, modifiedAt: string, reason: string, startsAt: string, status: string, summary: string, tlds: list<string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "modifiedAtAfter" $modified_at_after "scalar") (serialize-qp "startsAtAfter" $starts_at_after "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -1947,7 +1942,7 @@ export def "get-v2-domains-maintenances-maintenance-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-request-id: string # A client provided identifier for tracking this request.
-]: nothing -> record<createdAt: string, endsAt: string, environment: string, maintenanceId: string, modifiedAt: string, reason: string, startsAt: string, status: string, summary: string, systems: table<impact: list, name: string>, tlds: list<string>, type: string> {
+]: nothing -> oneof<record<createdAt: string, endsAt: string, environment: string, maintenanceId: string, modifiedAt: string, reason: string, startsAt: string, status: string, summary: string, systems: table<impact: list, name: string>, tlds: list<string>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($maintenance_id | is-empty) { error make --unspanned { msg: "path parameter 'maintenanceId' must be non-empty" } }

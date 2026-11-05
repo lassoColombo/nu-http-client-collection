@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -120,9 +144,9 @@ def run-attempt-completer [] { ["LATEST" "RUN_ATTEMPT_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bigquerydatatransfer-projects-transfer-configs-runs-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["bigquerydatatransfer-projects-transfer-configs-runs-delete" "bigquerydatatransfer-projects-transfer-configs-runs-get" "bigquerydatatransfer-projects-transfer-configs-patch" "bigquerydatatransfer-projects-locations-list" "bigquerydatatransfer-projects-locations-data-sources-check-valid-creds" "bigquerydatatransfer-projects-locations-enroll-data-sources" "bigquerydatatransfer-projects-locations-data-sources-list" "bigquerydatatransfer-projects-transfer-configs-runs-list" "bigquerydatatransfer-projects-transfer-configs-list" "bigquerydatatransfer-projects-transfer-configs-create" "bigquerydatatransfer-projects-transfer-configs-runs-transfer-logs-list" "bigquerydatatransfer-projects-transfer-configs-schedule-runs" "bigquerydatatransfer-projects-transfer-configs-start-manual-runs" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -166,7 +190,7 @@ export def "bigquerydatatransfer-projects-transfer-configs-runs-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -214,7 +238,7 @@ export def "bigquerydatatransfer-projects-transfer-configs-runs-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<dataSourceId: string, destinationDatasetId: string, emailPreferences: record<enableFailureEmail: bool>, endTime: string, errorStatus: record<code: int, details: list<record>, message: string>, name: string, notificationPubsubTopic: string, params: record, runTime: string, schedule: string, scheduleTime: string, startTime: string, state: string, updateTime: string, userId: string> {
+]: nothing -> oneof<record<dataSourceId: string, destinationDatasetId: string, emailPreferences: record<enableFailureEmail: bool>, endTime: string, errorStatus: record<code: int, details: list<record>, message: string>, name: string, notificationPubsubTopic: string, params: record, runTime: string, schedule: string, scheduleTime: string, startTime: string, state: string, updateTime: string, userId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -240,9 +264,6 @@ export def "bigquerydatatransfer-projects-transfer-configs-runs-get" [
 #
 # PATCH /v1/{name}
 # operationId: bigquerydatatransfer.projects.transferConfigs.patch
-# --emailPreferences shape: {enableFailureEmail?: bool}
-# --ownerInfo shape: {email?: string}
-# --scheduleOptions shape: {disableAutoScheduling?: bool, endTime?: string, startTime?: string}
 export def "bigquerydatatransfer-projects-transfer-configs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -282,7 +303,7 @@ export def "bigquerydatatransfer-projects-transfer-configs-patch" [
   --schedule: string # Data transfer schedule. If the data source does not support a custom schedule, this should be empty. If it is empty, the default value for the data source will be used. The specified times are in UTC. Examples of valid format: `1st,3rd monday of month 15:30`, `every wed,fri of jan,jun 13:15`, and `first sunday of quarter 00:00`. See more explanation about the format here: https://cloud.google.com/appengine/docs/flexible/python/scheduling-jobs-with-cron-yaml#the_schedule_format NOTE: The minimum interval time between recurring transfers depends on the data source; refer to the documentation for your data source.
   --schedule-options: record # Options customizing the data transfer schedule. — shape: {disableAutoScheduling?: bool, endTime?: string, startTime?: string}
   --user-id: string # Deprecated. Unique ID of the user on whose behalf transfer is done. (format: int64)
-]: any -> record<dataRefreshWindowDays: int, dataSourceId: string, datasetRegion: string, destinationDatasetId: string, disabled: bool, displayName: string, emailPreferences: record<enableFailureEmail: bool>, name: string, nextRunTime: string, notificationPubsubTopic: string, ownerInfo: record<email: string>, params: record, schedule: string, scheduleOptions: record<disableAutoScheduling: bool, endTime: string, startTime: string>, state: string, updateTime: string, userId: string> {
+]: any -> oneof<record<dataRefreshWindowDays: int, dataSourceId: string, datasetRegion: string, destinationDatasetId: string, disabled: bool, displayName: string, emailPreferences: record<enableFailureEmail: bool>, name: string, nextRunTime: string, notificationPubsubTopic: string, ownerInfo: record<email: string>, params: record, schedule: string, scheduleOptions: record<disableAutoScheduling: bool, endTime: string, startTime: string>, state: string, updateTime: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -336,7 +357,7 @@ export def "bigquerydatatransfer-projects-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like `"displayName=tokyo"`, and is documented in more detail in [AIP-160](https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the `next_page_token` field in the response. Send that page token to receive the subsequent page.
-]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -385,7 +406,7 @@ export def "bigquerydatatransfer-projects-locations-data-sources-check-valid-cre
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<hasValidCreds: bool> {
+]: any -> oneof<record<hasValidCreds: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -437,7 +458,7 @@ export def "bigquerydatatransfer-projects-locations-enroll-data-sources" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --data-source-ids: list<string> # Data sources that are enrolled. It is required to provide at least one data source id.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -490,7 +511,7 @@ export def "bigquerydatatransfer-projects-locations-data-sources-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Page size. The default page size is the maximum value of 1000 results.
   --page-token: string # Pagination token, which can be used to request a specific page of `ListDataSourcesRequest` list results. For multiple-page results, `ListDataSourcesResponse` outputs a `next_page` token, which can be used as the `page_token` value to request the next page of list results.
-]: nothing -> record<dataSources: table<authorizationType: string, clientId: string, dataRefreshType: string, dataSourceId: string, defaultDataRefreshWindowDays: int, defaultSchedule: string, description: string, displayName: string, helpUrl: string, manualRunsDisabled: bool, minimumScheduleInterval: string, name: string, parameters: list, scopes: list, supportsCustomSchedule: bool, supportsMultipleTransfers: bool, transferType: string, updateDeadlineSeconds: int>, nextPageToken: string> {
+]: nothing -> oneof<record<dataSources: table<authorizationType: string, clientId: string, dataRefreshType: string, dataSourceId: string, defaultDataRefreshWindowDays: int, defaultSchedule: string, description: string, displayName: string, helpUrl: string, manualRunsDisabled: bool, minimumScheduleInterval: string, name: string, parameters: list, scopes: list, supportsCustomSchedule: bool, supportsMultipleTransfers: bool, transferType: string, updateDeadlineSeconds: int>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -542,7 +563,7 @@ export def "bigquerydatatransfer-projects-transfer-configs-runs-list" [
   --page-token: string # Pagination token, which can be used to request a specific page of `ListTransferRunsRequest` list results. For multiple-page results, `ListTransferRunsResponse` outputs a `next_page` token, which can be used as the `page_token` value to request the next page of list results.
   --run-attempt: string@run-attempt-completer # Indicates how run attempts are to be pulled.
   --states: list<string> # When specified, only transfer runs with requested states are returned.
-]: nothing -> record<nextPageToken: string, transferRuns: table<dataSourceId: string, destinationDatasetId: string, emailPreferences: record, endTime: string, errorStatus: record, name: string, notificationPubsubTopic: string, params: record, runTime: string, schedule: string, scheduleTime: string, startTime: string, state: string, updateTime: string, userId: string>> {
+]: nothing -> oneof<record<nextPageToken: string, transferRuns: table<dataSourceId: string, destinationDatasetId: string, emailPreferences: record, endTime: string, errorStatus: record, name: string, notificationPubsubTopic: string, params: record, runTime: string, schedule: string, scheduleTime: string, startTime: string, state: string, updateTime: string, userId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -593,7 +614,7 @@ export def "bigquerydatatransfer-projects-transfer-configs-list" [
   --data-source-ids: list<string> # When specified, only configurations of requested data sources are returned.
   --page-size: int # Page size. The default page size is the maximum value of 1000 results.
   --page-token: string # Pagination token, which can be used to request a specific page of `ListTransfersRequest` list results. For multiple-page results, `ListTransfersResponse` outputs a `next_page` token, which can be used as the `page_token` value to request the next page of list results.
-]: nothing -> record<nextPageToken: string, transferConfigs: table<dataRefreshWindowDays: int, dataSourceId: string, datasetRegion: string, destinationDatasetId: string, disabled: bool, displayName: string, emailPreferences: record, name: string, nextRunTime: string, notificationPubsubTopic: string, ownerInfo: record, params: record, schedule: string, scheduleOptions: record, state: string, updateTime: string, userId: string>> {
+]: nothing -> oneof<record<nextPageToken: string, transferConfigs: table<dataRefreshWindowDays: int, dataSourceId: string, datasetRegion: string, destinationDatasetId: string, disabled: bool, displayName: string, emailPreferences: record, name: string, nextRunTime: string, notificationPubsubTopic: string, ownerInfo: record, params: record, schedule: string, scheduleOptions: record, state: string, updateTime: string, userId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -619,9 +640,6 @@ export def "bigquerydatatransfer-projects-transfer-configs-list" [
 #
 # POST /v1/{parent}/transferConfigs
 # operationId: bigquerydatatransfer.projects.transferConfigs.create
-# --emailPreferences shape: {enableFailureEmail?: bool}
-# --ownerInfo shape: {email?: string}
-# --scheduleOptions shape: {disableAutoScheduling?: bool, endTime?: string, startTime?: string}
 export def "bigquerydatatransfer-projects-transfer-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -660,7 +678,7 @@ export def "bigquerydatatransfer-projects-transfer-configs-create" [
   --schedule: string # Data transfer schedule. If the data source does not support a custom schedule, this should be empty. If it is empty, the default value for the data source will be used. The specified times are in UTC. Examples of valid format: `1st,3rd monday of month 15:30`, `every wed,fri of jan,jun 13:15`, and `first sunday of quarter 00:00`. See more explanation about the format here: https://cloud.google.com/appengine/docs/flexible/python/scheduling-jobs-with-cron-yaml#the_schedule_format NOTE: The minimum interval time between recurring transfers depends on the data source; refer to the documentation for your data source.
   --schedule-options: record # Options customizing the data transfer schedule. — shape: {disableAutoScheduling?: bool, endTime?: string, startTime?: string}
   --user-id: string # Deprecated. Unique ID of the user on whose behalf transfer is done. (format: int64)
-]: any -> record<dataRefreshWindowDays: int, dataSourceId: string, datasetRegion: string, destinationDatasetId: string, disabled: bool, displayName: string, emailPreferences: record<enableFailureEmail: bool>, name: string, nextRunTime: string, notificationPubsubTopic: string, ownerInfo: record<email: string>, params: record, schedule: string, scheduleOptions: record<disableAutoScheduling: bool, endTime: string, startTime: string>, state: string, updateTime: string, userId: string> {
+]: any -> oneof<record<dataRefreshWindowDays: int, dataSourceId: string, datasetRegion: string, destinationDatasetId: string, disabled: bool, displayName: string, emailPreferences: record<enableFailureEmail: bool>, name: string, nextRunTime: string, notificationPubsubTopic: string, ownerInfo: record<email: string>, params: record, schedule: string, scheduleOptions: record<disableAutoScheduling: bool, endTime: string, startTime: string>, state: string, updateTime: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -714,7 +732,7 @@ export def "bigquerydatatransfer-projects-transfer-configs-runs-transfer-logs-li
   --message-types: list<string> # Message types to return. If not populated - INFO, WARNING and ERROR messages are returned.
   --page-size: int # Page size. The default page size is the maximum value of 1000 results.
   --page-token: string # Pagination token, which can be used to request a specific page of `ListTransferLogsRequest` list results. For multiple-page results, `ListTransferLogsResponse` outputs a `next_page` token, which can be used as the `page_token` value to request the next page of list results.
-]: nothing -> record<nextPageToken: string, transferMessages: table<messageText: string, messageTime: string, severity: string>> {
+]: nothing -> oneof<record<nextPageToken: string, transferMessages: table<messageText: string, messageTime: string, severity: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -764,7 +782,7 @@ export def "bigquerydatatransfer-projects-transfer-configs-schedule-runs" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --end-time: string # Required. End time of the range of transfer runs. For example, `"2017-05-30T00:00:00+00:00"`. (format: google-datetime)
   --start-time: string # Required. Start time of the range of transfer runs. For example, `"2017-05-25T00:00:00+00:00"`. (format: google-datetime)
-]: any -> record<runs: table<dataSourceId: string, destinationDatasetId: string, emailPreferences: record, endTime: string, errorStatus: record, name: string, notificationPubsubTopic: string, params: record, runTime: string, schedule: string, scheduleTime: string, startTime: string, state: string, updateTime: string, userId: string>> {
+]: any -> oneof<record<runs: table<dataSourceId: string, destinationDatasetId: string, emailPreferences: record, endTime: string, errorStatus: record, name: string, notificationPubsubTopic: string, params: record, runTime: string, schedule: string, scheduleTime: string, startTime: string, state: string, updateTime: string, userId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -793,7 +811,6 @@ export def "bigquerydatatransfer-projects-transfer-configs-schedule-runs" [
 #
 # POST /v1/{parent}:startManualRuns
 # operationId: bigquerydatatransfer.projects.transferConfigs.startManualRuns
-# --requestedTimeRange shape: {endTime?: string, startTime?: string}
 export def "bigquerydatatransfer-projects-transfer-configs-start-manual-runs" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -818,7 +835,7 @@ export def "bigquerydatatransfer-projects-transfer-configs-start-manual-runs" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --requested-run-time: string # Specific run_time for a transfer run to be started. The requested_run_time must not be in the future. (format: google-datetime)
   --requested-time-range: record # A specification for a time range, this will request transfer runs with run_time between start_time (inclusive) and end_time (exclusive). — shape: {endTime?: string, startTime?: string}
-]: any -> record<runs: table<dataSourceId: string, destinationDatasetId: string, emailPreferences: record, endTime: string, errorStatus: record, name: string, notificationPubsubTopic: string, params: record, runTime: string, schedule: string, scheduleTime: string, startTime: string, state: string, updateTime: string, userId: string>> {
+]: any -> oneof<record<runs: table<dataSourceId: string, destinationDatasetId: string, emailPreferences: record, endTime: string, errorStatus: record, name: string, notificationPubsubTopic: string, params: record, runTime: string, schedule: string, scheduleTime: string, startTime: string, state: string, updateTime: string, userId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

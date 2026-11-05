@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -104,9 +128,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "applicants-all" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["applicants-all" "applicants-add" "applicants-one" "jobs-all" "jobs-one" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -146,7 +170,7 @@ export def "applicants-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<addresses: list, anonymized: bool, applications: list, archived: bool, birthday: string, confidential: bool, coordinator_id: string, cover_letter: string, created_at: string, created_by: string, custom_fields: list, cv_url: string, deleted: bool, deleted_at: string, deleted_by: string, emails: list, first_name: string, followers: list, headline: string, id: string, initials: string, job_url: string, last_interaction_at: string, last_name: string, middle_name: string, name: string, owner_id: string, phone_numbers: list, photo_url: string, position_id: string, record_url: string, recruiter_id: string, rejected_at: string, social_links: list, source_id: string, sourced_by: string, sources: list, stage_id: string, tags: list, title: string, updated_at: string, updated_by: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<addresses: list, anonymized: bool, applications: list, archived: bool, birthday: string, confidential: bool, coordinator_id: string, cover_letter: string, created_at: string, created_by: string, custom_fields: list, cv_url: string, deleted: bool, deleted_at: string, deleted_by: string, emails: list, first_name: string, followers: list, headline: string, id: string, initials: string, job_url: string, last_interaction_at: string, last_name: string, middle_name: string, name: string, owner_id: string, phone_numbers: list, photo_url: string, position_id: string, record_url: string, recruiter_id: string, rejected_at: string, social_links: list, source_id: string, sourced_by: string, sources: list, stage_id: string, tags: list, title: string, updated_at: string, updated_by: string, websites: list>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -175,12 +199,6 @@ export def "applicants-all" [
 #
 # POST /ats/applicants
 # operationId: applicantsAdd
-# --addresses item shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-# --custom_fields item shape: {description?: string, id: string, name?: string, value?: any}
-# --emails item shape: {email: string, id?: string, type?: "primary"|"secondary"|"work"|"personal"|"billing"|"other"}
-# --phone_numbers item shape: {area_code?: string, country_code?: string, extension?: string, id?: string, number: string, type?: "primary"|"secondary"|"home"|"work"|"office"|"mobile"|"assistant"|"fax"|"direct-dial-in"|"personal"|"other"}
-# --social_links item shape: {id?: string, type?: string, url: string}
-# --websites item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
 export def "applicants-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -225,7 +243,7 @@ export def "applicants-add" [
   --tags: list<string> # e.g. [New]
   --title: string # The job title of the person. (nullable, e.g. CEO)
   --websites: list # item shape: {id?: string, type?: "primary"|"secondary"|"work"|"personal"|"other", url: string}
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -273,7 +291,7 @@ export def "applicants-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<addresses: list<record>, anonymized: bool, applications: list<string>, archived: bool, birthday: string, confidential: bool, coordinator_id: string, cover_letter: string, created_at: string, created_by: string, custom_fields: list<record>, cv_url: string, deleted: bool, deleted_at: string, deleted_by: string, emails: list<record>, first_name: string, followers: list<string>, headline: string, id: string, initials: string, job_url: string, last_interaction_at: string, last_name: string, middle_name: string, name: string, owner_id: string, phone_numbers: list<record>, photo_url: string, position_id: string, record_url: string, recruiter_id: string, rejected_at: string, social_links: list<record>, source_id: string, sourced_by: string, sources: list<string>, stage_id: string, tags: list<string>, title: string, updated_at: string, updated_by: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<addresses: list<record>, anonymized: bool, applications: list<string>, archived: bool, birthday: string, confidential: bool, coordinator_id: string, cover_letter: string, created_at: string, created_by: string, custom_fields: list<record>, cv_url: string, deleted: bool, deleted_at: string, deleted_by: string, emails: list<record>, first_name: string, followers: list<string>, headline: string, id: string, initials: string, job_url: string, last_interaction_at: string, last_name: string, middle_name: string, name: string, owner_id: string, phone_numbers: list<record>, photo_url: string, position_id: string, record_url: string, recruiter_id: string, rejected_at: string, social_links: list<record>, source_id: string, sourced_by: string, sources: list<string>, stage_id: string, tags: list<string>, title: string, updated_at: string, updated_by: string, websites: list<record>>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -320,7 +338,7 @@ export def "jobs-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<addresses: list, available_to_employees: bool, blocks: list, branch: record, closing: string, closing_date: string, closing_html: string, code: string, confidential: bool, created_at: string, created_by: string, deleted: bool, department: record, description: string, description_html: string, employment_terms: string, experience: string, followers: list, hiring_managers: list, id: string, job_portal_url: string, language: string, owner_id: string, published_at: string, record_url: string, recruiters: list, remote: bool, requisition_id: string, salary: record, sequence: int, slug: string, status: string, tags: list, title: string, updated_at: string, updated_by: string, url: string, visibility: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<addresses: list, available_to_employees: bool, blocks: list, branch: record, closing: string, closing_date: string, closing_html: string, code: string, confidential: bool, created_at: string, created_by: string, deleted: bool, department: record, description: string, description_html: string, employment_terms: string, experience: string, followers: list, hiring_managers: list, id: string, job_portal_url: string, language: string, owner_id: string, published_at: string, record_url: string, recruiters: list, remote: bool, requisition_id: string, salary: record, sequence: int, slug: string, status: string, tags: list, title: string, updated_at: string, updated_by: string, url: string, visibility: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -365,7 +383,7 @@ export def "jobs-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<addresses: list<record>, available_to_employees: bool, blocks: list<record>, branch: record<id: string, name: string>, closing: string, closing_date: string, closing_html: string, code: string, confidential: bool, created_at: string, created_by: string, deleted: bool, department: record<code: string, created_at: string, created_by: string, description: string, id: string, name: string, parent_id: string, updated_at: string, updated_by: string>, description: string, description_html: string, employment_terms: string, experience: string, followers: list<string>, hiring_managers: list<record>, id: string, job_portal_url: string, language: string, owner_id: string, published_at: string, record_url: string, recruiters: list<string>, remote: bool, requisition_id: string, salary: record<currency: string, max: int, min: int>, sequence: int, slug: string, status: string, tags: list<string>, title: string, updated_at: string, updated_by: string, url: string, visibility: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<addresses: list<record>, available_to_employees: bool, blocks: list<record>, branch: record<id: string, name: string>, closing: string, closing_date: string, closing_html: string, code: string, confidential: bool, created_at: string, created_by: string, deleted: bool, department: record<code: string, created_at: string, created_by: string, description: string, id: string, name: string, parent_id: string, updated_at: string, updated_by: string>, description: string, description_html: string, employment_terms: string, experience: string, followers: list<string>, hiring_managers: list<record>, id: string, job_portal_url: string, language: string, owner_id: string, published_at: string, record_url: string, recruiters: list<string>, remote: bool, requisition_id: string, salary: record<currency: string, max: int, min: int>, sequence: int, slug: string, status: string, tags: list<string>, title: string, updated_at: string, updated_by: string, url: string, visibility: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

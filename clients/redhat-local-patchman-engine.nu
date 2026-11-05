@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "x-rh-identity" => { {scheme: $scheme, headers: {"x-rh-identity": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -117,9 +141,9 @@ def sort-completer-4 [] { ["id" "name" "public_date" "synopsis" "type"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-advisories" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-advisories" "detail-advisory" "list-advisory-systems" "export-advisories" "export-advisory-systems" "export-packages" "export-package-systems" "export-systems" "export-system-advisories" "export-system-packages" "list-packages" "latest-package" "package-systems" "package-versions" "list-systems" "deletesystem" "detail-system" "list-system-advisories" "system-packages" "view-advisories-systems" "view-systems-advisories" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -165,7 +189,7 @@ export def "list-advisories" [
   --tags: list<string> # Tag filter
   --filter-system-profile-sap-system: string # Filter only SAP systems
   --filter-system-profile-sap-sids-in: list<string> # Filter systems by their SAP SIDs
-]: nothing -> record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[public_date]" $filter_public_date "scalar") (serialize-qp "filter[synopsis]" $filter_synopsis "scalar") (serialize-qp "filter[advisory_type]" $filter_advisory_type "scalar") (serialize-qp "filter[severity]" $filter_severity "scalar") (serialize-qp "filter[applicable_systems]" $filter_applicable_systems "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
@@ -201,7 +225,7 @@ export def "detail-advisory" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<attributes: record<cves: list, description: string, fixes: string, modified_date: string, packages: record, public_date: string, references: list, severity: int, solution: string, synopsis: string, topic: string>, id: string, type: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<cves: list, description: string, fixes: string, modified_date: string, packages: record, public_date: string, references: list, severity: int, solution: string, synopsis: string, topic: string>, id: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($advisory_id | is-empty) { error make --unspanned { msg: "path parameter 'advisory_id' must be non-empty" } }
@@ -258,7 +282,7 @@ export def "list-advisory-systems" [
   --tags: list<string> # Tag filter
   --filter-system-profile-sap-system: string # Filter only SAP systems
   --filter-system-profile-sap-sids-in: list<string> # Filter systems by their SAP SIDs
-]: nothing -> record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($advisory_id | is-empty) { error make --unspanned { msg: "path parameter 'advisory_id' must be non-empty" } }
@@ -303,7 +327,7 @@ export def "export-advisories" [
   --filter-advisory-type: string # Filter
   --filter-severity: string # Filter
   --filter-applicable-systems: string # Filter
-]: nothing -> table<advisory_type: int, applicable_systems: int, cve_count: int, description: string, id: string, public_date: string, severity: int, synopsis: string> {
+]: nothing -> oneof<table<advisory_type: int, applicable_systems: int, cve_count: int, description: string, id: string, public_date: string, severity: int, synopsis: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[description]" $filter_description "scalar") (serialize-qp "filter[public_date]" $filter_public_date "scalar") (serialize-qp "filter[synopsis]" $filter_synopsis "scalar") (serialize-qp "filter[advisory_type]" $filter_advisory_type "scalar") (serialize-qp "filter[severity]" $filter_severity "scalar") (serialize-qp "filter[applicable_systems]" $filter_applicable_systems "scalar")] | flatten | str join "&"
@@ -355,7 +379,7 @@ export def "export-advisory-systems" [
   --filter-system-profile-sap-system: string # Filter only SAP systems
   --filter-system-profile-sap-sids-in: list<string> # Filter systems by their SAP SIDs
   --tags: list<string> # Tag filter
-]: nothing -> table<created: string, culled_timestamp: string, display_name: string, id: string, insights_id: string, last_evaluation: string, last_upload: string, os_major: string, os_minor: string, os_name: string, other_count: int, packages_installed: int, packages_updatable: int, rhba_count: int, rhea_count: int, rhsa_count: int, rhsm: string, stale: bool, stale_timestamp: string, stale_warning_timestamp: string, third_party: bool> {
+]: nothing -> oneof<table<created: string, culled_timestamp: string, display_name: string, id: string, insights_id: string, last_evaluation: string, last_upload: string, os_major: string, os_minor: string, os_name: string, other_count: int, packages_installed: int, packages_updatable: int, rhba_count: int, rhea_count: int, rhsa_count: int, rhsm: string, stale: bool, stale_timestamp: string, stale_warning_timestamp: string, third_party: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($advisory_id | is-empty) { error make --unspanned { msg: "path parameter 'advisory_id' must be non-empty" } }
@@ -398,7 +422,7 @@ export def "export-packages" [
   --filter-systems-installed: string # Filter
   --filter-systems-updatable: string # Filter
   --filter-summary: string # Filter
-]: nothing -> table<name: string, summary: string, systems_installed: int, systems_updatable: int> {
+]: nothing -> oneof<table<name: string, summary: string, systems_installed: int, systems_updatable: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[systems_installed]" $filter_systems_installed "scalar") (serialize-qp "filter[systems_updatable]" $filter_systems_updatable "scalar") (serialize-qp "filter[summary]" $filter_summary "scalar")] | flatten | str join "&"
@@ -437,7 +461,7 @@ export def "export-package-systems" [
   --filter-system-profile-sap-system: string # Filter only SAP systems
   --filter-system-profile-sap-sids-in: list<string> # Filter systems by their SAP SIDs
   --tags: list<string> # Tag filter
-]: nothing -> table<available_evra: string, display_name: string, id: string, installed_evra: string, updatable: bool> {
+]: nothing -> oneof<table<available_evra: string, display_name: string, id: string, installed_evra: string, updatable: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
@@ -489,7 +513,7 @@ export def "export-systems" [
   --filter-system-profile-sap-system: string # Filter only SAP systems
   --filter-system-profile-sap-sids-in: list<string> # Filter systems by their SAP SIDs
   --tags: list<string> # Tag filter
-]: nothing -> table<created: string, culled_timestamp: string, display_name: string, id: string, insights_id: string, last_evaluation: string, last_upload: string, os_major: string, os_minor: string, os_name: string, other_count: int, packages_installed: int, packages_updatable: int, rhba_count: int, rhea_count: int, rhsa_count: int, rhsm: string, stale: bool, stale_timestamp: string, stale_warning_timestamp: string, third_party: bool> {
+]: nothing -> oneof<table<created: string, culled_timestamp: string, display_name: string, id: string, insights_id: string, last_evaluation: string, last_upload: string, os_major: string, os_minor: string, os_name: string, other_count: int, packages_installed: int, packages_updatable: int, rhba_count: int, rhea_count: int, rhsa_count: int, rhsm: string, stale: bool, stale_timestamp: string, stale_warning_timestamp: string, third_party: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[display_name]" $filter_display_name "scalar") (serialize-qp "filter[last_evaluation]" $filter_last_evaluation "scalar") (serialize-qp "filter[last_upload]" $filter_last_upload "scalar") (serialize-qp "filter[rhsa_count]" $filter_rhsa_count "scalar") (serialize-qp "filter[rhba_count]" $filter_rhba_count "scalar") (serialize-qp "filter[rhea_count]" $filter_rhea_count "scalar") (serialize-qp "filter[other_count]" $filter_other_count "scalar") (serialize-qp "filter[stale]" $filter_stale "scalar") (serialize-qp "filter[packages_installed]" $filter_packages_installed "scalar") (serialize-qp "filter[packages_updatable]" $filter_packages_updatable "scalar") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi") (serialize-qp "tags" $tags "multi")] | flatten | str join "&"
@@ -533,7 +557,7 @@ export def "export-system-advisories" [
   --filter-synopsis: string # Filter
   --filter-advisory-type: string # Filter
   --filter-severity: string # Filter
-]: nothing -> table<advisory_type: int, cve_count: int, description: string, id: string, public_date: string, severity: int, synopsis: string> {
+]: nothing -> oneof<table<advisory_type: int, cve_count: int, description: string, id: string, public_date: string, severity: int, synopsis: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($inventory_id | is-empty) { error make --unspanned { msg: "path parameter 'inventory_id' must be non-empty" } }
@@ -576,7 +600,7 @@ export def "export-system-packages" [
   --filter-evra: string # Filter
   --filter-summary: string # Filter
   --filter-updatable: oneof<nothing, bool> # Filter
-]: nothing -> table<description: string, evra: string, latest_evra: string, name: string, summary: string, updatable: bool> {
+]: nothing -> oneof<table<description: string, evra: string, latest_evra: string, name: string, summary: string, updatable: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($inventory_id | is-empty) { error make --unspanned { msg: "path parameter 'inventory_id' must be non-empty" } }
@@ -623,7 +647,7 @@ export def "list-packages" [
   --tags: list<string> # Tag filter
   --filter-system-profile-sap-system: string # Filter only SAP systems
   --filter-system-profile-sap-sids-in: list<string> # Filter systems by their SAP SIDs
-]: nothing -> record<data: table<name: string, summary: string, systems_installed: int, systems_updatable: int>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>> {
+]: nothing -> oneof<record<data: table<name: string, summary: string, systems_installed: int, systems_updatable: int>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[name]" $filter_name "scalar") (serialize-qp "filter[systems_installed]" $filter_systems_installed "scalar") (serialize-qp "filter[systems_updatable]" $filter_systems_updatable "scalar") (serialize-qp "filter[summary]" $filter_summary "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
@@ -659,7 +683,7 @@ export def "latest-package" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<attributes: record<advisory_id: string, description: string, name: string, summary: string, version: string>, id: string, type: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<advisory_id: string, description: string, name: string, summary: string, version: string>, id: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
@@ -700,7 +724,7 @@ export def "package-systems" [
   --tags: list<string> # Tag filter
   --filter-system-profile-sap-system: string # Filter only SAP systems
   --filter-system-profile-sap-sids-in: list<string> # Filter systems by their SAP SIDs
-]: nothing -> record<data: table<available_evra: string, display_name: string, id: string, installed_evra: string, updatable: bool>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>> {
+]: nothing -> oneof<record<data: table<available_evra: string, display_name: string, id: string, installed_evra: string, updatable: bool>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
@@ -739,7 +763,7 @@ export def "package-versions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Limit for paging, set -1 to return all
   --offset: int # Offset for paging
-]: nothing -> record<data: table<evra: string>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>> {
+]: nothing -> oneof<record<data: table<evra: string>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'package_name' must be non-empty" } }
@@ -798,7 +822,7 @@ export def "list-systems" [
   --tags: list<string> # Tag filter
   --filter-system-profile-sap-system: string # Filter only SAP systems
   --filter-system-profile-sap-sids-in: list<string> # Filter systems by their SAP SIDs
-]: nothing -> record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filter[insights_id]" $filter_insights_id "scalar") (serialize-qp "filter[id]" $filter_id "scalar") (serialize-qp "filter[display_name]" $filter_display_name "scalar") (serialize-qp "filter[last_evaluation]" $filter_last_evaluation "scalar") (serialize-qp "filter[last_upload]" $filter_last_upload "scalar") (serialize-qp "filter[rhsa_count]" $filter_rhsa_count "scalar") (serialize-qp "filter[rhba_count]" $filter_rhba_count "scalar") (serialize-qp "filter[rhea_count]" $filter_rhea_count "scalar") (serialize-qp "filter[other_count]" $filter_other_count "scalar") (serialize-qp "filter[stale]" $filter_stale "scalar") (serialize-qp "filter[packages_installed]" $filter_packages_installed "scalar") (serialize-qp "filter[packages_updatable]" $filter_packages_updatable "scalar") (serialize-qp "filter[stale_timestamp]" $filter_stale_timestamp "scalar") (serialize-qp "filter[stale_warning_timestamp]" $filter_stale_warning_timestamp "scalar") (serialize-qp "filter[culled_timestamp]" $filter_culled_timestamp "scalar") (serialize-qp "filter[created]" $filter_created "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "filter[system_profile][sap_system]" $filter_system_profile_sap_system "scalar") (serialize-qp "filter[system_profile][sap_sids][in]" $filter_system_profile_sap_sids_in "multi")] | flatten | str join "&"
@@ -870,7 +894,7 @@ export def "detail-system" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<attributes: record<created: string, culled_timestamp: string, display_name: string, insights_id: string, last_evaluation: string, last_upload: string, os_major: string, os_minor: string, os_name: string, other_count: int, packages_installed: int, packages_updatable: int, rhba_count: int, rhea_count: int, rhsa_count: int, rhsm: string, stale: bool, stale_timestamp: string, stale_warning_timestamp: string, third_party: bool>, id: string, type: string>> {
+]: nothing -> oneof<record<data: record<attributes: record<created: string, culled_timestamp: string, display_name: string, insights_id: string, last_evaluation: string, last_upload: string, os_major: string, os_minor: string, os_name: string, other_count: int, packages_installed: int, packages_updatable: int, rhba_count: int, rhea_count: int, rhsa_count: int, rhsm: string, stale: bool, stale_timestamp: string, stale_warning_timestamp: string, third_party: bool>, id: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($inventory_id | is-empty) { error make --unspanned { msg: "path parameter 'inventory_id' must be non-empty" } }
@@ -916,7 +940,7 @@ export def "list-system-advisories" [
   --filter-synopsis: string # Filter
   --filter-advisory-type: string # Filter
   --filter-severity: string # Filter
-]: nothing -> record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>> {
+]: nothing -> oneof<record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($inventory_id | is-empty) { error make --unspanned { msg: "path parameter 'inventory_id' must be non-empty" } }
@@ -961,7 +985,7 @@ export def "system-packages" [
   --filter-evra: string # Filter
   --filter-summary: string # Filter
   --filter-updatable: oneof<nothing, bool> # Filter
-]: nothing -> record<data: table<description: string, evra: string, name: string, summary: string, updatable: bool, updates: list>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>> {
+]: nothing -> oneof<record<data: table<description: string, evra: string, name: string, summary: string, updatable: bool, updates: list>, links: record<first: string, last: string, next: string, previous: string>, meta: record<filter: record, limit: int, offset: int, search: string, sort: list<string>, subtotals: record, total_items: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
   if ($inventory_id | is-empty) { error make --unspanned { msg: "path parameter 'inventory_id' must be non-empty" } }
@@ -999,7 +1023,7 @@ export def "view-advisories-systems" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --advisories: list<string>
   --systems: list<string>
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)
@@ -1038,7 +1062,7 @@ export def "view-systems-advisories" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --advisories: list<string>
   --systems: list<string>
-]: any -> record<data: record> {
+]: any -> oneof<record<data: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-rh-identity"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -129,9 +153,9 @@ def search-mode-completer [] { ["FACETED_SEARCH_ONLY" "PRODUCT_SEARCH_ONLY" "SEA
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "retail-projects-locations-catalogs-attributes-config-add-catalog-attribute" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["retail-projects-locations-catalogs-attributes-config-add-catalog-attribute" "retail-projects-locations-catalogs-attributes-config-batch-remove-catalog-attributes" "retail-projects-locations-catalogs-attributes-config-remove-catalog-attribute" "retail-projects-locations-catalogs-attributes-config-replace-catalog-attribute" "retail-projects-locations-catalogs-complete-query" "retail-projects-locations-catalogs-get-default-branch" "retail-projects-locations-catalogs-set-default-branch" "retail-projects-locations-catalogs-serving-configs-delete" "retail-projects-operations-get" "retail-projects-locations-catalogs-serving-configs-patch" "retail-projects-locations-catalogs-merchant-center-account-links-create-merchant-center-account-link" "retail-projects-operations-list" "retail-projects-locations-catalogs-models-pause" "retail-projects-locations-catalogs-models-resume" "retail-projects-locations-catalogs-branches-products-set-inventory" "retail-projects-locations-catalogs-models-tune" "retail-projects-locations-catalogs-list" "retail-projects-locations-catalogs-completion-data-import" "retail-projects-locations-catalogs-controls-list" "retail-projects-locations-catalogs-controls-create" "retail-projects-locations-catalogs-merchant-center-account-links-list" "retail-projects-locations-catalogs-models-list" "retail-projects-locations-catalogs-models-create" "retail-projects-locations-catalogs-branches-products-list" "retail-projects-locations-catalogs-branches-products-create" "retail-projects-locations-catalogs-branches-products-import" "retail-projects-locations-catalogs-branches-products-purge" "retail-projects-locations-catalogs-serving-configs-list" "retail-projects-locations-catalogs-serving-configs-create" "retail-projects-locations-catalogs-user-events-collect" "retail-projects-locations-catalogs-user-events-import" "retail-projects-locations-catalogs-user-events-purge" "retail-projects-locations-catalogs-user-events-rejoin" "retail-projects-locations-catalogs-user-events-write" "retail-projects-locations-catalogs-serving-configs-predict" "retail-projects-locations-catalogs-serving-configs-search" "retail-projects-locations-catalogs-branches-products-add-fulfillment-places" "retail-projects-locations-catalogs-branches-products-add-local-inventories" "retail-projects-locations-catalogs-branches-products-remove-fulfillment-places" "retail-projects-locations-catalogs-branches-products-remove-local-inventories" "retail-projects-locations-catalogs-serving-configs-add-control" "retail-projects-locations-catalogs-serving-configs-remove-control" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -153,7 +177,6 @@ export def commands []: nothing -> table {
 #
 # POST /v2alpha/{attributesConfig}:addCatalogAttribute
 # operationId: retail.projects.locations.catalogs.attributesConfig.addCatalogAttribute
-# --catalogAttribute shape: {dynamicFacetableOption?: "DYNAMIC_FACETABLE_OPTION_UNSPECIFIED"|"DYNAMIC_FACETABLE_ENABLED"|"DYNAMIC_FACETABLE_DISABLED", exactSearchableOption?: "EXACT_SEARCHABLE_OPTION_UNSPECIFIED"|"EXACT_SEARCHABLE_ENABLED"|"EXACT_SEARCHABLE_DISABLED", indexableOption?: "INDEXABLE_OPTION_UNSPECIFIED"|"INDEXABLE_ENABLED"|"INDEXABLE_DISABLED", key?: string, recommendationsFilteringOption?: "RECOMMENDATIONS_FILTERING_OPTION_UNSPECIFIED"|"RECOMMENDATIONS_FILTERING_DISABLED"|"RECOMMENDATIONS_FILTERING_ENABLED", ... (2 more fields)}
 export def "retail-projects-locations-catalogs-attributes-config-add-catalog-attribute" [
   attributes_config: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -177,7 +200,7 @@ export def "retail-projects-locations-catalogs-attributes-config-add-catalog-att
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --catalog-attribute: record # Catalog level attribute config for an attribute. For example, if customers want to enable/disable facet for a specific attribute. — shape: {dynamicFacetableOption?: "DYNAMIC_FACETABLE_OPTION_UNSPECIFIED"|"DYNAMIC_FACETABLE_ENABLED"|"DYNAMIC_FACETABLE_DISABLED", exactSearchableOption?: "EXACT_SEARCHABLE_OPTION_UNSPECIFIED"|"EXACT_SEARCHABLE_ENABLED"|"EXACT_SEARCHABLE_DISABLED", indexableOption?: "INDEXABLE_OPTION_UNSPECIFIED"|"INDEXABLE_ENABLED"|"INDEXABLE_DISABLED", key?: string, recommendationsFilteringOption?: "RECOMMENDATIONS_FILTERING_OPTION_UNSPECIFIED"|"RECOMMENDATIONS_FILTERING_DISABLED"|"RECOMMENDATIONS_FILTERING_ENABLED", ... (2 more fields)}
-]: any -> record<attributeConfigLevel: string, catalogAttributes: record, name: string> {
+]: any -> oneof<record<attributeConfigLevel: string, catalogAttributes: record, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -229,7 +252,7 @@ export def "retail-projects-locations-catalogs-attributes-config-batch-remove-ca
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --attribute-keys: list<string> # Required. The attribute name keys of the CatalogAttributes to delete. A maximum of 1000 catalog attributes can be deleted in a batch.
-]: any -> record<deletedCatalogAttributes: list<string>, resetCatalogAttributes: list<string>> {
+]: any -> oneof<record<deletedCatalogAttributes: list<string>, resetCatalogAttributes: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -281,7 +304,7 @@ export def "retail-projects-locations-catalogs-attributes-config-remove-catalog-
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --key-body: string # Required. The attribute name key of the CatalogAttribute to remove. (body field)
-]: any -> record<attributeConfigLevel: string, catalogAttributes: record, name: string> {
+]: any -> oneof<record<attributeConfigLevel: string, catalogAttributes: record, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -310,7 +333,6 @@ export def "retail-projects-locations-catalogs-attributes-config-remove-catalog-
 #
 # POST /v2alpha/{attributesConfig}:replaceCatalogAttribute
 # operationId: retail.projects.locations.catalogs.attributesConfig.replaceCatalogAttribute
-# --catalogAttribute shape: {dynamicFacetableOption?: "DYNAMIC_FACETABLE_OPTION_UNSPECIFIED"|"DYNAMIC_FACETABLE_ENABLED"|"DYNAMIC_FACETABLE_DISABLED", exactSearchableOption?: "EXACT_SEARCHABLE_OPTION_UNSPECIFIED"|"EXACT_SEARCHABLE_ENABLED"|"EXACT_SEARCHABLE_DISABLED", indexableOption?: "INDEXABLE_OPTION_UNSPECIFIED"|"INDEXABLE_ENABLED"|"INDEXABLE_DISABLED", key?: string, recommendationsFilteringOption?: "RECOMMENDATIONS_FILTERING_OPTION_UNSPECIFIED"|"RECOMMENDATIONS_FILTERING_DISABLED"|"RECOMMENDATIONS_FILTERING_ENABLED", ... (2 more fields)}
 export def "retail-projects-locations-catalogs-attributes-config-replace-catalog-attribute" [
   attributes_config: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -335,7 +357,7 @@ export def "retail-projects-locations-catalogs-attributes-config-replace-catalog
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --catalog-attribute: record # Catalog level attribute config for an attribute. For example, if customers want to enable/disable facet for a specific attribute. — shape: {dynamicFacetableOption?: "DYNAMIC_FACETABLE_OPTION_UNSPECIFIED"|"DYNAMIC_FACETABLE_ENABLED"|"DYNAMIC_FACETABLE_DISABLED", exactSearchableOption?: "EXACT_SEARCHABLE_OPTION_UNSPECIFIED"|"EXACT_SEARCHABLE_ENABLED"|"EXACT_SEARCHABLE_DISABLED", indexableOption?: "INDEXABLE_OPTION_UNSPECIFIED"|"INDEXABLE_ENABLED"|"INDEXABLE_DISABLED", key?: string, recommendationsFilteringOption?: "RECOMMENDATIONS_FILTERING_OPTION_UNSPECIFIED"|"RECOMMENDATIONS_FILTERING_DISABLED"|"RECOMMENDATIONS_FILTERING_ENABLED", ... (2 more fields)}
   --update-mask: string # Indicates which fields in the provided CatalogAttribute to update. The following are NOT supported: * CatalogAttribute.key If not set, all supported fields are updated. (format: google-fieldmask)
-]: any -> record<attributeConfigLevel: string, catalogAttributes: record, name: string> {
+]: any -> oneof<record<attributeConfigLevel: string, catalogAttributes: record, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -394,7 +416,7 @@ export def "retail-projects-locations-catalogs-complete-query" [
   --max-suggestions: int # Completion max suggestions. If left unset or set to 0, then will fallback to the configured value CompletionConfig.max_suggestions. The maximum allowed max suggestions is 20. If it is set higher, it will be capped by 20.
   --query: string # Required. The query used to generate suggestions. The maximum number of allowed characters is 255.
   --visitor-id: string # Required field. A unique identifier for tracking visitors. For example, this could be implemented with an HTTP cookie, which should be able to uniquely identify a visitor on a single device. This unique identifier should not change if the visitor logs in or out of the website. The field must be a UTF-8 encoded string with a length limit of 128 characters. Otherwise, an INVALID_ARGUMENT error is returned.
-]: nothing -> record<attributeResults: record, attributionToken: string, completionResults: table<attributes: record, facets: list, suggestion: string, totalProductCount: int>, recentSearchResults: table<recentSearch: string>> {
+]: nothing -> oneof<record<attributeResults: record, attributionToken: string, completionResults: table<attributes: record, facets: list, suggestion: string, totalProductCount: int>, recentSearchResults: table<recentSearch: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($catalog | is-empty) { error make --unspanned { msg: "path parameter 'catalog' must be non-empty" } }
@@ -442,7 +464,7 @@ export def "retail-projects-locations-catalogs-get-default-branch" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<branch: string, note: string, setTime: string> {
+]: nothing -> oneof<record<branch: string, note: string, setTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($catalog | is-empty) { error make --unspanned { msg: "path parameter 'catalog' must be non-empty" } }
@@ -493,7 +515,7 @@ export def "retail-projects-locations-catalogs-set-default-branch" [
   --branch-id: string # The final component of the resource name of a branch. This field must be one of "0", "1" or "2". Otherwise, an INVALID_ARGUMENT error is returned. If there are no sufficient active products in the targeted branch and force is not set, a FAILED_PRECONDITION error is returned.
   --force: oneof<nothing, bool> # If set to true, it permits switching to a branch with branch_id even if it has no sufficient active products.
   --note: string # Some note on this request, this can be retrieved by CatalogService.GetDefaultBranch before next valid default branch set occurs. This field must be a UTF-8 encoded string with a length limit of 1,000 characters. Otherwise, an INVALID_ARGUMENT error is returned.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -545,7 +567,7 @@ export def "retail-projects-locations-catalogs-serving-configs-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --force: oneof<nothing, bool> # This value only applies to the case when the target product is of type PRIMARY. When deleting a product of VARIANT/COLLECTION type, this value will be ignored. When set to true, the subsequent variant products will be deleted. When set to false, if the primary product has active variant products, an error will be returned.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -593,7 +615,7 @@ export def "retail-projects-operations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -619,8 +641,6 @@ export def "retail-projects-operations-get" [
 #
 # PATCH /v2alpha/{name}
 # operationId: retail.projects.locations.catalogs.servingConfigs.patch
-# --dynamicFacetSpec shape: {mode?: "MODE_UNSPECIFIED"|"DISABLED"|"ENABLED"}
-# --personalizationSpec shape: {mode?: "MODE_UNSPECIFIED"|"AUTO"|"DISABLED"}
 export def "retail-projects-locations-catalogs-serving-configs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -663,7 +683,7 @@ export def "retail-projects-locations-catalogs-serving-configs-patch" [
   --replacement-control-ids: list<string> # Condition replacement specifications. - Applied according to the order in the list. - A previously replaced term can not be re-replaced. - Maximum number of specifications is 100. Can only be set if solution_types is SOLUTION_TYPE_SEARCH.
   --solution-types: list<string> # Required. Immutable. Specifies the solution types that a serving config can be associated with. Currently we support setting only one type of solution.
   --twoway-synonyms-control-ids: list<string> # Condition synonyms specifications. If multiple syonyms conditions match, all matching synonyms control in the list will execute. Order of controls in the list will not matter. Maximum number of specifications is 100. Can only be set if solution_types is SOLUTION_TYPE_SEARCH.
-]: any -> record<boostControlIds: list<string>, displayName: string, diversityLevel: string, diversityType: string, doNotAssociateControlIds: list<string>, dynamicFacetSpec: record<mode: string>, enableCategoryFilterLevel: string, facetControlIds: list<string>, filterControlIds: list<string>, ignoreControlIds: list<string>, modelId: string, name: string, onewaySynonymsControlIds: list<string>, personalizationSpec: record<mode: string>, priceRerankingLevel: string, redirectControlIds: list<string>, replacementControlIds: list<string>, solutionTypes: list<string>, twowaySynonymsControlIds: list<string>> {
+]: any -> oneof<record<boostControlIds: list<string>, displayName: string, diversityLevel: string, diversityType: string, doNotAssociateControlIds: list<string>, dynamicFacetSpec: record<mode: string>, enableCategoryFilterLevel: string, facetControlIds: list<string>, filterControlIds: list<string>, ignoreControlIds: list<string>, modelId: string, name: string, onewaySynonymsControlIds: list<string>, personalizationSpec: record<mode: string>, priceRerankingLevel: string, redirectControlIds: list<string>, replacementControlIds: list<string>, solutionTypes: list<string>, twowaySynonymsControlIds: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -692,7 +712,6 @@ export def "retail-projects-locations-catalogs-serving-configs-patch" [
 #
 # POST /v2alpha/{name}
 # operationId: retail.projects.locations.catalogs.merchantCenterAccountLinks.createMerchantCenterAccountLink
-# --feedFilters item shape: {primaryFeedId?: string, primaryFeedName?: string}
 export def "retail-projects-locations-catalogs-merchant-center-account-links-create-merchant-center-account-link" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -721,7 +740,7 @@ export def "retail-projects-locations-catalogs-merchant-center-account-links-cre
   --feed-label: string # The FeedLabel used to perform filtering. Note: this replaces [region_id](https://developers.google.com/shopping-content/reference/rest/v2.1/products#Product.FIELDS.feed_label). Example value: `US`. Example value: `FeedLabel1`.
   --language-code: string # Language of the title/description and other string attributes. Use language tags defined by [BCP 47](https://www.rfc-editor.org/rfc/bcp/bcp47.txt). ISO 639-1. This specifies the language of offers in Merchant Center that will be accepted. If empty, no language filtering will be performed. Example value: `en`.
   --merchant-center-account-id: string # Required. The linked [Merchant center account id](https://developers.google.com/shopping-content/guides/accountstatuses). The account must be a standalone account or a sub-account of a MCA. (format: int64)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -775,7 +794,7 @@ export def "retail-projects-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -824,7 +843,7 @@ export def "retail-projects-locations-catalogs-models-pause" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<createTime: string, dataState: string, displayName: string, filteringOption: string, lastTuneTime: string, name: string, optimizationObjective: string, pageOptimizationConfig: record<pageOptimizationEventType: string, panels: list<record>, restriction: string>, periodicTuningState: string, servingConfigLists: table<servingConfigIds: list>, servingState: string, trainingState: string, tuningOperation: string, type: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, dataState: string, displayName: string, filteringOption: string, lastTuneTime: string, name: string, optimizationObjective: string, pageOptimizationConfig: record<pageOptimizationEventType: string, panels: list<record>, restriction: string>, periodicTuningState: string, servingConfigLists: table<servingConfigIds: list>, servingState: string, trainingState: string, tuningOperation: string, type: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -876,7 +895,7 @@ export def "retail-projects-locations-catalogs-models-resume" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<createTime: string, dataState: string, displayName: string, filteringOption: string, lastTuneTime: string, name: string, optimizationObjective: string, pageOptimizationConfig: record<pageOptimizationEventType: string, panels: list<record>, restriction: string>, periodicTuningState: string, servingConfigLists: table<servingConfigIds: list>, servingState: string, trainingState: string, tuningOperation: string, type: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, dataState: string, displayName: string, filteringOption: string, lastTuneTime: string, name: string, optimizationObjective: string, pageOptimizationConfig: record<pageOptimizationEventType: string, panels: list<record>, restriction: string>, periodicTuningState: string, servingConfigLists: table<servingConfigIds: list>, servingState: string, trainingState: string, tuningOperation: string, type: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -905,7 +924,6 @@ export def "retail-projects-locations-catalogs-models-resume" [
 #
 # POST /v2alpha/{name}:setInventory
 # operationId: retail.projects.locations.catalogs.branches.products.setInventory
-# --inventory shape: {attributes?: record, audience?: record, availability?: "AVAILABILITY_UNSPECIFIED"|"IN_STOCK"|"OUT_OF_STOCK"|"PREORDER"|"BACKORDER", availableQuantity?: int, availableTime?: string, brands?: list<string>, categories?: list<string>, collectionMemberIds?: list<string>, colorInfo?: record, conditions?: list<string>, description?: string, expireTime?: string, fulfillmentInfo?: list, gtin?: string, id?: string, images?: list, languageCode?: string, materials?: list<string>, name?: string, ... (13 more fields)}
 export def "retail-projects-locations-catalogs-branches-products-set-inventory" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -932,7 +950,7 @@ export def "retail-projects-locations-catalogs-branches-products-set-inventory" 
   --inventory: record # Product captures all metadata information of items to be recommended or searched. — shape: {attributes?: record, audience?: record, availability?: "AVAILABILITY_UNSPECIFIED"|"IN_STOCK"|"OUT_OF_STOCK"|"PREORDER"|"BACKORDER", availableQuantity?: int, availableTime?: string, brands?: list<string>, categories?: list<string>, collectionMemberIds?: list<string>, colorInfo?: record, conditions?: list<string>, description?: string, expireTime?: string, fulfillmentInfo?: list, gtin?: string, id?: string, images?: list, languageCode?: string, materials?: list<string>, name?: string, ... (13 more fields)}
   --set-mask: string # Indicates which inventory fields in the provided Product to update. At least one field must be provided. If an unsupported or unknown field is provided, an INVALID_ARGUMENT error is returned and the entire update will be ignored. (format: google-fieldmask)
   --set-time: string # The time when the request is issued, used to prevent out-of-order updates on inventory fields with the last update time recorded. If not provided, the internal system time will be used. (format: google-datetime)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -984,7 +1002,7 @@ export def "retail-projects-locations-catalogs-models-tune" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1037,7 +1055,7 @@ export def "retail-projects-locations-catalogs-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of Catalogs to return. If unspecified, defaults to 50. The maximum allowed value is 1000. Values above 1000 will be coerced to 1000. If this field is negative, an INVALID_ARGUMENT is returned.
   --page-token: string # A page token ListCatalogsResponse.next_page_token, received from a previous CatalogService.ListCatalogs call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to CatalogService.ListCatalogs must match the call that provided the page token. Otherwise, an INVALID_ARGUMENT error is returned.
-]: nothing -> record<catalogs: table<displayName: string, merchantCenterLinkingConfig: record, name: string, productLevelConfig: record>, nextPageToken: string> {
+]: nothing -> oneof<record<catalogs: table<displayName: string, merchantCenterLinkingConfig: record, name: string, productLevelConfig: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1063,7 +1081,6 @@ export def "retail-projects-locations-catalogs-list" [
 #
 # POST /v2alpha/{parent}/completionData:import
 # operationId: retail.projects.locations.catalogs.completionData.import
-# --inputConfig shape: {bigQuerySource?: record}
 export def "retail-projects-locations-catalogs-completion-data-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1088,7 +1105,7 @@ export def "retail-projects-locations-catalogs-completion-data-import" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --input-config: record # The input config source for completion data. — shape: {bigQuerySource?: record}
   --notification-pubsub-topic: string # Pub/Sub topic for receiving notification. If this field is set, when the import is finished, a notification is sent to specified Pub/Sub topic. The message data is JSON string of a Operation. Format of the Pub/Sub topic is `projects/{project}/topics/{topic}`.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1142,7 +1159,7 @@ export def "retail-projects-locations-catalogs-controls-list" [
   --filter: string # Optional. A filter to apply on the list results. Supported features: * List all the products under the parent branch if filter is unset. * List controls that are used in a single ServingConfig: 'serving_config = "boosted_home_page_cvr"'
   --page-size: int # Optional. Maximum number of results to return. If unspecified, defaults to 50. Max allowed value is 1000.
   --page-token: string # Optional. A page token, received from a previous `ListControls` call. Provide this to retrieve the subsequent page.
-]: nothing -> record<controls: table<associatedServingConfigIds: list, displayName: string, facetSpec: record, name: string, rule: record, searchSolutionUseCase: list, solutionTypes: list>, nextPageToken: string> {
+]: nothing -> oneof<record<controls: table<associatedServingConfigIds: list, displayName: string, facetSpec: record, name: string, rule: record, searchSolutionUseCase: list, solutionTypes: list>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1168,8 +1185,6 @@ export def "retail-projects-locations-catalogs-controls-list" [
 #
 # POST /v2alpha/{parent}/controls
 # operationId: retail.projects.locations.catalogs.controls.create
-# --facetSpec shape: {enableDynamicPosition?: bool, excludedFilterKeys?: list<string>, facetKey?: record, limit?: int}
-# --rule shape: {boostAction?: record, condition?: record, doNotAssociateAction?: record, filterAction?: record, ignoreAction?: record, onewaySynonymsAction?: record, redirectAction?: record, replacementAction?: record, twowaySynonymsAction?: record}
 export def "retail-projects-locations-catalogs-controls-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1199,7 +1214,7 @@ export def "retail-projects-locations-catalogs-controls-create" [
   --rule: record # A rule is a condition-action pair * A condition defines when a rule is to be triggered. * An action specifies what occurs on that trigger. Currently rules only work for controls with SOLUTION_TYPE_SEARCH. — shape: {boostAction?: record, condition?: record, doNotAssociateAction?: record, filterAction?: record, ignoreAction?: record, onewaySynonymsAction?: record, redirectAction?: record, replacementAction?: record, twowaySynonymsAction?: record}
   --search-solution-use-case: list<string> # Specifies the use case for the control. Affects what condition fields can be set. Only settable by search controls. Will default to SEARCH_SOLUTION_USE_CASE_SEARCH if not specified. Currently only allow one search_solution_use_case per control.
   --solution-types: list<string> # Required. Immutable. The solution types that the control is used for. Currently we support setting only one type of solution at creation time. Only `SOLUTION_TYPE_SEARCH` value is supported at the moment. If no solution type is provided at creation time, will default to SOLUTION_TYPE_SEARCH.
-]: any -> record<associatedServingConfigIds: list<string>, displayName: string, facetSpec: record<enableDynamicPosition: bool, excludedFilterKeys: list<string>, facetKey: record<caseInsensitive: bool, contains: list, intervals: list, key: string, orderBy: string, prefixes: list, query: string, restrictedValues: list, returnMinMax: bool>, limit: int>, name: string, rule: record<boostAction: record<boost: float, productsFilter: string>, condition: record<activeTimeRange: list, queryTerms: list>, doNotAssociateAction: record<doNotAssociateTerms: list, queryTerms: list, terms: list>, filterAction: record<filter: string>, ignoreAction: record<ignoreTerms: list>, onewaySynonymsAction: record<onewayTerms: list, queryTerms: list, synonyms: list>, redirectAction: record<redirectUri: string>, replacementAction: record<queryTerms: list, replacementTerm: string, term: string>, twowaySynonymsAction: record<synonyms: list>>, searchSolutionUseCase: list<string>, solutionTypes: list<string>> {
+]: any -> oneof<record<associatedServingConfigIds: list<string>, displayName: string, facetSpec: record<enableDynamicPosition: bool, excludedFilterKeys: list<string>, facetKey: record<caseInsensitive: bool, contains: list, intervals: list, key: string, orderBy: string, prefixes: list, query: string, restrictedValues: list, returnMinMax: bool>, limit: int>, name: string, rule: record<boostAction: record<boost: float, productsFilter: string>, condition: record<activeTimeRange: list, queryTerms: list>, doNotAssociateAction: record<doNotAssociateTerms: list, queryTerms: list, terms: list>, filterAction: record<filter: string>, ignoreAction: record<ignoreTerms: list>, onewaySynonymsAction: record<onewayTerms: list, queryTerms: list, synonyms: list>, redirectAction: record<redirectUri: string>, replacementAction: record<queryTerms: list, replacementTerm: string, term: string>, twowaySynonymsAction: record<synonyms: list>>, searchSolutionUseCase: list<string>, solutionTypes: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1250,7 +1265,7 @@ export def "retail-projects-locations-catalogs-merchant-center-account-links-lis
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<merchantCenterAccountLinks: table<branchId: string, feedFilters: list, feedLabel: string, id: string, languageCode: string, merchantCenterAccountId: string, name: string, projectId: string, state: string>> {
+]: nothing -> oneof<record<merchantCenterAccountLinks: table<branchId: string, feedFilters: list, feedLabel: string, id: string, languageCode: string, merchantCenterAccountId: string, name: string, projectId: string, state: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1300,7 +1315,7 @@ export def "retail-projects-locations-catalogs-models-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. Maximum number of results to return. If unspecified, defaults to 50. Max allowed value is 1000.
   --page-token: string # Optional. A page token, received from a previous `ListModels` call. Provide this to retrieve the subsequent page.
-]: nothing -> record<models: table<createTime: string, dataState: string, displayName: string, filteringOption: string, lastTuneTime: string, name: string, optimizationObjective: string, pageOptimizationConfig: record, periodicTuningState: string, servingConfigLists: list, servingState: string, trainingState: string, tuningOperation: string, type: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<models: table<createTime: string, dataState: string, displayName: string, filteringOption: string, lastTuneTime: string, name: string, optimizationObjective: string, pageOptimizationConfig: record, periodicTuningState: string, servingConfigLists: list, servingState: string, trainingState: string, tuningOperation: string, type: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1326,8 +1341,6 @@ export def "retail-projects-locations-catalogs-models-list" [
 #
 # POST /v2alpha/{parent}/models
 # operationId: retail.projects.locations.catalogs.models.create
-# --pageOptimizationConfig shape: {pageOptimizationEventType?: string, panels?: list, restriction?: "RESTRICTION_UNSPECIFIED"|"NO_RESTRICTION"|"UNIQUE_SERVING_CONFIG_RESTRICTION"|"UNIQUE_MODEL_RESTRICTION"|"UNIQUE_MODEL_TYPE_RESTRICTION"}
-# --servingConfigLists item shape: {servingConfigIds?: list<string>}
 export def "retail-projects-locations-catalogs-models-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1359,7 +1372,7 @@ export def "retail-projects-locations-catalogs-models-create" [
   --periodic-tuning-state: string@periodic-tuning-state-completer # Optional. The state of periodic tuning. The period we use is 3 months - to do a one-off tune earlier use the `TuneModel` method. Default value is `PERIODIC_TUNING_ENABLED`.
   --training-state: string@training-state-completer # Optional. The training state that the model is in (e.g. `TRAINING` or `PAUSED`). Since part of the cost of running the service is frequency of training - this can be used to determine when to train model in order to control cost. If not specified: the default value for `CreateModel` method is `TRAINING`. The default value for `UpdateModel` method is to keep the state the same as before.
   --type: string # Required. The type of model e.g. `home-page`. Currently supported values: `recommended-for-you`, `others-you-may-like`, `frequently-bought-together`, `page-optimization`, `similar-items`, `buy-it-again`, `on-sale-items`, and `recently-viewed`(readonly value). This field together with optimization_objective describe model metadata to use to control model training and serving. See https://cloud.google.com/retail/docs/models for more details on what the model metadata control and which combination of parameters are valid. For invalid combinations of parameters (e.g. type = `frequently-bought-together` and optimization_objective = `ctr`), you receive an error 400 if you try to create/update a recommendation with this set of knobs.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1415,7 +1428,7 @@ export def "retail-projects-locations-catalogs-branches-products-list" [
   --page-token: string # A page token ListProductsResponse.next_page_token, received from a previous ProductService.ListProducts call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to ProductService.ListProducts must match the call that provided the page token. Otherwise, an INVALID_ARGUMENT error is returned.
   --read-mask: string # The fields of Product to return in the responses. If not set or empty, the following fields are returned: * Product.name * Product.id * Product.title * Product.uri * Product.images * Product.price_info * Product.brands If "*" is provided, all fields are returned. Product.name is always returned no matter what mask is set. If an unsupported or unknown field is provided, an INVALID_ARGUMENT error is returned.
   --require-total-size: oneof<nothing, bool> # If true and page_token is empty, ListProductsResponse.total_size is set to the total count of matched items irrespective of pagination. Notice that setting this field to true affects the performance.
-]: nothing -> record<nextPageToken: string, products: table<attributes: record, audience: record, availability: string, availableQuantity: int, availableTime: string, brands: list, categories: list, collectionMemberIds: list, colorInfo: record, conditions: list, description: string, expireTime: string, fulfillmentInfo: list, gtin: string, id: string, images: list, languageCode: string, localInventories: list, materials: list, name: string, patterns: list, priceInfo: record, primaryProductId: string, promotions: list, publishTime: string, rating: record, retrievableFields: string, sizes: list, tags: list, title: string, ttl: string, type: string, uri: string, variants: list>, totalSize: int> {
+]: nothing -> oneof<record<nextPageToken: string, products: table<attributes: record, audience: record, availability: string, availableQuantity: int, availableTime: string, brands: list, categories: list, collectionMemberIds: list, colorInfo: record, conditions: list, description: string, expireTime: string, fulfillmentInfo: list, gtin: string, id: string, images: list, languageCode: string, localInventories: list, materials: list, name: string, patterns: list, priceInfo: record, primaryProductId: string, promotions: list, publishTime: string, rating: record, retrievableFields: string, sizes: list, tags: list, title: string, ttl: string, type: string, uri: string, variants: list>, totalSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1441,15 +1454,6 @@ export def "retail-projects-locations-catalogs-branches-products-list" [
 #
 # POST /v2alpha/{parent}/products
 # operationId: retail.projects.locations.catalogs.branches.products.create
-# --audience shape: {ageGroups?: list<string>, genders?: list<string>}
-# --colorInfo shape: {colorFamilies?: list<string>, colors?: list<string>}
-# --fulfillmentInfo item shape: {placeIds?: list<string>, type?: string}
-# --images item shape: {height?: int, uri?: string, width?: int}
-# --localInventories item shape: {attributes?: record, fulfillmentTypes?: list<string>, placeId?: string, priceInfo?: record}
-# --priceInfo shape: {cost?: float, currencyCode?: string, originalPrice?: float, price?: float, priceEffectiveTime?: string, priceExpireTime?: string, priceRange?: record}
-# --promotions item shape: {promotionId?: string}
-# --rating shape: {averageRating?: float, ratingCount?: int, ratingHistogram?: list<int>}
-# --variants item shape: {attributes?: record, audience?: record, availability?: "AVAILABILITY_UNSPECIFIED"|"IN_STOCK"|"OUT_OF_STOCK"|"PREORDER"|"BACKORDER", availableQuantity?: int, availableTime?: string, brands?: list<string>, categories?: list<string>, collectionMemberIds?: list<string>, colorInfo?: record, conditions?: list<string>, description?: string, expireTime?: string, fulfillmentInfo?: list, gtin?: string, id?: string, images?: list, languageCode?: string, materials?: list<string>, name?: string, ... (13 more fields)}
 export def "retail-projects-locations-catalogs-branches-products-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1505,7 +1509,7 @@ export def "retail-projects-locations-catalogs-branches-products-create" [
   --ttl: string # Input only. The TTL (time to live) of the product. Note that this is only applicable to Type.PRIMARY and Type.COLLECTION, and ignored for Type.VARIANT. In general, we suggest the users to delete the stale products explicitly, instead of using this field to determine staleness. If it is set, it must be a non-negative value, and expire_time is set as current timestamp plus ttl. The derived expire_time is returned in the output and ttl is left blank when retrieving the Product. If it is set, the product is not available for SearchService.Search after current timestamp plus ttl. However, the product can still be retrieved by ProductService.GetProduct and ProductService.ListProducts. (format: google-duration)
   --type: string@type-completer # Immutable. The type of the product. Default to Catalog.product_level_config.ingestion_product_type if unset.
   --uri: string # Canonical URL directly linking to the product detail page. It is strongly recommended to provide a valid uri for the product, otherwise the service performance could be significantly degraded. This field must be a UTF-8 encoded string with a length limit of 5,000 characters. Otherwise, an INVALID_ARGUMENT error is returned. Corresponding properties: Google Merchant Center property [link](https://support.google.com/merchants/answer/6324416). Schema.org property [Offer.url](https://schema.org/url).
-]: any -> record<attributes: record, audience: record<ageGroups: list<string>, genders: list<string>>, availability: string, availableQuantity: int, availableTime: string, brands: list<string>, categories: list<string>, collectionMemberIds: list<string>, colorInfo: record<colorFamilies: list<string>, colors: list<string>>, conditions: list<string>, description: string, expireTime: string, fulfillmentInfo: table<placeIds: list, type: string>, gtin: string, id: string, images: table<height: int, uri: string, width: int>, languageCode: string, localInventories: table<attributes: record, fulfillmentTypes: list, placeId: string, priceInfo: record>, materials: list<string>, name: string, patterns: list<string>, priceInfo: record<cost: float, currencyCode: string, originalPrice: float, price: float, priceEffectiveTime: string, priceExpireTime: string, priceRange: record<originalPrice: record, price: record>>, primaryProductId: string, promotions: table<promotionId: string>, publishTime: string, rating: record<averageRating: float, ratingCount: int, ratingHistogram: list<int>>, retrievableFields: string, sizes: list<string>, tags: list<string>, title: string, ttl: string, type: string, uri: string, variants: list<any>> {
+]: any -> oneof<record<attributes: record, audience: record<ageGroups: list<string>, genders: list<string>>, availability: string, availableQuantity: int, availableTime: string, brands: list<string>, categories: list<string>, collectionMemberIds: list<string>, colorInfo: record<colorFamilies: list<string>, colors: list<string>>, conditions: list<string>, description: string, expireTime: string, fulfillmentInfo: table<placeIds: list, type: string>, gtin: string, id: string, images: table<height: int, uri: string, width: int>, languageCode: string, localInventories: table<attributes: record, fulfillmentTypes: list, placeId: string, priceInfo: record>, materials: list<string>, name: string, patterns: list<string>, priceInfo: record<cost: float, currencyCode: string, originalPrice: float, price: float, priceEffectiveTime: string, priceExpireTime: string, priceRange: record<originalPrice: record, price: record>>, primaryProductId: string, promotions: table<promotionId: string>, publishTime: string, rating: record<averageRating: float, ratingCount: int, ratingHistogram: list<int>>, retrievableFields: string, sizes: list<string>, tags: list<string>, title: string, ttl: string, type: string, uri: string, variants: list<any>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1534,8 +1538,6 @@ export def "retail-projects-locations-catalogs-branches-products-create" [
 #
 # POST /v2alpha/{parent}/products:import
 # operationId: retail.projects.locations.catalogs.branches.products.import
-# --errorsConfig shape: {gcsPrefix?: string}
-# --inputConfig shape: {bigQuerySource?: record, gcsSource?: record, productInlineSource?: record}
 export def "retail-projects-locations-catalogs-branches-products-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1565,7 +1567,7 @@ export def "retail-projects-locations-catalogs-branches-products-import" [
   --request-id: string # Deprecated. This field has no effect.
   --skip-default-branch-protection: oneof<nothing, bool> # If true, this performs the FULL import even if it would delete a large proportion of the products in the default branch, which could potentially cause outages if you have live predict/search traffic. Only supported when ImportProductsRequest.reconciliation_mode is set to `FULL`.
   --update-mask: string # Indicates which fields in the provided imported `products` to update. If not set, all fields are updated. (format: google-fieldmask)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1618,7 +1620,7 @@ export def "retail-projects-locations-catalogs-branches-products-purge" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Required. The filter string to specify the products to be deleted with a length limit of 5,000 characters. Empty string filter is not allowed. "*" implies delete all items in a branch. The eligible fields for filtering are: * `availability`: Double quoted Product.availability string. * `create_time` : in ISO 8601 "zulu" format. Supported syntax: * Comparators (">", "<", ">=", "<=", "="). Examples: * create_time <= "2015-02-13T17:05:46Z" * availability = "IN_STOCK" * Conjunctions ("AND") Examples: * create_time <= "2015-02-13T17:05:46Z" AND availability = "PREORDER" * Disjunctions ("OR") Examples: * create_time <= "2015-02-13T17:05:46Z" OR availability = "IN_STOCK" * Can support nested queries. Examples: * (create_time <= "2015-02-13T17:05:46Z" AND availability = "PREORDER") OR (create_time >= "2015-02-14T13:03:32Z" AND availability = "IN_STOCK") * Filter Limits: * Filter should not contain more than 6 conditions. * Max nesting depth should not exceed 2 levels. Examples queries: * Delete back order products created before a timestamp. create_time <= "2015-02-13T17:05:46Z" OR availability = "BACKORDER"
   --force: oneof<nothing, bool> # Actually perform the purge. If `force` is set to false, the method will return the expected purge count without deleting any products.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1671,7 +1673,7 @@ export def "retail-projects-locations-catalogs-serving-configs-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. Maximum number of results to return. If unspecified, defaults to 100. If a value greater than 100 is provided, at most 100 results are returned.
   --page-token: string # Optional. A page token, received from a previous `ListServingConfigs` call. Provide this to retrieve the subsequent page.
-]: nothing -> record<nextPageToken: string, servingConfigs: table<boostControlIds: list, displayName: string, diversityLevel: string, diversityType: string, doNotAssociateControlIds: list, dynamicFacetSpec: record, enableCategoryFilterLevel: string, facetControlIds: list, filterControlIds: list, ignoreControlIds: list, modelId: string, name: string, onewaySynonymsControlIds: list, personalizationSpec: record, priceRerankingLevel: string, redirectControlIds: list, replacementControlIds: list, solutionTypes: list, twowaySynonymsControlIds: list>> {
+]: nothing -> oneof<record<nextPageToken: string, servingConfigs: table<boostControlIds: list, displayName: string, diversityLevel: string, diversityType: string, doNotAssociateControlIds: list, dynamicFacetSpec: record, enableCategoryFilterLevel: string, facetControlIds: list, filterControlIds: list, ignoreControlIds: list, modelId: string, name: string, onewaySynonymsControlIds: list, personalizationSpec: record, priceRerankingLevel: string, redirectControlIds: list, replacementControlIds: list, solutionTypes: list, twowaySynonymsControlIds: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1697,8 +1699,6 @@ export def "retail-projects-locations-catalogs-serving-configs-list" [
 #
 # POST /v2alpha/{parent}/servingConfigs
 # operationId: retail.projects.locations.catalogs.servingConfigs.create
-# --dynamicFacetSpec shape: {mode?: "MODE_UNSPECIFIED"|"DISABLED"|"ENABLED"}
-# --personalizationSpec shape: {mode?: "MODE_UNSPECIFIED"|"AUTO"|"DISABLED"}
 export def "retail-projects-locations-catalogs-serving-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1741,7 +1741,7 @@ export def "retail-projects-locations-catalogs-serving-configs-create" [
   --replacement-control-ids: list<string> # Condition replacement specifications. - Applied according to the order in the list. - A previously replaced term can not be re-replaced. - Maximum number of specifications is 100. Can only be set if solution_types is SOLUTION_TYPE_SEARCH.
   --solution-types: list<string> # Required. Immutable. Specifies the solution types that a serving config can be associated with. Currently we support setting only one type of solution.
   --twoway-synonyms-control-ids: list<string> # Condition synonyms specifications. If multiple syonyms conditions match, all matching synonyms control in the list will execute. Order of controls in the list will not matter. Maximum number of specifications is 100. Can only be set if solution_types is SOLUTION_TYPE_SEARCH.
-]: any -> record<boostControlIds: list<string>, displayName: string, diversityLevel: string, diversityType: string, doNotAssociateControlIds: list<string>, dynamicFacetSpec: record<mode: string>, enableCategoryFilterLevel: string, facetControlIds: list<string>, filterControlIds: list<string>, ignoreControlIds: list<string>, modelId: string, name: string, onewaySynonymsControlIds: list<string>, personalizationSpec: record<mode: string>, priceRerankingLevel: string, redirectControlIds: list<string>, replacementControlIds: list<string>, solutionTypes: list<string>, twowaySynonymsControlIds: list<string>> {
+]: any -> oneof<record<boostControlIds: list<string>, displayName: string, diversityLevel: string, diversityType: string, doNotAssociateControlIds: list<string>, dynamicFacetSpec: record<mode: string>, enableCategoryFilterLevel: string, facetControlIds: list<string>, filterControlIds: list<string>, ignoreControlIds: list<string>, modelId: string, name: string, onewaySynonymsControlIds: list<string>, personalizationSpec: record<mode: string>, priceRerankingLevel: string, redirectControlIds: list<string>, replacementControlIds: list<string>, solutionTypes: list<string>, twowaySynonymsControlIds: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1797,7 +1797,7 @@ export def "retail-projects-locations-catalogs-user-events-collect" [
   --raw-json: string # An arbitrary serialized JSON string that contains necessary information that can comprise a user event. When this field is specified, the user_event field will be ignored. Note: line-delimited JSON is not supported, a single JSON only.
   --uri: string # The URL including cgi-parameters but excluding the hash fragment with a length limit of 5,000 characters. This is often more useful than the referer URL, because many browsers only send the domain for 3rd party requests.
   --user-event: string # Required. URL encoded UserEvent proto with a length limit of 2,000,000 characters.
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1823,8 +1823,6 @@ export def "retail-projects-locations-catalogs-user-events-collect" [
 #
 # POST /v2alpha/{parent}/userEvents:import
 # operationId: retail.projects.locations.catalogs.userEvents.import
-# --errorsConfig shape: {gcsPrefix?: string}
-# --inputConfig shape: {bigQuerySource?: record, gcsSource?: record, userEventInlineSource?: record}
 export def "retail-projects-locations-catalogs-user-events-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1849,7 +1847,7 @@ export def "retail-projects-locations-catalogs-user-events-import" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --errors-config: record # Configuration of destination for Import related errors. — shape: {gcsPrefix?: string}
   --input-config: record # The input config source for user events. — shape: {bigQuerySource?: record, gcsSource?: record, userEventInlineSource?: record}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1902,7 +1900,7 @@ export def "retail-projects-locations-catalogs-user-events-purge" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: string # Required. The filter string to specify the events to be deleted with a length limit of 5,000 characters. Empty string filter is not allowed. The eligible fields for filtering are: * `eventType`: Double quoted UserEvent.event_type string. * `eventTime`: in ISO 8601 "zulu" format. * `visitorId`: Double quoted string. Specifying this will delete all events associated with a visitor. * `userId`: Double quoted string. Specifying this will delete all events associated with a user. Examples: * Deleting all events in a time range: `eventTime > "2012-04-23T18:25:43.511Z" eventTime < "2012-04-23T18:30:43.511Z"` * Deleting specific eventType in time range: `eventTime > "2012-04-23T18:25:43.511Z" eventType = "detail-page-view"` * Deleting all events for a specific visitor: `visitorId = "visitor1024"` The filtering fields are assumed to have an implicit AND.
   --force: oneof<nothing, bool> # Actually perform the purge. If `force` is set to false, the method will return the expected purge count without deleting any user events.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1954,7 +1952,7 @@ export def "retail-projects-locations-catalogs-user-events-rejoin" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --user-event-rejoin-scope: string@user-event-rejoin-scope-completer # The type of the user event rejoin to define the scope and range of the user events to be rejoined with the latest product catalog. Defaults to `USER_EVENT_REJOIN_SCOPE_UNSPECIFIED` if this field is not set, or set to an invalid integer value.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1983,10 +1981,6 @@ export def "retail-projects-locations-catalogs-user-events-rejoin" [
 #
 # POST /v2alpha/{parent}/userEvents:write
 # operationId: retail.projects.locations.catalogs.userEvents.write
-# --completionDetail shape: {completionAttributionToken?: string, selectedPosition?: int, selectedSuggestion?: string}
-# --productDetails item shape: {product?: record, quantity?: int}
-# --purchaseTransaction shape: {cost?: float, currencyCode?: string, id?: string, revenue?: float, tax?: float}
-# --userInfo shape: {directUserRequest?: bool, ipAddress?: string, userAgent?: string, userId?: string}
 export def "retail-projects-locations-catalogs-user-events-write" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2031,7 +2025,7 @@ export def "retail-projects-locations-catalogs-user-events-write" [
   --uri: string # Complete URL (window.location.href) of the user's current page. When using the client side event reporting with JavaScript pixel and Google Tag Manager, this value is filled in automatically. Maximum length 5,000 characters.
   --user-info: record # Information of an end user. — shape: {directUserRequest?: bool, ipAddress?: string, userAgent?: string, userId?: string}
   --visitor-id: string # Required. A unique identifier for tracking visitors. For example, this could be implemented with an HTTP cookie, which should be able to uniquely identify a visitor on a single device. This unique identifier should not change if the visitor log in/out of the website. Don't set the field to the same fixed ID for different users. This mixes the event history of those users together, which results in degraded model quality. The field must be a UTF-8 encoded string with a length limit of 128 characters. Otherwise, an INVALID_ARGUMENT error is returned. The field should not contain PII or user-data. We recommend to use Google Analytics [Client ID](https://developers.google.com/analytics/devguides/collection/analyticsjs/field-reference#clientId) for this field.
-]: any -> record<attributes: record, attributionToken: string, cartId: string, completionDetail: record<completionAttributionToken: string, selectedPosition: int, selectedSuggestion: string>, entity: string, eventTime: string, eventType: string, experimentIds: list<string>, filter: string, offset: int, orderBy: string, pageCategories: list<string>, pageViewId: string, productDetails: table<product: record, quantity: int>, purchaseTransaction: record<cost: float, currencyCode: string, id: string, revenue: float, tax: float>, referrerUri: string, searchQuery: string, sessionId: string, uri: string, userInfo: record<directUserRequest: bool, ipAddress: string, userAgent: string, userId: string>, visitorId: string> {
+]: any -> oneof<record<attributes: record, attributionToken: string, cartId: string, completionDetail: record<completionAttributionToken: string, selectedPosition: int, selectedSuggestion: string>, entity: string, eventTime: string, eventType: string, experimentIds: list<string>, filter: string, offset: int, orderBy: string, pageCategories: list<string>, pageViewId: string, productDetails: table<product: record, quantity: int>, purchaseTransaction: record<cost: float, currencyCode: string, id: string, revenue: float, tax: float>, referrerUri: string, searchQuery: string, sessionId: string, uri: string, userInfo: record<directUserRequest: bool, ipAddress: string, userAgent: string, userId: string>, visitorId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2060,7 +2054,6 @@ export def "retail-projects-locations-catalogs-user-events-write" [
 #
 # POST /v2alpha/{placement}:predict
 # operationId: retail.projects.locations.catalogs.servingConfigs.predict
-# --userEvent shape: {attributes?: record, attributionToken?: string, cartId?: string, completionDetail?: record, entity?: string, eventTime?: string, eventType?: string, experimentIds?: list<string>, filter?: string, offset?: int, orderBy?: string, pageCategories?: list<string>, pageViewId?: string, productDetails?: list, purchaseTransaction?: record, referrerUri?: string, searchQuery?: string, sessionId?: string, uri?: string, userInfo?: record, visitorId?: string}
 export def "retail-projects-locations-catalogs-serving-configs-predict" [
   placement: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2090,7 +2083,7 @@ export def "retail-projects-locations-catalogs-serving-configs-predict" [
   --params: record # Additional domain specific parameters for the predictions. Allowed values: * `returnProduct`: Boolean. If set to true, the associated product object will be returned in the `results.metadata` field in the prediction response. * `returnScore`: Boolean. If set to true, the prediction 'score' corresponding to each returned product will be set in the `results.metadata` field in the prediction response. The given 'score' indicates the probability of a product being clicked/purchased given the user's context and history. * `strictFiltering`: Boolean. True by default. If set to false, the service will return generic (unfiltered) popular products instead of empty if your filter blocks all prediction results. * `priceRerankLevel`: String. Default empty. If set to be non-empty, then it needs to be one of {'no-price-reranking', 'low-price-reranking', 'medium-price-reranking', 'high-price-reranking'}. This gives request-level control and adjusts prediction results based on product price. * `diversityLevel`: String. Default empty. If set to be non-empty, then it needs to be one of {'no-diversity', 'low-diversity', 'medium-diversity', 'high-diversity', 'auto-diversity'}. This gives request-level control and adjusts prediction results based on product category. * `filterSyntaxV2`: Boolean. False by default. If set to true, the `filter` field is interpreteted according to the new, attribute-based syntax.
   --user-event: record # UserEvent captures all metadata information Retail API needs to know about how end users interact with customers' website. — shape: {attributes?: record, attributionToken?: string, cartId?: string, completionDetail?: record, entity?: string, eventTime?: string, eventType?: string, experimentIds?: list<string>, filter?: string, offset?: int, orderBy?: string, pageCategories?: list<string>, pageViewId?: string, productDetails?: list, purchaseTransaction?: record, referrerUri?: string, searchQuery?: string, sessionId?: string, uri?: string, userInfo?: record, visitorId?: string}
   --validate-only: oneof<nothing, bool> # Use validate only mode for this prediction query. If set to true, a dummy model will be used that returns arbitrary products. Note that the validate only mode should only be used for testing the API, or if the model is not ready.
-]: any -> record<attributionToken: string, missingIds: list<string>, results: table<id: string, metadata: record>, validateOnly: bool> {
+]: any -> oneof<record<attributionToken: string, missingIds: list<string>, results: table<id: string, metadata: record>, validateOnly: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2119,13 +2112,6 @@ export def "retail-projects-locations-catalogs-serving-configs-predict" [
 #
 # POST /v2alpha/{placement}:search
 # operationId: retail.projects.locations.catalogs.servingConfigs.search
-# --boostSpec shape: {conditionBoostSpecs?: list, skipBoostSpecValidation?: bool}
-# --dynamicFacetSpec shape: {mode?: "MODE_UNSPECIFIED"|"DISABLED"|"ENABLED"}
-# --facetSpecs item shape: {enableDynamicPosition?: bool, excludedFilterKeys?: list<string>, facetKey?: record, limit?: int}
-# --personalizationSpec shape: {mode?: "MODE_UNSPECIFIED"|"AUTO"|"DISABLED"}
-# --queryExpansionSpec shape: {condition?: "CONDITION_UNSPECIFIED"|"DISABLED"|"AUTO", pinUnexpandedResults?: bool}
-# --spellCorrectionSpec shape: {mode?: "MODE_UNSPECIFIED"|"SUGGESTION_ONLY"|"AUTO"}
-# --userInfo shape: {directUserRequest?: bool, ipAddress?: string, userAgent?: string, userId?: string}
 export def "retail-projects-locations-catalogs-serving-configs-search" [
   placement: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2170,7 +2156,7 @@ export def "retail-projects-locations-catalogs-serving-configs-search" [
   --user-info: record # Information of an end user. — shape: {directUserRequest?: bool, ipAddress?: string, userAgent?: string, userId?: string}
   --variant-rollup-keys: list<string> # The keys to fetch and rollup the matching variant Products attributes, FulfillmentInfo or LocalInventorys attributes. The attributes from all the matching variant Products or LocalInventorys are merged and de-duplicated. Notice that rollup attributes will lead to extra query latency. Maximum number of keys is 30. For FulfillmentInfo, a fulfillment type and a fulfillment ID must be provided in the format of "fulfillmentType.fulfillmentId". E.g., in "pickupInStore.store123", "pickupInStore" is fulfillment type and "store123" is the store ID. Supported keys are: * colorFamilies * price * originalPrice * discount * variantId * inventory(place_id,price) * inventory(place_id,original_price) * inventory(place_id,attributes.key), where key is any key in the Product.local_inventories.attributes map. * attributes.key, where key is any key in the Product.attributes map. * pickupInStore.id, where id is any FulfillmentInfo.place_ids for FulfillmentInfo.type "pickup-in-store". * shipToStore.id, where id is any FulfillmentInfo.place_ids for FulfillmentInfo.type "ship-to-store". * sameDayDelivery.id, where id is any FulfillmentInfo.place_ids for FulfillmentInfo.type "same-day-delivery". * nextDayDelivery.id, where id is any FulfillmentInfo.place_ids for FulfillmentInfo.type "next-day-delivery". * customFulfillment1.id, where id is any FulfillmentInfo.place_ids for FulfillmentInfo.type "custom-type-1". * customFulfillment2.id, where id is any FulfillmentInfo.place_ids for FulfillmentInfo.type "custom-type-2". * customFulfillment3.id, where id is any FulfillmentInfo.place_ids for FulfillmentInfo.type "custom-type-3". * customFulfillment4.id, where id is any FulfillmentInfo.place_ids for FulfillmentInfo.type "custom-type-4". * customFulfillment5.id, where id is any FulfillmentInfo.place_ids for FulfillmentInfo.type "custom-type-5". If this field is set to an invalid value other than these, an INVALID_ARGUMENT error is returned.
   --visitor-id: string # Required. A unique identifier for tracking visitors. For example, this could be implemented with an HTTP cookie, which should be able to uniquely identify a visitor on a single device. This unique identifier should not change if the visitor logs in or out of the website. This should be the same identifier as UserEvent.visitor_id. The field must be a UTF-8 encoded string with a length limit of 128 characters. Otherwise, an INVALID_ARGUMENT error is returned.
-]: any -> record<appliedControls: list<string>, attributionToken: string, correctedQuery: string, experimentInfo: table<experiment: string, servingConfigExperiment: record>, facets: table<dynamicFacet: bool, key: string, values: list>, invalidConditionBoostSpecs: table<boost: float, condition: string>, nextPageToken: string, queryExpansionInfo: record<expandedQuery: bool, pinnedResultCount: string>, redirectUri: string, results: table<id: string, matchingVariantCount: int, matchingVariantFields: record, personalLabels: list, product: record, variantRollupValues: record>, totalSize: int> {
+]: any -> oneof<record<appliedControls: list<string>, attributionToken: string, correctedQuery: string, experimentInfo: table<experiment: string, servingConfigExperiment: record>, facets: table<dynamicFacet: bool, key: string, values: list>, invalidConditionBoostSpecs: table<boost: float, condition: string>, nextPageToken: string, queryExpansionInfo: record<expandedQuery: bool, pinnedResultCount: string>, redirectUri: string, results: table<id: string, matchingVariantCount: int, matchingVariantFields: record, personalLabels: list, product: record, variantRollupValues: record>, totalSize: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2225,7 +2211,7 @@ export def "retail-projects-locations-catalogs-branches-products-add-fulfillment
   --allow-missing: oneof<nothing, bool> # If set to true, and the Product is not found, the fulfillment information will still be processed and retained for at most 1 day and processed once the Product is created. If set to false, a NOT_FOUND error is returned if the Product is not found.
   --place-ids: list<string> # Required. The IDs for this type, such as the store IDs for "pickup-in-store" or the region IDs for "same-day-delivery" to be added for this type. Duplicate IDs will be automatically ignored. At least 1 value is required, and a maximum of 2000 values are allowed. Each value must be a string with a length limit of 10 characters, matching the pattern `[a-zA-Z0-9_-]+`, such as "store1" or "REGION-2". Otherwise, an INVALID_ARGUMENT error is returned. If the total number of place IDs exceeds 2000 for this type after adding, then the update will be rejected.
   --type: string # Required. The fulfillment type, including commonly used types (such as pickup in store and same day delivery), and custom types. Supported values: * "pickup-in-store" * "ship-to-store" * "same-day-delivery" * "next-day-delivery" * "custom-type-1" * "custom-type-2" * "custom-type-3" * "custom-type-4" * "custom-type-5" If this field is set to an invalid value other than these, an INVALID_ARGUMENT error is returned. This field directly corresponds to Product.fulfillment_info.type.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2254,7 +2240,6 @@ export def "retail-projects-locations-catalogs-branches-products-add-fulfillment
 #
 # POST /v2alpha/{product}:addLocalInventories
 # operationId: retail.projects.locations.catalogs.branches.products.addLocalInventories
-# --localInventories item shape: {attributes?: record, fulfillmentTypes?: list<string>, placeId?: string, priceInfo?: record}
 export def "retail-projects-locations-catalogs-branches-products-add-local-inventories" [
   product: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2281,7 +2266,7 @@ export def "retail-projects-locations-catalogs-branches-products-add-local-inven
   --add-time: string # The time when the inventory updates are issued. Used to prevent out-of-order updates on local inventory fields. If not provided, the internal system time will be used. (format: google-datetime)
   --allow-missing: oneof<nothing, bool> # If set to true, and the Product is not found, the local inventory will still be processed and retained for at most 1 day and processed once the Product is created. If set to false, a NOT_FOUND error is returned if the Product is not found.
   --local-inventories: list # Required. A list of inventory information at difference places. Each place is identified by its place ID. At most 3000 inventories are allowed per request. — item shape: {attributes?: record, fulfillmentTypes?: list<string>, placeId?: string, priceInfo?: record}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2336,7 +2321,7 @@ export def "retail-projects-locations-catalogs-branches-products-remove-fulfillm
   --place-ids: list<string> # Required. The IDs for this type, such as the store IDs for "pickup-in-store" or the region IDs for "same-day-delivery", to be removed for this type. At least 1 value is required, and a maximum of 2000 values are allowed. Each value must be a string with a length limit of 10 characters, matching the pattern `[a-zA-Z0-9_-]+`, such as "store1" or "REGION-2". Otherwise, an INVALID_ARGUMENT error is returned.
   --remove-time: string # The time when the fulfillment updates are issued, used to prevent out-of-order updates on fulfillment information. If not provided, the internal system time will be used. (format: google-datetime)
   --type: string # Required. The fulfillment type, including commonly used types (such as pickup in store and same day delivery), and custom types. Supported values: * "pickup-in-store" * "ship-to-store" * "same-day-delivery" * "next-day-delivery" * "custom-type-1" * "custom-type-2" * "custom-type-3" * "custom-type-4" * "custom-type-5" If this field is set to an invalid value other than these, an INVALID_ARGUMENT error is returned. This field directly corresponds to Product.fulfillment_info.type.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2390,7 +2375,7 @@ export def "retail-projects-locations-catalogs-branches-products-remove-local-in
   --allow-missing: oneof<nothing, bool> # If set to true, and the Product is not found, the local inventory removal request will still be processed and retained for at most 1 day and processed once the Product is created. If set to false, a NOT_FOUND error is returned if the Product is not found.
   --place-ids: list<string> # Required. A list of place IDs to have their inventory deleted. At most 3000 place IDs are allowed per request.
   --remove-time: string # The time when the inventory deletions are issued. Used to prevent out-of-order updates and deletions on local inventory fields. If not provided, the internal system time will be used. (format: google-datetime)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2442,7 +2427,7 @@ export def "retail-projects-locations-catalogs-serving-configs-add-control" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --control-id: string # Required. The id of the control to apply. Assumed to be in the same catalog as the serving config - if id is not found a NOT_FOUND error is returned.
-]: any -> record<boostControlIds: list<string>, displayName: string, diversityLevel: string, diversityType: string, doNotAssociateControlIds: list<string>, dynamicFacetSpec: record<mode: string>, enableCategoryFilterLevel: string, facetControlIds: list<string>, filterControlIds: list<string>, ignoreControlIds: list<string>, modelId: string, name: string, onewaySynonymsControlIds: list<string>, personalizationSpec: record<mode: string>, priceRerankingLevel: string, redirectControlIds: list<string>, replacementControlIds: list<string>, solutionTypes: list<string>, twowaySynonymsControlIds: list<string>> {
+]: any -> oneof<record<boostControlIds: list<string>, displayName: string, diversityLevel: string, diversityType: string, doNotAssociateControlIds: list<string>, dynamicFacetSpec: record<mode: string>, enableCategoryFilterLevel: string, facetControlIds: list<string>, filterControlIds: list<string>, ignoreControlIds: list<string>, modelId: string, name: string, onewaySynonymsControlIds: list<string>, personalizationSpec: record<mode: string>, priceRerankingLevel: string, redirectControlIds: list<string>, replacementControlIds: list<string>, solutionTypes: list<string>, twowaySynonymsControlIds: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2494,7 +2479,7 @@ export def "retail-projects-locations-catalogs-serving-configs-remove-control" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --control-id: string # Required. The id of the control to apply. Assumed to be in the same catalog as the serving config.
-]: any -> record<boostControlIds: list<string>, displayName: string, diversityLevel: string, diversityType: string, doNotAssociateControlIds: list<string>, dynamicFacetSpec: record<mode: string>, enableCategoryFilterLevel: string, facetControlIds: list<string>, filterControlIds: list<string>, ignoreControlIds: list<string>, modelId: string, name: string, onewaySynonymsControlIds: list<string>, personalizationSpec: record<mode: string>, priceRerankingLevel: string, redirectControlIds: list<string>, replacementControlIds: list<string>, solutionTypes: list<string>, twowaySynonymsControlIds: list<string>> {
+]: any -> oneof<record<boostControlIds: list<string>, displayName: string, diversityLevel: string, diversityType: string, doNotAssociateControlIds: list<string>, dynamicFacetSpec: record<mode: string>, enableCategoryFilterLevel: string, facetControlIds: list<string>, filterControlIds: list<string>, ignoreControlIds: list<string>, modelId: string, name: string, onewaySynonymsControlIds: list<string>, personalizationSpec: record<mode: string>, priceRerankingLevel: string, redirectControlIds: list<string>, replacementControlIds: list<string>, solutionTypes: list<string>, twowaySynonymsControlIds: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

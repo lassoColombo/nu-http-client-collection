@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -121,9 +145,9 @@ def storage-type-completer [] { ["EBS" "EFS"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-broker" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-broker" "list-brokers" "create-configuration" "list-configurations" "create-tags" "list-tags" "create-user" "delete-user" "describe-user" "update-user" "delete-broker" "describe-broker" "update-broker" "delete-tags" "describe-broker-engine-types" "describe-broker-instance-options" "describe-configuration" "update-configuration" "describe-configuration-revision" "list-configuration-revisions" "list-users" "reboot-broker" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -145,12 +169,6 @@ export def commands []: nothing -> table {
 #
 # POST /v1/brokers
 # operationId: CreateBroker
-# --configuration shape: {Id?: string, Revision?: int}
-# --encryptionOptions shape: {KmsKeyId?: string, UseAwsOwnedKey?: bool}
-# --ldapServerMetadata shape: {Hosts?: list<string>, RoleBase?: string, RoleName?: string, RoleSearchMatching?: string, RoleSearchSubtree?: bool, ServiceAccountPassword?: string, ServiceAccountUsername?: string, UserBase?: string, UserRoleName?: string, UserSearchMatching?: string, UserSearchSubtree?: bool}
-# --logs shape: {Audit?: bool, General?: bool}
-# --maintenanceWindowStartTime shape: {DayOfWeek?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", TimeOfDay?: string, TimeZone?: string}
-# --users item shape: {ConsoleAccess?: bool, Groups?: list<string>, Password: string, Username: string}
 export def "create-broker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -187,7 +205,7 @@ export def "create-broker" [
   --subnet-ids: list<string> # The list of groups that define which subnets and IP ranges the broker can use from different Availability Zones. If you specify more than one subnet, the subnets must be in different Availability Zones. Amazon MQ will not be able to create VPC endpoints for your broker with multiple subnets in the same Availability Zone. A SINGLE_INSTANCE deployment requires one subnet (for example, the default subnet). An ACTIVE_STANDBY_MULTI_AZ Amazon MQ for ActiveMQ deployment requires two subnets. A CLUSTER_MULTI_AZ Amazon MQ for RabbitMQ deployment has no subnet requirements when deployed with public accessibility. Deployment without public accessibility requires at least one subnet. If you specify subnets in a shared VPC (https://docs.aws.amazon.com/vpc/latest/userguide/vpc-sharing.html) for a RabbitMQ broker, the associated VPC to which the specified subnets belong must be owned by your AWS account. Amazon MQ will not be able to create VPC endpoints in VPCs that are not owned by your AWS account.
   --tags: record # Create tags when creating the broker.
   users: list # Required. The list of broker users (persons or applications) who can access queues and topics. This value can contain only alphanumeric characters, dashes, periods, underscores, and tildes (- . _ ~). This value must be 2-100 characters long. Amazon MQ for RabbitMQ When you create an Amazon MQ for RabbitMQ broker, one and only one administrative user is accepted and created when a broker is first provisioned. All subsequent broker users are created by making RabbitMQ API calls directly to brokers or via the RabbitMQ web console. — item shape: {ConsoleAccess?: bool, Groups?: list<string>, Password: string, Username: string}
-]: any -> record<BrokerArn: string, BrokerId: string> {
+]: any -> oneof<record<BrokerArn: string, BrokerId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -239,7 +257,7 @@ export def "list-brokers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BrokerSummaries: table<BrokerArn: string, BrokerId: string, BrokerName: string, BrokerState: string, Created: string, DeploymentMode: string, EngineType: string, HostInstanceType: string>, NextToken: string> {
+]: nothing -> oneof<record<BrokerSummaries: table<BrokerArn: string, BrokerId: string, BrokerName: string, BrokerState: string, Created: string, DeploymentMode: string, EngineType: string, HostInstanceType: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -288,7 +306,7 @@ export def "create-configuration" [
   engine_version: string # Required. The broker engine's version. For a list of supported engine versions, see Supported engines (https://docs.aws.amazon.com//amazon-mq/latest/developer-guide/broker-engine.html).
   name: string # Required. The name of the configuration. This value can contain only alphanumeric characters, dashes, periods, underscores, and tildes (- . _ ~). This value must be 1-150 characters long.
   --tags: record # Create tags when creating the configuration.
-]: any -> record<Arn: string, AuthenticationStrategy: string, Created: string, Id: string, LatestRevision: record<Created: string, Description: string, Revision: int>, Name: string> {
+]: any -> oneof<record<Arn: string, AuthenticationStrategy: string, Created: string, Id: string, LatestRevision: record<Created: string, Description: string, Revision: int>, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -336,7 +354,7 @@ export def "list-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Configurations: table<Arn: string, AuthenticationStrategy: string, Created: string, Description: string, EngineType: string, EngineVersion: string, Id: string, LatestRevision: record, Name: string, Tags: record>, MaxResults: int, NextToken: string> {
+]: nothing -> oneof<record<Configurations: table<Arn: string, AuthenticationStrategy: string, Created: string, Description: string, EngineType: string, EngineVersion: string, Id: string, LatestRevision: record, Name: string, Tags: record>, MaxResults: int, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -430,7 +448,7 @@ export def "list-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource-arn' must be non-empty" } }
@@ -479,7 +497,7 @@ export def "create-user" [
   --console-access: oneof<nothing, bool> # Enables access to the ActiveMQ Web Console for the ActiveMQ user.
   --groups: list<string> # The list of groups (20 maximum) to which the ActiveMQ user belongs. This value can contain only alphanumeric characters, dashes, periods, underscores, and tildes (- . _ ~). This value must be 2-100 characters long.
   password: string # Required. The password of the user. This value must be at least 12 characters long, must contain at least 4 unique characters, and must not contain commas, colons, or equal signs (,:=).
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -529,7 +547,7 @@ export def "delete-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($broker_id | is-empty) { error make --unspanned { msg: "path parameter 'broker-id' must be non-empty" } }
@@ -576,7 +594,7 @@ export def "describe-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BrokerId: string, ConsoleAccess: bool, Groups: list<string>, Pending: record<ConsoleAccess: bool, Groups: list<string>, PendingChange: string>, Username: string> {
+]: nothing -> oneof<record<BrokerId: string, ConsoleAccess: bool, Groups: list<string>, Pending: record<ConsoleAccess: bool, Groups: list<string>, PendingChange: string>, Username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($broker_id | is-empty) { error make --unspanned { msg: "path parameter 'broker-id' must be non-empty" } }
@@ -626,7 +644,7 @@ export def "update-user" [
   --console-access: oneof<nothing, bool> # Enables access to the the ActiveMQ Web Console for the ActiveMQ user.
   --groups: list<string> # The list of groups (20 maximum) to which the ActiveMQ user belongs. This value can contain only alphanumeric characters, dashes, periods, underscores, and tildes (- . _ ~). This value must be 2-100 characters long.
   --password: string # The password of the user. This value must be at least 12 characters long, must contain at least 4 unique characters, and must not contain commas, colons, or equal signs (,:=).
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -675,7 +693,7 @@ export def "delete-broker" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BrokerId: string> {
+]: nothing -> oneof<record<BrokerId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($broker_id | is-empty) { error make --unspanned { msg: "path parameter 'broker-id' must be non-empty" } }
@@ -720,7 +738,7 @@ export def "describe-broker" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ActionsRequired: table<ActionRequiredCode: string, ActionRequiredInfo: string>, AuthenticationStrategy: string, AutoMinorVersionUpgrade: bool, BrokerArn: string, BrokerId: string, BrokerInstances: table<ConsoleURL: string, Endpoints: list, IpAddress: string>, BrokerName: string, BrokerState: string, Configurations: record<Current: record<Id: string, Revision: int>, History: list<record>, Pending: record<Id: string, Revision: int>>, Created: string, DeploymentMode: string, EncryptionOptions: record<KmsKeyId: string, UseAwsOwnedKey: bool>, EngineType: string, EngineVersion: string, HostInstanceType: string, LdapServerMetadata: record<Hosts: list<string>, RoleBase: string, RoleName: string, RoleSearchMatching: string, RoleSearchSubtree: bool, ServiceAccountUsername: string, UserBase: string, UserRoleName: string, UserSearchMatching: string, UserSearchSubtree: bool>, Logs: record<Audit: bool, AuditLogGroup: string, General: bool, GeneralLogGroup: string, Pending: record<Audit: bool, General: bool>>, MaintenanceWindowStartTime: record<DayOfWeek: string, TimeOfDay: string, TimeZone: string>, PendingAuthenticationStrategy: string, PendingEngineVersion: string, PendingHostInstanceType: string, PendingLdapServerMetadata: record<Hosts: list<string>, RoleBase: string, RoleName: string, RoleSearchMatching: string, RoleSearchSubtree: bool, ServiceAccountUsername: string, UserBase: string, UserRoleName: string, UserSearchMatching: string, UserSearchSubtree: bool>, PendingSecurityGroups: list<string>, PubliclyAccessible: bool, SecurityGroups: list<string>, StorageType: string, SubnetIds: list<string>, Tags: record, Users: table<PendingChange: string, Username: string>> {
+]: nothing -> oneof<record<ActionsRequired: table<ActionRequiredCode: string, ActionRequiredInfo: string>, AuthenticationStrategy: string, AutoMinorVersionUpgrade: bool, BrokerArn: string, BrokerId: string, BrokerInstances: table<ConsoleURL: string, Endpoints: list, IpAddress: string>, BrokerName: string, BrokerState: string, Configurations: record<Current: record<Id: string, Revision: int>, History: list<record>, Pending: record<Id: string, Revision: int>>, Created: string, DeploymentMode: string, EncryptionOptions: record<KmsKeyId: string, UseAwsOwnedKey: bool>, EngineType: string, EngineVersion: string, HostInstanceType: string, LdapServerMetadata: record<Hosts: list<string>, RoleBase: string, RoleName: string, RoleSearchMatching: string, RoleSearchSubtree: bool, ServiceAccountUsername: string, UserBase: string, UserRoleName: string, UserSearchMatching: string, UserSearchSubtree: bool>, Logs: record<Audit: bool, AuditLogGroup: string, General: bool, GeneralLogGroup: string, Pending: record<Audit: bool, General: bool>>, MaintenanceWindowStartTime: record<DayOfWeek: string, TimeOfDay: string, TimeZone: string>, PendingAuthenticationStrategy: string, PendingEngineVersion: string, PendingHostInstanceType: string, PendingLdapServerMetadata: record<Hosts: list<string>, RoleBase: string, RoleName: string, RoleSearchMatching: string, RoleSearchSubtree: bool, ServiceAccountUsername: string, UserBase: string, UserRoleName: string, UserSearchMatching: string, UserSearchSubtree: bool>, PendingSecurityGroups: list<string>, PubliclyAccessible: bool, SecurityGroups: list<string>, StorageType: string, SubnetIds: list<string>, Tags: record, Users: table<PendingChange: string, Username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($broker_id | is-empty) { error make --unspanned { msg: "path parameter 'broker-id' must be non-empty" } }
@@ -747,10 +765,6 @@ export def "describe-broker" [
 #
 # PUT /v1/brokers/{broker-id}
 # operationId: UpdateBroker
-# --configuration shape: {Id?: string, Revision?: int}
-# --ldapServerMetadata shape: {Hosts?: list<string>, RoleBase?: string, RoleName?: string, RoleSearchMatching?: string, RoleSearchSubtree?: bool, ServiceAccountPassword?: string, ServiceAccountUsername?: string, UserBase?: string, UserRoleName?: string, UserSearchMatching?: string, UserSearchSubtree?: bool}
-# --logs shape: {Audit?: bool, General?: bool}
-# --maintenanceWindowStartTime shape: {DayOfWeek?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", TimeOfDay?: string, TimeZone?: string}
 export def "update-broker" [
   broker_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -778,7 +792,7 @@ export def "update-broker" [
   --logs: record # The list of information about logs to be enabled for the specified broker. — shape: {Audit?: bool, General?: bool}
   --maintenance-window-start-time: record # The scheduled time period relative to UTC during which Amazon MQ begins to apply pending updates or patches to the broker. — shape: {DayOfWeek?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", TimeOfDay?: string, TimeZone?: string}
   --security-groups: list<string> # The list of security groups (1 minimum, 5 maximum) that authorizes connections to brokers.
-]: any -> record<AuthenticationStrategy: string, AutoMinorVersionUpgrade: bool, BrokerId: string, Configuration: record<Id: string, Revision: int>, EngineVersion: string, HostInstanceType: string, LdapServerMetadata: record<Hosts: list<string>, RoleBase: string, RoleName: string, RoleSearchMatching: string, RoleSearchSubtree: bool, ServiceAccountUsername: string, UserBase: string, UserRoleName: string, UserSearchMatching: string, UserSearchSubtree: bool>, Logs: record<Audit: bool, General: bool>, MaintenanceWindowStartTime: record<DayOfWeek: string, TimeOfDay: string, TimeZone: string>, SecurityGroups: list<string>> {
+]: any -> oneof<record<AuthenticationStrategy: string, AutoMinorVersionUpgrade: bool, BrokerId: string, Configuration: record<Id: string, Revision: int>, EngineVersion: string, HostInstanceType: string, LdapServerMetadata: record<Hosts: list<string>, RoleBase: string, RoleName: string, RoleSearchMatching: string, RoleSearchSubtree: bool, ServiceAccountUsername: string, UserBase: string, UserRoleName: string, UserSearchMatching: string, UserSearchSubtree: bool>, Logs: record<Audit: bool, General: bool>, MaintenanceWindowStartTime: record<DayOfWeek: string, TimeOfDay: string, TimeZone: string>, SecurityGroups: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -876,7 +890,7 @@ export def "describe-broker-engine-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BrokerEngineTypes: table<EngineType: string, EngineVersions: list>, MaxResults: int, NextToken: string> {
+]: nothing -> oneof<record<BrokerEngineTypes: table<EngineType: string, EngineVersions: list>, MaxResults: int, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "engineType" $engine_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -925,7 +939,7 @@ export def "describe-broker-instance-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BrokerInstanceOptions: table<AvailabilityZones: list, EngineType: string, HostInstanceType: string, StorageType: string, SupportedDeploymentModes: list, SupportedEngineVersions: list>, MaxResults: int, NextToken: string> {
+]: nothing -> oneof<record<BrokerInstanceOptions: table<AvailabilityZones: list, EngineType: string, HostInstanceType: string, StorageType: string, SupportedDeploymentModes: list, SupportedEngineVersions: list>, MaxResults: int, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "engineType" $engine_type "scalar") (serialize-qp "hostInstanceType" $host_instance_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "storageType" $storage_type "scalar")] | flatten | str join "&"
@@ -970,7 +984,7 @@ export def "describe-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: string, AuthenticationStrategy: string, Created: string, Description: string, EngineType: string, EngineVersion: string, Id: string, LatestRevision: record<Created: string, Description: string, Revision: int>, Name: string, Tags: record> {
+]: nothing -> oneof<record<Arn: string, AuthenticationStrategy: string, Created: string, Description: string, EngineType: string, EngineVersion: string, Id: string, LatestRevision: record<Created: string, Description: string, Revision: int>, Name: string, Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configuration-id' must be non-empty" } }
@@ -1017,7 +1031,7 @@ export def "update-configuration" [
   --x-amz-signed-headers: string
   data: string # Required. The base64-encoded XML configuration.
   --description: string # The description of the configuration.
-]: any -> record<Arn: string, Created: string, Id: string, LatestRevision: record<Created: string, Description: string, Revision: int>, Name: string, Warnings: table<AttributeName: string, ElementName: string, Reason: string>> {
+]: any -> oneof<record<Arn: string, Created: string, Id: string, LatestRevision: record<Created: string, Description: string, Revision: int>, Name: string, Warnings: table<AttributeName: string, ElementName: string, Reason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1066,7 +1080,7 @@ export def "describe-configuration-revision" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConfigurationId: string, Created: string, Data: string, Description: string> {
+]: nothing -> oneof<record<ConfigurationId: string, Created: string, Data: string, Description: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configuration-id' must be non-empty" } }
@@ -1114,7 +1128,7 @@ export def "list-configuration-revisions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConfigurationId: string, MaxResults: int, NextToken: string, Revisions: table<Created: string, Description: string, Revision: int>> {
+]: nothing -> oneof<record<ConfigurationId: string, MaxResults: int, NextToken: string, Revisions: table<Created: string, Description: string, Revision: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'configuration-id' must be non-empty" } }
@@ -1162,7 +1176,7 @@ export def "list-users" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<BrokerId: string, MaxResults: int, NextToken: string, Users: table<PendingChange: string, Username: string>> {
+]: nothing -> oneof<record<BrokerId: string, MaxResults: int, NextToken: string, Users: table<PendingChange: string, Username: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($broker_id | is-empty) { error make --unspanned { msg: "path parameter 'broker-id' must be non-empty" } }
@@ -1208,7 +1222,7 @@ export def "reboot-broker" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($broker_id | is-empty) { error make --unspanned { msg: "path parameter 'broker-id' must be non-empty" } }

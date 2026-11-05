@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -145,9 +169,9 @@ def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chart-axes-get-id" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["chart-axes-get-id" "chart-axisdatatypes-get" "chart-axisdatatypes-typeid-get-type-id" "chart-axisdatatypes-get-id" "chart-chartdata-get-id" "charts-charts-chartupdate-get-id" "charts-charts-chartupdate-put-id" "charts-charts-childobjects-get-id" "chart-columncollections-get-id" "chart-columns-get-id" "chart-datapoints-get-id" "charts-charts-details-get-id" "charts-charts-openofficexml-get-id-updated" "charts-charts-openofficexml-put-id" "chart-plottype-get" "chart-plottype-typeid-get-type-id" "chart-plottype-get-id" "chart-rowcol-get" "chart-rowcol-typeid-get-type-id" "chart-rowcol-get-id" "chart-rowcollections-get-id" "chart-rownameformattypes-get" "chart-rownameformattypes-typeid-get-type-id" "chart-rownameformattypes-get-id" "chart-rows-get-id" "charts-charts-svg-get-id-use-cache" "charts-charts-get-id" "slides-connectionshapes-childobjects-get-id" "slides-connectionshapes-details-get-id" "slides-connectionshapes-openofficexml-get-id-updated" "slides-connectionshapes-openofficexml-put-id" "slides-connectionshapes-svg-get-id-use-cache" "slides-connectionshapes-get-id" "documents-post" "documents-childobjects-get-id" "documents-clone-post-id" "documents-documenttype-get" "documents-documenttype-typeid-get-type-id" "documents-documenttype-get-id" "documents-download-get-id-orginal" "documents-delete-id" "documents-get-id" "slides-groups-childobjects-get-id" "slides-groups-details-get-id" "slides-groups-openofficexml-get-id-updated" "slides-groups-openofficexml-put-id" "slides-groups-svg-get-id-use-cache" "slides-groups-get-id" "shared-images-childobjects-get-id" "shared-images-details-get-id" "shared-images-getimage-put-id" "shared-images-openofficexml-get-id-updated" "shared-images-openofficexml-put-id" "shared-images-svg-get-id-use-cache" "shared-images-get-id" "slides-shapetrees-childobjects-get-id" "slides-shapetrees-details-get-id" "slides-shapetrees-openofficexml-get-id-updated" "slides-shapetrees-openofficexml-put-id" "slides-shapetrees-svg-get-id-use-cache" "slides-shapetrees-get-id" "slides-shapes-childobjects-get-id" "slides-shapes-details-get-id" "slides-shapes-openofficexml-get-id-updated" "slides-shapes-openofficexml-put-id" "slides-shapes-svg-get-id-use-cache" "slides-shapes-get-id" "shared-colortransformationattributes-get-id" "shared-colortransformations-get-id" "shared-colortypes-get" "shared-colortypes-typeid-get-type-id" "shared-colortypes-get-id" "shared-dashtypes-get" "shared-dashtypes-typeid-get-type-id" "shared-dashtypes-get-id" "shared-effectattributes-get-id" "shared-effecttypes-get" "shared-effecttypes-typeid-get-type-id" "shared-effecttypes-get-id" "shared-effects-get-id" "shared-fillmap-get-id" "shared-filltypes-get" "shared-filltypes-typeid-get-type-id" "shared-filltypes-get-id" "shared-gradientfills-get-id" "shared-gradientstops-get-id" "shared-imagefills-get-id" "shared-lineendsizes-get" "shared-lineendsizes-typeid-get-type-id" "shared-lineendsizes-get-id" "shared-lineendtypes-get" "shared-lineendtypes-typeid-get-type-id" "shared-lineendtypes-get-id" "shared-lines-get-id" "shared-paragraph-get-id" "shared-solidfills-get-id" "shared-text-get-id" "shared-textcontainer-get-id" "slides-slides-childobjects-get-id" "slides-colormaps-get-id" "slides-slides-details-get-id" "slides-graphictypes-get" "slides-graphictypes-typeid-get-type-id" "slides-graphictypes-get-id" "slides-graphics-get-id" "slides-groupelementtypes-get" "slides-groupelementtypes-typeid-get-type-id" "slides-groupelementtypes-get-id" "slides-groupelements-get-id" "slides-slides-openofficexml-get-id-updated" "slides-slides-openofficexml-put-id" "slides-slidemasters-get-id" "slides-slides-svg-get-id-use-cache" "slides-slides-get-id" "slides-smartarts-childobjects-get-id" "slides-smartarts-details-get-id" "slides-smartarts-openofficexml-get-id-updated" "slides-smartarts-openofficexml-put-id" "slides-smartarts-svg-get-id-use-cache" "slides-smartarts-get-id" "tables-borders-get-id" "tables-cells-get-id" "tables-tables-childobjects-get-id" "tables-columns-get-id" "tables-tables-details-get-id" "tables-tables-openofficexml-get-id-updated" "tables-tables-openofficexml-put-id" "tables-rows-get-id" "tables-tables-svg-get-id-use-cache" "tables-tables-tableupdate-get-id" "tables-tables-tableupdate-put-id" "tables-tables-get-id" "themes-backgroundfills-get-id" "theme-themes-childobjects-get-id" "themes-colors-get-id" "themes-customcolors-get-id" "theme-themes-details-get-id" "themes-effectmap-get-id" "themes-fills-get-id" "themes-fonts-get-id" "themes-intensity-get" "themes-intensity-typeid-get-type-id" "themes-intensity-get-id" "themes-linemap-get-id" "theme-themes-openofficexml-get-id-updated" "theme-themes-openofficexml-put-id" "theme-themes-svg-get-id-use-cache" "theme-themes-get-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -180,7 +204,7 @@ export def "chart-axes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<axisDataTypeId: int, chartsId: string, id: string, ooxmlId: int> {
+]: nothing -> oneof<record<axisDataTypeId: int, chartsId: string, id: string, ooxmlId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -215,7 +239,7 @@ export def "chart-axisdatatypes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, id: string, name: string, ooxmlName: string, typeId: int> {
+]: nothing -> oneof<table<description: string, id: string, name: string, ooxmlName: string, typeId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Charts/AxisDataTypes" $auth.query)
@@ -250,7 +274,7 @@ export def "chart-axisdatatypes-typeid-get-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, ooxmlName: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, ooxmlName: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -286,7 +310,7 @@ export def "chart-axisdatatypes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, ooxmlName: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, ooxmlName: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -322,7 +346,7 @@ export def "chart-chartdata-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<chartId: string, id: string> {
+]: nothing -> oneof<record<chartId: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -358,7 +382,7 @@ export def "charts-charts-chartupdate-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<categoryNames: list<string>, chartId: string, dataPoints: list<list<float>>, seriesNames: list<string>> {
+]: nothing -> oneof<record<categoryNames: list<string>, chartId: string, dataPoints: list<list<float>>, seriesNames: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -437,7 +461,7 @@ export def "charts-charts-childobjects-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
+]: nothing -> oneof<table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -473,7 +497,7 @@ export def "chart-columncollections-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<chartDataId: string, id: string> {
+]: nothing -> oneof<record<chartDataId: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -509,7 +533,7 @@ export def "chart-columns-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<axisId: string, columnCollectionId: string, id: string, index: int, name: string> {
+]: nothing -> oneof<record<axisId: string, columnCollectionId: string, id: string, index: int, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -545,7 +569,7 @@ export def "chart-datapoints-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<chartDataId: string, columnId: string, id: string, rowId: string, value: float> {
+]: nothing -> oneof<record<chartDataId: string, columnId: string, id: string, rowId: string, value: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -581,7 +605,7 @@ export def "charts-charts-details-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<axes: table<axisDataTypeId: int, chart: any, chartsId: string, dateCreated: string, dateModified: string, id: string, ooxmlId: int, titleTextContainer: record, userCreated: string, userModified: string>, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, chartData: record<chart: any, chartId: string, columnCollection: record<chartData: any, chartDataId: string, columns: list, dateCreated: string, dateModified: string, id: string, userCreated: string, userModified: string>, dataPoints: list<record>, dateCreated: string, dateModified: string, id: string, rowCollection: record<axis: record, axisId: string, chartData: any, chartDataId: string, dateCreated: string, dateModified: string, id: string, nameFormatType: int, rows: list, userCreated: string, userModified: string>, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, id: string, name: string, packageUri: string, parentGraphic: record<chart: any, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: record<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: any, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, fileExtension: string, graphicsId: string, id: string, imageFileBlobUrl: string, imageFill: record, imageFillsId: string, name: string, packageUri: string, parentGraphic: any, userCreated: string, userModified: string>, smartArt: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, graphicsId: string, id: string, name: string, packageUri: string, parentGraphic: any, svgBlobUrl: string, userCreated: string, userModified: string>, table: record<baseElementBlobUrl: string, cells: list, changedBaseElementBlobUrl: string, columns: list, dateCreated: string, dateModified: string, hasStylePart: bool, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, rows: list, stylePartOuterXml: string, svgBlobUrl: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, parentGraphicId: string, svgBlobUrl: string, titleTextContainer: record<axis: record<axisDataTypeId: int, chart: any, chartsId: string, dateCreated: string, dateModified: string, id: string, ooxmlId: int, titleTextContainer: any, userCreated: string, userModified: string>, axisId: string, chart: any, chartId: string, dateCreated: string, dateModified: string, id: string, outerXml: string, paragraphs: list<record>, parentShape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: any, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeId: string, tableCell: record<border: record, column: record, columnId: string, columnSpan: int, dateCreated: string, dateModified: string, fillMap: record, id: string, isMergedHorozontal: bool, isMergedVertical: bool, row: record, rowId: string, rowSpan: int, textContainer: any, userCreated: string, userModified: string>, tableCellId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string> {
+]: nothing -> oneof<record<axes: table<axisDataTypeId: int, chart: any, chartsId: string, dateCreated: string, dateModified: string, id: string, ooxmlId: int, titleTextContainer: record, userCreated: string, userModified: string>, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, chartData: record<chart: any, chartId: string, columnCollection: record<chartData: any, chartDataId: string, columns: list, dateCreated: string, dateModified: string, id: string, userCreated: string, userModified: string>, dataPoints: list<record>, dateCreated: string, dateModified: string, id: string, rowCollection: record<axis: record, axisId: string, chartData: any, chartDataId: string, dateCreated: string, dateModified: string, id: string, nameFormatType: int, rows: list, userCreated: string, userModified: string>, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, id: string, name: string, packageUri: string, parentGraphic: record<chart: any, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: record<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: any, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, fileExtension: string, graphicsId: string, id: string, imageFileBlobUrl: string, imageFill: record, imageFillsId: string, name: string, packageUri: string, parentGraphic: any, userCreated: string, userModified: string>, smartArt: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, graphicsId: string, id: string, name: string, packageUri: string, parentGraphic: any, svgBlobUrl: string, userCreated: string, userModified: string>, table: record<baseElementBlobUrl: string, cells: list, changedBaseElementBlobUrl: string, columns: list, dateCreated: string, dateModified: string, hasStylePart: bool, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, rows: list, stylePartOuterXml: string, svgBlobUrl: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, parentGraphicId: string, svgBlobUrl: string, titleTextContainer: record<axis: record<axisDataTypeId: int, chart: any, chartsId: string, dateCreated: string, dateModified: string, id: string, ooxmlId: int, titleTextContainer: any, userCreated: string, userModified: string>, axisId: string, chart: any, chartId: string, dateCreated: string, dateModified: string, id: string, outerXml: string, paragraphs: list<record>, parentShape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: any, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeId: string, tableCell: record<border: record, column: record, columnId: string, columnSpan: int, dateCreated: string, dateModified: string, fillMap: record, id: string, isMergedHorozontal: bool, isMergedVertical: bool, row: record, rowId: string, rowSpan: int, textContainer: any, userCreated: string, userModified: string>, tableCellId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -618,7 +642,7 @@ export def "charts-charts-openofficexml-get-id-updated" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --updated: oneof<nothing, bool> # Indicates whether API should return the orginal uploaded xml (false) or the actively updated version (true, default) (default: true)
-]: nothing -> record<id: string, openOfficeXml: string, type: string> {
+]: nothing -> oneof<record<id: string, openOfficeXml: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -696,7 +720,7 @@ export def "chart-plottype-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: string, plotQualifedAssy: string, plotTypeName: string, rowColTypeId: int, typeId: int> {
+]: nothing -> oneof<table<id: string, plotQualifedAssy: string, plotTypeName: string, rowColTypeId: int, typeId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Charts/PlotType" $auth.query)
@@ -731,7 +755,7 @@ export def "chart-plottype-typeid-get-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, plotQualifedAssy: string, plotTypeName: string, rowColTypeId: int, typeId: int> {
+]: nothing -> oneof<record<id: string, plotQualifedAssy: string, plotTypeName: string, rowColTypeId: int, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -767,7 +791,7 @@ export def "chart-plottype-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, plotQualifedAssy: string, plotTypeName: string, rowColTypeId: int, typeId: int> {
+]: nothing -> oneof<record<id: string, plotQualifedAssy: string, plotTypeName: string, rowColTypeId: int, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -802,7 +826,7 @@ export def "chart-rowcol-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<colName: string, colQualifiedAssy: string, id: string, rowName: string, rowQualifedAssy: string, typeId: int> {
+]: nothing -> oneof<table<colName: string, colQualifiedAssy: string, id: string, rowName: string, rowQualifedAssy: string, typeId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Charts/RowCol" $auth.query)
@@ -837,7 +861,7 @@ export def "chart-rowcol-typeid-get-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<colName: string, colQualifiedAssy: string, id: string, rowName: string, rowQualifedAssy: string, typeId: int> {
+]: nothing -> oneof<record<colName: string, colQualifiedAssy: string, id: string, rowName: string, rowQualifedAssy: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -873,7 +897,7 @@ export def "chart-rowcol-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<colName: string, colQualifiedAssy: string, id: string, rowName: string, rowQualifedAssy: string, typeId: int> {
+]: nothing -> oneof<record<colName: string, colQualifiedAssy: string, id: string, rowName: string, rowQualifedAssy: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -909,7 +933,7 @@ export def "chart-rowcollections-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<axisId: string, chartDataId: string, id: string, nameFormatType: int> {
+]: nothing -> oneof<record<axisId: string, chartDataId: string, id: string, nameFormatType: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -944,7 +968,7 @@ export def "chart-rownameformattypes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<formatCode: string, id: string, powerToolsId: int, typeId: int> {
+]: nothing -> oneof<table<formatCode: string, id: string, powerToolsId: int, typeId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Charts/RowNameFormatTypes" $auth.query)
@@ -979,7 +1003,7 @@ export def "chart-rownameformattypes-typeid-get-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<formatCode: string, id: string, powerToolsId: int, typeId: int> {
+]: nothing -> oneof<record<formatCode: string, id: string, powerToolsId: int, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -1015,7 +1039,7 @@ export def "chart-rownameformattypes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<formatCode: string, id: string, powerToolsId: int, typeId: int> {
+]: nothing -> oneof<record<formatCode: string, id: string, powerToolsId: int, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1051,7 +1075,7 @@ export def "chart-rows-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, index: int, name: string, rowNameCollectionId: string> {
+]: nothing -> oneof<record<id: string, index: int, name: string, rowNameCollectionId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1125,7 +1149,7 @@ export def "charts-charts-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, id: string, name: string, packageUri: string, parentGraphicId: string, svgBlobUrl: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, id: string, name: string, packageUri: string, parentGraphicId: string, svgBlobUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1161,7 +1185,7 @@ export def "slides-connectionshapes-childobjects-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
+]: nothing -> oneof<table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1197,7 +1221,7 @@ export def "slides-connectionshapes-details-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record<connectorId: string, dateCreated: string, dateModified: string, effectAttributes: list<record>, effectMap: record<dateCreated: string, dateModified: string, effect: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, effectMapId: string, id: string, name: string, parentConnector: any, parentShape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: any, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeId: string, userCreated: string, userModified: string>, endConnectionIdx: int, endConnectionShape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record<connectorId: string, dateCreated: string, dateModified: string, effectAttributes: list, effectMap: record, effectMapId: string, id: string, name: string, parentConnector: any, parentShape: any, shapeId: string, userCreated: string, userModified: string>, fillMap: record<connector: any, connectorId: string, dateCreated: string, dateModified: string, effectAttribute: record, effectAttributeId: string, fillTypeId: int, gradientFill: record, id: string, imageFill: record, shape: any, shapeId: string, solidFill: record, tableCell: record, tableCellId: string, themeBackgroundFill: record, themeBackgroundFillId: string, themeFill: record, themeFillId: string, userCreated: string, userModified: string>, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record<childGroupElements: list, connector: any, dateCreated: string, dateModified: string, graphic: record, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: any, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record<bLtoTRBorder: record, bLtoTRBorderId: string, bottomBorder: record, bottomBorderId: string, connectorId: string, dashTypeId: int, dateCreated: string, dateModified: string, headEndHeightId: int, headEndTypeId: int, headEndWidthId: int, id: string, leftBorder: record, leftBorderId: string, lineColorSolidFill: record, lineMap: record, lineMapId: string, parentConnector: any, parentShape: any, rightBorder: record, rightBorderId: string, shapeId: string, tLtoBRBorder: record, tLtoBRBorderId: string, tailEndHeightId: int, tailEndTypeId: int, tailEndWidthId: int, topBorder: record, topBorderId: string, userCreated: string, userModified: string, weight: int>, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record<axis: record, axisId: string, chart: record, chartId: string, dateCreated: string, dateModified: string, id: string, outerXml: string, paragraphs: list, parentShape: any, shapeId: string, tableCell: record, tableCellId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, endConnectionShapeId: string, fillMap: record<connector: any, connectorId: string, dateCreated: string, dateModified: string, effectAttribute: record<attributesJson: string, dateCreated: string, dateModified: string, effect: record, effectId: string, effectTypeId: int, fillMap: any, id: string, userCreated: string, userModified: string>, effectAttributeId: string, fillTypeId: int, gradientFill: record<angle: int, dateCreated: string, dateModified: string, fillMap: any, fillMapId: string, gradientStops: list, id: string, isPath: bool, pathType: string, rotateWithShape: bool, userCreated: string, userModified: string>, id: string, imageFill: record<compressionState: string, dateCreated: string, dateModified: string, dpi: int, effectsJson: string, fillMap: any, fillMapId: string, id: string, picture: record, rotateWithShape: bool, sourceRectangle: string, stretch: bool, tile: string, userCreated: string, userModified: string>, shape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: any, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeId: string, solidFill: record<colorTransformations: record, colorTypeId: int, dateCreated: string, dateModified: string, fillMapId: string, hexValue: string, id: string, isUserColor: bool, parentFillMap: any, parentGradientStop: record, parentGradientStopId: string, parentLine: record, parentLineId: string, parentText: record, parentTextId: string, userCreated: string, userModified: string>, tableCell: record<border: record, column: record, columnId: string, columnSpan: int, dateCreated: string, dateModified: string, fillMap: any, id: string, isMergedHorozontal: bool, isMergedVertical: bool, row: record, rowId: string, rowSpan: int, textContainer: record, userCreated: string, userModified: string>, tableCellId: string, themeBackgroundFill: record<dateCreated: string, dateModified: string, fillMap: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, themeBackgroundFillId: string, themeFill: record<dateCreated: string, dateModified: string, fillMap: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, themeFillId: string, userCreated: string, userModified: string>, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record<childGroupElements: list<any>, connector: any, dateCreated: string, dateModified: string, graphic: record<chart: record, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: any, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record, smartArt: record, table: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, group: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeTree: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, groupElements: list, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: record, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, shapeTreeId: string, typeInfo: record<dateCreated: string, dateModified: string, description: string, id: string, name: string, typeId: int, userCreated: string, userModified: string>, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record<bLtoTRBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, bLtoTRBorderId: string, bottomBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, bottomBorderId: string, connectorId: string, dashTypeId: int, dateCreated: string, dateModified: string, headEndHeightId: int, headEndTypeId: int, headEndWidthId: int, id: string, leftBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, leftBorderId: string, lineColorSolidFill: record<colorTransformations: record, colorTypeId: int, dateCreated: string, dateModified: string, fillMapId: string, hexValue: string, id: string, isUserColor: bool, parentFillMap: record, parentGradientStop: record, parentGradientStopId: string, parentLine: any, parentLineId: string, parentText: record, parentTextId: string, userCreated: string, userModified: string>, lineMap: record<dateCreated: string, dateModified: string, id: string, intensityId: int, line: any, theme: record, themeId: string, userCreated: string, userModified: string>, lineMapId: string, parentConnector: any, parentShape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: any, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, rightBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, rightBorderId: string, shapeId: string, tLtoBRBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, tLtoBRBorderId: string, tailEndHeightId: int, tailEndTypeId: int, tailEndWidthId: int, topBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, topBorderId: string, userCreated: string, userModified: string, weight: int>, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record<connectorId: string, dateCreated: string, dateModified: string, effectAttributes: list, effectMap: record, effectMapId: string, id: string, name: string, parentConnector: any, parentShape: any, shapeId: string, userCreated: string, userModified: string>, fillMap: record<connector: any, connectorId: string, dateCreated: string, dateModified: string, effectAttribute: record, effectAttributeId: string, fillTypeId: int, gradientFill: record, id: string, imageFill: record, shape: any, shapeId: string, solidFill: record, tableCell: record, tableCellId: string, themeBackgroundFill: record, themeBackgroundFillId: string, themeFill: record, themeFillId: string, userCreated: string, userModified: string>, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record<childGroupElements: list, connector: any, dateCreated: string, dateModified: string, graphic: record, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: any, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record<bLtoTRBorder: record, bLtoTRBorderId: string, bottomBorder: record, bottomBorderId: string, connectorId: string, dashTypeId: int, dateCreated: string, dateModified: string, headEndHeightId: int, headEndTypeId: int, headEndWidthId: int, id: string, leftBorder: record, leftBorderId: string, lineColorSolidFill: record, lineMap: record, lineMapId: string, parentConnector: any, parentShape: any, rightBorder: record, rightBorderId: string, shapeId: string, tLtoBRBorder: record, tLtoBRBorderId: string, tailEndHeightId: int, tailEndTypeId: int, tailEndWidthId: int, topBorder: record, topBorderId: string, userCreated: string, userModified: string, weight: int>, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record<axis: record, axisId: string, chart: record, chartId: string, dateCreated: string, dateModified: string, id: string, outerXml: string, paragraphs: list, parentShape: any, shapeId: string, tableCell: record, tableCellId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record<connectorId: string, dateCreated: string, dateModified: string, effectAttributes: list<record>, effectMap: record<dateCreated: string, dateModified: string, effect: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, effectMapId: string, id: string, name: string, parentConnector: any, parentShape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: any, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeId: string, userCreated: string, userModified: string>, endConnectionIdx: int, endConnectionShape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record<connectorId: string, dateCreated: string, dateModified: string, effectAttributes: list, effectMap: record, effectMapId: string, id: string, name: string, parentConnector: any, parentShape: any, shapeId: string, userCreated: string, userModified: string>, fillMap: record<connector: any, connectorId: string, dateCreated: string, dateModified: string, effectAttribute: record, effectAttributeId: string, fillTypeId: int, gradientFill: record, id: string, imageFill: record, shape: any, shapeId: string, solidFill: record, tableCell: record, tableCellId: string, themeBackgroundFill: record, themeBackgroundFillId: string, themeFill: record, themeFillId: string, userCreated: string, userModified: string>, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record<childGroupElements: list, connector: any, dateCreated: string, dateModified: string, graphic: record, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: any, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record<bLtoTRBorder: record, bLtoTRBorderId: string, bottomBorder: record, bottomBorderId: string, connectorId: string, dashTypeId: int, dateCreated: string, dateModified: string, headEndHeightId: int, headEndTypeId: int, headEndWidthId: int, id: string, leftBorder: record, leftBorderId: string, lineColorSolidFill: record, lineMap: record, lineMapId: string, parentConnector: any, parentShape: any, rightBorder: record, rightBorderId: string, shapeId: string, tLtoBRBorder: record, tLtoBRBorderId: string, tailEndHeightId: int, tailEndTypeId: int, tailEndWidthId: int, topBorder: record, topBorderId: string, userCreated: string, userModified: string, weight: int>, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record<axis: record, axisId: string, chart: record, chartId: string, dateCreated: string, dateModified: string, id: string, outerXml: string, paragraphs: list, parentShape: any, shapeId: string, tableCell: record, tableCellId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, endConnectionShapeId: string, fillMap: record<connector: any, connectorId: string, dateCreated: string, dateModified: string, effectAttribute: record<attributesJson: string, dateCreated: string, dateModified: string, effect: record, effectId: string, effectTypeId: int, fillMap: any, id: string, userCreated: string, userModified: string>, effectAttributeId: string, fillTypeId: int, gradientFill: record<angle: int, dateCreated: string, dateModified: string, fillMap: any, fillMapId: string, gradientStops: list, id: string, isPath: bool, pathType: string, rotateWithShape: bool, userCreated: string, userModified: string>, id: string, imageFill: record<compressionState: string, dateCreated: string, dateModified: string, dpi: int, effectsJson: string, fillMap: any, fillMapId: string, id: string, picture: record, rotateWithShape: bool, sourceRectangle: string, stretch: bool, tile: string, userCreated: string, userModified: string>, shape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: any, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeId: string, solidFill: record<colorTransformations: record, colorTypeId: int, dateCreated: string, dateModified: string, fillMapId: string, hexValue: string, id: string, isUserColor: bool, parentFillMap: any, parentGradientStop: record, parentGradientStopId: string, parentLine: record, parentLineId: string, parentText: record, parentTextId: string, userCreated: string, userModified: string>, tableCell: record<border: record, column: record, columnId: string, columnSpan: int, dateCreated: string, dateModified: string, fillMap: any, id: string, isMergedHorozontal: bool, isMergedVertical: bool, row: record, rowId: string, rowSpan: int, textContainer: record, userCreated: string, userModified: string>, tableCellId: string, themeBackgroundFill: record<dateCreated: string, dateModified: string, fillMap: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, themeBackgroundFillId: string, themeFill: record<dateCreated: string, dateModified: string, fillMap: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, themeFillId: string, userCreated: string, userModified: string>, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record<childGroupElements: list<any>, connector: any, dateCreated: string, dateModified: string, graphic: record<chart: record, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: any, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record, smartArt: record, table: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, group: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeTree: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, groupElements: list, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: record, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, shapeTreeId: string, typeInfo: record<dateCreated: string, dateModified: string, description: string, id: string, name: string, typeId: int, userCreated: string, userModified: string>, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record<bLtoTRBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, bLtoTRBorderId: string, bottomBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, bottomBorderId: string, connectorId: string, dashTypeId: int, dateCreated: string, dateModified: string, headEndHeightId: int, headEndTypeId: int, headEndWidthId: int, id: string, leftBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, leftBorderId: string, lineColorSolidFill: record<colorTransformations: record, colorTypeId: int, dateCreated: string, dateModified: string, fillMapId: string, hexValue: string, id: string, isUserColor: bool, parentFillMap: record, parentGradientStop: record, parentGradientStopId: string, parentLine: any, parentLineId: string, parentText: record, parentTextId: string, userCreated: string, userModified: string>, lineMap: record<dateCreated: string, dateModified: string, id: string, intensityId: int, line: any, theme: record, themeId: string, userCreated: string, userModified: string>, lineMapId: string, parentConnector: any, parentShape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: any, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, rightBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, rightBorderId: string, shapeId: string, tLtoBRBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, tLtoBRBorderId: string, tailEndHeightId: int, tailEndTypeId: int, tailEndWidthId: int, topBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, topBorderId: string, userCreated: string, userModified: string, weight: int>, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record<connectorId: string, dateCreated: string, dateModified: string, effectAttributes: list, effectMap: record, effectMapId: string, id: string, name: string, parentConnector: any, parentShape: any, shapeId: string, userCreated: string, userModified: string>, fillMap: record<connector: any, connectorId: string, dateCreated: string, dateModified: string, effectAttribute: record, effectAttributeId: string, fillTypeId: int, gradientFill: record, id: string, imageFill: record, shape: any, shapeId: string, solidFill: record, tableCell: record, tableCellId: string, themeBackgroundFill: record, themeBackgroundFillId: string, themeFill: record, themeFillId: string, userCreated: string, userModified: string>, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record<childGroupElements: list, connector: any, dateCreated: string, dateModified: string, graphic: record, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: any, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record<bLtoTRBorder: record, bLtoTRBorderId: string, bottomBorder: record, bottomBorderId: string, connectorId: string, dashTypeId: int, dateCreated: string, dateModified: string, headEndHeightId: int, headEndTypeId: int, headEndWidthId: int, id: string, leftBorder: record, leftBorderId: string, lineColorSolidFill: record, lineMap: record, lineMapId: string, parentConnector: any, parentShape: any, rightBorder: record, rightBorderId: string, shapeId: string, tLtoBRBorder: record, tLtoBRBorderId: string, tailEndHeightId: int, tailEndTypeId: int, tailEndWidthId: int, topBorder: record, topBorderId: string, userCreated: string, userModified: string, weight: int>, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record<axis: record, axisId: string, chart: record, chartId: string, dateCreated: string, dateModified: string, id: string, outerXml: string, paragraphs: list, parentShape: any, shapeId: string, tableCell: record, tableCellId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1234,7 +1258,7 @@ export def "slides-connectionshapes-openofficexml-get-id-updated" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --updated: oneof<nothing, bool> # Indicates whether API should return the orginal uploaded xml (false) or the actively updated version (true, default) (default: true)
-]: nothing -> record<id: string, openOfficeXml: string, type: string> {
+]: nothing -> oneof<record<id: string, openOfficeXml: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1351,7 +1375,7 @@ export def "slides-connectionshapes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, endConnectionIdx: int, endConnectionShapeId: string, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShapeId: string, svgBlobUrl: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, endConnectionIdx: int, endConnectionShapeId: string, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShapeId: string, svgBlobUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1389,7 +1413,7 @@ export def "documents-post" [
   --accept: string@accept-completer # Response content type
   file: string # The file to upload. Must be of type .pptx, ppt (format: binary)
   story_id: string # The story_id of the document being uploaded. (format: uuid)
-]: any -> table<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, storyId: string, tableStylesXmlBlobUrl: string, title: string> {
+]: any -> oneof<table<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, storyId: string, tableStylesXmlBlobUrl: string, title: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1430,7 +1454,7 @@ export def "documents-childobjects-get-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
+]: nothing -> oneof<table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1469,7 +1493,7 @@ export def "documents-clone-post-id" [
   --accept: string@accept-completer # Response content type
   --body-id: string # format: uuid
   --story-id: string # format: uuid
-]: any -> record<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, storyId: string, tableStylesXmlBlobUrl: string, title: string> {
+]: any -> oneof<record<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, storyId: string, tableStylesXmlBlobUrl: string, title: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1507,7 +1531,7 @@ export def "documents-documenttype-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, fileExtension: string, id: string, mimeType: string, name: string, ooxmlPackageType: string, typeId: int> {
+]: nothing -> oneof<table<description: string, fileExtension: string, id: string, mimeType: string, name: string, ooxmlPackageType: string, typeId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Documents/DocumentType" $auth.query)
@@ -1542,7 +1566,7 @@ export def "documents-documenttype-typeid-get-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, fileExtension: string, id: string, mimeType: string, name: string, ooxmlPackageType: string, typeId: int> {
+]: nothing -> oneof<record<description: string, fileExtension: string, id: string, mimeType: string, name: string, ooxmlPackageType: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -1578,7 +1602,7 @@ export def "documents-documenttype-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, fileExtension: string, id: string, mimeType: string, name: string, ooxmlPackageType: string, typeId: int> {
+]: nothing -> oneof<record<description: string, fileExtension: string, id: string, mimeType: string, name: string, ooxmlPackageType: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1689,7 +1713,7 @@ export def "documents-get-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, storyId: string, tableStylesXmlBlobUrl: string, title: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, storyId: string, tableStylesXmlBlobUrl: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1725,7 +1749,7 @@ export def "slides-groups-childobjects-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
+]: nothing -> oneof<table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1761,7 +1785,7 @@ export def "slides-groups-details-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: record<childGroupElements: list<any>, connector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, endConnectionIdx: int, endConnectionShape: record, endConnectionShapeId: string, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: record, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphic: record<chart: record, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: any, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record, smartArt: record, table: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, group: any, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeTree: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, groupElements: list, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: record, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, shapeTreeId: string, typeInfo: record<dateCreated: string, dateModified: string, description: string, id: string, name: string, typeId: int, userCreated: string, userModified: string>, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: record<childGroupElements: list<any>, connector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, endConnectionIdx: int, endConnectionShape: record, endConnectionShapeId: string, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: record, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphic: record<chart: record, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: any, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record, smartArt: record, table: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, group: any, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeTree: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, groupElements: list, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: record, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, shapeTreeId: string, typeInfo: record<dateCreated: string, dateModified: string, description: string, id: string, name: string, typeId: int, userCreated: string, userModified: string>, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1798,7 +1822,7 @@ export def "slides-groups-openofficexml-get-id-updated" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --updated: oneof<nothing, bool> # Indicates whether API should return the orginal uploaded xml (false) or the actively updated version (true, default) (default: true)
-]: nothing -> record<id: string, openOfficeXml: string, type: string> {
+]: nothing -> oneof<record<id: string, openOfficeXml: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1915,7 +1939,7 @@ export def "slides-groups-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, svgBlobUrl: string, title: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, svgBlobUrl: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1951,7 +1975,7 @@ export def "shared-images-childobjects-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
+]: nothing -> oneof<table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1987,7 +2011,7 @@ export def "shared-images-details-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, fileExtension: string, graphicsId: string, id: string, imageFileBlobUrl: string, imageFill: record<compressionState: string, dateCreated: string, dateModified: string, dpi: int, effectsJson: string, fillMap: record<connector: record, connectorId: string, dateCreated: string, dateModified: string, effectAttribute: record, effectAttributeId: string, fillTypeId: int, gradientFill: record, id: string, imageFill: any, shape: record, shapeId: string, solidFill: record, tableCell: record, tableCellId: string, themeBackgroundFill: record, themeBackgroundFillId: string, themeFill: record, themeFillId: string, userCreated: string, userModified: string>, fillMapId: string, id: string, picture: any, rotateWithShape: bool, sourceRectangle: string, stretch: bool, tile: string, userCreated: string, userModified: string>, imageFillsId: string, name: string, packageUri: string, parentGraphic: record<chart: record<axes: list, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, chartData: record, dateCreated: string, dateModified: string, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, svgBlobUrl: string, titleTextContainer: record, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: record<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: any, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: any, smartArt: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, graphicsId: string, id: string, name: string, packageUri: string, parentGraphic: any, svgBlobUrl: string, userCreated: string, userModified: string>, table: record<baseElementBlobUrl: string, cells: list, changedBaseElementBlobUrl: string, columns: list, dateCreated: string, dateModified: string, hasStylePart: bool, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, rows: list, stylePartOuterXml: string, svgBlobUrl: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, userCreated: string, userModified: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, fileExtension: string, graphicsId: string, id: string, imageFileBlobUrl: string, imageFill: record<compressionState: string, dateCreated: string, dateModified: string, dpi: int, effectsJson: string, fillMap: record<connector: record, connectorId: string, dateCreated: string, dateModified: string, effectAttribute: record, effectAttributeId: string, fillTypeId: int, gradientFill: record, id: string, imageFill: any, shape: record, shapeId: string, solidFill: record, tableCell: record, tableCellId: string, themeBackgroundFill: record, themeBackgroundFillId: string, themeFill: record, themeFillId: string, userCreated: string, userModified: string>, fillMapId: string, id: string, picture: any, rotateWithShape: bool, sourceRectangle: string, stretch: bool, tile: string, userCreated: string, userModified: string>, imageFillsId: string, name: string, packageUri: string, parentGraphic: record<chart: record<axes: list, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, chartData: record, dateCreated: string, dateModified: string, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, svgBlobUrl: string, titleTextContainer: record, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: record<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: any, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: any, smartArt: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, graphicsId: string, id: string, name: string, packageUri: string, parentGraphic: any, svgBlobUrl: string, userCreated: string, userModified: string>, table: record<baseElementBlobUrl: string, cells: list, changedBaseElementBlobUrl: string, columns: list, dateCreated: string, dateModified: string, hasStylePart: bool, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, rows: list, stylePartOuterXml: string, svgBlobUrl: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, userCreated: string, userModified: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2060,7 +2084,7 @@ export def "shared-images-openofficexml-get-id-updated" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --updated: oneof<nothing, bool> # Indicates whether API should return the orginal uploaded xml (false) or the actively updated version (true, default) (default: true)
-]: nothing -> record<id: string, openOfficeXml: string, type: string> {
+]: nothing -> oneof<record<id: string, openOfficeXml: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2177,7 +2201,7 @@ export def "shared-images-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, fileExtension: string, graphicsId: string, id: string, imageFileBlobUrl: string, imageFillsId: string, name: string, packageUri: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, fileExtension: string, graphicsId: string, id: string, imageFileBlobUrl: string, imageFillsId: string, name: string, packageUri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2213,7 +2237,7 @@ export def "slides-shapetrees-childobjects-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
+]: nothing -> oneof<table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2249,7 +2273,7 @@ export def "slides-shapetrees-details-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: record<childGroupElements: list<any>, connector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, endConnectionIdx: int, endConnectionShape: record, endConnectionShapeId: string, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: record, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphic: record<chart: record, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: any, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record, smartArt: record, table: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, group: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeTree: any, shapeTreeId: string, typeInfo: record<dateCreated: string, dateModified: string, description: string, id: string, name: string, typeId: int, userCreated: string, userModified: string>, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementId: string, groupElements: table<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: record, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: any, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, document: record<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, slides: list, storyId: string, tableStylesXmlBlobUrl: string, title: string, userCreated: string, userModified: string>, documentId: string, id: string, name: string, number: int, ooxmlId: int, packageUri: string, shapeTree: any, slideDocumentUrl: string, slideMaster: record<colorMap: record, dateCreated: string, dateModified: string, id: string, parentSlide: any, slideId: string, userCreated: string, userModified: string>, svgBlobUrl: string, theme: record<backgroundFills: list, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, colors: record, customColors: list, dateCreated: string, dateModified: string, effectMaps: list, fills: list, fonts: record, id: string, lineMaps: list, name: string, packageUri: string, slide: any, slideId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string>, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: record<childGroupElements: list<any>, connector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, endConnectionIdx: int, endConnectionShape: record, endConnectionShapeId: string, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: record, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphic: record<chart: record, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: any, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record, smartArt: record, table: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, group: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, shapeTree: any, shapeTreeId: string, typeInfo: record<dateCreated: string, dateModified: string, description: string, id: string, name: string, typeId: int, userCreated: string, userModified: string>, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementId: string, groupElements: table<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: record, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: any, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, document: record<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, slides: list, storyId: string, tableStylesXmlBlobUrl: string, title: string, userCreated: string, userModified: string>, documentId: string, id: string, name: string, number: int, ooxmlId: int, packageUri: string, shapeTree: any, slideDocumentUrl: string, slideMaster: record<colorMap: record, dateCreated: string, dateModified: string, id: string, parentSlide: any, slideId: string, userCreated: string, userModified: string>, svgBlobUrl: string, theme: record<backgroundFills: list, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, colors: record, customColors: list, dateCreated: string, dateModified: string, effectMaps: list, fills: list, fonts: record, id: string, lineMaps: list, name: string, packageUri: string, slide: any, slideId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string>, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2286,7 +2310,7 @@ export def "slides-shapetrees-openofficexml-get-id-updated" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --updated: oneof<nothing, bool> # Indicates whether API should return the orginal uploaded xml (false) or the actively updated version (true, default) (default: true)
-]: nothing -> record<id: string, openOfficeXml: string, type: string> {
+]: nothing -> oneof<record<id: string, openOfficeXml: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2403,7 +2427,7 @@ export def "slides-shapetrees-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slideId: string, svgBlobUrl: string, title: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slideId: string, svgBlobUrl: string, title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2439,7 +2463,7 @@ export def "slides-shapes-childobjects-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
+]: nothing -> oneof<table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2475,7 +2499,7 @@ export def "slides-shapes-details-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record<connectorId: string, dateCreated: string, dateModified: string, effectAttributes: list<record>, effectMap: record<dateCreated: string, dateModified: string, effect: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, effectMapId: string, id: string, name: string, parentConnector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: any, endConnectionIdx: int, endConnectionShape: any, endConnectionShapeId: string, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: any, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, parentShape: any, shapeId: string, userCreated: string, userModified: string>, fillMap: record<connector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, endConnectionIdx: int, endConnectionShape: any, endConnectionShapeId: string, fillMap: any, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: any, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, connectorId: string, dateCreated: string, dateModified: string, effectAttribute: record<attributesJson: string, dateCreated: string, dateModified: string, effect: record, effectId: string, effectTypeId: int, fillMap: any, id: string, userCreated: string, userModified: string>, effectAttributeId: string, fillTypeId: int, gradientFill: record<angle: int, dateCreated: string, dateModified: string, fillMap: any, fillMapId: string, gradientStops: list, id: string, isPath: bool, pathType: string, rotateWithShape: bool, userCreated: string, userModified: string>, id: string, imageFill: record<compressionState: string, dateCreated: string, dateModified: string, dpi: int, effectsJson: string, fillMap: any, fillMapId: string, id: string, picture: record, rotateWithShape: bool, sourceRectangle: string, stretch: bool, tile: string, userCreated: string, userModified: string>, shape: any, shapeId: string, solidFill: record<colorTransformations: record, colorTypeId: int, dateCreated: string, dateModified: string, fillMapId: string, hexValue: string, id: string, isUserColor: bool, parentFillMap: any, parentGradientStop: record, parentGradientStopId: string, parentLine: record, parentLineId: string, parentText: record, parentTextId: string, userCreated: string, userModified: string>, tableCell: record<border: record, column: record, columnId: string, columnSpan: int, dateCreated: string, dateModified: string, fillMap: any, id: string, isMergedHorozontal: bool, isMergedVertical: bool, row: record, rowId: string, rowSpan: int, textContainer: record, userCreated: string, userModified: string>, tableCellId: string, themeBackgroundFill: record<dateCreated: string, dateModified: string, fillMap: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, themeBackgroundFillId: string, themeFill: record<dateCreated: string, dateModified: string, fillMap: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, themeFillId: string, userCreated: string, userModified: string>, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record<childGroupElements: list<any>, connector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, endConnectionIdx: int, endConnectionShape: any, endConnectionShapeId: string, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: any, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphic: record<chart: record, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: any, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record, smartArt: record, table: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, group: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: any, shapeTree: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, groupElements: list, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: record, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, shapeTreeId: string, typeInfo: record<dateCreated: string, dateModified: string, description: string, id: string, name: string, typeId: int, userCreated: string, userModified: string>, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record<bLtoTRBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, bLtoTRBorderId: string, bottomBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, bottomBorderId: string, connectorId: string, dashTypeId: int, dateCreated: string, dateModified: string, headEndHeightId: int, headEndTypeId: int, headEndWidthId: int, id: string, leftBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, leftBorderId: string, lineColorSolidFill: record<colorTransformations: record, colorTypeId: int, dateCreated: string, dateModified: string, fillMapId: string, hexValue: string, id: string, isUserColor: bool, parentFillMap: record, parentGradientStop: record, parentGradientStopId: string, parentLine: any, parentLineId: string, parentText: record, parentTextId: string, userCreated: string, userModified: string>, lineMap: record<dateCreated: string, dateModified: string, id: string, intensityId: int, line: any, theme: record, themeId: string, userCreated: string, userModified: string>, lineMapId: string, parentConnector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, endConnectionIdx: int, endConnectionShape: any, endConnectionShapeId: string, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: any, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: any, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, parentShape: any, rightBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, rightBorderId: string, shapeId: string, tLtoBRBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, tLtoBRBorderId: string, tailEndHeightId: int, tailEndTypeId: int, tailEndWidthId: int, topBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, topBorderId: string, userCreated: string, userModified: string, weight: int>, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record<axis: record<axisDataTypeId: int, chart: record, chartsId: string, dateCreated: string, dateModified: string, id: string, ooxmlId: int, titleTextContainer: any, userCreated: string, userModified: string>, axisId: string, chart: record<axes: list, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, chartData: record, dateCreated: string, dateModified: string, id: string, name: string, packageUri: string, parentGraphic: record, parentGraphicId: string, svgBlobUrl: string, titleTextContainer: any, userCreated: string, userModified: string>, chartId: string, dateCreated: string, dateModified: string, id: string, outerXml: string, paragraphs: list<record>, parentShape: any, shapeId: string, tableCell: record<border: record, column: record, columnId: string, columnSpan: int, dateCreated: string, dateModified: string, fillMap: record, id: string, isMergedHorozontal: bool, isMergedVertical: bool, row: record, rowId: string, rowSpan: int, textContainer: any, userCreated: string, userModified: string>, tableCellId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record<connectorId: string, dateCreated: string, dateModified: string, effectAttributes: list<record>, effectMap: record<dateCreated: string, dateModified: string, effect: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, effectMapId: string, id: string, name: string, parentConnector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: any, endConnectionIdx: int, endConnectionShape: any, endConnectionShapeId: string, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: any, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, parentShape: any, shapeId: string, userCreated: string, userModified: string>, fillMap: record<connector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, endConnectionIdx: int, endConnectionShape: any, endConnectionShapeId: string, fillMap: any, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: any, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, connectorId: string, dateCreated: string, dateModified: string, effectAttribute: record<attributesJson: string, dateCreated: string, dateModified: string, effect: record, effectId: string, effectTypeId: int, fillMap: any, id: string, userCreated: string, userModified: string>, effectAttributeId: string, fillTypeId: int, gradientFill: record<angle: int, dateCreated: string, dateModified: string, fillMap: any, fillMapId: string, gradientStops: list, id: string, isPath: bool, pathType: string, rotateWithShape: bool, userCreated: string, userModified: string>, id: string, imageFill: record<compressionState: string, dateCreated: string, dateModified: string, dpi: int, effectsJson: string, fillMap: any, fillMapId: string, id: string, picture: record, rotateWithShape: bool, sourceRectangle: string, stretch: bool, tile: string, userCreated: string, userModified: string>, shape: any, shapeId: string, solidFill: record<colorTransformations: record, colorTypeId: int, dateCreated: string, dateModified: string, fillMapId: string, hexValue: string, id: string, isUserColor: bool, parentFillMap: any, parentGradientStop: record, parentGradientStopId: string, parentLine: record, parentLineId: string, parentText: record, parentTextId: string, userCreated: string, userModified: string>, tableCell: record<border: record, column: record, columnId: string, columnSpan: int, dateCreated: string, dateModified: string, fillMap: any, id: string, isMergedHorozontal: bool, isMergedVertical: bool, row: record, rowId: string, rowSpan: int, textContainer: record, userCreated: string, userModified: string>, tableCellId: string, themeBackgroundFill: record<dateCreated: string, dateModified: string, fillMap: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, themeBackgroundFillId: string, themeFill: record<dateCreated: string, dateModified: string, fillMap: any, id: string, intensityId: int, theme: record, themeId: string, userCreated: string, userModified: string>, themeFillId: string, userCreated: string, userModified: string>, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record<childGroupElements: list<any>, connector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, endConnectionIdx: int, endConnectionShape: any, endConnectionShapeId: string, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: any, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: any, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphic: record<chart: record, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: any, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record, smartArt: record, table: record, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, group: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: any, shapeTree: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: any, groupElementId: string, groupElements: list, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: record, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, shapeTreeId: string, typeInfo: record<dateCreated: string, dateModified: string, description: string, id: string, name: string, typeId: int, userCreated: string, userModified: string>, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: record<bLtoTRBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, bLtoTRBorderId: string, bottomBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, bottomBorderId: string, connectorId: string, dashTypeId: int, dateCreated: string, dateModified: string, headEndHeightId: int, headEndTypeId: int, headEndWidthId: int, id: string, leftBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, leftBorderId: string, lineColorSolidFill: record<colorTransformations: record, colorTypeId: int, dateCreated: string, dateModified: string, fillMapId: string, hexValue: string, id: string, isUserColor: bool, parentFillMap: record, parentGradientStop: record, parentGradientStopId: string, parentLine: any, parentLineId: string, parentText: record, parentTextId: string, userCreated: string, userModified: string>, lineMap: record<dateCreated: string, dateModified: string, id: string, intensityId: int, line: any, theme: record, themeId: string, userCreated: string, userModified: string>, lineMapId: string, parentConnector: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, effect: record, endConnectionIdx: int, endConnectionShape: any, endConnectionShapeId: string, fillMap: record, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElement: record, groupElementsId: string, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, line: any, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, startConnectionIdx: int, startConnectionShape: any, startConnectionShapeId: string, svgBlobUrl: string, userCreated: string, userModified: string>, parentShape: any, rightBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, rightBorderId: string, shapeId: string, tLtoBRBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, tLtoBRBorderId: string, tailEndHeightId: int, tailEndTypeId: int, tailEndWidthId: int, topBorder: record<bLtoTR: any, bottom: any, cell: record, cellId: string, dateCreated: string, dateModified: string, id: string, left: any, right: any, tLtoBR: any, top: any, userCreated: string, userModified: string>, topBorderId: string, userCreated: string, userModified: string, weight: int>, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, textContainer: record<axis: record<axisDataTypeId: int, chart: record, chartsId: string, dateCreated: string, dateModified: string, id: string, ooxmlId: int, titleTextContainer: any, userCreated: string, userModified: string>, axisId: string, chart: record<axes: list, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, chartData: record, dateCreated: string, dateModified: string, id: string, name: string, packageUri: string, parentGraphic: record, parentGraphicId: string, svgBlobUrl: string, titleTextContainer: any, userCreated: string, userModified: string>, chartId: string, dateCreated: string, dateModified: string, id: string, outerXml: string, paragraphs: list<record>, parentShape: any, shapeId: string, tableCell: record<border: record, column: record, columnId: string, columnSpan: int, dateCreated: string, dateModified: string, fillMap: record, id: string, isMergedHorozontal: bool, isMergedVertical: bool, row: record, rowId: string, rowSpan: int, textContainer: any, userCreated: string, userModified: string>, tableCellId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2512,7 +2536,7 @@ export def "slides-shapes-openofficexml-get-id-updated" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --updated: oneof<nothing, bool> # Indicates whether API should return the orginal uploaded xml (false) or the actively updated version (true, default) (default: true)
-]: nothing -> record<id: string, openOfficeXml: string, type: string> {
+]: nothing -> oneof<record<id: string, openOfficeXml: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2629,7 +2653,7 @@ export def "slides-shapes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, width: int, xOffset: int, yOffset: int> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, flipHorizontal: bool, flipVertical: bool, freeFormPathXml: string, groupElementsId: string, height: int, hidden: bool, id: string, isThemeEffect: bool, isThemeFill: bool, isThemeLine: bool, name: string, ooxmlId: int, packageUri: string, presetTypeId: string, rotation: int, svgBlobUrl: string, width: int, xOffset: int, yOffset: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2665,7 +2689,7 @@ export def "shared-colortransformationattributes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<colorTransformationsId: string, id: string, name: string, value: string> {
+]: nothing -> oneof<record<colorTransformationsId: string, id: string, name: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2701,7 +2725,7 @@ export def "shared-colortransformations-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, name: string, solidFillsId: string> {
+]: nothing -> oneof<record<id: string, name: string, solidFillsId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2736,7 +2760,7 @@ export def "shared-colortypes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<colorSchemeIndexValueEnum: int, description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<table<colorSchemeIndexValueEnum: int, description: string, id: string, name: string, typeId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Shared/ColorTypes" $auth.query)
@@ -2771,7 +2795,7 @@ export def "shared-colortypes-typeid-get-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<colorSchemeIndexValueEnum: int, description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<record<colorSchemeIndexValueEnum: int, description: string, id: string, name: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -2807,7 +2831,7 @@ export def "shared-colortypes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<colorSchemeIndexValueEnum: int, description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<record<colorSchemeIndexValueEnum: int, description: string, id: string, name: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2842,7 +2866,7 @@ export def "shared-dashtypes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, id: string, name: string, serializedAs: string, typeId: int> {
+]: nothing -> oneof<table<description: string, id: string, name: string, serializedAs: string, typeId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Shared/DashTypes" $auth.query)
@@ -2877,7 +2901,7 @@ export def "shared-dashtypes-typeid-get-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, serializedAs: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, serializedAs: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -2913,7 +2937,7 @@ export def "shared-dashtypes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, serializedAs: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, serializedAs: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2949,7 +2973,7 @@ export def "shared-effectattributes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attributesJson: string, effectId: string, effectTypeId: int, id: string> {
+]: nothing -> oneof<record<attributesJson: string, effectId: string, effectTypeId: int, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2984,7 +3008,7 @@ export def "shared-effecttypes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<table<description: string, id: string, name: string, typeId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Shared/EffectTypes" $auth.query)
@@ -3019,7 +3043,7 @@ export def "shared-effecttypes-typeid-get-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -3055,7 +3079,7 @@ export def "shared-effecttypes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3091,7 +3115,7 @@ export def "shared-effects-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<connectorId: string, effectMapId: string, id: string, name: string, shapeId: string> {
+]: nothing -> oneof<record<connectorId: string, effectMapId: string, id: string, name: string, shapeId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3127,7 +3151,7 @@ export def "shared-fillmap-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<connectorId: string, effectAttributeId: string, fillTypeId: int, id: string, shapeId: string, tableCellId: string, themeBackgroundFillId: string, themeFillId: string> {
+]: nothing -> oneof<record<connectorId: string, effectAttributeId: string, fillTypeId: int, id: string, shapeId: string, tableCellId: string, themeBackgroundFillId: string, themeFillId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3162,7 +3186,7 @@ export def "shared-filltypes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<table<description: string, id: string, name: string, typeId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Shared/FillTypes" $auth.query)
@@ -3197,7 +3221,7 @@ export def "shared-filltypes-typeid-get-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -3233,7 +3257,7 @@ export def "shared-filltypes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3269,7 +3293,7 @@ export def "shared-gradientfills-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<angle: int, fillMapId: string, id: string, isPath: bool, pathType: string, rotateWithShape: bool> {
+]: nothing -> oneof<record<angle: int, fillMapId: string, id: string, isPath: bool, pathType: string, rotateWithShape: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3305,7 +3329,7 @@ export def "shared-gradientstops-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<gradientFillsId: string, id: string, position: int> {
+]: nothing -> oneof<record<gradientFillsId: string, id: string, position: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3341,7 +3365,7 @@ export def "shared-imagefills-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<compressionState: string, dpi: int, effectsJson: string, fillMapId: string, id: string, rotateWithShape: bool, sourceRectangle: string, stretch: bool, tile: string> {
+]: nothing -> oneof<record<compressionState: string, dpi: int, effectsJson: string, fillMapId: string, id: string, rotateWithShape: bool, sourceRectangle: string, stretch: bool, tile: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3376,7 +3400,7 @@ export def "shared-lineendsizes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, id: string, name: string, serializedAs: string, typeId: int> {
+]: nothing -> oneof<table<description: string, id: string, name: string, serializedAs: string, typeId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Shared/LineEndSizes" $auth.query)
@@ -3411,7 +3435,7 @@ export def "shared-lineendsizes-typeid-get-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, serializedAs: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, serializedAs: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -3447,7 +3471,7 @@ export def "shared-lineendsizes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, serializedAs: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, serializedAs: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3482,7 +3506,7 @@ export def "shared-lineendtypes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, id: string, name: string, serializedAs: string, typeId: int> {
+]: nothing -> oneof<table<description: string, id: string, name: string, serializedAs: string, typeId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Shared/LineEndTypes" $auth.query)
@@ -3517,7 +3541,7 @@ export def "shared-lineendtypes-typeid-get-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, serializedAs: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, serializedAs: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -3553,7 +3577,7 @@ export def "shared-lineendtypes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, serializedAs: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, serializedAs: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3589,7 +3613,7 @@ export def "shared-lines-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bLtoTRBorderId: string, bottomBorderId: string, connectorId: string, dashTypeId: int, headEndHeightId: int, headEndTypeId: int, headEndWidthId: int, id: string, leftBorderId: string, lineMapId: string, rightBorderId: string, shapeId: string, tLtoBRBorderId: string, tailEndHeightId: int, tailEndTypeId: int, tailEndWidthId: int, topBorderId: string, weight: int> {
+]: nothing -> oneof<record<bLtoTRBorderId: string, bottomBorderId: string, connectorId: string, dashTypeId: int, headEndHeightId: int, headEndTypeId: int, headEndWidthId: int, id: string, leftBorderId: string, lineMapId: string, rightBorderId: string, shapeId: string, tLtoBRBorderId: string, tailEndHeightId: int, tailEndTypeId: int, tailEndWidthId: int, topBorderId: string, weight: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3625,7 +3649,7 @@ export def "shared-paragraph-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, number: int, textContainerId: string> {
+]: nothing -> oneof<record<id: string, number: int, textContainerId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3661,7 +3685,7 @@ export def "shared-solidfills-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<colorTypeId: int, fillMapId: string, hexValue: string, id: string, isUserColor: bool, parentGradientStopId: string, parentLineId: string, parentTextId: string> {
+]: nothing -> oneof<record<colorTypeId: int, fillMapId: string, hexValue: string, id: string, isUserColor: bool, parentGradientStopId: string, parentLineId: string, parentTextId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3697,7 +3721,7 @@ export def "shared-text-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<colorSolidFillsId: string, font: string, fontSize: int, id: string, isBold: bool, isItalic: bool, isThemeFont: bool, isUnderline: bool, paragraphId: string, rawText: string, sequence: int> {
+]: nothing -> oneof<record<colorSolidFillsId: string, font: string, fontSize: int, id: string, isBold: bool, isItalic: bool, isThemeFont: bool, isUnderline: bool, paragraphId: string, rawText: string, sequence: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3733,7 +3757,7 @@ export def "shared-textcontainer-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<axisId: string, chartId: string, id: string, outerXml: string, shapeId: string, tableCellId: string> {
+]: nothing -> oneof<record<axisId: string, chartId: string, id: string, outerXml: string, shapeId: string, tableCellId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3769,7 +3793,7 @@ export def "slides-slides-childobjects-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
+]: nothing -> oneof<table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3805,7 +3829,7 @@ export def "slides-colormaps-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accent1: int, accent2: int, accent3: int, accent4: int, accent5: int, accent6: int, background1: int, background2: int, followedHyperlink: int, hyperlink: int, id: string, slideMasterId: string, text1: int, text2: int> {
+]: nothing -> oneof<record<accent1: int, accent2: int, accent3: int, accent4: int, accent5: int, accent6: int, background1: int, background2: int, followedHyperlink: int, hyperlink: int, id: string, slideMasterId: string, text1: int, text2: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3841,7 +3865,7 @@ export def "slides-slides-details-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, document: record<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, slides: list<any>, storyId: string, tableStylesXmlBlobUrl: string, title: string, userCreated: string, userModified: string>, documentId: string, id: string, name: string, number: int, ooxmlId: int, packageUri: string, shapeTree: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: record<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: record, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: any, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementId: string, groupElements: list<record>, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: any, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, slideDocumentUrl: string, slideMaster: record<colorMap: record<accent1: int, accent2: int, accent3: int, accent4: int, accent5: int, accent6: int, background1: int, background2: int, dateCreated: string, dateModified: string, followedHyperlink: int, hyperlink: int, id: string, slideMaster: any, slideMasterId: string, text1: int, text2: int, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, id: string, parentSlide: any, slideId: string, userCreated: string, userModified: string>, svgBlobUrl: string, theme: record<backgroundFills: list<record>, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, colors: record<accent1: string, accent2: string, accent3: string, accent4: string, accent5: string, accent6: string, dark1: string, dark2: string, dateCreated: string, dateModified: string, followedHyperlink: string, hyperlink: string, id: string, light1: string, light2: string, name: string, theme: any, themeId: string, userCreated: string, userModified: string>, customColors: list<record>, dateCreated: string, dateModified: string, effectMaps: list<record>, fills: list<record>, fonts: record<bodyFont: string, dateCreated: string, dateModified: string, headingFont: string, id: string, theme: any, themeId: string, userCreated: string, userModified: string>, id: string, lineMaps: list<record>, name: string, packageUri: string, slide: any, slideId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, document: record<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, slides: list<any>, storyId: string, tableStylesXmlBlobUrl: string, title: string, userCreated: string, userModified: string>, documentId: string, id: string, name: string, number: int, ooxmlId: int, packageUri: string, shapeTree: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: record<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: record, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: any, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementId: string, groupElements: list<record>, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: any, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, slideDocumentUrl: string, slideMaster: record<colorMap: record<accent1: int, accent2: int, accent3: int, accent4: int, accent5: int, accent6: int, background1: int, background2: int, dateCreated: string, dateModified: string, followedHyperlink: int, hyperlink: int, id: string, slideMaster: any, slideMasterId: string, text1: int, text2: int, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, id: string, parentSlide: any, slideId: string, userCreated: string, userModified: string>, svgBlobUrl: string, theme: record<backgroundFills: list<record>, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, colors: record<accent1: string, accent2: string, accent3: string, accent4: string, accent5: string, accent6: string, dark1: string, dark2: string, dateCreated: string, dateModified: string, followedHyperlink: string, hyperlink: string, id: string, light1: string, light2: string, name: string, theme: any, themeId: string, userCreated: string, userModified: string>, customColors: list<record>, dateCreated: string, dateModified: string, effectMaps: list<record>, fills: list<record>, fonts: record<bodyFont: string, dateCreated: string, dateModified: string, headingFont: string, id: string, theme: any, themeId: string, userCreated: string, userModified: string>, id: string, lineMaps: list<record>, name: string, packageUri: string, slide: any, slideId: string, userCreated: string, userModified: string>, userCreated: string, userModified: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3876,7 +3900,7 @@ export def "slides-graphictypes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<table<description: string, id: string, name: string, typeId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Slides/GraphicTypes" $auth.query)
@@ -3911,7 +3935,7 @@ export def "slides-graphictypes-typeid-get-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -3947,7 +3971,7 @@ export def "slides-graphictypes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3983,7 +4007,7 @@ export def "slides-graphics-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<graphicTypeId: int, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, width: int, xOffset: int, yOffset: int> {
+]: nothing -> oneof<record<graphicTypeId: int, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, width: int, xOffset: int, yOffset: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4018,7 +4042,7 @@ export def "slides-groupelementtypes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<table<description: string, id: string, name: string, typeId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Slides/GroupElementTypes" $auth.query)
@@ -4053,7 +4077,7 @@ export def "slides-groupelementtypes-typeid-get-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -4089,7 +4113,7 @@ export def "slides-groupelementtypes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4125,7 +4149,7 @@ export def "slides-groupelements-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElementId: string, shapeTreeId: string, ultimateParentShapeTreeId: string> {
+]: nothing -> oneof<record<groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElementId: string, shapeTreeId: string, ultimateParentShapeTreeId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4162,7 +4186,7 @@ export def "slides-slides-openofficexml-get-id-updated" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --updated: oneof<nothing, bool> # Indicates whether API should return the orginal uploaded xml (false) or the actively updated version (true, default) (default: true)
-]: nothing -> record<id: string, openOfficeXml: string, type: string> {
+]: nothing -> oneof<record<id: string, openOfficeXml: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4241,7 +4265,7 @@ export def "slides-slidemasters-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, slideId: string> {
+]: nothing -> oneof<record<id: string, slideId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4315,7 +4339,7 @@ export def "slides-slides-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, documentId: string, id: string, name: string, number: int, ooxmlId: int, packageUri: string, slideDocumentUrl: string, svgBlobUrl: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, documentId: string, id: string, name: string, number: int, ooxmlId: int, packageUri: string, slideDocumentUrl: string, svgBlobUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4351,7 +4375,7 @@ export def "slides-smartarts-childobjects-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
+]: nothing -> oneof<table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4387,7 +4411,7 @@ export def "slides-smartarts-details-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, graphicsId: string, id: string, name: string, packageUri: string, parentGraphic: record<chart: record<axes: list, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, chartData: record, dateCreated: string, dateModified: string, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, svgBlobUrl: string, titleTextContainer: record, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: record<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: any, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, fileExtension: string, graphicsId: string, id: string, imageFileBlobUrl: string, imageFill: record, imageFillsId: string, name: string, packageUri: string, parentGraphic: any, userCreated: string, userModified: string>, smartArt: any, table: record<baseElementBlobUrl: string, cells: list, changedBaseElementBlobUrl: string, columns: list, dateCreated: string, dateModified: string, hasStylePart: bool, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, rows: list, stylePartOuterXml: string, svgBlobUrl: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, svgBlobUrl: string, userCreated: string, userModified: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, graphicsId: string, id: string, name: string, packageUri: string, parentGraphic: record<chart: record<axes: list, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, chartData: record, dateCreated: string, dateModified: string, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, svgBlobUrl: string, titleTextContainer: record, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: record<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: any, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, fileExtension: string, graphicsId: string, id: string, imageFileBlobUrl: string, imageFill: record, imageFillsId: string, name: string, packageUri: string, parentGraphic: any, userCreated: string, userModified: string>, smartArt: any, table: record<baseElementBlobUrl: string, cells: list, changedBaseElementBlobUrl: string, columns: list, dateCreated: string, dateModified: string, hasStylePart: bool, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, rows: list, stylePartOuterXml: string, svgBlobUrl: string, userCreated: string, userModified: string>, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, svgBlobUrl: string, userCreated: string, userModified: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4424,7 +4448,7 @@ export def "slides-smartarts-openofficexml-get-id-updated" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --updated: oneof<nothing, bool> # Indicates whether API should return the orginal uploaded xml (false) or the actively updated version (true, default) (default: true)
-]: nothing -> record<id: string, openOfficeXml: string, type: string> {
+]: nothing -> oneof<record<id: string, openOfficeXml: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4541,7 +4565,7 @@ export def "slides-smartarts-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, graphicsId: string, id: string, name: string, packageUri: string, svgBlobUrl: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, graphicsId: string, id: string, name: string, packageUri: string, svgBlobUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4577,7 +4601,7 @@ export def "tables-borders-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cellId: string, id: string> {
+]: nothing -> oneof<record<cellId: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4613,7 +4637,7 @@ export def "tables-cells-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<columnId: string, columnSpan: int, id: string, isMergedHorozontal: bool, isMergedVertical: bool, rowId: string, rowSpan: int> {
+]: nothing -> oneof<record<columnId: string, columnSpan: int, id: string, isMergedHorozontal: bool, isMergedVertical: bool, rowId: string, rowSpan: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4649,7 +4673,7 @@ export def "tables-tables-childobjects-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
+]: nothing -> oneof<table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4685,7 +4709,7 @@ export def "tables-columns-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, index: int, tableId: string, width: int> {
+]: nothing -> oneof<record<id: string, index: int, tableId: string, width: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4721,7 +4745,7 @@ export def "tables-tables-details-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, cells: table<border: record, column: record, columnId: string, columnSpan: int, dateCreated: string, dateModified: string, fillMap: record, id: string, isMergedHorozontal: bool, isMergedVertical: bool, row: record, rowId: string, rowSpan: int, textContainer: record, userCreated: string, userModified: string>, changedBaseElementBlobUrl: string, columns: table<cells: list, dateCreated: string, dateModified: string, id: string, index: int, table: any, tableId: string, userCreated: string, userModified: string, width: int>, dateCreated: string, dateModified: string, hasStylePart: bool, id: string, name: string, packageUri: string, parentGraphic: record<chart: record<axes: list, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, chartData: record, dateCreated: string, dateModified: string, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, svgBlobUrl: string, titleTextContainer: record, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: record<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: any, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, fileExtension: string, graphicsId: string, id: string, imageFileBlobUrl: string, imageFill: record, imageFillsId: string, name: string, packageUri: string, parentGraphic: any, userCreated: string, userModified: string>, smartArt: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, graphicsId: string, id: string, name: string, packageUri: string, parentGraphic: any, svgBlobUrl: string, userCreated: string, userModified: string>, table: any, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, parentGraphicId: string, rows: table<cells: list, dateCreated: string, dateModified: string, height: int, id: string, index: int, table: any, tableId: string, userCreated: string, userModified: string>, stylePartOuterXml: string, svgBlobUrl: string, userCreated: string, userModified: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, cells: table<border: record, column: record, columnId: string, columnSpan: int, dateCreated: string, dateModified: string, fillMap: record, id: string, isMergedHorozontal: bool, isMergedVertical: bool, row: record, rowId: string, rowSpan: int, textContainer: record, userCreated: string, userModified: string>, changedBaseElementBlobUrl: string, columns: table<cells: list, dateCreated: string, dateModified: string, id: string, index: int, table: any, tableId: string, userCreated: string, userModified: string, width: int>, dateCreated: string, dateModified: string, hasStylePart: bool, id: string, name: string, packageUri: string, parentGraphic: record<chart: record<axes: list, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, chartData: record, dateCreated: string, dateModified: string, id: string, name: string, packageUri: string, parentGraphic: any, parentGraphicId: string, svgBlobUrl: string, titleTextContainer: record, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, graphicTypeId: int, groupElement: record<childGroupElements: list, connector: record, dateCreated: string, dateModified: string, graphic: any, group: record, groupElementTypeId: int, groupElementTypePk: string, id: string, parentGroupElement: any, parentGroupElementId: string, shape: record, shapeTree: record, shapeTreeId: string, typeInfo: record, ultimateParentShapeTreeId: string, userCreated: string, userModified: string>, groupElementsId: string, height: int, id: string, name: string, ooxmlId: int, picture: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, fileExtension: string, graphicsId: string, id: string, imageFileBlobUrl: string, imageFill: record, imageFillsId: string, name: string, packageUri: string, parentGraphic: any, userCreated: string, userModified: string>, smartArt: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, graphicsId: string, id: string, name: string, packageUri: string, parentGraphic: any, svgBlobUrl: string, userCreated: string, userModified: string>, table: any, userCreated: string, userModified: string, width: int, xOffset: int, yOffset: int>, parentGraphicId: string, rows: table<cells: list, dateCreated: string, dateModified: string, height: int, id: string, index: int, table: any, tableId: string, userCreated: string, userModified: string>, stylePartOuterXml: string, svgBlobUrl: string, userCreated: string, userModified: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4758,7 +4782,7 @@ export def "tables-tables-openofficexml-get-id-updated" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --updated: oneof<nothing, bool> # Indicates whether API should return the orginal uploaded xml (false) or the actively updated version (true, default) (default: true)
-]: nothing -> record<id: string, openOfficeXml: string, type: string> {
+]: nothing -> oneof<record<id: string, openOfficeXml: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4837,7 +4861,7 @@ export def "tables-rows-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<height: int, id: string, index: int, tableId: string> {
+]: nothing -> oneof<record<height: int, id: string, index: int, tableId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4911,7 +4935,7 @@ export def "tables-tables-tableupdate-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<tableData: list<list<string>>, tableId: string> {
+]: nothing -> oneof<record<tableData: list<list<string>>, tableId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4988,7 +5012,7 @@ export def "tables-tables-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, hasStylePart: bool, id: string, name: string, packageUri: string, parentGraphicId: string, stylePartOuterXml: string, svgBlobUrl: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, hasStylePart: bool, id: string, name: string, packageUri: string, parentGraphicId: string, stylePartOuterXml: string, svgBlobUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5024,7 +5048,7 @@ export def "themes-backgroundfills-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, intensityId: int, themeId: string> {
+]: nothing -> oneof<record<id: string, intensityId: int, themeId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5060,7 +5084,7 @@ export def "theme-themes-childobjects-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string> {
+]: nothing -> oneof<table<entityId: string, entityName: string, objectType: string, parentEntityId: string, parentObjectType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5096,7 +5120,7 @@ export def "themes-colors-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accent1: string, accent2: string, accent3: string, accent4: string, accent5: string, accent6: string, dark1: string, dark2: string, followedHyperlink: string, hyperlink: string, id: string, light1: string, light2: string, name: string, themeId: string> {
+]: nothing -> oneof<record<accent1: string, accent2: string, accent3: string, accent4: string, accent5: string, accent6: string, dark1: string, dark2: string, followedHyperlink: string, hyperlink: string, id: string, light1: string, light2: string, name: string, themeId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5132,7 +5156,7 @@ export def "themes-customcolors-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<hexValue: string, id: string, name: string, themeId: string> {
+]: nothing -> oneof<record<hexValue: string, id: string, name: string, themeId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5168,7 +5192,7 @@ export def "theme-themes-details-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<backgroundFills: table<dateCreated: string, dateModified: string, fillMap: record, id: string, intensityId: int, theme: any, themeId: string, userCreated: string, userModified: string>, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, colors: record<accent1: string, accent2: string, accent3: string, accent4: string, accent5: string, accent6: string, dark1: string, dark2: string, dateCreated: string, dateModified: string, followedHyperlink: string, hyperlink: string, id: string, light1: string, light2: string, name: string, theme: any, themeId: string, userCreated: string, userModified: string>, customColors: table<dateCreated: string, dateModified: string, hexValue: string, id: string, name: string, theme: any, themeId: string, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, effectMaps: table<dateCreated: string, dateModified: string, effect: record, id: string, intensityId: int, theme: any, themeId: string, userCreated: string, userModified: string>, fills: table<dateCreated: string, dateModified: string, fillMap: record, id: string, intensityId: int, theme: any, themeId: string, userCreated: string, userModified: string>, fonts: record<bodyFont: string, dateCreated: string, dateModified: string, headingFont: string, id: string, theme: any, themeId: string, userCreated: string, userModified: string>, id: string, lineMaps: table<dateCreated: string, dateModified: string, id: string, intensityId: int, line: record, theme: any, themeId: string, userCreated: string, userModified: string>, name: string, packageUri: string, slide: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, document: record<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, slides: list, storyId: string, tableStylesXmlBlobUrl: string, title: string, userCreated: string, userModified: string>, documentId: string, id: string, name: string, number: int, ooxmlId: int, packageUri: string, shapeTree: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: record, groupElementId: string, groupElements: list, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: any, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, slideDocumentUrl: string, slideMaster: record<colorMap: record, dateCreated: string, dateModified: string, id: string, parentSlide: any, slideId: string, userCreated: string, userModified: string>, svgBlobUrl: string, theme: any, userCreated: string, userModified: string>, slideId: string, userCreated: string, userModified: string> {
+]: nothing -> oneof<record<backgroundFills: table<dateCreated: string, dateModified: string, fillMap: record, id: string, intensityId: int, theme: any, themeId: string, userCreated: string, userModified: string>, baseElementBlobUrl: string, changedBaseElementBlobUrl: string, colors: record<accent1: string, accent2: string, accent3: string, accent4: string, accent5: string, accent6: string, dark1: string, dark2: string, dateCreated: string, dateModified: string, followedHyperlink: string, hyperlink: string, id: string, light1: string, light2: string, name: string, theme: any, themeId: string, userCreated: string, userModified: string>, customColors: table<dateCreated: string, dateModified: string, hexValue: string, id: string, name: string, theme: any, themeId: string, userCreated: string, userModified: string>, dateCreated: string, dateModified: string, effectMaps: table<dateCreated: string, dateModified: string, effect: record, id: string, intensityId: int, theme: any, themeId: string, userCreated: string, userModified: string>, fills: table<dateCreated: string, dateModified: string, fillMap: record, id: string, intensityId: int, theme: any, themeId: string, userCreated: string, userModified: string>, fonts: record<bodyFont: string, dateCreated: string, dateModified: string, headingFont: string, id: string, theme: any, themeId: string, userCreated: string, userModified: string>, id: string, lineMaps: table<dateCreated: string, dateModified: string, id: string, intensityId: int, line: record, theme: any, themeId: string, userCreated: string, userModified: string>, name: string, packageUri: string, slide: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, document: record<baseElementBlobUrl: string, blobLocation: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, documentTypeId: int, filename: string, id: string, name: string, ownerGuid: string, packageUri: string, slides: list, storyId: string, tableStylesXmlBlobUrl: string, title: string, userCreated: string, userModified: string>, documentId: string, id: string, name: string, number: int, ooxmlId: int, packageUri: string, shapeTree: record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, dateCreated: string, dateModified: string, groupElement: record, groupElementId: string, groupElements: list, hidden: bool, id: string, name: string, ooxmlId: int, packageUri: string, slide: any, slideId: string, svgBlobUrl: string, title: string, userCreated: string, userModified: string>, slideDocumentUrl: string, slideMaster: record<colorMap: record, dateCreated: string, dateModified: string, id: string, parentSlide: any, slideId: string, userCreated: string, userModified: string>, svgBlobUrl: string, theme: any, userCreated: string, userModified: string>, slideId: string, userCreated: string, userModified: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5204,7 +5228,7 @@ export def "themes-effectmap-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, intensityId: int, themeId: string> {
+]: nothing -> oneof<record<id: string, intensityId: int, themeId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5240,7 +5264,7 @@ export def "themes-fills-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, intensityId: int, themeId: string> {
+]: nothing -> oneof<record<id: string, intensityId: int, themeId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5276,7 +5300,7 @@ export def "themes-fonts-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bodyFont: string, headingFont: string, id: string, themeId: string> {
+]: nothing -> oneof<record<bodyFont: string, headingFont: string, id: string, themeId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5311,7 +5335,7 @@ export def "themes-intensity-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<table<description: string, id: string, name: string, typeId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Themes/Intensity" $auth.query)
@@ -5346,7 +5370,7 @@ export def "themes-intensity-typeid-get-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type_id | is-empty) { error make --unspanned { msg: "path parameter 'type_id' must be non-empty" } }
@@ -5382,7 +5406,7 @@ export def "themes-intensity-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, name: string, typeId: int> {
+]: nothing -> oneof<record<description: string, id: string, name: string, typeId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5418,7 +5442,7 @@ export def "themes-linemap-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, intensityId: int, themeId: string> {
+]: nothing -> oneof<record<id: string, intensityId: int, themeId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5455,7 +5479,7 @@ export def "theme-themes-openofficexml-get-id-updated" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --updated: oneof<nothing, bool> # Indicates whether API should return the orginal uploaded xml (false) or the actively updated version (true, default) (default: true)
-]: nothing -> record<id: string, openOfficeXml: string, type: string> {
+]: nothing -> oneof<record<id: string, openOfficeXml: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5572,7 +5596,7 @@ export def "theme-themes-get-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, id: string, name: string, packageUri: string, slideId: string> {
+]: nothing -> oneof<record<baseElementBlobUrl: string, changedBaseElementBlobUrl: string, id: string, name: string, packageUri: string, slideId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

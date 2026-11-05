@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -145,9 +169,9 @@ def accept-completer [] { ["application/json" "application/octet-stream"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-anonymization-anonymize" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-anonymization-anonymize" "get-anonymization-keys" "get-anonymization-keys-export-csv" "post-anonymization-keys-query" "delete-anonymization-keys-id" "get-anonymization-keys-id" "get-anonymization-keys-id-keyvalues" "get-anonymization-options" "get-boxes" "post-boxes-connect" "post-boxes-createconnection" "get-boxes-incoming" "delete-boxes-incoming-id" "get-boxes-incoming-id-images" "get-boxes-outgoing" "delete-boxes-outgoing-id" "get-boxes-outgoing-id-images" "delete-boxes-id" "post-boxes-id-send" "get-destinations" "get-directorywatches" "post-directorywatches" "delete-directorywatches-id" "get-filtering-associations" "post-filtering-associations" "delete-filtering-associations-id" "get-filtering-filters" "post-filtering-filters" "delete-filtering-filters-id" "get-filtering-filters-id-tagpaths" "post-filtering-filters-id-tagpaths" "delete-filtering-filters-id-tagpaths-tagpathid" "delete-forwarding-rule-id" "get-forwarding-rules" "post-forwarding-rules" "post-images" "post-images-delete" "get-images-export" "post-images-export" "post-images-jpeg" "delete-images-id" "get-images-id" "put-images-id-anonymize" "post-images-id-anonymized" "get-images-id-attributes" "get-images-id-imageinformation" "put-images-id-modify" "get-images-id-png" "get-import-sessions" "post-import-sessions" "delete-import-sessions-id" "get-import-sessions-id" "get-import-sessions-id-images" "post-import-sessions-id-images" "delete-log" "get-log" "delete-log-id" "get-metadata-flatseries" "post-metadata-flatseries-query" "get-metadata-flatseries-id" "get-metadata-images" "post-metadata-images-query" "get-metadata-images-id" "get-metadata-patients" "post-metadata-patients-query" "get-metadata-patients-id" "get-metadata-patients-id-images" "get-metadata-series" "post-metadata-series-query" "get-metadata-series-id" "get-metadata-series-id-seriestags" "post-metadata-series-id-seriestags" "delete-metadata-series-id-seriestypes" "get-metadata-series-id-seriestypes" "get-metadata-series-id-source" "delete-metadata-series-series-id-seriestags-series-tag-id" "delete-metadata-series-series-id-seriestypes-series-type-id" "put-metadata-series-series-id-seriestypes-series-type-id" "get-metadata-seriestags" "get-metadata-studies" "post-metadata-studies-query" "get-metadata-studies-id" "get-metadata-studies-id-images" "get-scps" "post-scps" "delete-scps-id" "get-scus" "post-scus" "delete-scus-id" "post-scus-id-send" "get-seriestypes" "post-seriestypes" "get-seriestypes-rules" "post-seriestypes-rules" "get-seriestypes-rules-updatestatus" "delete-seriestypes-rules-id" "get-seriestypes-rules-id-attributes" "post-seriestypes-rules-id-attributes" "delete-seriestypes-rules-rule-id-attributes-attribute-id" "post-seriestypes-series-query" "delete-seriestypes-id" "put-seriestypes-id" "get-sources" "get-system-health" "post-system-stop" "post-transactions-token-image" "get-transactions-token-outgoing" "post-transactions-token-outgoing-done" "post-transactions-token-outgoing-failed" "get-transactions-token-outgoing-poll" "get-transactions-token-status" "put-transactions-token-status" "get-users" "post-users" "get-users-current" "post-users-login" "post-users-logout" "delete-users-id" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -180,7 +204,7 @@ export def "post-anonymization-anonymize" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body: list
-]: any -> table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>> {
+]: any -> oneof<table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -222,7 +246,7 @@ export def "get-anonymization-keys" [
   --orderby: string # property to order results by
   --orderascending: oneof<nothing, bool> # order result ascendingly if true, descendingly otherwise (default: true)
   --filter: string # filter the results by matching substrings of properties against this value
-]: nothing -> table<anonPatientID: string, anonPatientName: string, anonSOPInstanceUID: string, anonSeriesInstanceUID: string, anonStudyInstanceUID: string, created: int, id: int, imageId: int, patientID: string, patientName: string, seriesInstanceUID: string, sopInstanceUID: string, studyInstanceUID: string> {
+]: nothing -> oneof<table<anonPatientID: string, anonPatientName: string, anonSOPInstanceUID: string, anonSeriesInstanceUID: string, anonStudyInstanceUID: string, created: int, id: int, imageId: int, patientID: string, patientName: string, seriesInstanceUID: string, sopInstanceUID: string, studyInstanceUID: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "orderascending" $orderascending "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
@@ -280,8 +304,6 @@ export def "get-anonymization-keys-export-csv" [
 # submit a query for anonymization keys
 #
 # POST /anonymization/keys/query
-# --order shape: {orderAscending?: bool, orderBy?: string}
-# --queryProperties item shape: {operator?: string, propertyName?: string, propertyValue?: string}
 export def "post-anonymization-keys-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +319,7 @@ export def "post-anonymization-keys-query" [
   --order: record # shape: {orderAscending?: bool, orderBy?: string}
   query_properties: list # item shape: {operator?: string, propertyName?: string, propertyValue?: string}
   start_index: int # format: int64
-]: any -> table<anonPatientID: string, anonPatientName: string, anonSOPInstanceUID: string, anonSeriesInstanceUID: string, anonStudyInstanceUID: string, created: int, id: int, imageId: int, patientID: string, patientName: string, seriesInstanceUID: string, sopInstanceUID: string, studyInstanceUID: string> {
+]: any -> oneof<table<anonPatientID: string, anonPatientName: string, anonSOPInstanceUID: string, anonSeriesInstanceUID: string, anonStudyInstanceUID: string, created: int, id: int, imageId: int, patientID: string, patientName: string, seriesInstanceUID: string, sopInstanceUID: string, studyInstanceUID: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -371,7 +393,7 @@ export def "get-anonymization-keys-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<anonPatientID: string, anonPatientName: string, anonSOPInstanceUID: string, anonSeriesInstanceUID: string, anonStudyInstanceUID: string, created: int, id: int, imageId: int, patientID: string, patientName: string, seriesInstanceUID: string, sopInstanceUID: string, studyInstanceUID: string> {
+]: nothing -> oneof<record<anonPatientID: string, anonPatientName: string, anonSOPInstanceUID: string, anonSeriesInstanceUID: string, anonStudyInstanceUID: string, created: int, id: int, imageId: int, patientID: string, patientName: string, seriesInstanceUID: string, sopInstanceUID: string, studyInstanceUID: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -407,7 +429,7 @@ export def "get-anonymization-keys-id-keyvalues" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<anonymizationKeyId: int, anonymizedValue: string, id: int, tagPath: record<previous: record, tag: int>, value: string> {
+]: nothing -> oneof<table<anonymizationKeyId: int, anonymizedValue: string, id: int, tagPath: record<previous: record, tag: int>, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -442,7 +464,7 @@ export def "get-anonymization-options" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<description: string, name: string, rank: int, title: string> {
+]: nothing -> oneof<table<description: string, name: string, rank: int, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/anonymization/options" $auth.query)
@@ -478,7 +500,7 @@ export def "get-boxes" [
   --accept: string@accept-completer # Response content type
   --startindex: int # start index of returned slice of boxes (format: int64, default: 0)
   --count: int # size of returned slice of boxes (format: int64, default: 20)
-]: nothing -> table<baseUrl: string, id: int, name: string, online: bool, profile: record<options: list>, sendMethod: string, token: string> {
+]: nothing -> oneof<table<baseUrl: string, id: int, name: string, online: bool, profile: record<options: list>, sendMethod: string, token: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -502,7 +524,6 @@ export def "get-boxes" [
 # connect to another box using a received URL. Used to connect to a public box.
 #
 # POST /boxes/connect
-# --defaultProfile shape: {options?: list}
 export def "post-boxes-connect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -517,7 +538,7 @@ export def "post-boxes-connect" [
   --body-base-url: string
   --default-profile: record # shape: {options?: list}
   --name: string
-]: any -> record<baseUrl: string, id: int, name: string, online: bool, profile: record<options: list<record>>, sendMethod: string, token: string> {
+]: any -> oneof<record<baseUrl: string, id: int, name: string, online: bool, profile: record<options: list<record>>, sendMethod: string, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -543,7 +564,6 @@ export def "post-boxes-connect" [
 # create a new box connection where the supplied entity holds the remote box name. Used by publicly available boxes.
 #
 # POST /boxes/createconnection
-# --defaultProfile shape: {options?: list}
 export def "post-boxes-createconnection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -557,7 +577,7 @@ export def "post-boxes-createconnection" [
   --accept: string@accept-completer # Response content type
   --default-profile: record # shape: {options?: list}
   --name: string
-]: any -> record<baseUrl: string, id: int, name: string, online: bool, profile: record<options: list<record>>, sendMethod: string, token: string> {
+]: any -> oneof<record<baseUrl: string, id: int, name: string, online: bool, profile: record<options: list<record>>, sendMethod: string, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -596,7 +616,7 @@ export def "get-boxes-incoming" [
   --accept: string@accept-completer # Response content type
   --startindex: int # start index of returned slice of transactions (format: int64, default: 0)
   --count: int # size of returned slice of transactions (format: int64, default: 20)
-]: nothing -> table<boxId: int, boxName: string, id: int, outgoingTransactionId: int, receivedImageCount: int, status: string, totalImageCount: int, updated: int> {
+]: nothing -> oneof<table<boxId: int, boxName: string, id: int, outgoingTransactionId: int, receivedImageCount: int, status: string, totalImageCount: int, updated: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -668,7 +688,7 @@ export def "get-boxes-incoming-id-images" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>> {
+]: nothing -> oneof<table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -705,7 +725,7 @@ export def "get-boxes-outgoing" [
   --accept: string@accept-completer # Response content type
   --startindex: int # start index of returned slice of transactions (format: int64, default: 0)
   --count: int # size of returned slice of transactions (format: int64, default: 20)
-]: nothing -> table<boxId: int, boxName: string, id: int, profile: record<options: list>, sentImageCount: int, status: string, totalImageCount: int, updated: int> {
+]: nothing -> oneof<table<boxId: int, boxName: string, id: int, profile: record<options: list>, sentImageCount: int, status: string, totalImageCount: int, updated: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -777,7 +797,7 @@ export def "get-boxes-outgoing-id-images" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>> {
+]: nothing -> oneof<table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -837,8 +857,6 @@ export def "delete-boxes-id" [
 # send images corresponding to the supplied image ids to the remote box with the supplied ID
 #
 # POST /boxes/{id}/send
-# --imageTagValuesSet item shape: {imageId?: int, tagValues?: list}
-# --profile shape: {options?: list}
 export def "post-boxes-id-send" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -891,7 +909,7 @@ export def "get-destinations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<destinationId: int, destinationName: string, destinationType: string> {
+]: nothing -> oneof<table<destinationId: int, destinationName: string, destinationType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/destinations" $auth.query)
@@ -927,7 +945,7 @@ export def "get-directorywatches" [
   --accept: string@accept-completer # Response content type
   --startindex: int # start index of returned slice of watched directories (format: int64, default: 0)
   --count: int # size of returned slice of watched directories (format: int64, default: 20)
-]: nothing -> table<id: int, path: string> {
+]: nothing -> oneof<table<id: int, path: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -964,7 +982,7 @@ export def "post-directorywatches" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int64
   --path: string
-]: any -> record<id: int, path: string> {
+]: any -> oneof<record<id: int, path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1039,7 +1057,7 @@ export def "get-filtering-associations" [
   --accept: string@accept-completer # Response content type
   --startindex: int # start index of returned slice of source <-> filter associations (format: int64, default: 0)
   --count: int # size of returned slice of source <-> filter associations (format: int64, default: 20)
-]: nothing -> table<id: int, sourceId: int, sourceType: string, tagFilterId: int> {
+]: nothing -> oneof<table<id: int, sourceId: int, sourceType: string, tagFilterId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -1153,7 +1171,7 @@ export def "get-filtering-filters" [
   --accept: string@accept-completer # Response content type
   --startindex: int # start index of returned slice of filters (format: int64, default: 0)
   --count: int # size of returned slice of filters (format: int64, default: 20)
-]: nothing -> table<id: int, name: string, tagFilterType: string, tags: list<record>> {
+]: nothing -> oneof<table<id: int, name: string, tagFilterType: string, tags: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -1177,7 +1195,6 @@ export def "get-filtering-filters" [
 # Inserts or updates a filter. If a filter with same name as supplied filter exists this filter is updated, otherwise a new filter is inserted.
 #
 # POST /filtering/filters
-# --tags item shape: {previous?: record, tag?: int}
 export def "post-filtering-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1267,7 +1284,7 @@ export def "get-filtering-filters-id-tagpaths" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<previous: record<item: string, previous: any, tag: int>, tag: int> {
+]: nothing -> oneof<table<previous: record<item: string, previous: any, tag: int>, tag: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1291,7 +1308,6 @@ export def "get-filtering-filters-id-tagpaths" [
 # add a tagpath to a filter
 #
 # POST /filtering/filters/{id}/tagpaths
-# --previous shape: {item?: string, previous?: record, tag?: int}
 export def "post-filtering-filters-id-tagpaths" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1420,7 +1436,7 @@ export def "get-forwarding-rules" [
   --accept: string@accept-completer # Response content type
   --startindex: int # start index of returned slice of rules (format: int64, default: 0)
   --count: int # size of returned slice of rules (format: int64, default: 20)
-]: nothing -> table<destination: record<destinationId: int, destinationName: string, destinationType: string>, id: int, keepImages: bool, source: record<sourceId: int, sourceName: string, sourceType: string>> {
+]: nothing -> oneof<table<destination: record<destinationId: int, destinationName: string, destinationType: string>, id: int, keepImages: bool, source: record<sourceId: int, sourceName: string, sourceType: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -1444,8 +1460,6 @@ export def "get-forwarding-rules" [
 # add a new forwarding rule
 #
 # POST /forwarding/rules
-# --destination shape: {destinationId?: int, destinationName?: string, destinationType?: string}
-# --source shape: {sourceId?: int, sourceName?: string, sourceType?: string}
 export def "post-forwarding-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1461,7 +1475,7 @@ export def "post-forwarding-rules" [
   --id: int # format: int64
   --keep-images: oneof<nothing, bool>
   --source: record # shape: {sourceId?: int, sourceName?: string, sourceType?: string}
-]: any -> record<destination: record<destinationId: int, destinationName: string, destinationType: string>, id: int, keepImages: bool, source: record<sourceId: int, sourceName: string, sourceType: string>> {
+]: any -> oneof<record<destination: record<destinationId: int, destinationName: string, destinationType: string>, id: int, keepImages: bool, source: record<sourceId: int, sourceName: string, sourceType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1499,7 +1513,7 @@ export def "post-images" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   dataset: path # The dataset file
-]: any -> record<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>> {
+]: any -> oneof<record<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1613,7 +1627,7 @@ export def "post-images-export" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body: list
-]: any -> record<value: int> {
+]: any -> oneof<record<value: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1653,7 +1667,7 @@ export def "post-images-jpeg" [
   --studyid: int # ID of study to add new series to (required, format: int64)
   --description: string # DICOM series description of the resulting secondary capture series
   --body: record
-]: any -> record<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>> {
+]: any -> oneof<record<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1752,8 +1766,6 @@ export def "get-images-id" [
 # delete the selected image and replace it with an anonymized version
 #
 # PUT /images/{id}/anonymize
-# --profile shape: {options?: list}
-# --tagValues item shape: {tagPath?: record, value?: string}
 export def "put-images-id-anonymize" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1768,7 +1780,7 @@ export def "put-images-id-anonymize" [
   --accept: string@accept-completer # Response content type
   --profile: record # shape: {options?: list}
   --tag-values: list # item shape: {tagPath?: record, value?: string}
-]: any -> record<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>> {
+]: any -> oneof<record<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1795,8 +1807,6 @@ export def "put-images-id-anonymize" [
 # get an anonymized version of the image with the supplied ID
 #
 # POST /images/{id}/anonymized
-# --profile shape: {options?: list}
-# --tagValues item shape: {tagPath?: record, value?: string}
 export def "post-images-id-anonymized" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1850,7 +1860,7 @@ export def "get-images-id-attributes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<depth: int, element: string, group: string, length: int, multiplicity: int, name: string, path: string, value: string, vr: string> {
+]: nothing -> oneof<table<depth: int, element: string, group: string, length: int, multiplicity: int, name: string, path: string, value: string, vr: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1886,7 +1896,7 @@ export def "get-images-id-imageinformation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<frameIndex: int, maximumPixelValue: int, minimumPixelValue: int, numberOfFrames: int> {
+]: nothing -> oneof<record<frameIndex: int, maximumPixelValue: int, minimumPixelValue: int, numberOfFrames: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2003,7 +2013,7 @@ export def "get-import-sessions" [
   --accept: string@accept-completer # Response content type
   --startindex: int # start index of returned slice of import sessions (format: int64, default: 0)
   --count: int # size of returned slice of import sessions (format: int64, default: 20)
-]: nothing -> table<created: int, filesAdded: int, filesImported: int, filesRejected: int, id: int, lastUpdated: int, name: string, user: string, userId: int> {
+]: nothing -> oneof<table<created: int, filesAdded: int, filesImported: int, filesRejected: int, id: int, lastUpdated: int, name: string, user: string, userId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -2047,7 +2057,7 @@ export def "post-import-sessions" [
   --name: string
   --user: string
   --user-id: int # format: int64
-]: any -> record<created: int, filesAdded: int, filesImported: int, filesRejected: int, id: int, lastUpdated: int, name: string, user: string, userId: int> {
+]: any -> oneof<record<created: int, filesAdded: int, filesImported: int, filesRejected: int, id: int, lastUpdated: int, name: string, user: string, userId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2121,7 +2131,7 @@ export def "get-import-sessions-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<created: int, filesAdded: int, filesImported: int, filesRejected: int, id: int, lastUpdated: int, name: string, user: string, userId: int> {
+]: nothing -> oneof<record<created: int, filesAdded: int, filesImported: int, filesRejected: int, id: int, lastUpdated: int, name: string, user: string, userId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2157,7 +2167,7 @@ export def "get-import-sessions-id-images" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>> {
+]: nothing -> oneof<table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2194,7 +2204,7 @@ export def "post-import-sessions-id-images" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   dataset: path # The dataset file
-]: any -> record<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>> {
+]: any -> oneof<record<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2272,7 +2282,7 @@ export def "get-log" [
   --count: int # size of returned slice of log messages (format: int64, default: 20)
   --subject: string # log subject to filter results by
   --type: string # log type (DEFAULT, INFO, WARN, ERROR) to filter results by
-]: nothing -> table<created: int, entryType: string, id: int, message: string, subject: string> {
+]: nothing -> oneof<table<created: int, entryType: string, id: int, message: string, subject: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -2351,7 +2361,7 @@ export def "get-metadata-flatseries" [
   --sources: string # filter the results by matching on one or more series sources. Examples of sources are user, box, directory or scp. The list of sources to filter results by must have the form TYPE1:ID1,TYPE2:ID2,...,TYPEN:IDN. For instance, the argument sources=box:1,user:5 shows results either sent from (slice)box with id 1 or uploaded by user with id 5.
   --seriestypes: string # filter the results by matching on one or more series types. The supplied list of series types must be a comma separated list of series type ids. For instance, the argument seriestypes=3,7,22 shows series assigned to either of the series types with ids 3, 7 and 22.
   --seriestags: string # filter the results by matching on one or more series tags. The supplied list of series tags must be a comma separated list of series tag ids. For instance, the argument seriestags=6,2,11 shows series with either of the series tags with ids 6, 2 and 11.
-]: nothing -> table<id: int, patient: record<id: int, patientBirthDate: record, patientID: record, patientName: record, patientSex: record>, series: record<bodyPartExamined: record, frameOfReferenceUID: record, id: int, manufacturer: record, modality: record, protocolName: record, seriesDate: record, seriesDescription: record, seriesInstanceUID: record, stationName: record, studyId: int>, study: record<accessionNumber: record, id: int, patientAge: record, patientId: int, studyDate: record, studyDescription: record, studyID: record, studyInstanceUID: record>> {
+]: nothing -> oneof<table<id: int, patient: record<id: int, patientBirthDate: record, patientID: record, patientName: record, patientSex: record>, series: record<bodyPartExamined: record, frameOfReferenceUID: record, id: int, manufacturer: record, modality: record, protocolName: record, seriesDate: record, seriesDescription: record, seriesInstanceUID: record, stationName: record, studyId: int>, study: record<accessionNumber: record, id: int, patientAge: record, patientId: int, studyDate: record, studyDescription: record, studyID: record, studyInstanceUID: record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "orderascending" $orderascending "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "seriestypes" $seriestypes "scalar") (serialize-qp "seriestags" $seriestags "scalar")] | flatten | str join "&"
@@ -2375,9 +2385,6 @@ export def "get-metadata-flatseries" [
 # submit a query for flat series
 #
 # POST /metadata/flatseries/query
-# --filters shape: {seriesTagIds?: list<int>, seriesTypeIds?: list<int>, sourceRefs?: list}
-# --order shape: {orderAscending?: bool, orderBy?: string}
-# --queryProperties item shape: {operator?: string, propertyName?: string, propertyValue?: string}
 export def "post-metadata-flatseries-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2394,7 +2401,7 @@ export def "post-metadata-flatseries-query" [
   --order: record # shape: {orderAscending?: bool, orderBy?: string}
   query_properties: list # item shape: {operator?: string, propertyName?: string, propertyValue?: string}
   start_index: int # format: int64
-]: any -> table<id: int, patient: record<id: int, patientBirthDate: record, patientID: record, patientName: record, patientSex: record>, series: record<bodyPartExamined: record, frameOfReferenceUID: record, id: int, manufacturer: record, modality: record, protocolName: record, seriesDate: record, seriesDescription: record, seriesInstanceUID: record, stationName: record, studyId: int>, study: record<accessionNumber: record, id: int, patientAge: record, patientId: int, studyDate: record, studyDescription: record, studyID: record, studyInstanceUID: record>> {
+]: any -> oneof<table<id: int, patient: record<id: int, patientBirthDate: record, patientID: record, patientName: record, patientSex: record>, series: record<bodyPartExamined: record, frameOfReferenceUID: record, id: int, manufacturer: record, modality: record, protocolName: record, seriesDate: record, seriesDescription: record, seriesInstanceUID: record, stationName: record, studyId: int>, study: record<accessionNumber: record, id: int, patientAge: record, patientId: int, studyDate: record, studyDescription: record, studyID: record, studyInstanceUID: record>>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2432,7 +2439,7 @@ export def "get-metadata-flatseries-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, patient: record<id: int, patientBirthDate: record<value: string>, patientID: record<value: string>, patientName: record<value: string>, patientSex: record<value: string>>, series: record<bodyPartExamined: record<value: string>, frameOfReferenceUID: record<value: string>, id: int, manufacturer: record<value: string>, modality: record<value: string>, protocolName: record<value: string>, seriesDate: record<value: string>, seriesDescription: record<value: string>, seriesInstanceUID: record<value: string>, stationName: record<value: string>, studyId: int>, study: record<accessionNumber: record<value: string>, id: int, patientAge: record<value: string>, patientId: int, studyDate: record<value: string>, studyDescription: record<value: string>, studyID: record<value: string>, studyInstanceUID: record<value: string>>> {
+]: nothing -> oneof<record<id: int, patient: record<id: int, patientBirthDate: record<value: string>, patientID: record<value: string>, patientName: record<value: string>, patientSex: record<value: string>>, series: record<bodyPartExamined: record<value: string>, frameOfReferenceUID: record<value: string>, id: int, manufacturer: record<value: string>, modality: record<value: string>, protocolName: record<value: string>, seriesDate: record<value: string>, seriesDescription: record<value: string>, seriesInstanceUID: record<value: string>, stationName: record<value: string>, studyId: int>, study: record<accessionNumber: record<value: string>, id: int, patientAge: record<value: string>, patientId: int, studyDate: record<value: string>, studyDescription: record<value: string>, studyID: record<value: string>, studyInstanceUID: record<value: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2470,7 +2477,7 @@ export def "get-metadata-images" [
   --startindex: int # start index of returned slice of images (format: int64, default: 0)
   --count: int # size of returned slice of images (format: int64, default: 20)
   --seriesid: int # reference to series to list images for (required, format: int64)
-]: nothing -> table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>> {
+]: nothing -> oneof<table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($seriesid == null) { error make --unspanned { msg: "required query parameter 'seriesid' missing: pass --seriesid" } }
@@ -2495,9 +2502,6 @@ export def "get-metadata-images" [
 # submit a query for images
 #
 # POST /metadata/images/query
-# --filters shape: {seriesTagIds?: list<int>, seriesTypeIds?: list<int>, sourceRefs?: list}
-# --order shape: {orderAscending?: bool, orderBy?: string}
-# --queryProperties item shape: {operator?: string, propertyName?: string, propertyValue?: string}
 export def "post-metadata-images-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2514,7 +2518,7 @@ export def "post-metadata-images-query" [
   --order: record # shape: {orderAscending?: bool, orderBy?: string}
   query_properties: list # item shape: {operator?: string, propertyName?: string, propertyValue?: string}
   start_index: int # format: int64
-]: any -> table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>> {
+]: any -> oneof<table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2552,7 +2556,7 @@ export def "get-metadata-images-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>> {
+]: nothing -> oneof<record<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2595,7 +2599,7 @@ export def "get-metadata-patients" [
   --sources: string # filter the results by matching on one or more underlying series sources. Examples of sources are user, box, directory or scp. The list of sources to filter results by must have the form TYPE1:ID1,TYPE2:ID2,...,TYPEN:IDN. For instance, the argument sources=box:1,user:5 shows results either sent from (slice)box with id 1 or uploaded by user with id 5.
   --seriestypes: string # filter the results by matching on one or more underlying series types. The supplied list of series types must be a comma separated list of series type ids. For instance, the argument seriestypes=3,7,22 shows results including series assigned to either of the series types with ids 3, 7 and 22.
   --seriestags: string # filter the results by matching on one or more underlying series tags. The supplied list of series tags must be a comma separated list of series tag ids. For instance, the argument seriestags=6,2,11 shows results including series with either of the series tags with ids 6, 2 and 11.
-]: nothing -> table<id: int, patientBirthDate: record<value: string>, patientID: record<value: string>, patientName: record<value: string>, patientSex: record<value: string>> {
+]: nothing -> oneof<table<id: int, patientBirthDate: record<value: string>, patientID: record<value: string>, patientName: record<value: string>, patientSex: record<value: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "orderascending" $orderascending "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "seriestypes" $seriestypes "scalar") (serialize-qp "seriestags" $seriestags "scalar")] | flatten | str join "&"
@@ -2619,9 +2623,6 @@ export def "get-metadata-patients" [
 # submit a query for patients
 #
 # POST /metadata/patients/query
-# --filters shape: {seriesTagIds?: list<int>, seriesTypeIds?: list<int>, sourceRefs?: list}
-# --order shape: {orderAscending?: bool, orderBy?: string}
-# --queryProperties item shape: {operator?: string, propertyName?: string, propertyValue?: string}
 export def "post-metadata-patients-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2638,7 +2639,7 @@ export def "post-metadata-patients-query" [
   --order: record # shape: {orderAscending?: bool, orderBy?: string}
   query_properties: list # item shape: {operator?: string, propertyName?: string, propertyValue?: string}
   start_index: int # format: int64
-]: any -> table<id: int, patientBirthDate: record<value: string>, patientID: record<value: string>, patientName: record<value: string>, patientSex: record<value: string>> {
+]: any -> oneof<table<id: int, patientBirthDate: record<value: string>, patientID: record<value: string>, patientName: record<value: string>, patientSex: record<value: string>>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2676,7 +2677,7 @@ export def "get-metadata-patients-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, patientBirthDate: record<value: string>, patientID: record<value: string>, patientName: record<value: string>, patientSex: record<value: string>> {
+]: nothing -> oneof<record<id: int, patientBirthDate: record<value: string>, patientID: record<value: string>, patientName: record<value: string>, patientSex: record<value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2715,7 +2716,7 @@ export def "get-metadata-patients-id-images" [
   --sources: string # filter the results by matching on one or more series sources. Examples of sources are user, box, directory or scp. The list of sources to filter results by must have the form TYPE1:ID1,TYPE2:ID2,...,TYPEN:IDN. For instance, the argument sources=box:1,user:5 shows results either sent from (slice)box with id 1 or uploaded by user with id 5.
   --seriestypes: string # filter the results by matching on one or more series types. The supplied list of series types must be a comma separated list of series type ids. For instance, the argument seriestypes=3,7,22 shows series assigned to either of the series types with ids 3, 7 and 22.
   --seriestags: string # filter the results by matching on one or more series tags. The supplied list of series tags must be a comma separated list of series tag ids. For instance, the argument seriestags=6,2,11 shows series with either of the series tags with ids 6, 2 and 11.
-]: nothing -> table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>> {
+]: nothing -> oneof<table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2757,7 +2758,7 @@ export def "get-metadata-series" [
   --sources: string # filter the results by matching on one or more series sources. Examples of sources are user, box, directory or scp. The list of sources to filter results by must have the form TYPE1:ID1,TYPE2:ID2,...,TYPEN:IDN. For instance, the argument sources=box:1,user:5 shows results either sent from (slice)box with id 1 or uploaded by user with id 5.
   --seriestypes: string # filter the results by matching on one or more series types. The supplied list of series types must be a comma separated list of series type ids. For instance, the argument seriestypes=3,7,22 shows series assigned to either of the series types with ids 3, 7 and 22.
   --seriestags: string # filter the results by matching on one or more series tags. The supplied list of series tags must be a comma separated list of series tag ids. For instance, the argument seriestags=6,2,11 shows series with either of the series tags with ids 6, 2 and 11.
-]: nothing -> table<bodyPartExamined: record<value: string>, frameOfReferenceUID: record<value: string>, id: int, manufacturer: record<value: string>, modality: record<value: string>, protocolName: record<value: string>, seriesDate: record<value: string>, seriesDescription: record<value: string>, seriesInstanceUID: record<value: string>, stationName: record<value: string>, studyId: int> {
+]: nothing -> oneof<table<bodyPartExamined: record<value: string>, frameOfReferenceUID: record<value: string>, id: int, manufacturer: record<value: string>, modality: record<value: string>, protocolName: record<value: string>, seriesDate: record<value: string>, seriesDescription: record<value: string>, seriesInstanceUID: record<value: string>, stationName: record<value: string>, studyId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studyid == null) { error make --unspanned { msg: "required query parameter 'studyid' missing: pass --studyid" } }
@@ -2782,9 +2783,6 @@ export def "get-metadata-series" [
 # submit a query for series
 #
 # POST /metadata/series/query
-# --filters shape: {seriesTagIds?: list<int>, seriesTypeIds?: list<int>, sourceRefs?: list}
-# --order shape: {orderAscending?: bool, orderBy?: string}
-# --queryProperties item shape: {operator?: string, propertyName?: string, propertyValue?: string}
 export def "post-metadata-series-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2801,7 +2799,7 @@ export def "post-metadata-series-query" [
   --order: record # shape: {orderAscending?: bool, orderBy?: string}
   query_properties: list # item shape: {operator?: string, propertyName?: string, propertyValue?: string}
   start_index: int # format: int64
-]: any -> table<bodyPartExamined: record<value: string>, frameOfReferenceUID: record<value: string>, id: int, manufacturer: record<value: string>, modality: record<value: string>, protocolName: record<value: string>, seriesDate: record<value: string>, seriesDescription: record<value: string>, seriesInstanceUID: record<value: string>, stationName: record<value: string>, studyId: int> {
+]: any -> oneof<table<bodyPartExamined: record<value: string>, frameOfReferenceUID: record<value: string>, id: int, manufacturer: record<value: string>, modality: record<value: string>, protocolName: record<value: string>, seriesDate: record<value: string>, seriesDescription: record<value: string>, seriesInstanceUID: record<value: string>, stationName: record<value: string>, studyId: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2839,7 +2837,7 @@ export def "get-metadata-series-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<bodyPartExamined: record<value: string>, frameOfReferenceUID: record<value: string>, id: int, manufacturer: record<value: string>, modality: record<value: string>, protocolName: record<value: string>, seriesDate: record<value: string>, seriesDescription: record<value: string>, seriesInstanceUID: record<value: string>, stationName: record<value: string>, studyId: int> {
+]: nothing -> oneof<record<bodyPartExamined: record<value: string>, frameOfReferenceUID: record<value: string>, id: int, manufacturer: record<value: string>, modality: record<value: string>, protocolName: record<value: string>, seriesDate: record<value: string>, seriesDescription: record<value: string>, seriesInstanceUID: record<value: string>, stationName: record<value: string>, studyId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2875,7 +2873,7 @@ export def "get-metadata-series-id-seriestags" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<id: int, name: string> {
+]: nothing -> oneof<table<id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2913,7 +2911,7 @@ export def "post-metadata-series-id-seriestags" [
   --accept: string@accept-completer # Response content type
   --body-id: int # format: int64
   --name: string
-]: any -> record<id: int, name: string> {
+]: any -> oneof<record<id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2988,7 +2986,7 @@ export def "get-metadata-series-id-seriestypes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<id: int, name: string> {
+]: nothing -> oneof<table<id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3024,7 +3022,7 @@ export def "get-metadata-series-id-source" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<sourceId: int, sourceName: string, sourceType: string> {
+]: nothing -> oneof<record<sourceId: int, sourceName: string, sourceType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3173,7 +3171,7 @@ export def "get-metadata-seriestags" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<id: int, name: string> {
+]: nothing -> oneof<table<id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata/seriestags" $auth.query)
@@ -3213,7 +3211,7 @@ export def "get-metadata-studies" [
   --sources: string # filter the results by matching on one or more underlying series sources. Examples of sources are user, box, directory or scp. The list of sources to filter results by must have the form TYPE1:ID1,TYPE2:ID2,...,TYPEN:IDN. For instance, the argument sources=box:1,user:5 shows results either sent from (slice)box with id 1 or uploaded by user with id 5.
   --seriestypes: string # filter the results by matching on one or more underlying series types. The supplied list of series types must be a comma separated list of series type ids. For instance, the argument seriestypes=3,7,22 shows results including series assigned to either of the series types with ids 3, 7 and 22.
   --seriestags: string # filter the results by matching on one or more underlying series tags. The supplied list of series tags must be a comma separated list of series tag ids. For instance, the argument seriestags=6,2,11 shows results including series with either of the series tags with ids 6, 2 and 11.
-]: nothing -> table<accessionNumber: record<value: string>, id: int, patientAge: record<value: string>, patientId: int, studyDate: record<value: string>, studyDescription: record<value: string>, studyID: record<value: string>, studyInstanceUID: record<value: string>> {
+]: nothing -> oneof<table<accessionNumber: record<value: string>, id: int, patientAge: record<value: string>, patientId: int, studyDate: record<value: string>, studyDescription: record<value: string>, studyID: record<value: string>, studyInstanceUID: record<value: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($patientid == null) { error make --unspanned { msg: "required query parameter 'patientid' missing: pass --patientid" } }
@@ -3238,9 +3236,6 @@ export def "get-metadata-studies" [
 # submit a query for studies
 #
 # POST /metadata/studies/query
-# --filters shape: {seriesTagIds?: list<int>, seriesTypeIds?: list<int>, sourceRefs?: list}
-# --order shape: {orderAscending?: bool, orderBy?: string}
-# --queryProperties item shape: {operator?: string, propertyName?: string, propertyValue?: string}
 export def "post-metadata-studies-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3257,7 +3252,7 @@ export def "post-metadata-studies-query" [
   --order: record # shape: {orderAscending?: bool, orderBy?: string}
   query_properties: list # item shape: {operator?: string, propertyName?: string, propertyValue?: string}
   start_index: int # format: int64
-]: any -> table<accessionNumber: record<value: string>, id: int, patientAge: record<value: string>, patientId: int, studyDate: record<value: string>, studyDescription: record<value: string>, studyID: record<value: string>, studyInstanceUID: record<value: string>> {
+]: any -> oneof<table<accessionNumber: record<value: string>, id: int, patientAge: record<value: string>, patientId: int, studyDate: record<value: string>, studyDescription: record<value: string>, studyID: record<value: string>, studyInstanceUID: record<value: string>>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3295,7 +3290,7 @@ export def "get-metadata-studies-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<accessionNumber: record<value: string>, id: int, patientAge: record<value: string>, patientId: int, studyDate: record<value: string>, studyDescription: record<value: string>, studyID: record<value: string>, studyInstanceUID: record<value: string>> {
+]: nothing -> oneof<record<accessionNumber: record<value: string>, id: int, patientAge: record<value: string>, patientId: int, studyDate: record<value: string>, studyDescription: record<value: string>, studyID: record<value: string>, studyInstanceUID: record<value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3334,7 +3329,7 @@ export def "get-metadata-studies-id-images" [
   --sources: string # filter the results by matching on one or more series sources. Examples of sources are user, box, directory or scp. The list of sources to filter results by must have the form TYPE1:ID1,TYPE2:ID2,...,TYPEN:IDN. For instance, the argument sources=box:1,user:5 shows results either sent from (slice)box with id 1 or uploaded by user with id 5.
   --seriestypes: string # filter the results by matching on one or more series types. The supplied list of series types must be a comma separated list of series type ids. For instance, the argument seriestypes=3,7,22 shows series assigned to either of the series types with ids 3, 7 and 22.
   --seriestags: string # filter the results by matching on one or more series tags. The supplied list of series tags must be a comma separated list of series tag ids. For instance, the argument seriestags=6,2,11 shows series with either of the series tags with ids 6, 2 and 11.
-]: nothing -> table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>> {
+]: nothing -> oneof<table<id: int, imageType: record<value: string>, instanceNumber: record<value: string>, seriesId: int, sopInstanceUID: record<value: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3372,7 +3367,7 @@ export def "get-scps" [
   --accept: string@accept-completer # Response content type
   --startindex: int # start index of returned slice of SCPs (format: int64, default: 0)
   --count: int # size of returned slice of SCPs (format: int64, default: 20)
-]: nothing -> table<aeTitle: string, id: int, name: string, port: int> {
+]: nothing -> oneof<table<aeTitle: string, id: int, name: string, port: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -3411,7 +3406,7 @@ export def "post-scps" [
   --id: int # format: int64
   --name: string
   --port: int # format: int32
-]: any -> record<aeTitle: string, id: int, name: string, port: int> {
+]: any -> oneof<record<aeTitle: string, id: int, name: string, port: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3486,7 +3481,7 @@ export def "get-scus" [
   --accept: string@accept-completer # Response content type
   --startindex: int # start index of returned slice of SCUs (format: int64, default: 0)
   --count: int # size of returned slice of SCUs (format: int64, default: 20)
-]: nothing -> table<aeTitle: string, host: string, id: int, name: string, port: int> {
+]: nothing -> oneof<table<aeTitle: string, host: string, id: int, name: string, port: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -3526,7 +3521,7 @@ export def "post-scus" [
   --id: int # format: int64
   --name: string
   --port: int # format: int32
-]: any -> record<aeTitle: string, host: string, id: int, name: string, port: int> {
+]: any -> oneof<record<aeTitle: string, host: string, id: int, name: string, port: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3641,7 +3636,7 @@ export def "get-seriestypes" [
   --accept: string@accept-completer # Response content type
   --startindex: int # start index of returned slice of series types (format: int64, default: 0)
   --count: int # size of returned slice of series types (format: int64, default: 20)
-]: nothing -> table<id: int, name: string> {
+]: nothing -> oneof<table<id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -3678,7 +3673,7 @@ export def "post-seriestypes" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int64
   --name: string
-]: any -> record<id: int, name: string> {
+]: any -> oneof<record<id: int, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3716,7 +3711,7 @@ export def "get-seriestypes-rules" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --seriestypeid: int # ID of series type to list rules for (required, format: int64)
-]: nothing -> table<id: int, seriesTypeId: int> {
+]: nothing -> oneof<table<id: int, seriesTypeId: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($seriestypeid == null) { error make --unspanned { msg: "required query parameter 'seriestypeid' missing: pass --seriestypeid" } }
@@ -3754,7 +3749,7 @@ export def "post-seriestypes-rules" [
   --accept: string@accept-completer # Response content type
   --id: int # format: int64
   --series-type-id: int # format: int64
-]: any -> record<id: int, seriesTypeId: int> {
+]: any -> oneof<record<id: int, seriesTypeId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3791,7 +3786,7 @@ export def "get-seriestypes-rules-updatestatus" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<running: bool> {
+]: nothing -> oneof<record<running: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/seriestypes/rules/updatestatus" $auth.query)
@@ -3862,7 +3857,7 @@ export def "get-seriestypes-rules-id-attributes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<element: int, group: int, id: int, path: string, seriesTypeRuleId: int, value: string> {
+]: nothing -> oneof<table<element: int, group: int, id: int, path: string, seriesTypeRuleId: int, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3904,7 +3899,7 @@ export def "post-seriestypes-rules-id-attributes" [
   --path: string
   series_type_rule_id: int # format: int64
   value: string
-]: any -> record<element: int, group: int, id: int, path: string, seriesTypeRuleId: int, value: string> {
+]: any -> oneof<record<element: int, group: int, id: int, path: string, seriesTypeRuleId: int, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3982,7 +3977,7 @@ export def "post-seriestypes-series-query" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   ids: list<int>
-]: any -> record<seriesidseriestypes: table<seriesid: int, seriestype: record>> {
+]: any -> oneof<record<seriesidseriestypes: table<seriesid: int, seriestype: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4091,7 +4086,7 @@ export def "get-sources" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<sourceId: int, sourceName: string, sourceType: string> {
+]: nothing -> oneof<table<sourceId: int, sourceName: string, sourceType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sources" $auth.query)
@@ -4269,8 +4264,6 @@ export def "get-transactions-token-outgoing" [
 # signal that the supplied outgoing transaction and image was successfully received and can be marked as sent. This method is used when sending images using the poll method from a public slicebox.
 #
 # POST /transactions/{token}/outgoing/done
-# --image shape: {id?: int, imageId?: int, outgoingTransactionId?: int, sent?: bool, sequenceNumber?: int}
-# --transaction shape: {boxId?: int, boxName?: string, id?: int, profile?: record, sentImageCount?: int, status?: string, totalImageCount?: int, updated?: int}
 export def "post-transactions-token-outgoing-done" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4312,7 +4305,6 @@ export def "post-transactions-token-outgoing-done" [
 # signal that the image corresponding to the supplied outgoing transaction and image could not be read or stored properly on the receiving side, and that the transaction should be marked as failed.
 #
 # POST /transactions/{token}/outgoing/failed
-# --transactionImage shape: {image?: record, transaction?: record}
 export def "post-transactions-token-outgoing-failed" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4366,7 +4358,7 @@ export def "get-transactions-token-outgoing-poll" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<image: record<id: int, imageId: int, outgoingTransactionId: int, sent: bool, sequenceNumber: int>, transaction: record<boxId: int, boxName: string, id: int, profile: record, sentImageCount: int, status: string, totalImageCount: int, updated: int>> {
+]: nothing -> oneof<table<image: record<id: int, imageId: int, outgoingTransactionId: int, sent: bool, sequenceNumber: int>, transaction: record<boxId: int, boxName: string, id: int, profile: record, sentImageCount: int, status: string, totalImageCount: int, updated: int>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
@@ -4485,7 +4477,7 @@ export def "get-users" [
   --accept: string@accept-completer # Response content type
   --startindex: int # start index of returned slice of users (format: int64, default: 0)
   --count: int # size of returned slice of users (format: int64, default: 20)
-]: nothing -> table<hashedPassword: string, id: int, role: string, user: string> {
+]: nothing -> oneof<table<hashedPassword: string, id: int, role: string, user: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startindex" $startindex "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -4523,7 +4515,7 @@ export def "post-users" [
   --password: string
   --role: string
   --user: string
-]: any -> record<hashedPassword: string, id: int, role: string, user: string> {
+]: any -> oneof<record<hashedPassword: string, id: int, role: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4560,7 +4552,7 @@ export def "get-users-current" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<id: int, role: string, user: string> {
+]: nothing -> oneof<record<id: int, role: string, user: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/current" $auth.query)

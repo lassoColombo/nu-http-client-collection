@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -121,9 +145,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-build" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-build" "post-containers-create" "get-containers-floating-ips" "post-containers-floating-ips-request" "post-containers-floating-ips-ip-release" "get-containers-groups" "post-containers-groups" "delete-containers-groups-name-or-id" "get-containers-groups-name-or-id" "patch-containers-groups-name-or-id" "post-containers-groups-name-or-id-maproute" "post-containers-groups-name-or-id-unmaproute" "get-containers-json" "get-containers-messages" "get-containers-quota" "put-containers-quota" "get-containers-usage" "get-containers-version" "get-containers-id-status" "delete-containers-name-or-id" "post-containers-name-or-id-floating-ips-ip-bind" "post-containers-name-or-id-floating-ips-ip-unbind" "get-containers-name-or-id-json" "post-containers-name-or-id-pause" "post-containers-name-or-id-rename" "post-containers-name-or-id-restart" "post-containers-name-or-id-start" "post-containers-name-or-id-stop" "post-containers-name-or-id-unpause" "get-images-json" "delete-images-id" "get-images-name-or-id-json" "get-registry-namespaces" "get-registry-namespaces-namespace" "put-registry-namespaces-namespace" "get-tlskey" "put-tlskey-refresh" "post-volumes-create" "post-volumes-fs-create" "get-volumes-fs-flavors-json" "get-volumes-fs-json" "delete-volumes-fs-name" "get-volumes-fs-name-json" "get-volumes-json" "delete-volumes-name" "post-volumes-name" "get-volumes-name-json" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -193,7 +217,6 @@ export def "post-build" [
 # Create and start a single container
 #
 # POST /containers/create
-# --HostConfig shape: {Binds?: list<string>, ExtraHosts?: list<string>, Links?: list<string>, PortBindings?: list<string>}
 export def "post-containers-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,7 +240,7 @@ export def "post-containers-create" [
   --memory: int # The container memory that is set for the container in Megabyte. Choose one of the following sizes: Pico 64 MB, Nano 128 MB, Micro 256 MB, Tiny 512 MB, Small 1 GB (1024 MB), Medium 2 GB (2048 MB), Large 4 GB (4096 MB) XLarge 8GB (8192 MB) and 2XLarge 16 GB (16384 MB). (format: int32)
   --number-cpus: int # Number of virtual CPUs that are allocated to the container. (format: int32)
   --volumes: string # Mount a volume to a container by specifying the details in the following format: `VOLUME_NAME:/DIRECTORY_PATH[:ro]`. Example: testvolume:/volumedata/temp:rw. By default, all volumes will be set up with read-write access inside the container (rw). If you wish to set up your volume with read-only access, enter `ro`. Note: To mount a volume to a container, you must create the volume in your space first by using the `cf ic volume-create` command, or calling the `POST /volumes/create endpoint`.
-]: any -> record<Id: string, flavor_id: int, mem: int, vcpu: int> {
+]: any -> oneof<record<Id: string, flavor_id: int, mem: int, vcpu: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -261,7 +284,7 @@ export def "get-containers-floating-ips" [
   --all: oneof<nothing, bool> # If this option is set to `all=1`, `all=True`, or `all=true`, all public IP addresses that are allocated to a space are returned. If this option is set to `all=0`, `all=False`, or `all=false`, only available public IP addresses that are allocated but not bound to a container are returned. By default, only available public IP addresses are returned.
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> table<Bindings: record<ContainerId: string>, IpAddress: string> {
+]: nothing -> oneof<table<Bindings: record<ContainerId: string>, IpAddress: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
@@ -381,7 +404,7 @@ export def "get-containers-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> table<Creation_time: string, Id: string, Name: string, Port: int, Routes: list<string>, Status: string, Updated_time: string> {
+]: nothing -> oneof<table<Creation_time: string, Id: string, Name: string, Port: int, Routes: list<string>, Status: string, Updated_time: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
@@ -408,8 +431,6 @@ export def "get-containers-groups" [
 # Create and start a container group.
 #
 # POST /containers/groups
-# --NumberInstances shape: {Desired?: int, Max?: int, Min?: int}
-# --Route shape: {domain?: string, host?: string}
 export def "post-containers-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -433,7 +454,7 @@ export def "post-containers-groups" [
   --port: int # (Optional) Expose a port for HTTP traffic to make your container group available from the Internet. Every container instance that is started for this group, listens on this port. Container groups cannot expose multiple ports. Note: You need to expose a port, when "Autorecovery" is set to true. (format: int32)
   --route: record # shape: {domain?: string, host?: string}
   --volumes: list<string> # (Optional) List of volumes to be mounted to the container instances of your container group. You need to create the volume first by using the cf ic volume-create command before you can mount a volume to a container group. When you specify a volume, use the following format: NAME:PATH:MODE. For NAME, use either the name or ID of the volume. For the PATH, enter the absolute path to the volume directory in the container. For MODE, enter either ro (read-only) or rw (read-write).
-]: any -> record<Id: string, Warnings: list<string>> {
+]: any -> oneof<record<Id: string, Warnings: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -519,7 +540,7 @@ export def "get-containers-groups-name-or-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> record<Anti_affinity: string, Autorecovery: string, AvailabilityZone: string, Cmd: list<string>, Creation_time: string, Env: list<string>, Id: string, Image: string, ImageName: string, Memory: int, Name: string, NumberInstances: record<CurrentSize: int, Desired: int, Max: int, Min: int>, Port: int, Route_Status: record<in_progress: bool, message: string, successful: bool>, Routes: list<string>, Status: string, UpdatedTime: string, Volumes: list<string>> {
+]: nothing -> oneof<record<Anti_affinity: string, Autorecovery: string, AvailabilityZone: string, Cmd: list<string>, Creation_time: string, Env: list<string>, Id: string, Image: string, ImageName: string, Memory: int, Name: string, NumberInstances: record<CurrentSize: int, Desired: int, Max: int, Min: int>, Port: int, Route_Status: record<in_progress: bool, message: string, successful: bool>, Routes: list<string>, Status: string, UpdatedTime: string, Volumes: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
@@ -547,7 +568,6 @@ export def "get-containers-groups-name-or-id" [
 # Update a container group.
 #
 # PATCH /containers/groups/{name_or_id}
-# --NumberInstances shape: {Desired?: int, Max?: int, Min?: int}
 export def "patch-containers-groups-name-or-id" [
   name_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -610,7 +630,7 @@ export def "post-containers-groups-name-or-id-maproute" [
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
   --domain: string # The default system domain is mybluemix.net and already provides a SSL certificate, so you can access your container groups with HTTPS without any additional configuration.
   --host: string # The host name of your container group, such as mycontainerhost. Do not include underscores (_) in the host name. The host and the domain combined form the full public route URL, such as http://mycontainerhost.mybluemix.net.
-]: any -> record<Id: string, Warnings: list<string>> {
+]: any -> oneof<record<Id: string, Warnings: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -656,7 +676,7 @@ export def "post-containers-groups-name-or-id-unmaproute" [
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
   --domain: string # The default system domain is mybluemix.net and already provides a SSL certificate, so you can access your container groups with HTTPS without any additional configuration.
   --host: string # The host name of your container group, such as mycontainerhost. Do not include underscores (_) in the host name. The host and the domain combined form the full public route URL, such as http://mycontainerhost.mybluemix.net.
-]: any -> record<Id: string, Warnings: list<string>> {
+]: any -> oneof<record<Id: string, Warnings: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -701,7 +721,7 @@ export def "get-containers-json" [
   --filters: string # You can filter your containers by any environment variable key or value that is listed in the `Env` section of your CLI/ API response when you run the `cf ic inspect ` command, or call the `GET /containers/{id}/json` endpoint. Your search criteria does not need to be an exact match. It can also be a part of the key or value you are looking for. For example, to filter all containers with an environment variable that contains `id` in one of their environment variables, use `filter=id`.
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> table<Command: string, ContainerState: string, Created: float, Env: list<string>, Group: record<Id: string, Name: string>, Id: string, Image: string, ImageId: string, Labels: record, Memory: int, Name: string, Names: list<string>, NetworkSettings: record<Bridge: string, Gateway: string, IpAddress: string, IpPrefixLen: int, MacAddress: string, Network: record, PortMapping: string, Ports: list, PublicIpAddress: string>, Ports: record<IP: string, PrivatePort: string, PublicPort: string, Type: string>, SizeRootFs: int, SizeRw: int, Started: float, Status: string, VCPU: int> {
+]: nothing -> oneof<table<Command: string, ContainerState: string, Created: float, Env: list<string>, Group: record<Id: string, Name: string>, Id: string, Image: string, ImageId: string, Labels: record, Memory: int, Name: string, Names: list<string>, NetworkSettings: record<Bridge: string, Gateway: string, IpAddress: string, IpPrefixLen: int, MacAddress: string, Network: record, PortMapping: string, Ports: list, PublicIpAddress: string>, Ports: record<IP: string, PrivatePort: string, PublicPort: string, Type: string>, SizeRootFs: int, SizeRw: int, Started: float, Status: string, VCPU: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
@@ -741,7 +761,7 @@ export def "get-containers-messages" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. To retrieve your space ID, run `cf space <space_name> --guid` and replace `<space_name>` with the name of the space where you want to create or work with your container. (required)
-]: nothing -> record<created_date: string, message: string> {
+]: nothing -> oneof<record<created_date: string, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
@@ -780,7 +800,7 @@ export def "get-containers-quota" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> record<account_type: string, country_code: string, org_quota: record<floating_ips_max: string, floating_ips_space_default: string, floating_ips_usage: int, ram_max: int, ram_space_default: int, ram_usage: int, subnet_usage: int, subnets_default: int, subnets_max: int>, space_quota: record<floating_ips_max: string, ram_max: int, subnets_max: int>> {
+]: nothing -> oneof<record<account_type: string, country_code: string, org_quota: record<floating_ips_max: string, floating_ips_space_default: string, floating_ips_usage: int, ram_max: int, ram_space_default: int, ram_usage: int, subnet_usage: int, subnets_default: int, subnets_max: int>, space_quota: record<floating_ips_max: string, ram_max: int, subnets_max: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
@@ -863,7 +883,7 @@ export def "get-containers-usage" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> record<AvailableSizes: table<disk: int, id: string, memory_MB: int, name: string, vcpus: int>, Environment: string, Limits: record<containers: int, floating_ips: int, memory_MB: int, vcpu: int>, Usage: record<containers: int, floating_ips: int, floating_ips_bound: int, images: int, memory_MB: int, running: int, vcpu: int>> {
+]: nothing -> oneof<record<AvailableSizes: table<disk: int, id: string, memory_MB: int, name: string, vcpus: int>, Environment: string, Limits: record<containers: int, floating_ips: int, memory_MB: int, vcpu: int>, Usage: record<containers: int, floating_ips: int, floating_ips_bound: int, images: int, memory_MB: int, running: int, vcpu: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
@@ -900,7 +920,7 @@ export def "get-containers-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ApiVersion: string, Arch: string, BuildDetail: record<api: string, automount: string, grupdater: string, harmony: string, health_monitor: string, hijack: string, ldap: string, logmet: string, lumberjack: string, redis_cluster: string, sgwatcher: string, volmgr: string>, BuildID: string, BuildNumber: string, BuildTime: string, GitCommit: string, GoVersion: string, KernelVersion: string, Os: string, Version: string> {
+]: nothing -> oneof<record<ApiVersion: string, Arch: string, BuildDetail: record<api: string, automount: string, grupdater: string, harmony: string, health_monitor: string, hijack: string, ldap: string, logmet: string, lumberjack: string, redis_cluster: string, sgwatcher: string, volmgr: string>, BuildID: string, BuildNumber: string, BuildTime: string, GitCommit: string, GoVersion: string, KernelVersion: string, Os: string, Version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/containers/version" $auth.query)
@@ -936,7 +956,7 @@ export def "get-containers-id-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> record<NameOrId: string, Status: string, Transient: bool> {
+]: nothing -> oneof<record<NameOrId: string, Status: string, Transient: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1106,7 +1126,7 @@ export def "get-containers-name-or-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> record<BluemixApp: string, BluemixServices: string, Config: record<ArgsEscaped: bool, AttachStderr: string, AttachStdin: string, AttachStdout: string, Cmd: list<string>, Domainname: string, Env: list<string>, ExposedPorts: list<string>, Hostname: string, Image: string, ImageArchitecture: string, Labels: list<string>, Memory: int, MemorySwap: string, OpenStdin: string, PortSpecs: string, StdinOnce: string, Tty: string, User: string, VCPU: int, VolumesFrom: string, WorkingDir: string>, ContainerState: string, Created: string, Group: record<Id: string, Name: string>, HostConfig: record<Binds: list<string>, ExtraHosts: list<string>, Links: list<string>, PortBindings: list<string>>, HostId: string, Human_Id: string, Id: string, Image: string, Mounts: list<string>, Name: string, NetworkSettings: record<Bridge: string, Gateway: string, IpAddress: string, IpPrefixLen: int, MacAddress: string, Network: record<Aliases: string, EndpointID: string, Gateway: string, GlobalIPv6Address: string, GlobalIPv6PrefixLen: int, IPAMConfig: string, IPPrefixLen: string, IPv6Gateway: string, Links: string, MacAddress: string, NetworkID: string>, PortMapping: string, Ports: list<string>, PublicIpAddress: string>, Path: string, ResolveConfPath: string, State: record<ExitCode: string, FinishedAt: string, Ghost: string, Pid: int, Running: bool, StartedAt: string, Status: string>, Volumes: record<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string>, VolumesRW: list<string>> {
+]: nothing -> oneof<record<BluemixApp: string, BluemixServices: string, Config: record<ArgsEscaped: bool, AttachStderr: string, AttachStdin: string, AttachStdout: string, Cmd: list<string>, Domainname: string, Env: list<string>, ExposedPorts: list<string>, Hostname: string, Image: string, ImageArchitecture: string, Labels: list<string>, Memory: int, MemorySwap: string, OpenStdin: string, PortSpecs: string, StdinOnce: string, Tty: string, User: string, VCPU: int, VolumesFrom: string, WorkingDir: string>, ContainerState: string, Created: string, Group: record<Id: string, Name: string>, HostConfig: record<Binds: list<string>, ExtraHosts: list<string>, Links: list<string>, PortBindings: list<string>>, HostId: string, Human_Id: string, Id: string, Image: string, Mounts: list<string>, Name: string, NetworkSettings: record<Bridge: string, Gateway: string, IpAddress: string, IpPrefixLen: int, MacAddress: string, Network: record<Aliases: string, EndpointID: string, Gateway: string, GlobalIPv6Address: string, GlobalIPv6PrefixLen: int, IPAMConfig: string, IPPrefixLen: string, IPv6Gateway: string, Links: string, MacAddress: string, NetworkID: string>, PortMapping: string, Ports: list<string>, PublicIpAddress: string>, Path: string, ResolveConfPath: string, State: record<ExitCode: string, FinishedAt: string, Ghost: string, Pid: int, Running: bool, StartedAt: string, Status: string>, Volumes: record<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string>, VolumesRW: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
@@ -1399,7 +1419,7 @@ export def "get-images-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> record<Created: float, Id: string, Image: string, RepoTags: list<string>, Size: int, VirtualSize: int> {
+]: nothing -> oneof<record<Created: float, Id: string, Image: string, RepoTags: list<string>, Size: int, VirtualSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
@@ -1480,7 +1500,7 @@ export def "get-images-name-or-id-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> record<Architecture: string, Config: record<ArgsEscaped: bool, AttachStderr: bool, AttachStdin: bool, AttachStdout: bool, Cmd: list<string>, Domainmame: string, Entrypoint: string, Env: list<string>, ExposedPorts: list<string>, Hostname: string, Image: string, Labels: list<string>, OnBuild: list<string>, OpenStdin: bool, StdinOnce: bool, Tty: bool, User: string, Volumes: string, WorkingDir: string>, Container: string, ContainerConfig: record<ArgsEscaped: bool, AttachStderr: string, AttachStdin: string, AttachStdout: string, Cmd: list<string>, Domainname: string, Env: list<string>, ExposedPorts: list<string>, Hostname: string, Image: string, ImageArchitecture: string, Labels: list<string>, Memory: int, MemorySwap: string, OpenStdin: string, PortSpecs: string, StdinOnce: string, Tty: string, User: string, VCPU: int, VolumesFrom: string, WorkingDir: string>, Created: string, DockerVersion: string, Id: string, Os: string, Parent: string, Size: int, Tag: string, Throwaway: string, VirtualSize: int> {
+]: nothing -> oneof<record<Architecture: string, Config: record<ArgsEscaped: bool, AttachStderr: bool, AttachStdin: bool, AttachStdout: bool, Cmd: list<string>, Domainmame: string, Entrypoint: string, Env: list<string>, ExposedPorts: list<string>, Hostname: string, Image: string, Labels: list<string>, OnBuild: list<string>, OpenStdin: bool, StdinOnce: bool, Tty: bool, User: string, Volumes: string, WorkingDir: string>, Container: string, ContainerConfig: record<ArgsEscaped: bool, AttachStderr: string, AttachStdin: string, AttachStdout: string, Cmd: list<string>, Domainname: string, Env: list<string>, ExposedPorts: list<string>, Hostname: string, Image: string, ImageArchitecture: string, Labels: list<string>, Memory: int, MemorySwap: string, OpenStdin: string, PortSpecs: string, StdinOnce: string, Tty: string, User: string, VCPU: int, VolumesFrom: string, WorkingDir: string>, Created: string, DockerVersion: string, Id: string, Os: string, Parent: string, Size: int, Tag: string, Throwaway: string, VirtualSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name_or_id | is-empty) { error make --unspanned { msg: "path parameter 'name_or_id' must be non-empty" } }
@@ -1520,7 +1540,7 @@ export def "get-registry-namespaces" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> record<namespace: string> {
+]: nothing -> oneof<record<namespace: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
@@ -1560,7 +1580,7 @@ export def "get-registry-namespaces-namespace" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> record<namespace: string> {
+]: nothing -> oneof<record<namespace: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -1601,7 +1621,7 @@ export def "put-registry-namespaces-namespace" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> record<namespace: string> {
+]: nothing -> oneof<record<namespace: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -1641,7 +1661,7 @@ export def "get-tlskey" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> record<ca_cert: string, server_cert: string, user_cert: string, user_key: string> {
+]: nothing -> oneof<record<ca_cert: string, server_cert: string, user_cert: string, user_key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
@@ -1680,7 +1700,7 @@ export def "put-tlskey-refresh" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> record<ca_cert: string, reg_host: string, server_cert: string, user_cert: string, user_key: string> {
+]: nothing -> oneof<record<ca_cert: string, reg_host: string, server_cert: string, user_cert: string, user_key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
@@ -1721,7 +1741,7 @@ export def "post-volumes-create" [
   --fs-name: string # The name of the file share that the volume is hosted on. File shares can have different storage sizes and IOPS based on the required workload. If this field is left blank, the volume is hosted on the default file share.
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> record<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string> {
+]: nothing -> oneof<record<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
@@ -1807,7 +1827,7 @@ export def "get-volumes-fs-flavors-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> list<int> {
+]: nothing -> oneof<list<int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
@@ -1846,7 +1866,7 @@ export def "get-volumes-fs-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> table<capacity: int, created_date: string, fsName: string, hostPath: string, iops: float, iopsTotal: int, orderId: string, provider: string, spaceGuid: string, state: string, updated_date: string> {
+]: nothing -> oneof<table<capacity: int, created_date: string, fsName: string, hostPath: string, iops: float, iopsTotal: int, orderId: string, provider: string, spaceGuid: string, state: string, updated_date: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
@@ -1927,7 +1947,7 @@ export def "get-volumes-fs-name-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> table<fs: list<record>, fsUsage: list<record>, volnames: list<string>> {
+]: nothing -> oneof<table<fs: list<record>, fsUsage: list<record>, volnames: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1967,7 +1987,7 @@ export def "get-volumes-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> table<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string> {
+]: nothing -> oneof<table<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_auth_token == null) { error make --unspanned { msg: "required header parameter 'X-Auth-Token' missing: pass --x-auth-token" } }
@@ -2050,7 +2070,7 @@ export def "post-volumes-name" [
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
   --add-spaces: list<string> # The name or ID of the space where you want to provision your existing volume. Run `cf spaces` to retrieve the name, or `cf space <space_name> --guid` to retrieve the space ID.
   --remove-spaces: list<string> # The name or ID of the space from which you want to unprovision your existing volume. Run `cf spaces` to retrieve the name, or `cf space <space_name> --guid` to retrieve the space ID.
-]: any -> record<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string> {
+]: any -> oneof<record<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2094,7 +2114,7 @@ export def "get-volumes-name-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token. (required)
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID. (required)
-]: nothing -> record<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string> {
+]: nothing -> oneof<record<fsID: string, hostPath: string, otherSpaceVisibility: list<string>, spaceGuid: string, volName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }

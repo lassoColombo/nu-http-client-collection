@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -127,9 +151,9 @@ def deletion-type-completer [] { ["cancel" "deletion_type_undefined" "transfer_t
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reseller-customers-insert" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["reseller-customers-insert" "reseller-customers-get" "reseller-customers-patch" "reseller-customers-update" "reseller-subscriptions-insert" "reseller-subscriptions-delete" "reseller-subscriptions-get" "reseller-subscriptions-activate" "reseller-subscriptions-change-plan" "reseller-subscriptions-change-renewal-settings" "reseller-subscriptions-change-seats" "reseller-subscriptions-start-paid-service" "reseller-subscriptions-suspend" "reseller-resellernotify-getwatchdetails" "reseller-resellernotify-register" "reseller-resellernotify-unregister" "reseller-subscriptions-list" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -151,8 +175,6 @@ export def commands []: nothing -> table {
 #
 # POST /apps/reseller/v1/customers
 # operationId: reseller.customers.insert
-# --postalAddress shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, kind?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
-# --primaryAdmin shape: {primaryEmail?: string}
 export def "reseller-customers-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +207,7 @@ export def "reseller-customers-insert" [
   --postal-address: record # JSON template for address of a customer. — shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, kind?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
   --primary-admin: record # JSON template for primary admin in case of TEAM customers — shape: {primaryEmail?: string}
   --resource-ui-url: string # URL to customer's Admin console dashboard. The read-only URL is generated by the API service. This is used if your client application requires the customer to complete a task in the Admin console.
-]: any -> record<alternateEmail: string, customerDomain: string, customerDomainVerified: bool, customerId: string, customerType: string, kind: string, phoneNumber: string, postalAddress: record<addressLine1: string, addressLine2: string, addressLine3: string, contactName: string, countryCode: string, kind: string, locality: string, organizationName: string, postalCode: string, region: string>, primaryAdmin: record<primaryEmail: string>, resourceUiUrl: string> {
+]: any -> oneof<record<alternateEmail: string, customerDomain: string, customerDomainVerified: bool, customerId: string, customerType: string, kind: string, phoneNumber: string, postalAddress: record<addressLine1: string, addressLine2: string, addressLine3: string, contactName: string, countryCode: string, kind: string, locality: string, organizationName: string, postalCode: string, region: string>, primaryAdmin: record<primaryEmail: string>, resourceUiUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -235,7 +257,7 @@ export def "reseller-customers-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<alternateEmail: string, customerDomain: string, customerDomainVerified: bool, customerId: string, customerType: string, kind: string, phoneNumber: string, postalAddress: record<addressLine1: string, addressLine2: string, addressLine3: string, contactName: string, countryCode: string, kind: string, locality: string, organizationName: string, postalCode: string, region: string>, primaryAdmin: record<primaryEmail: string>, resourceUiUrl: string> {
+]: nothing -> oneof<record<alternateEmail: string, customerDomain: string, customerDomainVerified: bool, customerId: string, customerType: string, kind: string, phoneNumber: string, postalAddress: record<addressLine1: string, addressLine2: string, addressLine3: string, contactName: string, countryCode: string, kind: string, locality: string, organizationName: string, postalCode: string, region: string>, primaryAdmin: record<primaryEmail: string>, resourceUiUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -261,8 +283,6 @@ export def "reseller-customers-get" [
 #
 # PATCH /apps/reseller/v1/customers/{customerId}
 # operationId: reseller.customers.patch
-# --postalAddress shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, kind?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
-# --primaryAdmin shape: {primaryEmail?: string}
 export def "reseller-customers-patch" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -295,7 +315,7 @@ export def "reseller-customers-patch" [
   --postal-address: record # JSON template for address of a customer. — shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, kind?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
   --primary-admin: record # JSON template for primary admin in case of TEAM customers — shape: {primaryEmail?: string}
   --resource-ui-url: string # URL to customer's Admin console dashboard. The read-only URL is generated by the API service. This is used if your client application requires the customer to complete a task in the Admin console.
-]: any -> record<alternateEmail: string, customerDomain: string, customerDomainVerified: bool, customerId: string, customerType: string, kind: string, phoneNumber: string, postalAddress: record<addressLine1: string, addressLine2: string, addressLine3: string, contactName: string, countryCode: string, kind: string, locality: string, organizationName: string, postalCode: string, region: string>, primaryAdmin: record<primaryEmail: string>, resourceUiUrl: string> {
+]: any -> oneof<record<alternateEmail: string, customerDomain: string, customerDomainVerified: bool, customerId: string, customerType: string, kind: string, phoneNumber: string, postalAddress: record<addressLine1: string, addressLine2: string, addressLine3: string, contactName: string, countryCode: string, kind: string, locality: string, organizationName: string, postalCode: string, region: string>, primaryAdmin: record<primaryEmail: string>, resourceUiUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -324,8 +344,6 @@ export def "reseller-customers-patch" [
 #
 # PUT /apps/reseller/v1/customers/{customerId}
 # operationId: reseller.customers.update
-# --postalAddress shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, kind?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
-# --primaryAdmin shape: {primaryEmail?: string}
 export def "reseller-customers-update" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -358,7 +376,7 @@ export def "reseller-customers-update" [
   --postal-address: record # JSON template for address of a customer. — shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, kind?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
   --primary-admin: record # JSON template for primary admin in case of TEAM customers — shape: {primaryEmail?: string}
   --resource-ui-url: string # URL to customer's Admin console dashboard. The read-only URL is generated by the API service. This is used if your client application requires the customer to complete a task in the Admin console.
-]: any -> record<alternateEmail: string, customerDomain: string, customerDomainVerified: bool, customerId: string, customerType: string, kind: string, phoneNumber: string, postalAddress: record<addressLine1: string, addressLine2: string, addressLine3: string, contactName: string, countryCode: string, kind: string, locality: string, organizationName: string, postalCode: string, region: string>, primaryAdmin: record<primaryEmail: string>, resourceUiUrl: string> {
+]: any -> oneof<record<alternateEmail: string, customerDomain: string, customerDomainVerified: bool, customerId: string, customerType: string, kind: string, phoneNumber: string, postalAddress: record<addressLine1: string, addressLine2: string, addressLine3: string, contactName: string, countryCode: string, kind: string, locality: string, organizationName: string, postalCode: string, region: string>, primaryAdmin: record<primaryEmail: string>, resourceUiUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -387,11 +405,6 @@ export def "reseller-customers-update" [
 #
 # POST /apps/reseller/v1/customers/{customerId}/subscriptions
 # operationId: reseller.subscriptions.insert
-# --plan shape: {commitmentInterval?: record, isCommitmentPlan?: bool, planName?: string}
-# --renewalSettings shape: {kind?: string, renewalType?: string}
-# --seats shape: {kind?: string, licensedNumberOfSeats?: int, maximumNumberOfSeats?: int, numberOfSeats?: int}
-# --transferInfo shape: {currentLegacySkuId?: string, minimumTransferableSeats?: int, transferabilityExpirationTime?: string}
-# --trialSettings shape: {isInTrial?: bool, trialEndTime?: string}
 export def "reseller-subscriptions-insert" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -433,7 +446,7 @@ export def "reseller-subscriptions-insert" [
   --suspension-reasons: list<string> # Read-only field containing an enumerable of all the current suspension reasons for a subscription. It is possible for a subscription to have many concurrent, overlapping suspension reasons. A subscription's `STATUS` is `SUSPENDED` until all pending suspensions are removed. Possible options include: - `PENDING_TOS_ACCEPTANCE` - The customer has not logged in and accepted the G Suite Resold Terms of Services. - `RENEWAL_WITH_TYPE_CANCEL` - The customer's commitment ended and their service was cancelled at the end of their term. - `RESELLER_INITIATED` - A manual suspension invoked by a Reseller. - `TRIAL_ENDED` - The customer's trial expired without a plan selected. - `OTHER` - The customer is suspended for an internal Google reason (e.g. abuse or otherwise).
   --transfer-info: record # Read-only transfer related information for the subscription. For more information, see retrieve transferable subscriptions for a customer. — shape: {currentLegacySkuId?: string, minimumTransferableSeats?: int, transferabilityExpirationTime?: string}
   --trial-settings: record # The G Suite annual commitment and flexible payment plans can be in a 30-day free trial. For more information, see the API concepts. — shape: {isInTrial?: bool, trialEndTime?: string}
-]: any -> record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>> {
+]: any -> oneof<record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -537,7 +550,7 @@ export def "reseller-subscriptions-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>> {
+]: nothing -> oneof<record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -587,7 +600,7 @@ export def "reseller-subscriptions-activate" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>> {
+]: nothing -> oneof<record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -614,7 +627,6 @@ export def "reseller-subscriptions-activate" [
 #
 # POST /apps/reseller/v1/customers/{customerId}/subscriptions/{subscriptionId}/changePlan
 # operationId: reseller.subscriptions.changePlan
-# --seats shape: {kind?: string, licensedNumberOfSeats?: int, maximumNumberOfSeats?: int, numberOfSeats?: int}
 export def "reseller-subscriptions-change-plan" [
   customer_id: string
   subscription_id: string
@@ -643,7 +655,7 @@ export def "reseller-subscriptions-change-plan" [
   --plan-name: string # The `planName` property is required. This is the name of the subscription's payment plan. For more information about the Google payment plans, see API concepts. Possible values are: - `ANNUAL_MONTHLY_PAY` - The annual commitment plan with monthly payments *Caution: *`ANNUAL_MONTHLY_PAY` is returned as `ANNUAL` in all API responses. - `ANNUAL_YEARLY_PAY` - The annual commitment plan with yearly payments - `FLEXIBLE` - The flexible plan - `TRIAL` - The 30-day free trial plan
   --purchase-order-id: string # This is an optional property. This purchase order (PO) information is for resellers to use for their company tracking usage. If a `purchaseOrderId` value is given it appears in the API responses and shows up in the invoice. The property accepts up to 80 plain text characters.
   --seats: record # JSON template for subscription seats. — shape: {kind?: string, licensedNumberOfSeats?: int, maximumNumberOfSeats?: int, numberOfSeats?: int}
-]: any -> record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>> {
+]: any -> oneof<record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -698,7 +710,7 @@ export def "reseller-subscriptions-change-renewal-settings" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --kind: string # Identifies the resource as a subscription renewal setting. Value: `subscriptions#renewalSettings` (default: subscriptions#renewalSettings)
   --renewal-type: string # Renewal settings for the annual commitment plan. For more detailed information, see renewal options in the administrator help center. When renewing a subscription, the `renewalType` is a required property.
-]: any -> record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>> {
+]: any -> oneof<record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -755,7 +767,7 @@ export def "reseller-subscriptions-change-seats" [
   --licensed-number-of-seats: int # Read-only field containing the current number of users that are assigned a license for the product defined in `skuId`. This field's value is equivalent to the numerical count of users returned by the Enterprise License Manager API method: [`listForProductAndSku`](/admin-sdk/licensing/v1/reference/licenseAssignments/listForProductAndSku). (format: int32)
   --maximum-number-of-seats: int # This is a required property and is exclusive to subscriptions with `FLEXIBLE` or `TRIAL` plans. This property sets the maximum number of licensed users allowed on a subscription. This quantity can be increased up to the maximum limit defined in the reseller's contract. The minimum quantity is the current number of users in the customer account. *Note: *G Suite subscriptions automatically assign a license to every user. (format: int32)
   --number-of-seats: int # This is a required property and is exclusive to subscriptions with `ANNUAL_MONTHLY_PAY` and `ANNUAL_YEARLY_PAY` plans. This property sets the maximum number of licenses assignable to users on a subscription. The reseller can add more licenses, but once set, the `numberOfSeats` cannot be reduced until renewal. The reseller is invoiced based on the `numberOfSeats` value regardless of how many of these user licenses are assigned. *Note: *Google Workspace subscriptions automatically assign a license to every user. (format: int32)
-]: any -> record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>> {
+]: any -> oneof<record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -808,7 +820,7 @@ export def "reseller-subscriptions-start-paid-service" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>> {
+]: nothing -> oneof<record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -858,7 +870,7 @@ export def "reseller-subscriptions-suspend" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>> {
+]: nothing -> oneof<record<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record<commitmentInterval: record<endTime: string, startTime: string>, isCommitmentPlan: bool, planName: string>, purchaseOrderId: string, renewalSettings: record<kind: string, renewalType: string>, resourceUiUrl: string, seats: record<kind: string, licensedNumberOfSeats: int, maximumNumberOfSeats: int, numberOfSeats: int>, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list<string>, transferInfo: record<currentLegacySkuId: string, minimumTransferableSeats: int, transferabilityExpirationTime: string>, trialSettings: record<isInTrial: bool, trialEndTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -906,7 +918,7 @@ export def "reseller-resellernotify-getwatchdetails" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<serviceAccountEmailAddresses: list<string>, topicName: string> {
+]: nothing -> oneof<record<serviceAccountEmailAddresses: list<string>, topicName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -953,7 +965,7 @@ export def "reseller-resellernotify-register" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --service-account-email-address: string # The service account which will own the created Cloud-PubSub topic.
-]: nothing -> record<topicName: string> {
+]: nothing -> oneof<record<topicName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "serviceAccountEmailAddress" $service_account_email_address "scalar")] | flatten | str join "&"
@@ -1000,7 +1012,7 @@ export def "reseller-resellernotify-unregister" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --service-account-email-address: string # The service account which owns the Cloud-PubSub topic.
-]: nothing -> record<topicName: string> {
+]: nothing -> oneof<record<topicName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "serviceAccountEmailAddress" $service_account_email_address "scalar")] | flatten | str join "&"
@@ -1051,7 +1063,7 @@ export def "reseller-subscriptions-list" [
   --customer-name-prefix: string # When retrieving all of your subscriptions and filtering for specific customers, you can enter a prefix for a customer name. Using an example customer group that includes `exam.com`, `example20.com` and `example.com`: - `exa` -- Returns all customer names that start with 'exa' which could include `exam.com`, `example20.com`, and `example.com`. A name prefix is similar to using a regular expression's asterisk, exa*. - `example` -- Returns `example20.com` and `example.com`.
   --max-results: int # When retrieving a large list, the `maxResults` is the maximum number of results per page. The `nextPageToken` value takes you to the next page. The default is 20.
   --page-token: string # Token to specify next page in the list
-]: nothing -> record<kind: string, nextPageToken: string, subscriptions: table<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record, purchaseOrderId: string, renewalSettings: record, resourceUiUrl: string, seats: record, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list, transferInfo: record, trialSettings: record>> {
+]: nothing -> oneof<record<kind: string, nextPageToken: string, subscriptions: table<billingMethod: string, creationTime: string, customerDomain: string, customerId: string, dealCode: string, kind: string, plan: record, purchaseOrderId: string, renewalSettings: record, resourceUiUrl: string, seats: record, skuId: string, skuName: string, status: string, subscriptionId: string, suspensionReasons: list, transferInfo: record, trialSettings: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customerAuthToken" $customer_auth_token "scalar") (serialize-qp "customerId" $customer_id "scalar") (serialize-qp "customerNamePrefix" $customer_name_prefix "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"

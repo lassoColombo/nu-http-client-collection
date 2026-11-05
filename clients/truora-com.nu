@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "truora-api-key" => { {scheme: $scheme, headers: {"Truora-API-Key": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -157,9 +181,9 @@ def subscriber-type-completer [] { ["email" "web"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "report-behavior" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["report-behavior" "list-checks" "create-check" "get-health-dashboard" "get-check" "list-check-details" "get-pdf" "create-pdf" "delete-custom-type" "list-score-configs" "create-score-config" "update-custom-type" "list-continuous-checks" "create-continuous-check" "get-continuous-check" "update-continuous-check" "get-v1-continuous-checks-continuous-check-id-history" "list-hook" "create-hook" "delet-hook" "update-hook" "list-reports" "create-report" "get-report" "batch-upload" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -201,7 +225,7 @@ export def "report-behavior" [
   last_name: string # Person last name
   --phone-number: string # Phone number of the reported person
   reason: any@reason-completer # Report reason
-]: any -> record<behavior: table<birth_date: string, country: any, creation_date: string, document_id: string, document_type: any, email: string, feedback_date: string, first_name: string, last_name: string, phone_number: string, reason: string>, self: string> {
+]: any -> oneof<record<behavior: table<birth_date: string, country: any, creation_date: string, document_id: string, document_type: any, email: string, feedback_date: string, first_name: string, last_name: string, phone_number: string, reason: string>, self: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -210,7 +234,7 @@ export def "report-behavior" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -241,7 +265,7 @@ export def "list-checks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-key: string # Start key value for the pagination
   --report-id: string # Report id checks to be returned
-]: nothing -> record<checks: table<birth_certificate: string, check_id: string, company_summary: record, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list, status: string, statuses: list, summary: record, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record, wrong_inputs: list>, next: string, self: string> {
+]: nothing -> oneof<record<checks: table<birth_certificate: string, check_id: string, company_summary: record, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list, status: string, statuses: list, summary: record, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record, wrong_inputs: list>, next: string, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_key" $start_key "scalar") (serialize-qp "report_id" $report_id "scalar")] | flatten | str join "&"
@@ -309,7 +333,7 @@ export def "create-check" [
   --vehicle-id: string # Vehicle license plate
   --verification-code: string # Verification code registered for criminal records in Peru only
   --watch: string # Indicates whether the check score is to be periodically revised and its frequency. It can be daily, weekly, monthly, yearly or have a custom frequency written as a number accompanied by d: day, w: week, m: month, y: year for instance: 3d: every three days, 2w: every two weeks. Ignore this field if the check is only to be performed once
-]: any -> record<check: record<birth_certificate: string, check_id: string, company_summary: record<names_found: list>, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list<record>, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list<record>, status: string, statuses: list<record>, summary: record<date_of_birth: string, death_date: string, drivers_license: string, gender: string, identity_status: string, names_found: list, nss: string, rfc: string>, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record<capacity: int, color: string, license_plate: string, manufacturer: string, model: string, number_of_doors: int, obligatory_insurance_expiration_date: string, obligatory_insurance_status: string, service_type: string, vehicle_category: string, vehicle_id: string, vehicle_type: string, year: int>, wrong_inputs: list<record>>, details: string, self: string> {
+]: any -> oneof<record<check: record<birth_certificate: string, check_id: string, company_summary: record<names_found: list>, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list<record>, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list<record>, status: string, statuses: list<record>, summary: record<date_of_birth: string, death_date: string, drivers_license: string, gender: string, identity_status: string, names_found: list, nss: string, rfc: string>, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record<capacity: int, color: string, license_plate: string, manufacturer: string, model: string, number_of_doors: int, obligatory_insurance_expiration_date: string, obligatory_insurance_status: string, service_type: string, vehicle_category: string, vehicle_id: string, vehicle_type: string, year: int>, wrong_inputs: list<record>>, details: string, self: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -320,7 +344,7 @@ export def "create-check" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"Truora-Priority": $truora_priority} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -352,7 +376,7 @@ export def "get-health-dashboard" [
   --country: string # Country in ISO 3166, uppercase
   --unix-timestamp-seconds: string # Unix timestamp in seconds. Send a day timestamp to view the database hourly status for that day or send the current time to know the current database status
   --unixtimezone-offset-seconds: string # Offset between the local time and the UTC time in seconds. (e.g., Colombia is at UTC -18000 seconds)
-]: nothing -> table<data_sets: list<string>, database_id: string, database_name: string, hourly_status: list<string>> {
+]: nothing -> oneof<table<data_sets: list<string>, database_id: string, database_name: string, hourly_status: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "unixTimestampSeconds" $unix_timestamp_seconds "scalar") (serialize-qp "unixtimezoneOffsetSeconds" $unixtimezone_offset_seconds "scalar")] | flatten | str join "&"
@@ -388,7 +412,7 @@ export def "get-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<check: record<birth_certificate: string, check_id: string, company_summary: record<names_found: list>, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list<record>, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list<record>, status: string, statuses: list<record>, summary: record<date_of_birth: string, death_date: string, drivers_license: string, gender: string, identity_status: string, names_found: list, nss: string, rfc: string>, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record<capacity: int, color: string, license_plate: string, manufacturer: string, model: string, number_of_doors: int, obligatory_insurance_expiration_date: string, obligatory_insurance_status: string, service_type: string, vehicle_category: string, vehicle_id: string, vehicle_type: string, year: int>, wrong_inputs: list<record>>, details: string, self: string> {
+]: nothing -> oneof<record<check: record<birth_certificate: string, check_id: string, company_summary: record<names_found: list>, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list<record>, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list<record>, status: string, statuses: list<record>, summary: record<date_of_birth: string, death_date: string, drivers_license: string, gender: string, identity_status: string, names_found: list, nss: string, rfc: string>, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record<capacity: int, color: string, license_plate: string, manufacturer: string, model: string, number_of_doors: int, obligatory_insurance_expiration_date: string, obligatory_insurance_status: string, service_type: string, vehicle_category: string, vehicle_id: string, vehicle_type: string, year: int>, wrong_inputs: list<record>>, details: string, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($check_id | is-empty) { error make --unspanned { msg: "path parameter 'check_id' must be non-empty" } }
@@ -426,7 +450,7 @@ export def "list-check-details" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-key: string # Start key value for the pagination
   --lang: string # This parameter is used to specify the language wanted for details, if not specified details will come in their original language.
-]: nothing -> record<details: table<check_id: string, data_set: string, database_name: string, group: any, id: string, result: any, score: float, tables: list>, next: string, self: string> {
+]: nothing -> oneof<record<details: table<check_id: string, data_set: string, database_name: string, group: any, id: string, result: any, score: float, tables: list>, next: string, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($check_id | is-empty) { error make --unspanned { msg: "path parameter 'check_id' must be non-empty" } }
@@ -575,7 +599,7 @@ export def "list-score-configs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-key: string # The key to start the pagination
-]: nothing -> record<score_configs: table<ScoreConfigByCountry: list>> {
+]: nothing -> oneof<record<score_configs: table<ScoreConfigByCountry: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_key" $start_key "scalar")] | flatten | str join "&"
@@ -625,7 +649,7 @@ export def "create-score-config" [
   --dataset-vehicle-information: float # Vehicle information weight for score calculation. From 0 to 1 (format: float)
   --dataset-vehicle-permits: float # Vehicle certificate background weight for score calculation. From 0 to 1 (format: float)
   type: string # Score configuration name. It cannot be person, vehicle, or company
-]: any -> record<ScoreConfigByCountry: table<data_set: string, weight: string>> {
+]: any -> oneof<record<ScoreConfigByCountry: table<data_set: string, weight: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -634,7 +658,7 @@ export def "create-score-config" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -687,7 +711,7 @@ export def "update-custom-type" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -716,7 +740,7 @@ export def "list-continuous-checks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<continuous_checks: table<birth_certificate: string, check_id: string, company_summary: record, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list, status: string, statuses: list, summary: record, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record, wrong_inputs: list>, next: string, self: string> {
+]: nothing -> oneof<record<continuous_checks: table<birth_certificate: string, check_id: string, company_summary: record, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list, status: string, statuses: list, summary: record, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record, wrong_inputs: list>, next: string, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/continuous-checks" $auth.query)
@@ -753,7 +777,7 @@ export def "create-continuous-check" [
   --check-id: string # Background checks to be processed recurrently
   --frequency: string # Time between background checks. It can be daily, weekly, monthly, yearly or have a custom frequency written as a number accompanied by d: day, w: week, m: month, y: year for instance: 3d: every three days, 2w: every two weeks
   --status: string # Indicates whether the background checks must be processed recurrently (enabled | disabled)
-]: any -> record<ContinuousCheckID: string, ContinuousCheckStatus: string, CreationDate: string, Enabled: bool, Frequency: string, History: record<changes: list<record>, check_id: string, continuous_check_id: string, creation_date: string, previous_check_id: string>, LastCheckID: string, NextRunDate: string, OriginalCheck: record<birth_certificate: string, check_id: string, company_summary: record<names_found: list>, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list<record>, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list<record>, status: string, statuses: list<record>, summary: record<date_of_birth: string, death_date: string, drivers_license: string, gender: string, identity_status: string, names_found: list, nss: string, rfc: string>, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record<capacity: int, color: string, license_plate: string, manufacturer: string, model: string, number_of_doors: int, obligatory_insurance_expiration_date: string, obligatory_insurance_status: string, service_type: string, vehicle_category: string, vehicle_id: string, vehicle_type: string, year: int>, wrong_inputs: list<record>>, UpdateDate: string> {
+]: any -> oneof<record<ContinuousCheckID: string, ContinuousCheckStatus: string, CreationDate: string, Enabled: bool, Frequency: string, History: record<changes: list<record>, check_id: string, continuous_check_id: string, creation_date: string, previous_check_id: string>, LastCheckID: string, NextRunDate: string, OriginalCheck: record<birth_certificate: string, check_id: string, company_summary: record<names_found: list>, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list<record>, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list<record>, status: string, statuses: list<record>, summary: record<date_of_birth: string, death_date: string, drivers_license: string, gender: string, identity_status: string, names_found: list, nss: string, rfc: string>, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record<capacity: int, color: string, license_plate: string, manufacturer: string, model: string, number_of_doors: int, obligatory_insurance_expiration_date: string, obligatory_insurance_status: string, service_type: string, vehicle_category: string, vehicle_id: string, vehicle_type: string, year: int>, wrong_inputs: list<record>>, UpdateDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -762,7 +786,7 @@ export def "create-continuous-check" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -792,7 +816,7 @@ export def "get-continuous-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ContinuousCheckID: string, ContinuousCheckStatus: string, CreationDate: string, Enabled: bool, Frequency: string, History: record<changes: list<record>, check_id: string, continuous_check_id: string, creation_date: string, previous_check_id: string>, LastCheckID: string, NextRunDate: string, OriginalCheck: record<birth_certificate: string, check_id: string, company_summary: record<names_found: list>, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list<record>, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list<record>, status: string, statuses: list<record>, summary: record<date_of_birth: string, death_date: string, drivers_license: string, gender: string, identity_status: string, names_found: list, nss: string, rfc: string>, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record<capacity: int, color: string, license_plate: string, manufacturer: string, model: string, number_of_doors: int, obligatory_insurance_expiration_date: string, obligatory_insurance_status: string, service_type: string, vehicle_category: string, vehicle_id: string, vehicle_type: string, year: int>, wrong_inputs: list<record>>, UpdateDate: string> {
+]: nothing -> oneof<record<ContinuousCheckID: string, ContinuousCheckStatus: string, CreationDate: string, Enabled: bool, Frequency: string, History: record<changes: list<record>, check_id: string, continuous_check_id: string, creation_date: string, previous_check_id: string>, LastCheckID: string, NextRunDate: string, OriginalCheck: record<birth_certificate: string, check_id: string, company_summary: record<names_found: list>, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list<record>, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list<record>, status: string, statuses: list<record>, summary: record<date_of_birth: string, death_date: string, drivers_license: string, gender: string, identity_status: string, names_found: list, nss: string, rfc: string>, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record<capacity: int, color: string, license_plate: string, manufacturer: string, model: string, number_of_doors: int, obligatory_insurance_expiration_date: string, obligatory_insurance_status: string, service_type: string, vehicle_category: string, vehicle_id: string, vehicle_type: string, year: int>, wrong_inputs: list<record>>, UpdateDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($continuous_check_id | is-empty) { error make --unspanned { msg: "path parameter 'continuous_check_id' must be non-empty" } }
@@ -830,7 +854,7 @@ export def "update-continuous-check" [
   --dry-run(-n) # Return the request that would be sent without executing it
   frequency: string # Time between background checks
   status: string@status-completer # Indicates whether the background checks must be processed recurrently
-]: any -> record<ContinuousCheckID: string, ContinuousCheckStatus: string, CreationDate: string, Enabled: bool, Frequency: string, History: record<changes: list<record>, check_id: string, continuous_check_id: string, creation_date: string, previous_check_id: string>, LastCheckID: string, NextRunDate: string, OriginalCheck: record<birth_certificate: string, check_id: string, company_summary: record<names_found: list>, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list<record>, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list<record>, status: string, statuses: list<record>, summary: record<date_of_birth: string, death_date: string, drivers_license: string, gender: string, identity_status: string, names_found: list, nss: string, rfc: string>, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record<capacity: int, color: string, license_plate: string, manufacturer: string, model: string, number_of_doors: int, obligatory_insurance_expiration_date: string, obligatory_insurance_status: string, service_type: string, vehicle_category: string, vehicle_id: string, vehicle_type: string, year: int>, wrong_inputs: list<record>>, UpdateDate: string> {
+]: any -> oneof<record<ContinuousCheckID: string, ContinuousCheckStatus: string, CreationDate: string, Enabled: bool, Frequency: string, History: record<changes: list<record>, check_id: string, continuous_check_id: string, creation_date: string, previous_check_id: string>, LastCheckID: string, NextRunDate: string, OriginalCheck: record<birth_certificate: string, check_id: string, company_summary: record<names_found: list>, country: string, creation_date: string, date_of_birth: string, diplomatic_id: string, driver_license: string, first_name: string, foreign_id: string, homonym_probability: float, homonym_score: float, homonym_scores: list<record>, id_score: float, issue_date: string, last_name: string, license_plate: string, national_id: string, native_country: string, owner_document_id: string, owner_document_type: string, passport: string, payment_date: string, pep: string, phone_number: string, professional_card: string, ptp: string, region: string, report_id: string, score: float, scores: list<record>, status: string, statuses: list<record>, summary: record<date_of_birth: string, death_date: string, drivers_license: string, gender: string, identity_status: string, names_found: list, nss: string, rfc: string>, tax_id: string, type: any, update_date: string, vehicle_id: string, vehicle_summary: record<capacity: int, color: string, license_plate: string, manufacturer: string, model: string, number_of_doors: int, obligatory_insurance_expiration_date: string, obligatory_insurance_status: string, service_type: string, vehicle_category: string, vehicle_id: string, vehicle_type: string, year: int>, wrong_inputs: list<record>>, UpdateDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -840,7 +864,7 @@ export def "update-continuous-check" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -869,7 +893,7 @@ export def "get-v1-continuous-checks-continuous-check-id-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<history: table<dataset_score_changes: float, score_changes: list>, next: string, self: string> {
+]: nothing -> oneof<record<history: table<dataset_score_changes: float, score_changes: list>, next: string, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($continuous_check_id | is-empty) { error make --unspanned { msg: "path parameter 'continuous_check_id' must be non-empty" } }
@@ -904,7 +928,7 @@ export def "list-hook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<hooks: table<actions: list, event_type: string, signing_key: string, status: string, subscriber_type: string, subscriber_url: string>, next: string, self: string, signing_key: string> {
+]: nothing -> oneof<record<hooks: table<actions: list, event_type: string, signing_key: string, status: string, subscriber_type: string, subscriber_url: string>, next: string, self: string, signing_key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/hooks" $auth.query)
@@ -946,7 +970,7 @@ export def "create-hook" [
   --subscriber-name: string # Name of the person to be notified
   subscriber_type: string@subscriber-type-completer # A platform with an endpoint ready to process the information
   --subscriber-url: string # URL where the notification is to be sent. Required only if subscriber_type is set to web
-]: any -> record<actions: list<string>, event_type: string, signing_key: string, status: string, subscriber_type: string, subscriber_url: string> {
+]: any -> oneof<record<actions: list<string>, event_type: string, signing_key: string, status: string, subscriber_type: string, subscriber_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -955,7 +979,7 @@ export def "create-hook" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1029,7 +1053,7 @@ export def "update-hook" [
   --subscriber-name: string # Name of the person to be notified
   subscriber_type: string@subscriber-type-completer # A platform with an endpoint ready to process the information
   --subscriber-url: string # URL where the notification is to be sent. Required only if subscriber_type is set to web
-]: any -> record<actions: list<string>, event_type: string, signing_key: string, status: string, subscriber_type: string, subscriber_url: string> {
+]: any -> oneof<record<actions: list<string>, event_type: string, signing_key: string, status: string, subscriber_type: string, subscriber_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1039,7 +1063,7 @@ export def "update-hook" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/x-www-form-urlencoded"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -1070,7 +1094,7 @@ export def "list-reports" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-key: string # Start value for pagination.
   --username: string # filter reports created by the specified username
-]: nothing -> record<next: string, reports: table<created_by: string, created_checks_count: int, creation_date: string, has_data: bool, id: string, invalid_checks_count: int, name: string, size: int, update_date: string>, self: string> {
+]: nothing -> oneof<record<next: string, reports: table<created_by: string, created_checks_count: int, creation_date: string, has_data: bool, id: string, invalid_checks_count: int, name: string, size: int, update_date: string>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start_key" $start_key "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
@@ -1106,7 +1130,7 @@ export def "create-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # Report name
-]: any -> record<checks: string, report: record<created_by: string, created_checks_count: int, creation_date: string, has_data: bool, id: string, invalid_checks_count: int, name: string, size: int, update_date: string>, self: string> {
+]: any -> oneof<record<checks: string, report: record<created_by: string, created_checks_count: int, creation_date: string, has_data: bool, id: string, invalid_checks_count: int, name: string, size: int, update_date: string>, self: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1115,7 +1139,7 @@ export def "create-report" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1145,7 +1169,7 @@ export def "get-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<checks: string, report: record<created_by: string, created_checks_count: int, creation_date: string, has_data: bool, id: string, invalid_checks_count: int, name: string, size: int, update_date: string>, self: string> {
+]: nothing -> oneof<record<checks: string, report: record<created_by: string, created_checks_count: int, creation_date: string, has_data: bool, id: string, invalid_checks_count: int, name: string, size: int, update_date: string>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'report_id' must be non-empty" } }
@@ -1182,7 +1206,7 @@ export def "batch-upload" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: list<string> # Uploaded file name
-]: any -> record<checks: string, report: record<created_by: string, created_checks_count: int, creation_date: string, has_data: bool, id: string, invalid_checks_count: int, name: string, size: int, update_date: string>, self: string> {
+]: any -> oneof<record<checks: string, report: record<created_by: string, created_checks_count: int, creation_date: string, has_data: bool, id: string, invalid_checks_count: int, name: string, size: int, update_date: string>, self: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)

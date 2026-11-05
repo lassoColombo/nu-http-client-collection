@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def state-completer [] { ["DEPRECATED" "DISABLED" "ENABLED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-artifact-types" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-artifact-types" "list-config-properties" "reset-config-property" "get-config-property" "update-config-property" "export-data" "import-data" "list-log-configurations" "remove-log-configuration" "get-log-configuration" "set-log-configuration" "list-role-mappings" "create-role-mapping" "delete-role-mapping" "get-role-mapping" "update-role-mapping" "delete-all-global-rules" "list-global-rules" "create-global-rule" "delete-global-rule" "get-global-rule-config" "update-global-rule-config" "list-groups" "create-group" "delete-group-by-id" "get-group-by-id" "delete-artifacts-in-group" "list-artifacts-in-group" "create-artifact" "delete-artifact" "get-latest-artifact" "update-artifact" "get-artifact-meta-data" "get-artifact-version-meta-data-by-content" "update-artifact-meta-data" "get-artifact-owner" "update-artifact-owner" "delete-artifact-rules" "list-artifact-rules" "create-artifact-rule" "delete-artifact-rule" "get-artifact-rule-config" "update-artifact-rule-config" "update-artifact-state" "test-update-artifact" "list-artifact-versions" "create-artifact-version" "get-artifact-version" "delete-artifact-version-meta-data" "get-artifact-version-meta-data" "update-artifact-version-meta-data" "get-artifact-version-references" "update-artifact-version-state" "get-content-by-hash" "references-by-content-hash" "get-content-by-id" "references-by-content-id" "get-content-by-global-id" "references-by-global-id" "search-artifacts" "search-artifacts-by-content" "get-system-info" "get-resource-limits" "get-current-user-info" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -160,7 +184,7 @@ export def "list-artifact-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string> {
+]: nothing -> oneof<table<name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/artifactTypes" $auth.query)
@@ -194,7 +218,7 @@ export def "list-config-properties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, label: string, name: string, type: string, value: string> {
+]: nothing -> oneof<table<description: string, label: string, name: string, type: string, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/config/properties" $auth.query)
@@ -265,7 +289,7 @@ export def "get-config-property" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, label: string, name: string, type: string, value: string> {
+]: nothing -> oneof<record<description: string, label: string, name: string, type: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($property_name | is-empty) { error make --unspanned { msg: "path parameter 'propertyName' must be non-empty" } }
@@ -342,7 +366,7 @@ export def "export-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --for-browser: oneof<nothing, bool> # Indicates if the operation is done for a browser. If true, the response will be a JSON payload with a property called `href`. This `href` will be a single-use, naked download link suitable for use by a web browser to download the content.
-]: nothing -> record<downloadId: string, href: string> {
+]: nothing -> oneof<record<downloadId: string, href: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "forBrowser" $for_browser "scalar")] | flatten | str join "&"
@@ -419,7 +443,7 @@ export def "list-log-configurations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, level: string> {
+]: nothing -> oneof<table<name: string, level: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/loggers" $auth.query)
@@ -454,7 +478,7 @@ export def "remove-log-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<name: string, level: string> {
+]: nothing -> oneof<record<name: string, level: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($logger | is-empty) { error make --unspanned { msg: "path parameter 'logger' must be non-empty" } }
@@ -490,7 +514,7 @@ export def "get-log-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<name: string, level: string> {
+]: nothing -> oneof<record<name: string, level: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($logger | is-empty) { error make --unspanned { msg: "path parameter 'logger' must be non-empty" } }
@@ -527,7 +551,7 @@ export def "set-log-configuration" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   level: string@level-completer
-]: any -> record<name: string, level: string> {
+]: any -> oneof<record<name: string, level: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -565,7 +589,7 @@ export def "list-role-mappings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<principalId: string, principalName: string, role: string> {
+]: nothing -> oneof<table<principalId: string, principalName: string, role: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/roleMappings" $auth.query)
@@ -676,7 +700,7 @@ export def "get-role-mapping" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<principalId: string, principalName: string, role: string> {
+]: nothing -> oneof<record<principalId: string, principalName: string, role: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($principal_id | is-empty) { error make --unspanned { msg: "path parameter 'principalId' must be non-empty" } }
@@ -785,7 +809,7 @@ export def "list-global-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/admin/rules" $auth.query)
@@ -895,7 +919,7 @@ export def "get-global-rule-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<config: string, type: string> {
+]: nothing -> oneof<record<config: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule | is-empty) { error make --unspanned { msg: "path parameter 'rule' must be non-empty" } }
@@ -933,7 +957,7 @@ export def "update-global-rule-config" [
   --dry-run(-n) # Return the request that would be sent without executing it
   config: string
   --type: string@type-completer # e.g. VALIDITY
-]: any -> record<config: string, type: string> {
+]: any -> oneof<record<config: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -975,7 +999,7 @@ export def "list-groups" [
   --offset: int # The number of groups to skip before starting the result set. Defaults to 0.
   --order: string@order-completer # Sort order, ascending (`asc`) or descending (`desc`).
   --orderby: string@orderby-completer # The field to sort by. Can be one of: * `name` * `createdOn`
-]: nothing -> record<count: int, groups: table<createdBy: string, createdOn: string, description: string, id: string, modifiedBy: string, modifiedOn: string>> {
+]: nothing -> oneof<record<count: int, groups: table<createdBy: string, createdOn: string, description: string, id: string, modifiedBy: string, modifiedOn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "orderby" $orderby "scalar")] | flatten | str join "&"
@@ -1013,7 +1037,7 @@ export def "create-group" [
   --description: string
   id: string
   --properties: record # User-defined name-value pairs. Name and value must be strings.
-]: any -> record<createdBy: string, createdOn: string, description: string, id: string, modifiedBy: string, modifiedOn: string, properties: record> {
+]: any -> oneof<record<createdBy: string, createdOn: string, description: string, id: string, modifiedBy: string, modifiedOn: string, properties: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1087,7 +1111,7 @@ export def "get-group-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdBy: string, createdOn: string, description: string, id: string, modifiedBy: string, modifiedOn: string, properties: record> {
+]: nothing -> oneof<record<createdBy: string, createdOn: string, description: string, id: string, modifiedBy: string, modifiedOn: string, properties: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1163,7 +1187,7 @@ export def "list-artifacts-in-group" [
   --offset: int # The number of artifacts to skip before starting the result set. Defaults to 0.
   --order: string@order-completer # Sort order, ascending (`asc`) or descending (`desc`).
   --orderby: string@orderby-completer # The field to sort by. Can be one of: * `name` * `createdOn`
-]: nothing -> record<artifacts: table<createdBy: string, createdOn: string, description: string, groupId: string, id: string, labels: list, modifiedBy: string, modifiedOn: string, name: string, state: string, type: string>, count: int> {
+]: nothing -> oneof<record<artifacts: table<createdBy: string, createdOn: string, description: string, groupId: string, id: string, labels: list, modifiedBy: string, modifiedOn: string, name: string, state: string, type: string>, count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1212,7 +1236,7 @@ export def "create-artifact" [
   --x-registry-content-hash: string # Specifies the (optional) hash of the artifact to be verified.
   --x-registry-hash-algorithm: string@x-registry-hash-algorithm-completer # The algorithm to use when checking the content validity. (available: SHA256, MD5; default: SHA256)
   --body: string
-]: any -> record<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, groupId: string, id: string, labels: list<string>, modifiedBy: string, modifiedOn: string, name: string, properties: record, references: table<artifactId: string, groupId: string, name: string, version: string>, state: string, type: string, version: string> {
+]: any -> oneof<record<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, groupId: string, id: string, labels: list<string>, modifiedBy: string, modifiedOn: string, name: string, properties: record, references: table<artifactId: string, groupId: string, name: string, version: string>, state: string, type: string, version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1339,7 +1363,7 @@ export def "update-artifact" [
   --x-registry-description: string # Specifies the artifact description of this new version of the artifact content. Description must be ASCII-only string. If this is not provided, the server will extract the description from the artifact content. (e.g. "Artifact description")
   --x-registry-description-encoded: string # Specifies the artifact description of this new version of the artifact content. Value of this must be Base64 encoded string. If this is not provided, the server will extract the description from the artifact content. (e.g. "QXJ0aWZhY3QgZGVzY3JpcHRpb24K")
   --body: string
-]: any -> record<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, groupId: string, id: string, labels: list<string>, modifiedBy: string, modifiedOn: string, name: string, properties: record, references: table<artifactId: string, groupId: string, name: string, version: string>, state: string, type: string, version: string> {
+]: any -> oneof<record<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, groupId: string, id: string, labels: list<string>, modifiedBy: string, modifiedOn: string, name: string, properties: record, references: table<artifactId: string, groupId: string, name: string, version: string>, state: string, type: string, version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1382,7 +1406,7 @@ export def "get-artifact-meta-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, groupId: string, id: string, labels: list<string>, modifiedBy: string, modifiedOn: string, name: string, properties: record, references: table<artifactId: string, groupId: string, name: string, version: string>, state: string, type: string, version: string> {
+]: nothing -> oneof<record<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, groupId: string, id: string, labels: list<string>, modifiedBy: string, modifiedOn: string, name: string, properties: record, references: table<artifactId: string, groupId: string, name: string, version: string>, state: string, type: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1422,7 +1446,7 @@ export def "get-artifact-version-meta-data-by-content" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --canonical: oneof<nothing, bool> # Parameter that can be set to `true` to indicate that the server should "canonicalize" the content when searching for a matching version. Canonicalization is unique to each artifact type, but typically involves removing any extra whitespace and formatting the content in a consistent manner.
   --body: string
-]: any -> record<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, groupId: string, id: string, labels: list<string>, name: string, properties: record, state: string, type: string, version: string> {
+]: any -> oneof<record<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, groupId: string, id: string, labels: list<string>, name: string, properties: record, state: string, type: string, version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1509,7 +1533,7 @@ export def "get-artifact-owner" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<owner: string> {
+]: nothing -> oneof<record<owner: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1627,7 +1651,7 @@ export def "list-artifact-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1749,7 +1773,7 @@ export def "get-artifact-rule-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<config: string, type: string> {
+]: nothing -> oneof<record<config: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1791,7 +1815,7 @@ export def "update-artifact-rule-config" [
   --dry-run(-n) # Return the request that would be sent without executing it
   config: string
   --type: string@type-completer # e.g. VALIDITY
-]: any -> record<config: string, type: string> {
+]: any -> oneof<record<config: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1919,7 +1943,7 @@ export def "list-artifact-versions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of versions to skip before starting to collect the result set. Defaults to 0.
   --limit: int # The number of versions to return. Defaults to 20.
-]: nothing -> record<count: int, versions: table<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, labels: list, name: string, properties: record, references: list, state: string, type: string, version: string>> {
+]: nothing -> oneof<record<count: int, versions: table<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, labels: list, name: string, properties: record, references: list, state: string, type: string, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1964,7 +1988,7 @@ export def "create-artifact-version" [
   --x-registry-description-encoded: string # Specifies the artifact description of this new version of the artifact content. Value of this must be Base64 encoded string. If this is not provided, the server will extract the description from the artifact content. (e.g. "QXJ0aWZhY3QgZGVzY3JpcHRpb24K")
   --x-registry-name-encoded: string # Specifies the artifact name of this new version of the artifact content. Value of this must be Base64 encoded string. If this is not provided, the server will extract the name from the artifact content. (e.g. "QXJ0aWZhY3QgbmFtZQo=")
   --body: string
-]: any -> record<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, groupId: string, id: string, labels: list<string>, name: string, properties: record, state: string, type: string, version: string> {
+]: any -> oneof<record<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, groupId: string, id: string, labels: list<string>, name: string, properties: record, state: string, type: string, version: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2090,7 +2114,7 @@ export def "get-artifact-version-meta-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, groupId: string, id: string, labels: list<string>, name: string, properties: record, state: string, type: string, version: string> {
+]: nothing -> oneof<record<contentId: int, createdBy: string, createdOn: string, description: string, globalId: int, groupId: string, id: string, labels: list<string>, name: string, properties: record, state: string, type: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2177,7 +2201,7 @@ export def "get-artifact-version-references" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<artifactId: string, groupId: string, name: string, version: string> {
+]: nothing -> oneof<table<artifactId: string, groupId: string, name: string, version: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2295,7 +2319,7 @@ export def "references-by-content-hash" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<artifactId: string, groupId: string, name: string, version: string> {
+]: nothing -> oneof<table<artifactId: string, groupId: string, name: string, version: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_hash | is-empty) { error make --unspanned { msg: "path parameter 'contentHash' must be non-empty" } }
@@ -2367,7 +2391,7 @@ export def "references-by-content-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<artifactId: string, groupId: string, name: string, version: string> {
+]: nothing -> oneof<table<artifactId: string, groupId: string, name: string, version: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_id | is-empty) { error make --unspanned { msg: "path parameter 'contentId' must be non-empty" } }
@@ -2441,7 +2465,7 @@ export def "references-by-global-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<artifactId: string, groupId: string, name: string, version: string> {
+]: nothing -> oneof<table<artifactId: string, groupId: string, name: string, version: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($global_id | is-empty) { error make --unspanned { msg: "path parameter 'globalId' must be non-empty" } }
@@ -2487,7 +2511,7 @@ export def "search-artifacts" [
   --group: string # Filter by artifact group.
   --global-id: int # Filter by globalId. (format: int64)
   --content-id: int # Filter by contentId. (format: int64)
-]: nothing -> record<artifacts: table<createdBy: string, createdOn: string, description: string, groupId: string, id: string, labels: list, modifiedBy: string, modifiedOn: string, name: string, state: string, type: string>, count: int> {
+]: nothing -> oneof<record<artifacts: table<createdBy: string, createdOn: string, description: string, groupId: string, id: string, labels: list, modifiedBy: string, modifiedOn: string, name: string, state: string, type: string>, count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "orderby" $orderby "scalar") (serialize-qp "labels" $labels "multi") (serialize-qp "properties" $properties "multi") (serialize-qp "description" $description "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "globalId" $global_id "scalar") (serialize-qp "contentId" $content_id "scalar")] | flatten | str join "&"
@@ -2529,7 +2553,7 @@ export def "search-artifacts-by-content" [
   --order: string@order-completer # Sort order, ascending (`asc`) or descending (`desc`).
   --orderby: string@orderby-completer # The field to sort by. Can be one of: * `name` * `createdOn`
   --body: string
-]: any -> record<artifacts: table<createdBy: string, createdOn: string, description: string, groupId: string, id: string, labels: list, modifiedBy: string, modifiedOn: string, name: string, state: string, type: string>, count: int> {
+]: any -> oneof<record<artifacts: table<createdBy: string, createdOn: string, description: string, groupId: string, id: string, labels: list, modifiedBy: string, modifiedOn: string, name: string, state: string, type: string>, count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2567,7 +2591,7 @@ export def "get-system-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<builtOn: string, description: string, name: string, version: string> {
+]: nothing -> oneof<record<builtOn: string, description: string, name: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/info" $auth.query)
@@ -2601,7 +2625,7 @@ export def "get-resource-limits" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<maxArtifactDescriptionLengthChars: int, maxArtifactLabelsCount: int, maxArtifactNameLengthChars: int, maxArtifactPropertiesCount: int, maxArtifactsCount: int, maxLabelSizeBytes: int, maxPropertyKeySizeBytes: int, maxPropertyValueSizeBytes: int, maxRequestsPerSecondCount: int, maxSchemaSizeBytes: int, maxTotalSchemasCount: int, maxVersionsPerArtifactCount: int> {
+]: nothing -> oneof<record<maxArtifactDescriptionLengthChars: int, maxArtifactLabelsCount: int, maxArtifactNameLengthChars: int, maxArtifactPropertiesCount: int, maxArtifactsCount: int, maxLabelSizeBytes: int, maxPropertyKeySizeBytes: int, maxPropertyValueSizeBytes: int, maxRequestsPerSecondCount: int, maxSchemaSizeBytes: int, maxTotalSchemasCount: int, maxVersionsPerArtifactCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/limits" $auth.query)
@@ -2635,7 +2659,7 @@ export def "get-current-user-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<admin: bool, developer: bool, displayName: string, username: string, viewer: bool> {
+]: nothing -> oneof<record<admin: bool, developer: bool, displayName: string, username: string, viewer: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/me" $auth.query)

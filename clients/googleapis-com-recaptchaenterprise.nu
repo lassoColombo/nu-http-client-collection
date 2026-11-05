@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -120,9 +144,9 @@ def annotation-completer [] { ["ANNOTATION_UNSPECIFIED" "FRAUDULENT" "LEGITIMATE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "recaptchaenterprise-projects-keys-retrieve-legacy-secret-key" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["recaptchaenterprise-projects-keys-retrieve-legacy-secret-key" "recaptchaenterprise-projects-keys-delete" "recaptchaenterprise-projects-keys-get-metrics" "recaptchaenterprise-projects-keys-patch" "recaptchaenterprise-projects-assessments-annotate" "recaptchaenterprise-projects-keys-migrate" "recaptchaenterprise-projects-assessments-create" "recaptchaenterprise-projects-firewallpolicies-list" "recaptchaenterprise-projects-firewallpolicies-create" "recaptchaenterprise-projects-keys-list" "recaptchaenterprise-projects-keys-create" "recaptchaenterprise-projects-relatedaccountgroups-memberships-list" "recaptchaenterprise-projects-relatedaccountgroups-list" "recaptchaenterprise-projects-relatedaccountgroupmemberships-search" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -166,7 +190,7 @@ export def "recaptchaenterprise-projects-keys-retrieve-legacy-secret-key" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<legacySecretKey: string> {
+]: nothing -> oneof<record<legacySecretKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -214,7 +238,7 @@ export def "recaptchaenterprise-projects-keys-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -262,7 +286,7 @@ export def "recaptchaenterprise-projects-keys-get-metrics" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<challengeMetrics: table<failedCount: string, nocaptchaCount: string, pageloadCount: string, passedCount: string>, name: string, scoreMetrics: table<actionMetrics: record, overallMetrics: record>, startTime: string> {
+]: nothing -> oneof<record<challengeMetrics: table<failedCount: string, nocaptchaCount: string, pageloadCount: string, passedCount: string>, name: string, scoreMetrics: table<actionMetrics: record, overallMetrics: record>, startTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -288,11 +312,6 @@ export def "recaptchaenterprise-projects-keys-get-metrics" [
 #
 # PATCH /v1/{name}
 # operationId: recaptchaenterprise.projects.keys.patch
-# --androidSettings shape: {allowAllPackageNames?: bool, allowedPackageNames?: list<string>, supportNonGoogleAppStoreDistribution?: bool}
-# --iosSettings shape: {allowAllBundleIds?: bool, allowedBundleIds?: list<string>}
-# --testingOptions shape: {testingChallenge?: "TESTING_CHALLENGE_UNSPECIFIED"|"NOCAPTCHA"|"UNSOLVABLE_CHALLENGE", testingScore?: float}
-# --wafSettings shape: {wafFeature?: "WAF_FEATURE_UNSPECIFIED"|"CHALLENGE_PAGE"|"SESSION_TOKEN"|"ACTION_TOKEN"|"EXPRESS", wafService?: "WAF_SERVICE_UNSPECIFIED"|"CA"|"FASTLY"}
-# --webSettings shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list<string>, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
 export def "recaptchaenterprise-projects-keys-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -324,7 +343,7 @@ export def "recaptchaenterprise-projects-keys-patch" [
   --testing-options: record # Options for user acceptance testing. — shape: {testingChallenge?: "TESTING_CHALLENGE_UNSPECIFIED"|"NOCAPTCHA"|"UNSOLVABLE_CHALLENGE", testingScore?: float}
   --waf-settings: record # Settings specific to keys that can be used for WAF (Web Application Firewall). — shape: {wafFeature?: "WAF_FEATURE_UNSPECIFIED"|"CHALLENGE_PAGE"|"SESSION_TOKEN"|"ACTION_TOKEN"|"EXPRESS", wafService?: "WAF_SERVICE_UNSPECIFIED"|"CA"|"FASTLY"}
   --web-settings: record # Settings specific to keys that can be used by websites. — shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list<string>, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
-]: any -> record<androidSettings: record<allowAllPackageNames: bool, allowedPackageNames: list<string>, supportNonGoogleAppStoreDistribution: bool>, createTime: string, displayName: string, iosSettings: record<allowAllBundleIds: bool, allowedBundleIds: list<string>>, labels: record, name: string, testingOptions: record<testingChallenge: string, testingScore: float>, wafSettings: record<wafFeature: string, wafService: string>, webSettings: record<allowAllDomains: bool, allowAmpTraffic: bool, allowedDomains: list<string>, challengeSecurityPreference: string, integrationType: string>> {
+]: any -> oneof<record<androidSettings: record<allowAllPackageNames: bool, allowedPackageNames: list<string>, supportNonGoogleAppStoreDistribution: bool>, createTime: string, displayName: string, iosSettings: record<allowAllBundleIds: bool, allowedBundleIds: list<string>>, labels: record, name: string, testingOptions: record<testingChallenge: string, testingScore: float>, wafSettings: record<wafFeature: string, wafService: string>, webSettings: record<allowAllDomains: bool, allowAmpTraffic: bool, allowedDomains: list<string>, challengeSecurityPreference: string, integrationType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -353,7 +372,6 @@ export def "recaptchaenterprise-projects-keys-patch" [
 #
 # POST /v1/{name}:annotate
 # operationId: recaptchaenterprise.projects.assessments.annotate
-# --transactionEvent shape: {eventTime?: string, eventType?: "TRANSACTION_EVENT_TYPE_UNSPECIFIED"|"MERCHANT_APPROVE"|"MERCHANT_DENY"|"MANUAL_REVIEW"|"AUTHORIZATION"|"AUTHORIZATION_DECLINE"|"PAYMENT_CAPTURE"|"PAYMENT_CAPTURE_DECLINE"|"CANCEL"|"CHARGEBACK_INQUIRY"|"CHARGEBACK_ALERT"|"FRAUD_NOTIFICATION"|"CHARGEBACK"|"CHARGEBACK_REPRESENTMENT"|"CHARGEBACK_REVERSE"|"REFUND_REQUEST"|"REFUND_DECLINE"|"REFUND"|"REFUND_REVERSE", reason?: string, value?: float}
 export def "recaptchaenterprise-projects-assessments-annotate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -380,7 +398,7 @@ export def "recaptchaenterprise-projects-assessments-annotate" [
   --hashed-account-id: string # Optional. Unique stable hashed user identifier to apply to the assessment. This is an alternative to setting the hashed_account_id in CreateAssessment, for example when the account identifier is not yet known in the initial request. It is recommended that the identifier is hashed using hmac-sha256 with stable secret. (format: byte)
   --reasons: list<string> # Optional. Optional reasons for the annotation that will be assigned to the Event.
   --transaction-event: record # Describes an event in the lifecycle of a payment transaction. — shape: {eventTime?: string, eventType?: "TRANSACTION_EVENT_TYPE_UNSPECIFIED"|"MERCHANT_APPROVE"|"MERCHANT_DENY"|"MANUAL_REVIEW"|"AUTHORIZATION"|"AUTHORIZATION_DECLINE"|"PAYMENT_CAPTURE"|"PAYMENT_CAPTURE_DECLINE"|"CANCEL"|"CHARGEBACK_INQUIRY"|"CHARGEBACK_ALERT"|"FRAUD_NOTIFICATION"|"CHARGEBACK"|"CHARGEBACK_REPRESENTMENT"|"CHARGEBACK_REVERSE"|"REFUND_REQUEST"|"REFUND_DECLINE"|"REFUND"|"REFUND_REVERSE", reason?: string, value?: float}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -432,7 +450,7 @@ export def "recaptchaenterprise-projects-keys-migrate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --skip-billing-check: oneof<nothing, bool> # Optional. If true, skips the billing check. A reCAPTCHA Enterprise key or migrated key behaves differently than a reCAPTCHA (non-Enterprise version) key when you reach a quota limit (see https://cloud.google.com/recaptcha-enterprise/quotas#quota_limit). To avoid any disruption of your usage, we check that a billing account is present. If your usage of reCAPTCHA is under the free quota, you can safely skip the billing check and proceed with the migration. See https://cloud.google.com/recaptcha-enterprise/docs/billing-information.
-]: any -> record<androidSettings: record<allowAllPackageNames: bool, allowedPackageNames: list<string>, supportNonGoogleAppStoreDistribution: bool>, createTime: string, displayName: string, iosSettings: record<allowAllBundleIds: bool, allowedBundleIds: list<string>>, labels: record, name: string, testingOptions: record<testingChallenge: string, testingScore: float>, wafSettings: record<wafFeature: string, wafService: string>, webSettings: record<allowAllDomains: bool, allowAmpTraffic: bool, allowedDomains: list<string>, challengeSecurityPreference: string, integrationType: string>> {
+]: any -> oneof<record<androidSettings: record<allowAllPackageNames: bool, allowedPackageNames: list<string>, supportNonGoogleAppStoreDistribution: bool>, createTime: string, displayName: string, iosSettings: record<allowAllBundleIds: bool, allowedBundleIds: list<string>>, labels: record, name: string, testingOptions: record<testingChallenge: string, testingScore: float>, wafSettings: record<wafFeature: string, wafService: string>, webSettings: record<allowAllDomains: bool, allowAmpTraffic: bool, allowedDomains: list<string>, challengeSecurityPreference: string, integrationType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -461,14 +479,6 @@ export def "recaptchaenterprise-projects-keys-migrate" [
 #
 # POST /v1/{parent}/assessments
 # operationId: recaptchaenterprise.projects.assessments.create
-# --accountDefenderAssessment shape: {labels?: list<string>}
-# --accountVerification shape: {endpoints?: list, languageCode?: string, username?: string}
-# --event shape: {expectedAction?: string, express?: bool, firewallPolicyEvaluation?: bool, hashedAccountId?: string, headers?: list<string>, ja3?: string, requestedUri?: string, siteKey?: string, token?: string, transactionData?: record, userAgent?: string, userIpAddress?: string, wafTokenAssessment?: bool}
-# --firewallPolicyAssessment shape: {error?: record, firewallPolicy?: record}
-# --fraudPreventionAssessment shape: {behavioralTrustVerdict?: record, cardTestingVerdict?: record, stolenInstrumentVerdict?: record, transactionRisk?: float}
-# --privatePasswordLeakVerification shape: {encryptedUserCredentialsHash?: string, lookupHashPrefix?: string}
-# --riskAnalysis shape: {extendedVerdictReasons?: list<string>, reasons?: list<string>, score?: float}
-# --tokenProperties shape: {action?: string, androidPackageName?: string, createTime?: string, hostname?: string, invalidReason?: "INVALID_REASON_UNSPECIFIED"|"UNKNOWN_INVALID_REASON"|"MALFORMED"|"EXPIRED"|"DUPE"|"MISSING"|"BROWSER_ERROR", iosBundleId?: string, valid?: bool}
 export def "recaptchaenterprise-projects-assessments-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -499,7 +509,7 @@ export def "recaptchaenterprise-projects-assessments-create" [
   --private-password-leak-verification: record # Private password leak verification info. — shape: {encryptedUserCredentialsHash?: string, lookupHashPrefix?: string}
   --risk-analysis: record # Risk analysis result for an event. — shape: {extendedVerdictReasons?: list<string>, reasons?: list<string>, score?: float}
   --token-properties: record # Properties of the provided event token. — shape: {action?: string, androidPackageName?: string, createTime?: string, hostname?: string, invalidReason?: "INVALID_REASON_UNSPECIFIED"|"UNKNOWN_INVALID_REASON"|"MALFORMED"|"EXPIRED"|"DUPE"|"MISSING"|"BROWSER_ERROR", iosBundleId?: string, valid?: bool}
-]: any -> record<accountDefenderAssessment: record<labels: list<string>>, accountVerification: record<endpoints: list<record>, languageCode: string, latestVerificationResult: string, username: string>, event: record<expectedAction: string, express: bool, firewallPolicyEvaluation: bool, hashedAccountId: string, headers: list<string>, ja3: string, requestedUri: string, siteKey: string, token: string, transactionData: record<billingAddress: record, cardBin: string, cardLastFour: string, currencyCode: string, gatewayInfo: record, items: list, merchants: list, paymentMethod: string, shippingAddress: record, shippingValue: float, transactionId: string, user: record, value: float>, userAgent: string, userIpAddress: string, wafTokenAssessment: bool>, firewallPolicyAssessment: record<error: record<code: int, details: list, message: string>, firewallPolicy: record<actions: list, condition: string, description: string, name: string, path: string>>, fraudPreventionAssessment: record<behavioralTrustVerdict: record<trust: float>, cardTestingVerdict: record<risk: float>, stolenInstrumentVerdict: record<risk: float>, transactionRisk: float>, name: string, privatePasswordLeakVerification: record<encryptedLeakMatchPrefixes: list<string>, encryptedUserCredentialsHash: string, lookupHashPrefix: string, reencryptedUserCredentialsHash: string>, riskAnalysis: record<extendedVerdictReasons: list<string>, reasons: list<string>, score: float>, tokenProperties: record<action: string, androidPackageName: string, createTime: string, hostname: string, invalidReason: string, iosBundleId: string, valid: bool>> {
+]: any -> oneof<record<accountDefenderAssessment: record<labels: list<string>>, accountVerification: record<endpoints: list<record>, languageCode: string, latestVerificationResult: string, username: string>, event: record<expectedAction: string, express: bool, firewallPolicyEvaluation: bool, hashedAccountId: string, headers: list<string>, ja3: string, requestedUri: string, siteKey: string, token: string, transactionData: record<billingAddress: record, cardBin: string, cardLastFour: string, currencyCode: string, gatewayInfo: record, items: list, merchants: list, paymentMethod: string, shippingAddress: record, shippingValue: float, transactionId: string, user: record, value: float>, userAgent: string, userIpAddress: string, wafTokenAssessment: bool>, firewallPolicyAssessment: record<error: record<code: int, details: list, message: string>, firewallPolicy: record<actions: list, condition: string, description: string, name: string, path: string>>, fraudPreventionAssessment: record<behavioralTrustVerdict: record<trust: float>, cardTestingVerdict: record<risk: float>, stolenInstrumentVerdict: record<risk: float>, transactionRisk: float>, name: string, privatePasswordLeakVerification: record<encryptedLeakMatchPrefixes: list<string>, encryptedUserCredentialsHash: string, lookupHashPrefix: string, reencryptedUserCredentialsHash: string>, riskAnalysis: record<extendedVerdictReasons: list<string>, reasons: list<string>, score: float>, tokenProperties: record<action: string, androidPackageName: string, createTime: string, hostname: string, invalidReason: string, iosBundleId: string, valid: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -552,7 +562,7 @@ export def "recaptchaenterprise-projects-firewallpolicies-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of policies to return. Default is 10. Max limit is 1000.
   --page-token: string # Optional. The next_page_token value returned from a previous. ListFirewallPoliciesRequest, if any.
-]: nothing -> record<firewallPolicies: table<actions: list, condition: string, description: string, name: string, path: string>, nextPageToken: string> {
+]: nothing -> oneof<record<firewallPolicies: table<actions: list, condition: string, description: string, name: string, path: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -578,7 +588,6 @@ export def "recaptchaenterprise-projects-firewallpolicies-list" [
 #
 # POST /v1/{parent}/firewallpolicies
 # operationId: recaptchaenterprise.projects.firewallpolicies.create
-# --actions item shape: {allow?: record, block?: record, redirect?: record, setHeader?: record, substitute?: record}
 export def "recaptchaenterprise-projects-firewallpolicies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -606,7 +615,7 @@ export def "recaptchaenterprise-projects-firewallpolicies-create" [
   --description: string # A description of what this policy aims to achieve, for convenience purposes. The description can at most include 256 UTF-8 characters.
   --name: string # The resource name for the FirewallPolicy in the format "projects/{project}/firewallpolicies/{firewallpolicy}".
   --path: string # The path for which this policy applies, specified as a glob pattern. For more information on glob, see the [manual page](https://man7.org/linux/man-pages/man7/glob.7.html). A path has a max length of 200 characters.
-]: any -> record<actions: table<allow: record, block: record, redirect: record, setHeader: record, substitute: record>, condition: string, description: string, name: string, path: string> {
+]: any -> oneof<record<actions: table<allow: record, block: record, redirect: record, setHeader: record, substitute: record>, condition: string, description: string, name: string, path: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -659,7 +668,7 @@ export def "recaptchaenterprise-projects-keys-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of keys to return. Default is 10. Max limit is 1000.
   --page-token: string # Optional. The next_page_token value returned from a previous. ListKeysRequest, if any.
-]: nothing -> record<keys: table<androidSettings: record, createTime: string, displayName: string, iosSettings: record, labels: record, name: string, testingOptions: record, wafSettings: record, webSettings: record>, nextPageToken: string> {
+]: nothing -> oneof<record<keys: table<androidSettings: record, createTime: string, displayName: string, iosSettings: record, labels: record, name: string, testingOptions: record, wafSettings: record, webSettings: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -685,11 +694,6 @@ export def "recaptchaenterprise-projects-keys-list" [
 #
 # POST /v1/{parent}/keys
 # operationId: recaptchaenterprise.projects.keys.create
-# --androidSettings shape: {allowAllPackageNames?: bool, allowedPackageNames?: list<string>, supportNonGoogleAppStoreDistribution?: bool}
-# --iosSettings shape: {allowAllBundleIds?: bool, allowedBundleIds?: list<string>}
-# --testingOptions shape: {testingChallenge?: "TESTING_CHALLENGE_UNSPECIFIED"|"NOCAPTCHA"|"UNSOLVABLE_CHALLENGE", testingScore?: float}
-# --wafSettings shape: {wafFeature?: "WAF_FEATURE_UNSPECIFIED"|"CHALLENGE_PAGE"|"SESSION_TOKEN"|"ACTION_TOKEN"|"EXPRESS", wafService?: "WAF_SERVICE_UNSPECIFIED"|"CA"|"FASTLY"}
-# --webSettings shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list<string>, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
 export def "recaptchaenterprise-projects-keys-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -720,7 +724,7 @@ export def "recaptchaenterprise-projects-keys-create" [
   --testing-options: record # Options for user acceptance testing. — shape: {testingChallenge?: "TESTING_CHALLENGE_UNSPECIFIED"|"NOCAPTCHA"|"UNSOLVABLE_CHALLENGE", testingScore?: float}
   --waf-settings: record # Settings specific to keys that can be used for WAF (Web Application Firewall). — shape: {wafFeature?: "WAF_FEATURE_UNSPECIFIED"|"CHALLENGE_PAGE"|"SESSION_TOKEN"|"ACTION_TOKEN"|"EXPRESS", wafService?: "WAF_SERVICE_UNSPECIFIED"|"CA"|"FASTLY"}
   --web-settings: record # Settings specific to keys that can be used by websites. — shape: {allowAllDomains?: bool, allowAmpTraffic?: bool, allowedDomains?: list<string>, challengeSecurityPreference?: "CHALLENGE_SECURITY_PREFERENCE_UNSPECIFIED"|"USABILITY"|"BALANCE"|"SECURITY", integrationType?: "INTEGRATION_TYPE_UNSPECIFIED"|"SCORE"|"CHECKBOX"|"INVISIBLE"}
-]: any -> record<androidSettings: record<allowAllPackageNames: bool, allowedPackageNames: list<string>, supportNonGoogleAppStoreDistribution: bool>, createTime: string, displayName: string, iosSettings: record<allowAllBundleIds: bool, allowedBundleIds: list<string>>, labels: record, name: string, testingOptions: record<testingChallenge: string, testingScore: float>, wafSettings: record<wafFeature: string, wafService: string>, webSettings: record<allowAllDomains: bool, allowAmpTraffic: bool, allowedDomains: list<string>, challengeSecurityPreference: string, integrationType: string>> {
+]: any -> oneof<record<androidSettings: record<allowAllPackageNames: bool, allowedPackageNames: list<string>, supportNonGoogleAppStoreDistribution: bool>, createTime: string, displayName: string, iosSettings: record<allowAllBundleIds: bool, allowedBundleIds: list<string>>, labels: record, name: string, testingOptions: record<testingChallenge: string, testingScore: float>, wafSettings: record<wafFeature: string, wafService: string>, webSettings: record<allowAllDomains: bool, allowAmpTraffic: bool, allowedDomains: list<string>, challengeSecurityPreference: string, integrationType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -773,7 +777,7 @@ export def "recaptchaenterprise-projects-relatedaccountgroups-memberships-list" 
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of accounts to return. The service might return fewer than this value. If unspecified, at most 50 accounts are returned. The maximum value is 1000; values above 1000 are coerced to 1000.
   --page-token: string # Optional. A page token, received from a previous `ListRelatedAccountGroupMemberships` call. When paginating, all other parameters provided to `ListRelatedAccountGroupMemberships` must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, relatedAccountGroupMemberships: table<hashedAccountId: string, name: string>> {
+]: nothing -> oneof<record<nextPageToken: string, relatedAccountGroupMemberships: table<hashedAccountId: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -823,7 +827,7 @@ export def "recaptchaenterprise-projects-relatedaccountgroups-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of groups to return. The service might return fewer than this value. If unspecified, at most 50 groups are returned. The maximum value is 1000; values above 1000 are coerced to 1000.
   --page-token: string # Optional. A page token, received from a previous `ListRelatedAccountGroups` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListRelatedAccountGroups` must match the call that provided the page token.
-]: nothing -> record<nextPageToken: string, relatedAccountGroups: table<name: string>> {
+]: nothing -> oneof<record<nextPageToken: string, relatedAccountGroups: table<name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -874,7 +878,7 @@ export def "recaptchaenterprise-projects-relatedaccountgroupmemberships-search" 
   --hashed-account-id: string # Optional. The unique stable hashed user identifier we should search connections to. The identifier should correspond to a `hashed_account_id` provided in a previous `CreateAssessment` or `AnnotateAssessment` call. (format: byte)
   --page-size: int # Optional. The maximum number of groups to return. The service might return fewer than this value. If unspecified, at most 50 groups are returned. The maximum value is 1000; values above 1000 are coerced to 1000. (format: int32)
   --page-token: string # Optional. A page token, received from a previous `SearchRelatedAccountGroupMemberships` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `SearchRelatedAccountGroupMemberships` must match the call that provided the page token.
-]: any -> record<nextPageToken: string, relatedAccountGroupMemberships: table<hashedAccountId: string, name: string>> {
+]: any -> oneof<record<nextPageToken: string, relatedAccountGroupMemberships: table<hashedAccountId: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

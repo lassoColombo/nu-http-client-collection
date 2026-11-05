@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "x-billbee-api-key" => { {scheme: $scheme, headers: {"X-Billbee-Api-Key": $token_val}, query: "", location: "header"} }
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -90,7 +113,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -137,9 +161,9 @@ def shipping-carrier-completer [] { ["0" "1" "10" "11" "12" "13" "14" "15" "16" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "automatic-provisioning-create-account" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["automatic-provisioning-create-account" "automatic-provisioning-terms-info" "cloud-storage-api-get-list" "customer-addresses-get-all" "customer-addresses-create" "customer-addresses-get-one" "customer-addresses-update" "customer-get-all" "customer-create" "customer-get-customer-address" "customer-patch-address" "customer-update-address" "customer-get-one" "customer-update" "customer-get-customer-addresses" "customer-add-customer-address" "customer-get-customer-orders" "enum-api-get-order-states" "enum-api-get-payment-types" "enum-api-get-shipment-types" "enum-api-get-shipping-carriers" "event-api-get-list" "layout-api-get-list" "order-api-get-list" "order-api-post-new-order" "order-api-create-delivery-note" "order-api-create-invoice" "order-api-get-patchable-fields" "order-api-find" "order-api-get-by-ext-ref" "order-api-get-invoice-list" "order-api-get" "order-api-patch-order" "order-api-update-state" "order-api-parse-placeholders" "order-api-send-message" "order-api-add-shipment" "order-api-tags-create" "order-api-tags-update" "order-api-trigger-event" "article-get-list" "article-create-article" "article-get-patchable-fields" "article-get-category" "article-get-custom-fields" "article-get-custom-field" "article-delete-images" "article-delete-image" "article-get-image" "article-get-reserved-amount" "article-get-stocks" "article-update-stock" "article-update-stock-code" "article-update-stock-multiple" "article-delete-article" "article-get-article" "article-patch-article" "article-get-images" "article-put-images" "article-delete-image-from-product" "article-get-image-from-product" "article-put-image" "search-search" "shipment-get-ping" "shipment-post-shipment" "shipment-get-list" "shipment-get-shipping-carrier" "shipment-get-shippingproviders" "shipment-ship-with-label" "web-hook-management-delete-all" "web-hook-management-get" "web-hook-management-post" "web-hook-management-get-filters" "web-hook-management-delete" "web-hook-management-lookup" "web-hook-management-put" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +185,6 @@ export def commands []: nothing -> table {
 #
 # POST /api/v1/automaticprovision/createaccount
 # operationId: AutomaticProvisioning_CreateAccount
-# --Address shape: {Address1?: string, Address2?: string, City?: string, Company?: string, Country?: string, Name?: string, VatId?: string, Zip?: string}
 export def "automatic-provisioning-create-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -183,7 +206,7 @@ export def "automatic-provisioning-create-account" [
   --password: string
   --vat1-rate: float # Optionally specify the vat1 (normal) rate of the user (format: double)
   --vat2-rate: float # Optionally specify the vat2 (reduced) rate of the user (format: double)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -221,7 +244,7 @@ export def "automatic-provisioning-terms-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/automaticprovision/termsinfo" $auth.query)
@@ -256,7 +279,7 @@ export def "cloud-storage-api-get-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<Data: table<Id: int, Name: string, Type: string, UsedAsPrinter: bool>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: nothing -> oneof<record<Data: table<Id: int, Name: string, Type: string, UsedAsPrinter: bool>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/cloudstorages" $auth.query)
@@ -293,7 +316,7 @@ export def "customer-addresses-get-all" [
   --accept: string@accept-completer-1 # Response content type
   --page: int # The current page to request starting with 1 (default is 1) (format: int32)
   --page-size: int # The page size for the result list. Values between 1 and 250 are allowed. (default is 50) (format: int32)
-]: nothing -> record<Data: table<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>> {
+]: nothing -> oneof<record<Data: table<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -349,7 +372,7 @@ export def "customer-addresses-create" [
   --tel1: string
   --tel2: string
   --zip: string
-]: any -> record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -388,7 +411,7 @@ export def "customer-addresses-get-one" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: nothing -> oneof<record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -445,7 +468,7 @@ export def "customer-addresses-update" [
   --tel1: string
   --tel2: string
   --zip: string
-]: any -> record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -486,7 +509,7 @@ export def "customer-get-all" [
   --accept: string@accept-completer-1 # Response content type
   --page: int # The current page to request starting with 1 (format: int32)
   --page-size: int # The pagesize for the result list. Values between 1 and 250 are allowed (format: int32)
-]: nothing -> record<Data: table<ArchivedAt: string, DefaultCommercialMailAddress: record, DefaultFax: record, DefaultMailAddress: record, DefaultPhone1: record, DefaultPhone2: record, DefaultStatusUpdatesMailAddress: record, Email: string, Id: int, LanguageId: int, MetaData: list, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>> {
+]: nothing -> oneof<record<Data: table<ArchivedAt: string, DefaultCommercialMailAddress: record, DefaultFax: record, DefaultMailAddress: record, DefaultPhone1: record, DefaultPhone2: record, DefaultStatusUpdatesMailAddress: record, Email: string, Id: int, LanguageId: int, MetaData: list, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -511,14 +534,6 @@ export def "customer-get-all" [
 #
 # POST /api/v1/customers
 # operationId: Customer_Create
-# --Address shape: {AddressAddition?: string, AddressType?: "1"|"2", ArchivedAt?: string, City?: string, Company?: string, CountryCode?: string, CustomerId?: int, Email?: string, Fax?: string, FirstName?: string, Housenumber?: string, Id?: int, LastName?: string, Name2?: string, RestoredAt?: string, State?: string, Street?: string, Tel1?: string, Tel2?: string, Zip?: string}
-# --DefaultCommercialMailAddress shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
-# --DefaultFax shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
-# --DefaultMailAddress shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
-# --DefaultPhone1 shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
-# --DefaultPhone2 shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
-# --DefaultStatusUpdatesMailAddress shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
-# --MetaData item shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
 export def "customer-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -550,7 +565,7 @@ export def "customer-create" [
   --tel2: string
   --type: int # Customer Type (format: int32)
   --vat-id: string # The vat-id, that should be saved at the customer. Only used if CustomerVatId is not set on the order.
-]: any -> record<Data: record<ArchivedAt: string, DefaultCommercialMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultFax: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultPhone1: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultPhone2: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultStatusUpdatesMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, Email: string, Id: int, LanguageId: int, MetaData: list<record>, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record<ArchivedAt: string, DefaultCommercialMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultFax: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultPhone1: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultPhone2: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultStatusUpdatesMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, Email: string, Id: int, LanguageId: int, MetaData: list<record>, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -589,7 +604,7 @@ export def "customer-get-customer-address" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: nothing -> oneof<record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -627,7 +642,7 @@ export def "customer-patch-address" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --body: record
-]: any -> record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -687,7 +702,7 @@ export def "customer-update-address" [
   --tel1: string
   --tel2: string
   --zip: string
-]: any -> record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -727,7 +742,7 @@ export def "customer-get-one" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<Data: record<ArchivedAt: string, DefaultCommercialMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultFax: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultPhone1: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultPhone2: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultStatusUpdatesMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, Email: string, Id: int, LanguageId: int, MetaData: list<record>, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: nothing -> oneof<record<Data: record<ArchivedAt: string, DefaultCommercialMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultFax: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultPhone1: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultPhone2: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultStatusUpdatesMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, Email: string, Id: int, LanguageId: int, MetaData: list<record>, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -752,13 +767,6 @@ export def "customer-get-one" [
 #
 # PUT /api/v1/customers/{id}
 # operationId: Customer_Update
-# --DefaultCommercialMailAddress shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
-# --DefaultFax shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
-# --DefaultMailAddress shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
-# --DefaultPhone1 shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
-# --DefaultPhone2 shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
-# --DefaultStatusUpdatesMailAddress shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
-# --MetaData item shape: {Id?: int, SubType?: string, TypeId?: int, Value?: string}
 export def "customer-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -790,7 +798,7 @@ export def "customer-update" [
   --tel2: string
   --type: int # Customer Type (format: int32)
   --vat-id: string # The vat-id, that should be saved at the customer. Only used if CustomerVatId is not set on the order.
-]: any -> record<Data: record<ArchivedAt: string, DefaultCommercialMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultFax: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultPhone1: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultPhone2: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultStatusUpdatesMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, Email: string, Id: int, LanguageId: int, MetaData: list<record>, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record<ArchivedAt: string, DefaultCommercialMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultFax: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultPhone1: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultPhone2: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, DefaultStatusUpdatesMailAddress: record<Id: int, SubType: string, TypeId: int, TypeName: string, Value: string>, Email: string, Id: int, LanguageId: int, MetaData: list<record>, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -832,7 +840,7 @@ export def "customer-get-customer-addresses" [
   --accept: string@accept-completer-1 # Response content type
   --page: int # The current page to request starting with 1 (format: int32)
   --page-size: int # The pagesize for the result list. Values between 1 and 250 are allowed (format: int32)
-]: nothing -> record<Data: table<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>> {
+]: nothing -> oneof<record<Data: table<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -890,7 +898,7 @@ export def "customer-add-customer-address" [
   --tel1: string
   --tel2: string
   --zip: string
-]: any -> record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record<AddressAddition: string, AddressType: int, ArchivedAt: string, City: string, Company: string, CountryCode: string, CustomerId: int, Email: string, Fax: string, FirstName: string, Housenumber: string, Id: int, LastName: string, Name2: string, RestoredAt: string, State: string, Street: string, Tel1: string, Tel2: string, Zip: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -932,7 +940,7 @@ export def "customer-get-customer-orders" [
   --accept: string@accept-completer-1 # Response content type
   --page: int # The current page to request starting with 1 (format: int32)
   --page-size: int # The pagesize for the result list. Values between 1 and 250 are allowed (format: int32)
-]: nothing -> record<Data: table<CanCreateAutoInvoice: bool, CreatedAt: string, ExternalId: string, HasInvoice: bool, Id: int, InvoiceCreatedAt: string, InvoiceDate: string, InvoiceNumber: string, OrderStateId: int, OrderStateText: string, PaidAt: string, ShippedAt: string, ShopName: string, TotalGross: float>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>> {
+]: nothing -> oneof<record<Data: table<CanCreateAutoInvoice: bool, CreatedAt: string, ExternalId: string, HasInvoice: bool, Id: int, InvoiceCreatedAt: string, InvoiceDate: string, InvoiceNumber: string, OrderStateId: int, OrderStateText: string, PaidAt: string, ShippedAt: string, ShopName: string, TotalGross: float>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -969,7 +977,7 @@ export def "enum-api-get-order-states" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/enums/orderstates" $auth.query)
@@ -1004,7 +1012,7 @@ export def "enum-api-get-payment-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/enums/paymenttypes" $auth.query)
@@ -1039,7 +1047,7 @@ export def "enum-api-get-shipment-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/enums/shipmenttypes" $auth.query)
@@ -1074,7 +1082,7 @@ export def "enum-api-get-shipping-carriers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/enums/shippingcarriers" $auth.query)
@@ -1115,7 +1123,7 @@ export def "event-api-get-list" [
   --page-size: int # Specifies the pagesize. Defaults to 50, max value is 250 (format: int32)
   --type-id: list<int> # Filter for specific event types
   --order-id: int # Filter for specific order id (format: int64)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "minDate" $min_date "scalar") (serialize-qp "maxDate" $max_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "typeId" $type_id "multi") (serialize-qp "orderId" $order_id "scalar")] | flatten | str join "&"
@@ -1150,7 +1158,7 @@ export def "layout-api-get-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<Data: table<Id: int, Name: string, Type: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: nothing -> oneof<record<Data: table<Id: int, Name: string, Type: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/layouts" $auth.query)
@@ -1197,7 +1205,7 @@ export def "order-api-get-list" [
   --modified-at-max: string # If given, the last modification has to be older or equal than the given date. (format: date-time)
   --article-title-source: int@article-title-source-completer # The source field for the article title. 0 = Order Position (default), 1 = Article Title, 2 = Article Invoice Text (format: int32)
   --exclude-tags: oneof<nothing, bool> # If true the list of tags passed to the call are used to filter orders to not include these tags
-]: nothing -> record<Data: table<AcceptLossOfReturnRight: bool, AdjustmentCost: float, AdjustmentReason: string, ApiAccountId: int, ApiAccountName: string, ArchivedAt: string, BillBeeOrderId: int, BillBeeParentOrderId: int, Buyer: record, Comments: list, ConfirmedAt: string, CreatedAt: string, Currency: string, CustomInvoiceNote: string, Customer: record, CustomerNumber: string, CustomerVatId: string, DeliverySourceCountryCode: string, DistributionCenter: string, History: list, Id: string, InvoiceAddress: record, InvoiceDate: string, InvoiceNumber: int, InvoiceNumberPostfix: string, InvoiceNumberPrefix: string, IsCancelationFor: string, IsFromBillbeeApi: bool, LanguageCode: string, LastModifiedAt: string, MerchantVatId: string, OrderItems: list, OrderNumber: string, PaidAmount: float, PayedAt: string, PaymentInstruction: string, PaymentMethod: int, PaymentReference: string, PaymentTransactionId: string, Payments: list, RebateDifference: float, RestoredAt: string, Seller: record, SellerComment: string, ShipWeightKg: float, ShippedAt: string, ShippingAddress: record, ShippingCost: float, ShippingIds: list, ShippingProfileId: string, ShippingProfileName: string, ShippingProviderId: int, ShippingProviderName: string, ShippingProviderProductId: int, ShippingProviderProductName: string, ShippingServices: list, State: int, Tags: list, TaxRate1: float, TaxRate2: float, TotalCost: float, UpdatedAt: string, VatId: string, VatMode: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>> {
+]: nothing -> oneof<record<Data: table<AcceptLossOfReturnRight: bool, AdjustmentCost: float, AdjustmentReason: string, ApiAccountId: int, ApiAccountName: string, ArchivedAt: string, BillBeeOrderId: int, BillBeeParentOrderId: int, Buyer: record, Comments: list, ConfirmedAt: string, CreatedAt: string, Currency: string, CustomInvoiceNote: string, Customer: record, CustomerNumber: string, CustomerVatId: string, DeliverySourceCountryCode: string, DistributionCenter: string, History: list, Id: string, InvoiceAddress: record, InvoiceDate: string, InvoiceNumber: int, InvoiceNumberPostfix: string, InvoiceNumberPrefix: string, IsCancelationFor: string, IsFromBillbeeApi: bool, LanguageCode: string, LastModifiedAt: string, MerchantVatId: string, OrderItems: list, OrderNumber: string, PaidAmount: float, PayedAt: string, PaymentInstruction: string, PaymentMethod: int, PaymentReference: string, PaymentTransactionId: string, Payments: list, RebateDifference: float, RestoredAt: string, Seller: record, SellerComment: string, ShipWeightKg: float, ShippedAt: string, ShippingAddress: record, ShippingCost: float, ShippingIds: list, ShippingProfileId: string, ShippingProfileName: string, ShippingProviderId: int, ShippingProviderName: string, ShippingProviderProductId: int, ShippingProviderProductName: string, ShippingServices: list, State: int, Tags: list, TaxRate1: float, TaxRate2: float, TotalCost: float, UpdatedAt: string, VatId: string, VatMode: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "minOrderDate" $min_order_date "scalar") (serialize-qp "maxOrderDate" $max_order_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "shopId" $shop_id "multi") (serialize-qp "orderStateId" $order_state_id "multi") (serialize-qp "tag" $tag "multi") (serialize-qp "minimumBillBeeOrderId" $minimum_bill_bee_order_id "scalar") (serialize-qp "modifiedAtMin" $modified_at_min "scalar") (serialize-qp "modifiedAtMax" $modified_at_max "scalar") (serialize-qp "articleTitleSource" $article_title_source "scalar") (serialize-qp "excludeTags" $exclude_tags "scalar")] | flatten | str join "&"
@@ -1222,16 +1230,6 @@ export def "order-api-get-list" [
 #
 # POST /api/v1/orders
 # operationId: OrderApi_PostNewOrder
-# --Buyer shape: {BillbeeShopId?: int, BillbeeShopName?: string, Email?: string, FirstName?: string, Id?: string, LastName?: string, Nick?: string, Platform?: string}
-# --Comments item shape: {Created?: string, FromCustomer?: bool, Id?: int, Name?: string, Text?: string}
-# --Customer shape: {ArchivedAt?: string, DefaultCommercialMailAddress?: record, DefaultFax?: record, DefaultMailAddress?: record, DefaultPhone1?: record, DefaultPhone2?: record, DefaultStatusUpdatesMailAddress?: record, Email?: string, Id?: int, LanguageId?: int, MetaData?: list, Name?: string, Number?: int, PriceGroupId?: int, RestoredAt?: string, Tel1?: string, Tel2?: string, Type?: int, VatId?: string}
-# --History item shape: {Created?: string, EmployeeName?: string, EventTypeName?: string, Text?: string, TypeId?: int}
-# --InvoiceAddress shape: {BillbeeId?: int, City?: string, Company?: string, Country?: string, CountryISO2?: string, Email?: string, FirstName?: string, HouseNumber?: string, LastName?: string, Line2?: string, NameAddition?: string, Phone?: string, State?: string, Street?: string, Zip?: string}
-# --OrderItems item shape: {Attributes?: list, BillbeeId?: int, Discount?: float, DontAdjustStock?: bool, GetPriceFromArticleIfAny?: bool, InvoiceSKU?: string, IsCoupon?: bool, Product?: record, Quantity?: float, SerialNumber?: string, ShippingProfileId?: string, TaxAmount?: float, TaxIndex?: int, TotalPrice?: float, TransactionId?: string, UnrebatedTotalPrice?: float}
-# --Payments item shape: {BillbeeId?: int, Name?: string, PayDate?: string, PayValue?: float, PaymentType?: int, Purpose?: string, SourceTechnology?: string, SourceText?: string, TransactionId?: string}
-# --Seller shape: {BillbeeShopId?: int, BillbeeShopName?: string, Email?: string, FirstName?: string, Id?: string, LastName?: string, Nick?: string, Platform?: string}
-# --ShippingAddress shape: {BillbeeId?: int, City?: string, Company?: string, Country?: string, CountryISO2?: string, Email?: string, FirstName?: string, HouseNumber?: string, LastName?: string, Line2?: string, NameAddition?: string, Phone?: string, State?: string, Street?: string, Zip?: string}
-# --ShippingIds item shape: {BillbeeId?: int, Created?: string, ShipmentType?: int, Shipper?: string, ShippingCarrier?: int, ShippingId?: string, ShippingProviderId?: int, ShippingProviderProductId?: int, TrackingUrl?: string}
 export def "order-api-post-new-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1307,7 +1305,7 @@ export def "order-api-post-new-order" [
   --updated-at: string # The date on which the order was last updated (format: date-time)
   --vat-id: string # The customers vat id
   --vat-mode: int@vat-mode-completer # The vat mode of the order (format: int32)
-]: any -> record<Data: record<AcceptLossOfReturnRight: bool, AdjustmentCost: float, AdjustmentReason: string, ApiAccountId: int, ApiAccountName: string, ArchivedAt: string, BillBeeOrderId: int, BillBeeParentOrderId: int, Buyer: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, Comments: list<record>, ConfirmedAt: string, CreatedAt: string, Currency: string, CustomInvoiceNote: string, Customer: record<ArchivedAt: string, DefaultCommercialMailAddress: record, DefaultFax: record, DefaultMailAddress: record, DefaultPhone1: record, DefaultPhone2: record, DefaultStatusUpdatesMailAddress: record, Email: string, Id: int, LanguageId: int, MetaData: list, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, CustomerNumber: string, CustomerVatId: string, DeliverySourceCountryCode: string, DistributionCenter: string, History: list<record>, Id: string, InvoiceAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, InvoiceDate: string, InvoiceNumber: int, InvoiceNumberPostfix: string, InvoiceNumberPrefix: string, IsCancelationFor: string, IsFromBillbeeApi: bool, LanguageCode: string, LastModifiedAt: string, MerchantVatId: string, OrderItems: list<record>, OrderNumber: string, PaidAmount: float, PayedAt: string, PaymentInstruction: string, PaymentMethod: int, PaymentReference: string, PaymentTransactionId: string, Payments: list<record>, RebateDifference: float, RestoredAt: string, Seller: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, SellerComment: string, ShipWeightKg: float, ShippedAt: string, ShippingAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, ShippingCost: float, ShippingIds: list<record>, ShippingProfileId: string, ShippingProfileName: string, ShippingProviderId: int, ShippingProviderName: string, ShippingProviderProductId: int, ShippingProviderProductName: string, ShippingServices: list<record>, State: int, Tags: list<string>, TaxRate1: float, TaxRate2: float, TotalCost: float, UpdatedAt: string, VatId: string, VatMode: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record<AcceptLossOfReturnRight: bool, AdjustmentCost: float, AdjustmentReason: string, ApiAccountId: int, ApiAccountName: string, ArchivedAt: string, BillBeeOrderId: int, BillBeeParentOrderId: int, Buyer: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, Comments: list<record>, ConfirmedAt: string, CreatedAt: string, Currency: string, CustomInvoiceNote: string, Customer: record<ArchivedAt: string, DefaultCommercialMailAddress: record, DefaultFax: record, DefaultMailAddress: record, DefaultPhone1: record, DefaultPhone2: record, DefaultStatusUpdatesMailAddress: record, Email: string, Id: int, LanguageId: int, MetaData: list, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, CustomerNumber: string, CustomerVatId: string, DeliverySourceCountryCode: string, DistributionCenter: string, History: list<record>, Id: string, InvoiceAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, InvoiceDate: string, InvoiceNumber: int, InvoiceNumberPostfix: string, InvoiceNumberPrefix: string, IsCancelationFor: string, IsFromBillbeeApi: bool, LanguageCode: string, LastModifiedAt: string, MerchantVatId: string, OrderItems: list<record>, OrderNumber: string, PaidAmount: float, PayedAt: string, PaymentInstruction: string, PaymentMethod: int, PaymentReference: string, PaymentTransactionId: string, Payments: list<record>, RebateDifference: float, RestoredAt: string, Seller: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, SellerComment: string, ShipWeightKg: float, ShippedAt: string, ShippingAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, ShippingCost: float, ShippingIds: list<record>, ShippingProfileId: string, ShippingProfileName: string, ShippingProviderId: int, ShippingProviderName: string, ShippingProviderProductId: int, ShippingProviderProductName: string, ShippingServices: list<record>, State: int, Tags: list<string>, TaxRate1: float, TaxRate2: float, TotalCost: float, UpdatedAt: string, VatId: string, VatMode: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1349,7 +1347,7 @@ export def "order-api-create-delivery-note" [
   --accept: string@accept-completer # Response content type
   --include-pdf: oneof<nothing, bool> # If true, the PDF is included in the response as base64 encoded string
   --send-to-cloud-id: int # Optionally specify the id of a billbee connected cloud device to send the pdf to (format: int64)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1390,7 +1388,7 @@ export def "order-api-create-invoice" [
   --include-invoice-pdf: oneof<nothing, bool> # If true, the PDF is included in the response as base64 encoded string
   --template-id: int # You can pass the id of an invoice template to overwrite the assigned template for invoice creation (format: int64)
   --send-to-cloud-id: int # You can pass the id of a connected cloud printer/storage to send the invoice to it (format: int64)
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1427,7 +1425,7 @@ export def "order-api-get-patchable-fields" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/orders/PatchableFields" $auth.query)
@@ -1466,7 +1464,7 @@ export def "order-api-find" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1504,7 +1502,7 @@ export def "order-api-get-by-ext-ref" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<Data: record<AcceptLossOfReturnRight: bool, AdjustmentCost: float, AdjustmentReason: string, ApiAccountId: int, ApiAccountName: string, ArchivedAt: string, BillBeeOrderId: int, BillBeeParentOrderId: int, Buyer: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, Comments: list<record>, ConfirmedAt: string, CreatedAt: string, Currency: string, CustomInvoiceNote: string, Customer: record<ArchivedAt: string, DefaultCommercialMailAddress: record, DefaultFax: record, DefaultMailAddress: record, DefaultPhone1: record, DefaultPhone2: record, DefaultStatusUpdatesMailAddress: record, Email: string, Id: int, LanguageId: int, MetaData: list, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, CustomerNumber: string, CustomerVatId: string, DeliverySourceCountryCode: string, DistributionCenter: string, History: list<record>, Id: string, InvoiceAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, InvoiceDate: string, InvoiceNumber: int, InvoiceNumberPostfix: string, InvoiceNumberPrefix: string, IsCancelationFor: string, IsFromBillbeeApi: bool, LanguageCode: string, LastModifiedAt: string, MerchantVatId: string, OrderItems: list<record>, OrderNumber: string, PaidAmount: float, PayedAt: string, PaymentInstruction: string, PaymentMethod: int, PaymentReference: string, PaymentTransactionId: string, Payments: list<record>, RebateDifference: float, RestoredAt: string, Seller: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, SellerComment: string, ShipWeightKg: float, ShippedAt: string, ShippingAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, ShippingCost: float, ShippingIds: list<record>, ShippingProfileId: string, ShippingProfileName: string, ShippingProviderId: int, ShippingProviderName: string, ShippingProviderProductId: int, ShippingProviderProductName: string, ShippingServices: list<record>, State: int, Tags: list<string>, TaxRate1: float, TaxRate2: float, TotalCost: float, UpdatedAt: string, VatId: string, VatMode: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: nothing -> oneof<record<Data: record<AcceptLossOfReturnRight: bool, AdjustmentCost: float, AdjustmentReason: string, ApiAccountId: int, ApiAccountName: string, ArchivedAt: string, BillBeeOrderId: int, BillBeeParentOrderId: int, Buyer: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, Comments: list<record>, ConfirmedAt: string, CreatedAt: string, Currency: string, CustomInvoiceNote: string, Customer: record<ArchivedAt: string, DefaultCommercialMailAddress: record, DefaultFax: record, DefaultMailAddress: record, DefaultPhone1: record, DefaultPhone2: record, DefaultStatusUpdatesMailAddress: record, Email: string, Id: int, LanguageId: int, MetaData: list, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, CustomerNumber: string, CustomerVatId: string, DeliverySourceCountryCode: string, DistributionCenter: string, History: list<record>, Id: string, InvoiceAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, InvoiceDate: string, InvoiceNumber: int, InvoiceNumberPostfix: string, InvoiceNumberPrefix: string, IsCancelationFor: string, IsFromBillbeeApi: bool, LanguageCode: string, LastModifiedAt: string, MerchantVatId: string, OrderItems: list<record>, OrderNumber: string, PaidAmount: float, PayedAt: string, PaymentInstruction: string, PaymentMethod: int, PaymentReference: string, PaymentTransactionId: string, Payments: list<record>, RebateDifference: float, RestoredAt: string, Seller: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, SellerComment: string, ShipWeightKg: float, ShippedAt: string, ShippingAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, ShippingCost: float, ShippingIds: list<record>, ShippingProfileId: string, ShippingProfileName: string, ShippingProviderId: int, ShippingProviderName: string, ShippingProviderProductId: int, ShippingProviderProductName: string, ShippingServices: list<record>, State: int, Tags: list<string>, TaxRate1: float, TaxRate2: float, TotalCost: float, UpdatedAt: string, VatId: string, VatMode: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($ext_ref | is-empty) { error make --unspanned { msg: "path parameter 'extRef' must be non-empty" } }
@@ -1551,7 +1549,7 @@ export def "order-api-get-invoice-list" [
   --max-pay-date: string # format: date-time
   --include-positions: oneof<nothing, bool>
   --exclude-tags: oneof<nothing, bool> # If true the list of tags passed to the call are used to filter orders to not include these tags
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "minInvoiceDate" $min_invoice_date "scalar") (serialize-qp "maxInvoiceDate" $max_invoice_date "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "shopId" $shop_id "multi") (serialize-qp "orderStateId" $order_state_id "multi") (serialize-qp "tag" $tag "multi") (serialize-qp "minPayDate" $min_pay_date "scalar") (serialize-qp "maxPayDate" $max_pay_date "scalar") (serialize-qp "includePositions" $include_positions "scalar") (serialize-qp "excludeTags" $exclude_tags "scalar")] | flatten | str join "&"
@@ -1589,7 +1587,7 @@ export def "order-api-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --article-title-source: int@article-title-source-completer # The source field for the article title. 0 = Order Position (default), 1 = Article Title, 2 = Article Invoice Text (format: int32)
-]: nothing -> record<Data: record<AcceptLossOfReturnRight: bool, AdjustmentCost: float, AdjustmentReason: string, ApiAccountId: int, ApiAccountName: string, ArchivedAt: string, BillBeeOrderId: int, BillBeeParentOrderId: int, Buyer: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, Comments: list<record>, ConfirmedAt: string, CreatedAt: string, Currency: string, CustomInvoiceNote: string, Customer: record<ArchivedAt: string, DefaultCommercialMailAddress: record, DefaultFax: record, DefaultMailAddress: record, DefaultPhone1: record, DefaultPhone2: record, DefaultStatusUpdatesMailAddress: record, Email: string, Id: int, LanguageId: int, MetaData: list, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, CustomerNumber: string, CustomerVatId: string, DeliverySourceCountryCode: string, DistributionCenter: string, History: list<record>, Id: string, InvoiceAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, InvoiceDate: string, InvoiceNumber: int, InvoiceNumberPostfix: string, InvoiceNumberPrefix: string, IsCancelationFor: string, IsFromBillbeeApi: bool, LanguageCode: string, LastModifiedAt: string, MerchantVatId: string, OrderItems: list<record>, OrderNumber: string, PaidAmount: float, PayedAt: string, PaymentInstruction: string, PaymentMethod: int, PaymentReference: string, PaymentTransactionId: string, Payments: list<record>, RebateDifference: float, RestoredAt: string, Seller: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, SellerComment: string, ShipWeightKg: float, ShippedAt: string, ShippingAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, ShippingCost: float, ShippingIds: list<record>, ShippingProfileId: string, ShippingProfileName: string, ShippingProviderId: int, ShippingProviderName: string, ShippingProviderProductId: int, ShippingProviderProductName: string, ShippingServices: list<record>, State: int, Tags: list<string>, TaxRate1: float, TaxRate2: float, TotalCost: float, UpdatedAt: string, VatId: string, VatMode: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: nothing -> oneof<record<Data: record<AcceptLossOfReturnRight: bool, AdjustmentCost: float, AdjustmentReason: string, ApiAccountId: int, ApiAccountName: string, ArchivedAt: string, BillBeeOrderId: int, BillBeeParentOrderId: int, Buyer: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, Comments: list<record>, ConfirmedAt: string, CreatedAt: string, Currency: string, CustomInvoiceNote: string, Customer: record<ArchivedAt: string, DefaultCommercialMailAddress: record, DefaultFax: record, DefaultMailAddress: record, DefaultPhone1: record, DefaultPhone2: record, DefaultStatusUpdatesMailAddress: record, Email: string, Id: int, LanguageId: int, MetaData: list, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, CustomerNumber: string, CustomerVatId: string, DeliverySourceCountryCode: string, DistributionCenter: string, History: list<record>, Id: string, InvoiceAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, InvoiceDate: string, InvoiceNumber: int, InvoiceNumberPostfix: string, InvoiceNumberPrefix: string, IsCancelationFor: string, IsFromBillbeeApi: bool, LanguageCode: string, LastModifiedAt: string, MerchantVatId: string, OrderItems: list<record>, OrderNumber: string, PaidAmount: float, PayedAt: string, PaymentInstruction: string, PaymentMethod: int, PaymentReference: string, PaymentTransactionId: string, Payments: list<record>, RebateDifference: float, RestoredAt: string, Seller: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, SellerComment: string, ShipWeightKg: float, ShippedAt: string, ShippingAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, ShippingCost: float, ShippingIds: list<record>, ShippingProfileId: string, ShippingProfileName: string, ShippingProviderId: int, ShippingProviderName: string, ShippingProviderProductId: int, ShippingProviderProductName: string, ShippingServices: list<record>, State: int, Tags: list<string>, TaxRate1: float, TaxRate2: float, TotalCost: float, UpdatedAt: string, VatId: string, VatMode: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1628,7 +1626,7 @@ export def "order-api-patch-order" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --body: record
-]: any -> record<Data: record<AcceptLossOfReturnRight: bool, AdjustmentCost: float, AdjustmentReason: string, ApiAccountId: int, ApiAccountName: string, ArchivedAt: string, BillBeeOrderId: int, BillBeeParentOrderId: int, Buyer: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, Comments: list<record>, ConfirmedAt: string, CreatedAt: string, Currency: string, CustomInvoiceNote: string, Customer: record<ArchivedAt: string, DefaultCommercialMailAddress: record, DefaultFax: record, DefaultMailAddress: record, DefaultPhone1: record, DefaultPhone2: record, DefaultStatusUpdatesMailAddress: record, Email: string, Id: int, LanguageId: int, MetaData: list, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, CustomerNumber: string, CustomerVatId: string, DeliverySourceCountryCode: string, DistributionCenter: string, History: list<record>, Id: string, InvoiceAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, InvoiceDate: string, InvoiceNumber: int, InvoiceNumberPostfix: string, InvoiceNumberPrefix: string, IsCancelationFor: string, IsFromBillbeeApi: bool, LanguageCode: string, LastModifiedAt: string, MerchantVatId: string, OrderItems: list<record>, OrderNumber: string, PaidAmount: float, PayedAt: string, PaymentInstruction: string, PaymentMethod: int, PaymentReference: string, PaymentTransactionId: string, Payments: list<record>, RebateDifference: float, RestoredAt: string, Seller: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, SellerComment: string, ShipWeightKg: float, ShippedAt: string, ShippingAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, ShippingCost: float, ShippingIds: list<record>, ShippingProfileId: string, ShippingProfileName: string, ShippingProviderId: int, ShippingProviderName: string, ShippingProviderProductId: int, ShippingProviderProductName: string, ShippingServices: list<record>, State: int, Tags: list<string>, TaxRate1: float, TaxRate2: float, TotalCost: float, UpdatedAt: string, VatId: string, VatMode: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record<AcceptLossOfReturnRight: bool, AdjustmentCost: float, AdjustmentReason: string, ApiAccountId: int, ApiAccountName: string, ArchivedAt: string, BillBeeOrderId: int, BillBeeParentOrderId: int, Buyer: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, Comments: list<record>, ConfirmedAt: string, CreatedAt: string, Currency: string, CustomInvoiceNote: string, Customer: record<ArchivedAt: string, DefaultCommercialMailAddress: record, DefaultFax: record, DefaultMailAddress: record, DefaultPhone1: record, DefaultPhone2: record, DefaultStatusUpdatesMailAddress: record, Email: string, Id: int, LanguageId: int, MetaData: list, Name: string, Number: int, PriceGroupId: int, RestoredAt: string, Tel1: string, Tel2: string, Type: int, VatId: string>, CustomerNumber: string, CustomerVatId: string, DeliverySourceCountryCode: string, DistributionCenter: string, History: list<record>, Id: string, InvoiceAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, InvoiceDate: string, InvoiceNumber: int, InvoiceNumberPostfix: string, InvoiceNumberPrefix: string, IsCancelationFor: string, IsFromBillbeeApi: bool, LanguageCode: string, LastModifiedAt: string, MerchantVatId: string, OrderItems: list<record>, OrderNumber: string, PaidAmount: float, PayedAt: string, PaymentInstruction: string, PaymentMethod: int, PaymentReference: string, PaymentTransactionId: string, Payments: list<record>, RebateDifference: float, RestoredAt: string, Seller: record<BillbeeShopId: int, BillbeeShopName: string, Email: string, FirstName: string, FullName: string, Id: string, LastName: string, Nick: string, Platform: string>, SellerComment: string, ShipWeightKg: float, ShippedAt: string, ShippingAddress: record<BillbeeId: int, City: string, Company: string, Country: string, CountryISO2: string, Email: string, FirstName: string, HouseNumber: string, LastName: string, Line2: string, NameAddition: string, Phone: string, State: string, Street: string, Zip: string>, ShippingCost: float, ShippingIds: list<record>, ShippingProfileId: string, ShippingProfileName: string, ShippingProviderId: int, ShippingProviderName: string, ShippingProviderProductId: int, ShippingProviderProductName: string, ShippingServices: list<record>, State: int, Tags: list<string>, TaxRate1: float, TaxRate2: float, TotalCost: float, UpdatedAt: string, VatId: string, VatMode: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1669,7 +1667,7 @@ export def "order-api-update-state" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --new-state-id: int@new-state-id-completer # The new state to set (format: int32)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1713,7 +1711,7 @@ export def "order-api-parse-placeholders" [
   --language: string # The ISO 639-1 code of the target language. Using default if not set.
   --text-to-parse: string # The text to parse and replace the placeholders in.
   --trim: oneof<nothing, bool> # If true, then the placeholder values are trimmed after usage.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1741,8 +1739,6 @@ export def "order-api-parse-placeholders" [
 #
 # POST /api/v1/orders/{id}/send-message
 # operationId: OrderApi_SendMessage
-# --Body item shape: {LanguageCode?: string, Text?: string}
-# --Subject item shape: {LanguageCode?: string, Text?: string}
 export def "order-api-send-message" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1759,7 +1755,7 @@ export def "order-api-send-message" [
   --body: list # item shape: {LanguageCode?: string, Text?: string}
   --send-mode: int@send-mode-completer # format: int32
   --subject: list # item shape: {LanguageCode?: string, Text?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1806,7 +1802,7 @@ export def "order-api-add-shipment" [
   --shipping-id: string # The id of the shipment (Sendungsnummer/trackingid)
   --shipping-provider-id: int # Optional the id of a shipping provider existing in the billbee account that should be assigned to the shipment (format: int64)
   --shipping-provider-product-id: int # Optional the id of a shipping provider product that should be assigend to the shipment (format: int64)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1847,7 +1843,7 @@ export def "order-api-tags-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --tags: list<string>
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1888,7 +1884,7 @@ export def "order-api-tags-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --tags: list<string>
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1930,7 +1926,7 @@ export def "order-api-trigger-event" [
   --accept: string@accept-completer # Response content type
   --delay-in-minutes: int # The delay in minutes until the rule is executed (format: int32)
   --name: string # Name of the event
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1974,7 +1970,7 @@ export def "article-get-list" [
   --min-created-at: string # Optional the oldest create date of the articles to be returned (format: date-time)
   --minimum-bill-bee-article-id: int # format: int64
   --maximum-bill-bee-article-id: int # format: int64
-]: nothing -> record<Data: table<BasicAttributes: list, BillOfMaterial: list, Category1: record, Category2: record, Category3: record, Condition: int, CostPrice: float, CountryOfOrigin: string, CustomFields: list, DeliveryTime: int, Description: list, EAN: string, ExportDescription: string, ExportDescriptionMultiLanguage: list, HeightCm: float, Id: int, Images: list, InvoiceText: list, IsCustomizable: bool, IsDeactivated: bool, IsDigital: bool, LengthCm: float, LowStock: bool, Manufacturer: string, Materials: list, Occasion: int, Price: float, Recipient: int, SKU: string, ShippingProductId: int, ShortDescription: list, SoldAmount: float, SoldAmountLast30Days: float, SoldSumGross: float, SoldSumGrossLast30Days: float, SoldSumNet: float, SoldSumNetLast30Days: float, Sources: list, StockCode: string, StockCurrent: float, StockDesired: float, StockReduceItemsPerSale: float, StockWarning: float, Stocks: list, Tags: list, TaricNumber: string, Title: list, Type: int, Unit: int, UnitsPerItem: float, Vat1Rate: float, Vat2Rate: float, VatIndex: int, Weight: int, WeightNet: int, WidthCm: float>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>> {
+]: nothing -> oneof<record<Data: table<BasicAttributes: list, BillOfMaterial: list, Category1: record, Category2: record, Category3: record, Condition: int, CostPrice: float, CountryOfOrigin: string, CustomFields: list, DeliveryTime: int, Description: list, EAN: string, ExportDescription: string, ExportDescriptionMultiLanguage: list, HeightCm: float, Id: int, Images: list, InvoiceText: list, IsCustomizable: bool, IsDeactivated: bool, IsDigital: bool, LengthCm: float, LowStock: bool, Manufacturer: string, Materials: list, Occasion: int, Price: float, Recipient: int, SKU: string, ShippingProductId: int, ShortDescription: list, SoldAmount: float, SoldAmountLast30Days: float, SoldSumGross: float, SoldSumGrossLast30Days: float, SoldSumNet: float, SoldSumNetLast30Days: float, Sources: list, StockCode: string, StockCurrent: float, StockDesired: float, StockReduceItemsPerSale: float, StockWarning: float, Stocks: list, Tags: list, TaricNumber: string, Title: list, Type: int, Unit: int, UnitsPerItem: float, Vat1Rate: float, Vat2Rate: float, VatIndex: int, Weight: int, WeightNet: int, WidthCm: float>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "minCreatedAt" $min_created_at "scalar") (serialize-qp "minimumBillBeeArticleId" $minimum_bill_bee_article_id "scalar") (serialize-qp "maximumBillBeeArticleId" $maximum_bill_bee_article_id "scalar")] | flatten | str join "&"
@@ -1999,22 +1995,6 @@ export def "article-get-list" [
 #
 # POST /api/v1/products
 # operationId: Article_CreateArticle
-# --BasicAttributes item shape: {LanguageCode?: string, Text?: string}
-# --BillOfMaterial item shape: {Amount?: float, ArticleId?: int, SKU?: string}
-# --Category1 shape: {Id?: int, Name?: string}
-# --Category2 shape: {Id?: int, Name?: string}
-# --Category3 shape: {Id?: int, Name?: string}
-# --CustomFields item shape: {ArticleId?: int, Definition?: record, DefinitionId?: int, Id?: int, Value?: record}
-# --Description item shape: {LanguageCode?: string, Text?: string}
-# --ExportDescriptionMultiLanguage item shape: {LanguageCode?: string, Text?: string}
-# --Images item shape: {ArticleId?: int, Id?: int, IsDefault?: bool, Position?: int, ThumbPathExt?: string, ThumbUrl?: string, Url?: string}
-# --InvoiceText item shape: {LanguageCode?: string, Text?: string}
-# --Materials item shape: {LanguageCode?: string, Text?: string}
-# --ShortDescription item shape: {LanguageCode?: string, Text?: string}
-# --Sources item shape: {ApiAccountId?: int, ApiAccountName?: string, Custom?: record, ExportFactor?: float, Id?: int, Source: string, SourceId: string, StockSyncInactive?: bool, StockSyncMax?: float, StockSyncMin?: float, UnitsPerItem?: float}
-# --Stocks item shape: {Name?: string, StockCode?: string, StockCurrent?: float, StockDesired?: float, StockId?: int, StockWarning?: float, UnfulfilledAmount?: float}
-# --Tags item shape: {LanguageCode?: string, Text?: string}
-# --Title item shape: {LanguageCode?: string, Text?: string}
 export def "article-create-article" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2081,7 +2061,7 @@ export def "article-create-article" [
   --weight: int # format: int32
   --weight-net: int # format: int32
   --width-cm: float # format: double
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2121,7 +2101,7 @@ export def "article-get-patchable-fields" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/products/PatchableFields" $auth.query)
@@ -2156,7 +2136,7 @@ export def "article-get-category" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/products/category" $auth.query)
@@ -2193,7 +2173,7 @@ export def "article-get-custom-fields" [
   --accept: string@accept-completer-1 # Response content type
   --page: int # format: int32
   --page-size: int # format: int32
-]: nothing -> record<Data: table<Configuration: record, Id: int, IsNullable: bool, Name: string, Type: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>> {
+]: nothing -> oneof<record<Data: table<Configuration: record, Id: int, IsNullable: bool, Name: string, Type: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -2230,7 +2210,7 @@ export def "article-get-custom-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<Data: record<Configuration: record, Id: int, IsNullable: bool, Name: string, Type: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: nothing -> oneof<record<Data: record<Configuration: record, Id: int, IsNullable: bool, Name: string, Type: int>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2267,7 +2247,7 @@ export def "article-delete-images" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --body: list
-]: any -> record<Data: record<Deleted: list<int>, NotFound: list<int>>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record<Deleted: list<int>, NotFound: list<int>>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2306,7 +2286,7 @@ export def "article-delete-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
@@ -2343,7 +2323,7 @@ export def "article-get-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<Data: record<ArticleId: int, Id: int, IsDefault: bool, Position: int, ThumbPathExt: string, ThumbUrl: string, Url: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: nothing -> oneof<record<Data: record<ArticleId: int, Id: int, IsDefault: bool, Position: int, ThumbPathExt: string, ThumbUrl: string, Url: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
@@ -2382,7 +2362,7 @@ export def "article-get-reserved-amount" [
   --id: string # The id or the sku of the article to query (required)
   --lookup-by: string # Either the value id or the value sku to specify the meaning of the id parameter
   --stock-id: int # Optional the stock id if the multi stock feature is enabled (format: int64)
-]: nothing -> record<Data: record<ReservedAmount: float>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: nothing -> oneof<record<Data: record<ReservedAmount: float>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -2419,7 +2399,7 @@ export def "article-get-stocks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<Data: table<Description: string, Id: int, IsDefault: bool, Name: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: nothing -> oneof<record<Data: table<Description: string, Id: int, IsDefault: bool, Name: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/products/stocks" $auth.query)
@@ -2463,7 +2443,7 @@ export def "article-update-stock" [
   --reason: string # Optional a reason text for the stock update
   --sku: string # The SKU of the product to update
   --stock-id: int # Optional the stock id if the feature multi stock is activated (format: int64)
-]: any -> record<Data: record<CurrentStock: float, Message: string, OldStock: float, SKU: string, UnfulfilledAmount: float>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record<CurrentStock: float, Message: string, OldStock: float, SKU: string, UnfulfilledAmount: float>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2505,7 +2485,7 @@ export def "article-update-stock-code" [
   --sku: string
   --stock-code: string
   --stock-id: int # format: int64
-]: any -> record<Data: record, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2544,7 +2524,7 @@ export def "article-update-stock-multiple" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --body: list
-]: any -> table<Data: record<CurrentStock: float, Message: string, OldStock: float, SKU: string, UnfulfilledAmount: float>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<table<Data: record<CurrentStock: float, Message: string, OldStock: float, SKU: string, UnfulfilledAmount: float>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2583,7 +2563,7 @@ export def "article-delete-article" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2621,7 +2601,7 @@ export def "article-get-article" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --lookup-by: string # Either the value id, ean or the value sku to specify the meaning of the id parameter.
-]: nothing -> record<Data: record<BasicAttributes: list<record>, BillOfMaterial: list<record>, Category1: record<Id: int, Name: string>, Category2: record<Id: int, Name: string>, Category3: record<Id: int, Name: string>, Condition: int, CostPrice: float, CountryOfOrigin: string, CustomFields: list<record>, DeliveryTime: int, Description: list<record>, EAN: string, ExportDescription: string, ExportDescriptionMultiLanguage: list<record>, HeightCm: float, Id: int, Images: list<record>, InvoiceText: list<record>, IsCustomizable: bool, IsDeactivated: bool, IsDigital: bool, LengthCm: float, LowStock: bool, Manufacturer: string, Materials: list<record>, Occasion: int, Price: float, Recipient: int, SKU: string, ShippingProductId: int, ShortDescription: list<record>, SoldAmount: float, SoldAmountLast30Days: float, SoldSumGross: float, SoldSumGrossLast30Days: float, SoldSumNet: float, SoldSumNetLast30Days: float, Sources: list<record>, StockCode: string, StockCurrent: float, StockDesired: float, StockReduceItemsPerSale: float, StockWarning: float, Stocks: list<record>, Tags: list<record>, TaricNumber: string, Title: list<record>, Type: int, Unit: int, UnitsPerItem: float, Vat1Rate: float, Vat2Rate: float, VatIndex: int, Weight: int, WeightNet: int, WidthCm: float>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: nothing -> oneof<record<Data: record<BasicAttributes: list<record>, BillOfMaterial: list<record>, Category1: record<Id: int, Name: string>, Category2: record<Id: int, Name: string>, Category3: record<Id: int, Name: string>, Condition: int, CostPrice: float, CountryOfOrigin: string, CustomFields: list<record>, DeliveryTime: int, Description: list<record>, EAN: string, ExportDescription: string, ExportDescriptionMultiLanguage: list<record>, HeightCm: float, Id: int, Images: list<record>, InvoiceText: list<record>, IsCustomizable: bool, IsDeactivated: bool, IsDigital: bool, LengthCm: float, LowStock: bool, Manufacturer: string, Materials: list<record>, Occasion: int, Price: float, Recipient: int, SKU: string, ShippingProductId: int, ShortDescription: list<record>, SoldAmount: float, SoldAmountLast30Days: float, SoldSumGross: float, SoldSumGrossLast30Days: float, SoldSumNet: float, SoldSumNetLast30Days: float, Sources: list<record>, StockCode: string, StockCurrent: float, StockDesired: float, StockReduceItemsPerSale: float, StockWarning: float, Stocks: list<record>, Tags: list<record>, TaricNumber: string, Title: list<record>, Type: int, Unit: int, UnitsPerItem: float, Vat1Rate: float, Vat2Rate: float, VatIndex: int, Weight: int, WeightNet: int, WidthCm: float>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2660,7 +2640,7 @@ export def "article-patch-article" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2700,7 +2680,7 @@ export def "article-get-images" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<Data: table<ArticleId: int, Id: int, IsDefault: bool, Position: int, ThumbPathExt: string, ThumbUrl: string, Url: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: nothing -> oneof<record<Data: table<ArticleId: int, Id: int, IsDefault: bool, Position: int, ThumbPathExt: string, ThumbUrl: string, Url: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -2739,7 +2719,7 @@ export def "article-put-images" [
   --accept: string@accept-completer-1 # Response content type
   --replace: oneof<nothing, bool> # If you pass true, the images will be replaced by the passed images. Otherwise the passed images will be appended to the product.
   --body: list
-]: any -> record<Data: record<ArticleId: int, Id: int, IsDefault: bool, Position: int, ThumbPathExt: string, ThumbUrl: string, Url: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record<ArticleId: int, Id: int, IsDefault: bool, Position: int, ThumbPathExt: string, ThumbUrl: string, Url: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2781,7 +2761,7 @@ export def "article-delete-image-from-product" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -2820,7 +2800,7 @@ export def "article-get-image-from-product" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<Data: record<ArticleId: int, Id: int, IsDefault: bool, Position: int, ThumbPathExt: string, ThumbUrl: string, Url: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: nothing -> oneof<record<Data: record<ArticleId: int, Id: int, IsDefault: bool, Position: int, ThumbPathExt: string, ThumbUrl: string, Url: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -2866,7 +2846,7 @@ export def "article-put-image" [
   --thumb-path-ext: string
   --thumb-url: string
   --url: string
-]: any -> record<Data: record<ArticleId: int, Id: int, IsDefault: bool, Position: int, ThumbPathExt: string, ThumbUrl: string, Url: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record<ArticleId: int, Id: int, IsDefault: bool, Position: int, ThumbPathExt: string, ThumbUrl: string, Url: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2909,7 +2889,7 @@ export def "search-search" [
   --search-mode: int@search-mode-completer # format: int32
   --term: string
   --type: list<string>
-]: any -> record<Data: record<Customers: list<record>, Orders: list<record>, Products: list<record>>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record<Customers: list<record>, Orders: list<record>, Products: list<record>>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2946,7 +2926,7 @@ export def "shipment-get-ping" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/shipment/ping" $auth.query)
@@ -2970,8 +2950,6 @@ export def "shipment-get-ping" [
 #
 # POST /api/v1/shipment/shipment
 # operationId: Shipment_PostShipment
-# --Dimension shape: {height?: float, length?: float, width?: float}
-# --ReceiverAddress shape: {AddressAddition?: string, City?: string, Company?: string, CountryCode?: string, CountryCodeISO3?: string, Email?: string, FirstName?: string, Housenumber?: string, IsExportCountry?: bool, LastName?: string, Name2?: string, State?: string, Street?: string, Telephone?: string, Zip?: string}
 export def "shipment-post-shipment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2999,7 +2977,7 @@ export def "shipment-post-shipment" [
   --total-net: float # The value of the shipments content (net) (format: double)
   --weight-in-gram: float # Optional specify the weight in gram of the shipment (format: double)
   --shipping-carrier: int@shipping-carrier-completer # format: int32
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3044,7 +3022,7 @@ export def "shipment-get-list" [
   --order-id: int # Get shipments for this order only. (format: int64)
   --minimum-shipment-id: int # Get Shipments with a shipment greater or equal than this id. New shipments have a greater id than older shipments. (format: int64)
   --shipping-provider-id: int # Get Shippings for the specified shipping provider only. (format: int64)
-]: nothing -> record<Data: table<BillbeeId: int, Created: string, ShipmentType: int, Shipper: string, ShippingCarrier: int, ShippingId: string, ShippingProviderId: int, ShippingProviderProductId: int, TrackingUrl: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>> {
+]: nothing -> oneof<record<Data: table<BillbeeId: int, Created: string, ShipmentType: int, Shipper: string, ShippingCarrier: int, ShippingId: string, ShippingProviderId: int, ShippingProviderProductId: int, TrackingUrl: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string, Paging: record<Page: int, PageSize: int, TotalPages: int, TotalRows: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "createdAtMin" $created_at_min "scalar") (serialize-qp "createdAtMax" $created_at_max "scalar") (serialize-qp "orderId" $order_id "scalar") (serialize-qp "minimumShipmentId" $minimum_shipment_id "scalar") (serialize-qp "shippingProviderId" $shipping_provider_id "scalar")] | flatten | str join "&"
@@ -3080,7 +3058,7 @@ export def "shipment-get-shipping-carrier" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/shipment/shippingcarriers" $auth.query)
@@ -3115,7 +3093,7 @@ export def "shipment-get-shippingproviders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/shipment/shippingproviders" $auth.query)
@@ -3139,7 +3117,6 @@ export def "shipment-get-shippingproviders" [
 #
 # POST /api/v1/shipment/shipwithlabel
 # operationId: Shipment_ShipWithLabel
-# --Dimension shape: {height?: float, length?: float, width?: float}
 export def "shipment-ship-with-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3160,7 +3137,7 @@ export def "shipment-ship-with-label" [
   --provider-id: int # The id of the provider. You can query all providers with the shippingproviders endpoint (format: int64)
   --ship-date: string # Optional specify the shipdate to be transmitted to the carrier (format: date-time)
   --weight-in-gram: int # Optional the shipments weight in gram to override the calculated weight (format: int32)
-]: any -> record<Data: record<Carrier: string, ExportDocsPdf: string, LabelDataPdf: string, OrderId: int, OrderReference: string, ShippingDate: string, ShippingId: string, TrackingUrl: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string> {
+]: any -> oneof<record<Data: record<Carrier: string, ExportDocsPdf: string, LabelDataPdf: string, OrderId: int, OrderReference: string, ShippingDate: string, ShippingId: string, TrackingUrl: string>, ErrorCode: int, ErrorDescription: int, ErrorMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3198,7 +3175,7 @@ export def "web-hook-management-delete-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/webhooks" $auth.query)
@@ -3233,7 +3210,7 @@ export def "web-hook-management-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<Description: string, Filters: list<string>, Headers: record, Id: string, IsPaused: bool, Properties: record, Secret: string, WebHookUri: string> {
+]: nothing -> oneof<table<Description: string, Filters: list<string>, Headers: record, Id: string, IsPaused: bool, Properties: record, Secret: string, WebHookUri: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/webhooks" $auth.query)
@@ -3276,7 +3253,7 @@ export def "web-hook-management-post" [
   --properties: record
   secret: string
   web_hook_uri: string
-]: any -> record<Description: string, Filters: list<string>, Headers: record, Id: string, IsPaused: bool, Properties: record, Secret: string, WebHookUri: string> {
+]: any -> oneof<record<Description: string, Filters: list<string>, Headers: record, Id: string, IsPaused: bool, Properties: record, Secret: string, WebHookUri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -3314,7 +3291,7 @@ export def "web-hook-management-get-filters" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/webhooks/filters" $auth.query)
@@ -3350,7 +3327,7 @@ export def "web-hook-management-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3387,7 +3364,7 @@ export def "web-hook-management-lookup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<Description: string, Filters: list<string>, Headers: record, Id: string, IsPaused: bool, Properties: record, Secret: string, WebHookUri: string> {
+]: nothing -> oneof<record<Description: string, Filters: list<string>, Headers: record, Id: string, IsPaused: bool, Properties: record, Secret: string, WebHookUri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3432,7 +3409,7 @@ export def "web-hook-management-put" [
   --properties: record
   secret: string
   web_hook_uri: string
-]: any -> record<Description: string, Filters: list<string>, Headers: record, Id: string, IsPaused: bool, Properties: record, Secret: string, WebHookUri: string> {
+]: any -> oneof<record<Description: string, Filters: list<string>, Headers: record, Id: string, IsPaused: bool, Properties: record, Secret: string, WebHookUri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-billbee-api-key"))
   let base = ($base_url | default $BASE_URL)

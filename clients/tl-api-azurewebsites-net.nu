@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -117,9 +141,9 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "article-delete" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["article-delete" "article-post" "article-put" "article-update-article-gym-details" "article-get-addons" "article-gym-article-details" "article-add-measure-unit" "article-get-measure-units" "article-get-revenue-accounts" "article-search" "article-update-status" "article-get" "auth-login" "gym-get" "membership-get" "membership-post" "package-delete" "package-get" "package-post" "package-put" "package-search" "package-update-status" "status-get" "test-get" "user-get" "user-register-user" "user-update-user" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -152,7 +176,7 @@ export def "article-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --article-id: int # indentity number(primary key) for article object (format: int32)
-]: nothing -> record<isError: bool, message: string, responseException: any, result: int> {
+]: nothing -> oneof<record<isError: bool, message: string, responseException: any, result: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ArticleId" $article_id "scalar")] | flatten | str join "&"
@@ -177,8 +201,6 @@ export def "article-delete" [
 #
 # POST /api/Article
 # operationId: Article_Post
-# --availableGyms item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
-# --gymArticles item shape: {articleId?: int, availableQty?: float, createdUser?: string, employeeDiscount?: float, employeePrice?: float, gymId?: int, gymIdList?: string, gymName?: string, id?: int, isDefault?: bool, isInventoryItem?: bool, isObsolete?: bool, modifiedUser?: string, reorderLevel?: float, revenueAccountId?: int, sellingPrice?: float}
 export def "article-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -219,7 +241,7 @@ export def "article-post" [
   type: string
   --vat: float # format: decimal
   --vat-applicable: oneof<nothing, bool> # VAT Applicable
-]: any -> record<isError: bool, message: string, responseException: any, result: any> {
+]: any -> oneof<record<isError: bool, message: string, responseException: any, result: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -246,8 +268,6 @@ export def "article-post" [
 #
 # PUT /api/Article
 # operationId: Article_Put
-# --availableGyms item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
-# --gymArticles item shape: {articleId?: int, availableQty?: float, createdUser?: string, employeeDiscount?: float, employeePrice?: float, gymId?: int, gymIdList?: string, gymName?: string, id?: int, isDefault?: bool, isInventoryItem?: bool, isObsolete?: bool, modifiedUser?: string, reorderLevel?: float, revenueAccountId?: int, sellingPrice?: float}
 export def "article-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,7 +308,7 @@ export def "article-put" [
   type: string
   --vat: float # format: decimal
   --vat-applicable: oneof<nothing, bool> # VAT Applicable
-]: any -> record<isError: bool, message: string, responseException: any, result: any> {
+]: any -> oneof<record<isError: bool, message: string, responseException: any, result: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -326,7 +346,7 @@ export def "article-update-article-gym-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<isError: bool, message: string, responseException: any, result: any> {
+]: any -> oneof<record<isError: bool, message: string, responseException: any, result: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -367,7 +387,7 @@ export def "article-get-addons" [
   --type: string # nullable, default: all
   --limit: int # format: int32, default: 100
   --offset: int # format: int32, default: 0
-]: nothing -> record<isError: bool, message: string, responseException: any, result: table<activeStatus: bool, applyForAllGyms: bool, articleId: int, createdDate: string, createdUser: string, description: string, measureUnit: string, modifiedDate: string, modifiedUser: string, name: string, number: int, price: float, sellingPrice: float, tags: string, totalCount: int, type: string>> {
+]: nothing -> oneof<record<isError: bool, message: string, responseException: any, result: table<activeStatus: bool, applyForAllGyms: bool, articleId: int, createdDate: string, createdUser: string, description: string, measureUnit: string, modifiedDate: string, modifiedUser: string, name: string, number: int, price: float, sellingPrice: float, tags: string, totalCount: int, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "searchText" $search_text "scalar") (serialize-qp "gymIds" $gym_ids "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -404,7 +424,7 @@ export def "article-gym-article-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<articleId: int, availableQty: float, createdUser: string, employeeDiscount: float, employeePrice: float, gymId: int, gymIdList: string, gymName: string, id: int, isDefault: bool, isInventoryItem: bool, isObsolete: bool, modifiedUser: string, reorderLevel: float, revenueAccountId: int, sellingPrice: float> {
+]: nothing -> oneof<record<articleId: int, availableQty: float, createdUser: string, employeeDiscount: float, employeePrice: float, gymId: int, gymIdList: string, gymName: string, id: int, isDefault: bool, isInventoryItem: bool, isObsolete: bool, modifiedUser: string, reorderLevel: float, revenueAccountId: int, sellingPrice: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'articleId' must be non-empty" } }
@@ -441,7 +461,7 @@ export def "article-add-measure-unit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<isError: bool, message: string, responseException: any, result: any> {
+]: any -> oneof<record<isError: bool, message: string, responseException: any, result: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -479,7 +499,7 @@ export def "article-get-measure-units" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string # type of the measure unit (all, item, service) (nullable)
-]: nothing -> record<isError: bool, message: string, responseException: any, result: any> {
+]: nothing -> oneof<record<isError: bool, message: string, responseException: any, result: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -514,7 +534,7 @@ export def "article-get-revenue-accounts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<isError: bool, message: string, responseException: any, result: any> {
+]: nothing -> oneof<record<isError: bool, message: string, responseException: any, result: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Article/RevenueAccounts" $auth.query)
@@ -555,7 +575,7 @@ export def "article-search" [
   --limit: int # number of recode in result and default is 100. use negative numbers to order by desc (format: int32, default: 100)
   --offset: int # number of recodes to skip (format: int32, default: 0)
   --active-status: int # Active Status 1 : Active, 2: Inactive, 3: All, Default : 1 (format: int32, default: 1)
-]: nothing -> record<isError: bool, message: string, responseException: any, result: table<activeStatus: bool, applyForAllGyms: bool, articleId: int, createdDate: string, createdUser: string, description: string, measureUnit: string, modifiedDate: string, modifiedUser: string, name: string, number: int, price: float, sellingPrice: float, tags: string, totalCount: int, type: string>> {
+]: nothing -> oneof<record<isError: bool, message: string, responseException: any, result: table<activeStatus: bool, applyForAllGyms: bool, articleId: int, createdDate: string, createdUser: string, description: string, measureUnit: string, modifiedDate: string, modifiedUser: string, name: string, number: int, price: float, sellingPrice: float, tags: string, totalCount: int, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "searchText" $search_text "scalar") (serialize-qp "gymId" $gym_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "activeStatus" $active_status "scalar")] | flatten | str join "&"
@@ -593,7 +613,7 @@ export def "article-update-status" [
   --article-id: int # format: int32
   --status: int # 1 : activate , 2 deactivate (format: int32)
   --user-name: string # Updating user (nullable)
-]: nothing -> record<isError: bool, message: string, responseException: any, result: int> {
+]: nothing -> oneof<record<isError: bool, message: string, responseException: any, result: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ArticleId" $article_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
@@ -629,7 +649,7 @@ export def "article-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<isError: bool, message: string, responseException: any, result: any> {
+]: nothing -> oneof<record<isError: bool, message: string, responseException: any, result: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'articleID' must be non-empty" } }
@@ -705,7 +725,7 @@ export def "gym-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<isError: bool, message: string, responseException: any, result: any> {
+]: nothing -> oneof<record<isError: bool, message: string, responseException: any, result: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($gym_id | is-empty) { error make --unspanned { msg: "path parameter 'gymID' must be non-empty" } }
@@ -740,7 +760,7 @@ export def "membership-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string> {
+]: nothing -> oneof<table<name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Membership" $auth.query)
@@ -813,7 +833,7 @@ export def "package-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --package-id: int # primary key of package entity (format: int32)
-]: nothing -> record<isError: bool, message: string, responseException: any, result: bool> {
+]: nothing -> oneof<record<isError: bool, message: string, responseException: any, result: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "PackageId" $package_id "scalar")] | flatten | str join "&"
@@ -849,7 +869,7 @@ export def "package-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --package-id: int # primary key of package entity (format: int32)
-]: nothing -> record<isError: bool, message: string, responseException: any, result: any> {
+]: nothing -> oneof<record<isError: bool, message: string, responseException: any, result: any>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "packageId" $package_id "scalar")] | flatten | str join "&"
@@ -874,8 +894,6 @@ export def "package-get" [
 #
 # POST /api/Package
 # operationId: Package_Post
-# --addOns item shape: {articleId: int, articleName?: string, articleNumber?: int, articlePrice?: float, endOrder?: int, isIncludeServiceInCharge?: bool, measureUnit?: string, numberOfItems?: float, startOrder?: int}
-# --availableGyms item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
 export def "package-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -929,7 +947,7 @@ export def "package-post" [
   --start-date: string # Start date of the package. (format: date-time)
   --tags: string # Comma separated string values in case of need of maintain some labels kind of stuff relevant to the package. (nullable)
   --total-price: float # total price for the package including Addon fees, service fee and registration fee. incoming values for this field will ignore. (format: decimal)
-]: any -> record<isError: bool, message: string, responseException: any, result: any> {
+]: any -> oneof<record<isError: bool, message: string, responseException: any, result: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -956,8 +974,6 @@ export def "package-post" [
 #
 # PUT /api/Package
 # operationId: Package_Put
-# --addOns item shape: {articleId: int, articleName?: string, articleNumber?: int, articlePrice?: float, endOrder?: int, isIncludeServiceInCharge?: bool, measureUnit?: string, numberOfItems?: float, startOrder?: int}
-# --availableGyms item shape: {externalGymNumber?: int, gymId?: int, gymName?: string, location?: string}
 export def "package-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1011,7 +1027,7 @@ export def "package-put" [
   --start-date: string # Start date of the package. (format: date-time)
   --tags: string # Comma separated string values in case of need of maintain some labels kind of stuff relevant to the package. (nullable)
   --total-price: float # total price for the package including Addon fees, service fee and registration fee. incoming values for this field will ignore. (format: decimal)
-]: any -> record<isError: bool, message: string, responseException: any, result: any> {
+]: any -> oneof<record<isError: bool, message: string, responseException: any, result: any>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1059,7 +1075,7 @@ export def "package-search" [
   --startp-price: float # Start price of the price Range (format: decimal, default: 0)
   --end-price: float # End Price of the price Range (format: decimal, default: 9999999)
   --request-source: int # 1 : MRM, 2 : Mobile (format: int32, default: 1)
-]: nothing -> table<isError: bool, message: string, responseException: any, result: any> {
+]: nothing -> oneof<table<isError: bool, message: string, responseException: any, result: any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "searchText" $search_text "scalar") (serialize-qp "gymId" $gym_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "activeStatus" $active_status "scalar") (serialize-qp "categoryId" $category_id "scalar") (serialize-qp "startpPrice" $startp_price "scalar") (serialize-qp "endPrice" $end_price "scalar") (serialize-qp "requestSource" $request_source "scalar")] | flatten | str join "&"
@@ -1097,7 +1113,7 @@ export def "package-update-status" [
   --package-id: int # package Id (format: int32)
   --status: int # status : 1 activate, 2 : deactivate (format: int32, default: 1)
   --user-name: string # Status updated User (nullable, default: system)
-]: nothing -> record<isError: bool, message: string, responseException: any, result: bool> {
+]: nothing -> oneof<record<isError: bool, message: string, responseException: any, result: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "packageId" $package_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
@@ -1133,7 +1149,7 @@ export def "status-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --message-id: string # respose of POST request (nullable)
-]: nothing -> record<messageId: string, referenceId: int, source: any, statusId: int, statusText: string> {
+]: nothing -> oneof<record<messageId: string, referenceId: int, source: any, statusId: int, statusText: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "messageId" $message_id "scalar")] | flatten | str join "&"
@@ -1168,7 +1184,7 @@ export def "test-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: int> {
+]: nothing -> oneof<record<id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/Test" $auth.query)
@@ -1202,7 +1218,7 @@ export def "user-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accountNumber: string, externalEntityNumber: string, guardian: int, gymNumber: string, introduceBy: int, name: string, number: string, typeId: int, userId: int> {
+]: nothing -> oneof<record<accountNumber: string, externalEntityNumber: string, guardian: int, gymNumber: string, introduceBy: int, name: string, number: string, typeId: int, userId: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/User" $auth.query)

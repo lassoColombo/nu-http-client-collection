@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def syntax-completer [] { ["json" "original"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "discovery-exists" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["discovery-exists" "discovery-identifiers" "discovery-receives" "create-document-submission" "show-document-submission-evidence" "create-invoice-submission" "preflight-invoice-recipient" "show-invoice-submission-evidence" "create-legal-entity" "delete-legal-entity" "get-legal-entity" "update-legal-entity" "create-additional-tax-identifier" "delete-additional-tax-identifier" "get-additional-tax-identifier" "update-additional-tax-identifier" "create-administration" "delete-administration" "get-administration" "update-administration" "create-peppol-identifier" "delete-peppol-identifier" "receive-documenht" "get-invoice-json" "get-invoice-ubl" "get-invoice-ubl-versioned" "create-received-document" "get-received-document" "get-webhook-instances" "delete-webhook-instance" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -165,7 +189,7 @@ export def "discovery-exists" [
   --meta-scheme: string # The meta scheme of the identifier. For Peppol this is always 'iso6523-actorid-upis'. (default: iso6523-actorid-upis)
   --network: string # The network to check. Currently only 'peppol' is supported. (default: peppol)
   scheme: string # The scheme of the identifier. See <<_receiver_identifiers_list>> for a list.
-]: any -> record<code: string, email: bool> {
+]: any -> oneof<record<code: string, email: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -202,7 +226,7 @@ export def "discovery-identifiers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<countries: table<country: string, receiver: record, region: string, sender: record>> {
+]: nothing -> oneof<record<countries: table<country: string, receiver: record, region: string, sender: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/discovery/identifiers" $auth.query)
@@ -241,7 +265,7 @@ export def "discovery-receives" [
   --meta-scheme: string # The meta scheme of the identifier. For Peppol this is always 'iso6523-actorid-upis'. (default: iso6523-actorid-upis)
   --network: string # The network to check. Currently only 'peppol' is supported. (default: peppol)
   scheme: string # The scheme of the identifier. See <<_receiver_identifiers_list>> for a list.
-]: any -> record<code: string, email: bool> {
+]: any -> oneof<record<code: string, email: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -268,9 +292,6 @@ export def "discovery-receives" [
 #
 # POST /document_submissions
 # operationId: create_document_submission
-# --attachments item shape: {description?: string, document: string, documentId?: string, filename?: string, mimeType: "application/pdf", primaryImage?: bool}
-# --document shape: {documentType: "invoice"|"invoice_response"|"order", invoice?: record, invoiceResponse?: record, order?: record, rawDocumentData?: record}
-# --routing shape: {clearWithoutSending?: bool, eIdentifiers?: list, emails?: list<string>}
 export def "create-document-submission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,7 +309,7 @@ export def "create-document-submission" [
   --legal-entity-id: int # The id of the LegalEntity this document should be sent on behalf of. Either legalEntityId or receiveGuid is mandatory.
   --receive-guid: string # The GUID that was in the received_document webhook. Either legalEntityId or receiveGuid is mandatory. This field is used for sending response documents, such as InvoiceReponse and OrderResponse.
   --routing: record # The different ways to send the invoice to the recipient. The publicIdentifiers are used to send via the Peppol network, if the recipient is not registered on the Peppol network, the invoice will be sent to the email addresses in the emails property. This property is only mandatory when sending the invoice data using the <<_openapi_invoice>> property, not when sending using the <<_openapi_invoicedata>> property, in which case this information will be extracted from the <<_openapi_invoicedata>> object. If you do specify an <<_openapi_invoicerecipient>> object and an <<_openapi_invoicedata>> object, the data from the two will be merged. — shape: {clearWithoutSending?: bool, eIdentifiers?: list, emails?: list<string>}
-]: any -> record<guid: string> {
+]: any -> oneof<record<guid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -327,7 +348,7 @@ export def "show-document-submission-evidence" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<documents: table<document: string, expires_at: string, mime_type: string>, evidence: record<message_id: string, receiving_accesspoint: string, remote_mta_ip: string, reporting_mta: string, smtp_response: string, timestamp: string, transmission_id: string, xml: string>, network: string, receiver: string, sender: string> {
+]: nothing -> oneof<record<documents: table<document: string, expires_at: string, mime_type: string>, evidence: record<message_id: string, receiving_accesspoint: string, remote_mta_ip: string, reporting_mta: string, smtp_response: string, timestamp: string, transmission_id: string, xml: string>, network: string, receiver: string, sender: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($guid | is-empty) { error make --unspanned { msg: "path parameter 'guid' must be non-empty" } }
@@ -353,11 +374,6 @@ export def "show-document-submission-evidence" [
 #
 # POST /invoice_submissions
 # operationId: create_invoice_submission
-# --attachments item shape: {description?: string, document: string, documentId?: string, filename?: string, mimeType: "application/pdf", primaryImage?: bool}
-# --invoice shape: {accountingCost?: string, accountingCurrencyTaxAmount?: float, ... (42 more fields)}
-# --invoiceData shape: {conversionStrategy?: "ubl"|"cii"|"idoc", document?: string}
-# --invoiceRecipient shape: {emails?: list<string>, publicIdentifiers?: list}
-# --routing shape: {clearWithoutSending?: bool, eIdentifiers?: list, emails?: list<string>}
 export def "create-invoice-submission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -381,7 +397,7 @@ export def "create-invoice-submission" [
   --mode: string@mode-completer # DEPRECATED.
   --routing: record # The different ways to send the invoice to the recipient. The publicIdentifiers are used to send via the Peppol network, if the recipient is not registered on the Peppol network, the invoice will be sent to the email addresses in the emails property. This property is only mandatory when sending the invoice data using the <<_openapi_invoice>> property, not when sending using the <<_openapi_invoicedata>> property, in which case this information will be extracted from the <<_openapi_invoicedata>> object. If you do specify an <<_openapi_invoicerecipient>> object and an <<_openapi_invoicedata>> object, the data from the two will be merged. — shape: {clearWithoutSending?: bool, eIdentifiers?: list, emails?: list<string>}
   --supplier-id: int # DEPRECATED.
-]: any -> record<guid: string> {
+]: any -> oneof<record<guid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -408,7 +424,6 @@ export def "create-invoice-submission" [
 #
 # POST /invoice_submissions/preflight
 # operationId: preflight_invoice_recipient
-# --publicIdentifiers item shape: {id: string, scheme: string}
 export def "preflight-invoice-recipient" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -420,7 +435,7 @@ export def "preflight-invoice-recipient" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --public-identifiers: list # A list of public identifiers that uniquely identify this customer. — item shape: {id: string, scheme: string}
-]: any -> record<code: string> {
+]: any -> oneof<record<code: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -458,7 +473,7 @@ export def "show-invoice-submission-evidence" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<actions: table<receiver_response: string, transmission_datetime: string, transmission_result: string, transmission_type: string, transmitted_document: string>, guid: string, status: string> {
+]: nothing -> oneof<record<actions: table<receiver_response: string, transmission_datetime: string, transmission_result: string, transmission_type: string, transmitted_document: string>, guid: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($guid | is-empty) { error make --unspanned { msg: "path parameter 'guid' must be non-empty" } }
@@ -483,7 +498,6 @@ export def "show-invoice-submission-evidence" [
 #
 # POST /legal_entities
 # operationId: create_legal_entity
-# --rea shape: {capital?: float, identifier?: string, liquidation_status?: "LN"|"LS", partners?: "SU"|"SM", ... (1 more fields)}
 export def "create-legal-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +521,7 @@ export def "create-legal-entity" [
   --third-party-password: string # The password to use to authenticate to a system through which to send the document, or to obtain tax authority approval to send it. This field is currently relevant only for India and mandatory when creating an IN LegalEntity.
   --third-party-username: string # The username to use to authenticate to a system through which to send the document, or to obtain tax authority approval to send it. This field is currently relevant only for India and mandatory when creating an IN LegalEntity.
   zip: string # The zipcode.
-]: any -> record<advertisements: list<string>, city: string, country: string, county: string, id: int, line1: string, line2: string, party_name: string, public: bool, rea: record<capital: float, identifier: string, liquidation_status: string, partners: string, province: string>, smart_inbox: string, tenant_id: string, third_party_password: string, third_party_username: string, zip: string, peppol_identifiers: table<corppass: record, identifier: string, scheme: string, superscheme: string>, additional_tax_identifiers: table<country: string, county: string, id: int, identifier: string, scheme: string, superscheme: string>, api_keys: list<string>> {
+]: any -> oneof<record<advertisements: list<string>, city: string, country: string, county: string, id: int, line1: string, line2: string, party_name: string, public: bool, rea: record<capital: float, identifier: string, liquidation_status: string, partners: string, province: string>, smart_inbox: string, tenant_id: string, third_party_password: string, third_party_username: string, zip: string, peppol_identifiers: table<corppass: record, identifier: string, scheme: string, superscheme: string>, additional_tax_identifiers: table<country: string, county: string, id: int, identifier: string, scheme: string, superscheme: string>, api_keys: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -581,7 +595,7 @@ export def "get-legal-entity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<advertisements: list<string>, city: string, country: string, county: string, id: int, line1: string, line2: string, party_name: string, public: bool, rea: record<capital: float, identifier: string, liquidation_status: string, partners: string, province: string>, smart_inbox: string, tenant_id: string, third_party_password: string, third_party_username: string, zip: string, peppol_identifiers: table<corppass: record, identifier: string, scheme: string, superscheme: string>, additional_tax_identifiers: table<country: string, county: string, id: int, identifier: string, scheme: string, superscheme: string>, api_keys: list<string>> {
+]: nothing -> oneof<record<advertisements: list<string>, city: string, country: string, county: string, id: int, line1: string, line2: string, party_name: string, public: bool, rea: record<capital: float, identifier: string, liquidation_status: string, partners: string, province: string>, smart_inbox: string, tenant_id: string, third_party_password: string, third_party_username: string, zip: string, peppol_identifiers: table<corppass: record, identifier: string, scheme: string, superscheme: string>, additional_tax_identifiers: table<country: string, county: string, id: int, identifier: string, scheme: string, superscheme: string>, api_keys: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -606,7 +620,6 @@ export def "get-legal-entity" [
 #
 # PATCH /legal_entities/{id}
 # operationId: update_legal_entity
-# --rea shape: {capital?: float, identifier?: string, liquidation_status?: "LN"|"LS", partners?: "SU"|"SM", ... (1 more fields)}
 export def "update-legal-entity" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -633,7 +646,7 @@ export def "update-legal-entity" [
   --third-party-password: string # The password to use to authenticate to a system through which to send the document, or to obtain tax authority approval to send it. This field is currently relevant only for India and mandatory when creating an IN LegalEntity.
   --third-party-username: string # The username to use to authenticate to a system through which to send the document, or to obtain tax authority approval to send it. This field is currently relevant only for India and mandatory when creating an IN LegalEntity.
   --zip: string # The zipcode.
-]: any -> record<advertisements: list<string>, city: string, country: string, county: string, id: int, line1: string, line2: string, party_name: string, public: bool, rea: record<capital: float, identifier: string, liquidation_status: string, partners: string, province: string>, smart_inbox: string, tenant_id: string, third_party_password: string, third_party_username: string, zip: string, peppol_identifiers: table<corppass: record, identifier: string, scheme: string, superscheme: string>, additional_tax_identifiers: table<country: string, county: string, id: int, identifier: string, scheme: string, superscheme: string>, api_keys: list<string>> {
+]: any -> oneof<record<advertisements: list<string>, city: string, country: string, county: string, id: int, line1: string, line2: string, party_name: string, public: bool, rea: record<capital: float, identifier: string, liquidation_status: string, partners: string, province: string>, smart_inbox: string, tenant_id: string, third_party_password: string, third_party_username: string, zip: string, peppol_identifiers: table<corppass: record, identifier: string, scheme: string, superscheme: string>, additional_tax_identifiers: table<country: string, county: string, id: int, identifier: string, scheme: string, superscheme: string>, api_keys: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -679,7 +692,7 @@ export def "create-additional-tax-identifier" [
   superscheme: string # The superscheme of the identifier. Should always be "iso6523-actorid-upis".
   --third-party-password: string # The password to use to authenticate to a system through which to send the document, or to obtain tax authority approval to send it. This field is currently relevant only for India and mandatory when creating an IN tax identifier.
   --third-party-username: string # The username to use to authenticate to a system through which to send the document, or to obtain tax authority approval to send it. This field is currently relevant only for India and mandatory when creating an IN tax identifier.
-]: any -> record<country: string, county: string, id: int, identifier: string, scheme: string, superscheme: string> {
+]: any -> oneof<record<country: string, county: string, id: int, identifier: string, scheme: string, superscheme: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -757,7 +770,7 @@ export def "get-additional-tax-identifier" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<country: string, county: string, id: int, identifier: string, scheme: string, superscheme: string> {
+]: nothing -> oneof<record<country: string, county: string, id: int, identifier: string, scheme: string, superscheme: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($legal_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'legal_entity_id' must be non-empty" } }
@@ -798,7 +811,7 @@ export def "update-additional-tax-identifier" [
   identifier: string # The identifier.
   --third-party-password: string # The password to use to authenticate to a system through which to send the document, or to obtain tax authority approval to send it. This field is currently relevant only for India and mandatory when creating an IN tax identifier.
   --third-party-username: string # The username to use to authenticate to a system through which to send the document, or to obtain tax authority approval to send it. This field is currently relevant only for India and mandatory when creating an IN tax identifier.
-]: any -> record<country: string, county: string, id: int, identifier: string, scheme: string, superscheme: string> {
+]: any -> oneof<record<country: string, county: string, id: int, identifier: string, scheme: string, superscheme: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -843,7 +856,7 @@ export def "create-administration" [
   --package-version: string@package-version-completer # The version of the package. (default: peppol_bis_v3)
   --packaging: string@packaging-completer # How to package the purchase invoice. (default: ubl)
   --sender-email-identity-id: int # The id of the SenderEmailIdentity. If not provided, the Storecove default sender will be used (format: int64)
-]: any -> record<email: string, id: int, legal_entity_id: int, package_version: string, packaging: string, sender_email_identity_id: int> {
+]: any -> oneof<record<email: string, id: int, legal_entity_id: int, package_version: string, packaging: string, sender_email_identity_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -921,7 +934,7 @@ export def "get-administration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<email: string, id: int, legal_entity_id: int, package_version: string, packaging: string, sender_email_identity_id: int> {
+]: nothing -> oneof<record<email: string, id: int, legal_entity_id: int, package_version: string, packaging: string, sender_email_identity_id: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($legal_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'legal_entity_id' must be non-empty" } }
@@ -963,7 +976,7 @@ export def "update-administration" [
   --package-version: string@package-version-completer # The version of the package.
   --packaging: string@packaging-completer # How to package the purchase invoice.
   --sender-email-identity-id: int # The id of the SenderEmailIdentity. If not provided, the Storecove default sender will be used (format: int64)
-]: any -> record<email: string, id: int, legal_entity_id: int, package_version: string, packaging: string, sender_email_identity_id: int> {
+]: any -> oneof<record<email: string, id: int, legal_entity_id: int, package_version: string, packaging: string, sender_email_identity_id: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -992,7 +1005,6 @@ export def "update-administration" [
 #
 # POST /legal_entities/{legal_entity_id}/peppol_identifiers
 # operationId: create_peppol_identifier
-# --corppass shape: {client_redirect_fail_url?: string, client_redirect_success_url?: string, enabled?: bool, flow_type: "corppass_flow_redirect"|"corppass_flow_email", signer_email?: string, signer_name?: string, simulate_corppass?: bool}
 export def "create-peppol-identifier" [
   legal_entity_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1008,7 +1020,7 @@ export def "create-peppol-identifier" [
   identifier: string # The identifier.
   scheme: string # The scheme of the identifier. See <<_receiver_identifiers_list>> for a list.
   superscheme: string # The superscheme of the identifier. Should always be "iso6523-actorid-upis".
-]: any -> record<corppass: record<client_redirect_fail_url: string, client_redirect_success_url: string, corppass_url: string, enabled: bool, flow_type: string, signer_email: string, signer_name: string, simulate_corppass: bool, status: string>, identifier: string, scheme: string, superscheme: string> {
+]: any -> oneof<record<corppass: record<client_redirect_fail_url: string, client_redirect_success_url: string, corppass_url: string, enabled: bool, flow_type: string, signer_email: string, signer_name: string, simulate_corppass: bool, status: string>, identifier: string, scheme: string, superscheme: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1092,7 +1104,7 @@ export def "receive-documenht" [
   --document: string # The Base64 encoded document.
   --body-legal-entity-id: int # The of the LegalEntity this document was received for. (format: int64)
   --parse-strategy: string@parse-strategy-completer # The attachment content type (mime type).
-]: any -> record<guid: string> {
+]: any -> oneof<record<guid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1132,7 +1144,7 @@ export def "get-invoice-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pmv: string # The PaymentMeans version. The default (and deprecated) version 1.0 will give BankPaymentMean, DirectDebitPaymentMean, CardPaymentMean, NppPaymentMean, SeBankGiroPaymentMean, SePlusGiroPaymentMean, SgCardPaymentMean, SgGiroPaymentMean, SgPaynowPaymentMean. Version 2.0 deprecates BankPaymentMean (now CreditTransferPaymentMean), CardPaymentMean (now CreditCardPaymentMean), NppPaymentMean (now AunzNppPayidPaymentMean), SeBankGiroPaymentMean (now SeBankgiroPaymentMean -- note the lower 'g' in 'bankgiro'). It also adds OnlinePaymentServicePaymentMean, StandingAgreementPaymentMean, AunzNppPaytoPaymentMean, AunzBpayPaymentMean, AunzPostbillpayPaymentMean, AunzUriPaymentMean. (default: 1.0)
-]: nothing -> record<accounting: record<code: string, list: string, list_version: string, name: string>, accounting_cost: string, allowance_charge: float, allowance_charges: table<amount_excluding_tax: float, amount_excluding_vat: string, reason: string, tax: record, vat: record>, amount_including_vat: float, attachments: table<content_type: string, document: string>, billing_reference: string, buyer_reference: string, contract_document_reference: string, delivery: record<actual_date: string, location: record<building_number: string, city: string, country: string, county: string, department: string, id: string, line1: string, line2: string, neighborhood: string, scheme_id: string, secondary_number: string, zip: string>, party: record<name: string>>, document: string, document_currency_code: string, document_totals: record<payable: float, prepaid: float, rounding: float, total: float>, document_type: string, due_date: string, external_key: string, external_user_id: string, guid: string, invoice_lines: table<accounting: record, allowance_charge: float, allowance_charge_array: list, allowance_charges: list, amount_excluding_tax: float, amount_excluding_vat: float, description: string, name: string, period_end: string, period_start: string, price: record, tax: record, units: record, vat: record>, invoice_number: string, invoice_type: string, issue_date: string, legal_entity_id: int, note: string, order_reference: string, payment_means: record<iban: string, id: string>, payment_means_array: table<account: string, branch_code: string, holder: string, mandate: string, network: string, payment_id: string, type: any>, payment_means_payment_id: string, payment_terms_note: string, period_end: string, period_start: string, project_reference: string, sender: record<billing_contact: record<email: string, first_name: string, last_name: string>, building_number: string, city: string, country: string, county: string, department: string, identifiers: list<record>, legal_name: string, line1: string, line2: string, neighborhood: string, party_name: string, peppol_identifiers: record<corppass: record, identifier: string, scheme: string, superscheme: string>, secondary_number: string, zip: string>, source: string, sub_type: string, system_generated_primary_image: bool, tax_point_date: string, tax_subtotals: table<amount_excluding_tax: float, amount_excluding_vat: string, tax: record, vat: record>, tax_system: string, vat_reverse_charge: bool> {
+]: nothing -> oneof<record<accounting: record<code: string, list: string, list_version: string, name: string>, accounting_cost: string, allowance_charge: float, allowance_charges: table<amount_excluding_tax: float, amount_excluding_vat: string, reason: string, tax: record, vat: record>, amount_including_vat: float, attachments: table<content_type: string, document: string>, billing_reference: string, buyer_reference: string, contract_document_reference: string, delivery: record<actual_date: string, location: record<building_number: string, city: string, country: string, county: string, department: string, id: string, line1: string, line2: string, neighborhood: string, scheme_id: string, secondary_number: string, zip: string>, party: record<name: string>>, document: string, document_currency_code: string, document_totals: record<payable: float, prepaid: float, rounding: float, total: float>, document_type: string, due_date: string, external_key: string, external_user_id: string, guid: string, invoice_lines: table<accounting: record, allowance_charge: float, allowance_charge_array: list, allowance_charges: list, amount_excluding_tax: float, amount_excluding_vat: float, description: string, name: string, period_end: string, period_start: string, price: record, tax: record, units: record, vat: record>, invoice_number: string, invoice_type: string, issue_date: string, legal_entity_id: int, note: string, order_reference: string, payment_means: record<iban: string, id: string>, payment_means_array: table<account: string, branch_code: string, holder: string, mandate: string, network: string, payment_id: string, type: any>, payment_means_payment_id: string, payment_terms_note: string, period_end: string, period_start: string, project_reference: string, sender: record<billing_contact: record<email: string, first_name: string, last_name: string>, building_number: string, city: string, country: string, county: string, department: string, identifiers: list<record>, legal_name: string, line1: string, line2: string, neighborhood: string, party_name: string, peppol_identifiers: record<corppass: record, identifier: string, scheme: string, superscheme: string>, secondary_number: string, zip: string>, source: string, sub_type: string, system_generated_primary_image: bool, tax_point_date: string, tax_subtotals: table<amount_excluding_tax: float, amount_excluding_vat: string, tax: record, vat: record>, tax_system: string, vat_reverse_charge: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($guid | is-empty) { error make --unspanned { msg: "path parameter 'guid' must be non-empty" } }
@@ -1171,7 +1183,7 @@ export def "get-invoice-ubl" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --pmv: string # The PaymentMeans version. The default (and deprecated) version 1.0 will give BankPaymentMean, DirectDebitPaymentMean, CardPaymentMean, NppPaymentMean, SeBankGiroPaymentMean, SePlusGiroPaymentMean, SgCardPaymentMean, SgGiroPaymentMean, SgPaynowPaymentMean. Version 2.0 deprecates BankPaymentMean (now CreditTransferPaymentMean), CardPaymentMean (now CreditCardPaymentMean), NppPaymentMean (now AunzNppPayidPaymentMean), SeBankGiroPaymentMean (now SeBankgiroPaymentMean -- note the lower 'g' in 'bankgiro'). It also adds OnlinePaymentServicePaymentMean, StandingAgreementPaymentMean, AunzNppPaytoPaymentMean, AunzBpayPaymentMean, AunzPostbillpayPaymentMean, AunzUriPaymentMean. (default: 1.0)
-]: nothing -> record<external_key: string, external_user_id: string, guid: string, legal_entity_id: int, system_generated_primary_image: bool, tax_system: string, ubl: string> {
+]: nothing -> oneof<record<external_key: string, external_user_id: string, guid: string, legal_entity_id: int, system_generated_primary_image: bool, tax_system: string, ubl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($guid | is-empty) { error make --unspanned { msg: "path parameter 'guid' must be non-empty" } }
@@ -1211,7 +1223,7 @@ export def "get-invoice-ubl-versioned" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<external_key: string, external_user_id: string, guid: string, legal_entity_id: int, system_generated_primary_image: bool, tax_system: string, ubl: string> {
+]: nothing -> oneof<record<external_key: string, external_user_id: string, guid: string, legal_entity_id: int, system_generated_primary_image: bool, tax_system: string, ubl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($guid | is-empty) { error make --unspanned { msg: "path parameter 'guid' must be non-empty" } }
@@ -1251,7 +1263,7 @@ export def "create-received-document" [
   --document: string # The Base64 encoded document.
   --legal-entity-id: int # The of the LegalEntity this document was received for. (format: int64)
   --parse-strategy: string@parse-strategy-completer # The attachment content type (mime type).
-]: any -> record<guid: string> {
+]: any -> oneof<record<guid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1291,7 +1303,7 @@ export def "get-received-document" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --syntax: string@syntax-completer # The syntax in which to receive the received document. (required, default: json)
-]: nothing -> record<guid: string> {
+]: nothing -> oneof<record<guid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($guid | is-empty) { error make --unspanned { msg: "path parameter 'guid' must be non-empty" } }
@@ -1329,7 +1341,7 @@ export def "get-webhook-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<body: string, guid: string> {
+]: nothing -> oneof<record<body: string, guid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_instances/" $auth.query)

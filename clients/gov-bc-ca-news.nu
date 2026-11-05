@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://news.api.gov.bc.ca"] }
@@ -99,9 +123,9 @@ def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "facebook-posts-get-by-uri" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["facebook-posts-get-by-uri" "home-get" "ministries-get-all" "ministries-get-one" "ministries-get-minister" "newsletters-get-all" "newsletters-get-image" "newsletters-get-one" "newsletters-get-edition" "newsletters-get-article" "posts-get" "posts-get-all-keys" "posts-get-key-from-reference" "posts-get-latest" "posts-get-latest-media-uri" "posts-get-one" "resource-links-get-all" "sectors-get-all" "sectors-get-one" "services-get-all" "services-get-one" "slides-get-all" "slides-get-one" "tags-get-all" "tags-get-one" "themes-get-all" "themes-get-one" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -136,7 +160,7 @@ export def "facebook-posts-get-by-uri" [
   --accept: string@accept-completer # Response content type
   --uri: string # default: ""
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> record<content: string, facebookObjectId: int, pictureUri: string, postComments: int, postLikes: int, postShares: int, poster: string, posterLikes: int, posterLogo: string, posterSubtitle: string, type: string, key: string, timestamp: string> {
+]: nothing -> oneof<record<content: string, facebookObjectId: int, pictureUri: string, postComments: int, postLikes: int, postShares: int, poster: string, posterLikes: int, posterLogo: string, posterSubtitle: string, type: string, key: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "1.0")
@@ -174,7 +198,7 @@ export def "home-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> record<featurePostKey: string, liveWebcastFlashMediaManifestUrl: string, liveWebcastM3uPlaylist: string, name: string, topPostKey: string, kind: string, key: string, timestamp: string> {
+]: nothing -> oneof<record<featurePostKey: string, liveWebcastFlashMediaManifestUrl: string, liveWebcastM3uPlaylist: string, name: string, topPostKey: string, kind: string, key: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "1.0")
@@ -212,7 +236,7 @@ export def "ministries-get-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> table<audioUri: string, childMinistryKey: string, contactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, displayAdditionalName: string, featurePostKey: string, flickrUri: string, isActive: bool, ministerName: string, ministryUrl: string, name: string, newsletterLinks: list<record>, parentMinistryKey: string, secondContactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, serviceLinks: list<record>, topPostKey: string, topicLinks: list<record>, twitterFeedUsername: string, weekendContactNumber: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
+]: nothing -> oneof<table<audioUri: string, childMinistryKey: string, contactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, displayAdditionalName: string, featurePostKey: string, flickrUri: string, isActive: bool, ministerName: string, ministryUrl: string, name: string, newsletterLinks: list<record>, parentMinistryKey: string, secondContactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, serviceLinks: list<record>, topPostKey: string, topicLinks: list<record>, twitterFeedUsername: string, weekendContactNumber: string, youtubeUri: string, kind: string, key: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "1.0")
@@ -251,7 +275,7 @@ export def "ministries-get-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> record<audioUri: string, childMinistryKey: string, contactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, displayAdditionalName: string, featurePostKey: string, flickrUri: string, isActive: bool, ministerName: string, ministryUrl: string, name: string, newsletterLinks: table<uri: string, key: string, timestamp: string>, parentMinistryKey: string, secondContactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, serviceLinks: table<uri: string, key: string, timestamp: string>, topPostKey: string, topicLinks: table<uri: string, key: string, timestamp: string>, twitterFeedUsername: string, weekendContactNumber: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
+]: nothing -> oneof<record<audioUri: string, childMinistryKey: string, contactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, displayAdditionalName: string, featurePostKey: string, flickrUri: string, isActive: bool, ministerName: string, ministryUrl: string, name: string, newsletterLinks: table<uri: string, key: string, timestamp: string>, parentMinistryKey: string, secondContactUser: record<emailAddress: string, fullName: string, mobileNumber: string, phoneNumber: string>, serviceLinks: table<uri: string, key: string, timestamp: string>, topPostKey: string, topicLinks: table<uri: string, key: string, timestamp: string>, twitterFeedUsername: string, weekendContactNumber: string, youtubeUri: string, kind: string, key: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -291,7 +315,7 @@ export def "ministries-get-minister" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> record<details: string, emailHtml: string, headline: string, photo: string, post: string, summary: string, key: string, timestamp: string> {
+]: nothing -> oneof<record<details: string, emailHtml: string, headline: string, photo: string, post: string, summary: string, key: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -330,7 +354,7 @@ export def "newsletters-get-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> table<description: string, editions: list<record>, ministryName: string, name: string, key: string, timestamp: string> {
+]: nothing -> oneof<table<description: string, editions: list<record>, ministryName: string, name: string, key: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "1.0")
@@ -369,7 +393,7 @@ export def "newsletters-get-image" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> record<fileName: string, imageBytes: string, imageType: string, key: string, timestamp: string> {
+]: nothing -> oneof<record<fileName: string, imageBytes: string, imageType: string, key: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($guid | is-empty) { error make --unspanned { msg: "path parameter 'guid' must be non-empty" } }
@@ -409,7 +433,7 @@ export def "newsletters-get-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> record<description: string, editions: table<key: string, value: string>, ministryName: string, name: string, key: string, timestamp: string> {
+]: nothing -> oneof<record<description: string, editions: table<key: string, value: string>, ministryName: string, name: string, key: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($newsletter_key | is-empty) { error make --unspanned { msg: "path parameter 'newsletterKey' must be non-empty" } }
@@ -450,7 +474,7 @@ export def "newsletters-get-edition" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> record<htmlBody: string, name: string, key: string, timestamp: string> {
+]: nothing -> oneof<record<htmlBody: string, name: string, key: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($newsletter_key | is-empty) { error make --unspanned { msg: "path parameter 'newsletterKey' must be non-empty" } }
@@ -493,7 +517,7 @@ export def "newsletters-get-article" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> record<editionName: string, htmlBody: string, key: string, timestamp: string> {
+]: nothing -> oneof<record<editionName: string, htmlBody: string, key: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($newsletter_key | is-empty) { error make --unspanned { msg: "path parameter 'newsletterKey' must be non-empty" } }
@@ -535,7 +559,7 @@ export def "posts-get" [
   --accept: string@accept-completer # Response content type
   --post-keys: list<string> # default: ""
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> table<assetUrl: string, atomId: string, azureAssets: list<record>, documents: list<record>, facebookPictureUri: string, hasMediaAssets: bool, isNewsOnDemand: bool, keywords: string, kind: string, leadMinistryKey: string, location: string, ministryKeys: list<string>, publishDate: string, redirectUri: string, reference: string, sectorKeys: list<string>, serviceKeys: list<string>, socialMediaHeadline: string, socialMediaSummary: string, summary: string, key: string, timestamp: string> {
+]: nothing -> oneof<table<assetUrl: string, atomId: string, azureAssets: list<record>, documents: list<record>, facebookPictureUri: string, hasMediaAssets: bool, isNewsOnDemand: bool, keywords: string, kind: string, leadMinistryKey: string, location: string, ministryKeys: list<string>, publishDate: string, redirectUri: string, reference: string, sectorKeys: list<string>, serviceKeys: list<string>, socialMediaHeadline: string, socialMediaSummary: string, summary: string, key: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "1.0")
@@ -578,7 +602,7 @@ export def "posts-get-all-keys" [
   --count: int # number of posts to return (format: int32, default: "")
   --skip: int # number of posts to skip (format: int32, default: "")
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> table<key: string, value: string> {
+]: nothing -> oneof<table<key: string, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index_kind | is-empty) { error make --unspanned { msg: "path parameter 'indexKind' must be non-empty" } }
@@ -619,7 +643,7 @@ export def "posts-get-key-from-reference" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> record<key: string, value: string> {
+]: nothing -> oneof<record<key: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reference | is-empty) { error make --unspanned { msg: "path parameter 'reference' must be non-empty" } }
@@ -663,7 +687,7 @@ export def "posts-get-latest" [
   --count: int # number of posts to return (format: int32, default: "")
   --skip: int # number of posts to skip (format: int32, default: "")
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> table<assetUrl: string, atomId: string, azureAssets: list<record>, documents: list<record>, facebookPictureUri: string, hasMediaAssets: bool, isNewsOnDemand: bool, keywords: string, kind: string, leadMinistryKey: string, location: string, ministryKeys: list<string>, publishDate: string, redirectUri: string, reference: string, sectorKeys: list<string>, serviceKeys: list<string>, socialMediaHeadline: string, socialMediaSummary: string, summary: string, key: string, timestamp: string> {
+]: nothing -> oneof<table<assetUrl: string, atomId: string, azureAssets: list<record>, documents: list<record>, facebookPictureUri: string, hasMediaAssets: bool, isNewsOnDemand: bool, keywords: string, kind: string, leadMinistryKey: string, location: string, ministryKeys: list<string>, publishDate: string, redirectUri: string, reference: string, sectorKeys: list<string>, serviceKeys: list<string>, socialMediaHeadline: string, socialMediaSummary: string, summary: string, key: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($index_kind | is-empty) { error make --unspanned { msg: "path parameter 'indexKind' must be non-empty" } }
@@ -744,7 +768,7 @@ export def "posts-get-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> record<assetUrl: string, atomId: string, azureAssets: table<key: string, label: string, length: int>, documents: table<byline: string, contacts: list, detailsHtml: string, headline: string, languageId: int, pageTitle: string, subheadline: string>, facebookPictureUri: string, hasMediaAssets: bool, isNewsOnDemand: bool, keywords: string, kind: string, leadMinistryKey: string, location: string, ministryKeys: list<string>, publishDate: string, redirectUri: string, reference: string, sectorKeys: list<string>, serviceKeys: list<string>, socialMediaHeadline: string, socialMediaSummary: string, summary: string, key: string, timestamp: string> {
+]: nothing -> oneof<record<assetUrl: string, atomId: string, azureAssets: table<key: string, label: string, length: int>, documents: table<byline: string, contacts: list, detailsHtml: string, headline: string, languageId: int, pageTitle: string, subheadline: string>, facebookPictureUri: string, hasMediaAssets: bool, isNewsOnDemand: bool, keywords: string, kind: string, leadMinistryKey: string, location: string, ministryKeys: list<string>, publishDate: string, redirectUri: string, reference: string, sectorKeys: list<string>, serviceKeys: list<string>, socialMediaHeadline: string, socialMediaSummary: string, summary: string, key: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -783,7 +807,7 @@ export def "resource-links-get-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> table<uri: string, key: string, timestamp: string> {
+]: nothing -> oneof<table<uri: string, key: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "1.0")
@@ -821,7 +845,7 @@ export def "sectors-get-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
+]: nothing -> oneof<table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "1.0")
@@ -860,7 +884,7 @@ export def "sectors-get-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
+]: nothing -> oneof<record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -899,7 +923,7 @@ export def "services-get-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
+]: nothing -> oneof<table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "1.0")
@@ -938,7 +962,7 @@ export def "services-get-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
+]: nothing -> oneof<record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -977,7 +1001,7 @@ export def "slides-get-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> table<actionLabel: string, actionUri: string, facebookPostUri: string, headline: string, image: string, imageType: string, justify: string, slideId: string, summary: string, key: string, timestamp: string> {
+]: nothing -> oneof<table<actionLabel: string, actionUri: string, facebookPostUri: string, headline: string, image: string, imageType: string, justify: string, slideId: string, summary: string, key: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "1.0")
@@ -1016,7 +1040,7 @@ export def "slides-get-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> record<actionLabel: string, actionUri: string, facebookPostUri: string, headline: string, image: string, imageType: string, justify: string, slideId: string, summary: string, key: string, timestamp: string> {
+]: nothing -> oneof<record<actionLabel: string, actionUri: string, facebookPostUri: string, headline: string, image: string, imageType: string, justify: string, slideId: string, summary: string, key: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1055,7 +1079,7 @@ export def "tags-get-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
+]: nothing -> oneof<table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "1.0")
@@ -1094,7 +1118,7 @@ export def "tags-get-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
+]: nothing -> oneof<record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -1133,7 +1157,7 @@ export def "themes-get-all" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
+]: nothing -> oneof<table<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let api_version = ($api_version | default "1.0")
@@ -1172,7 +1196,7 @@ export def "themes-get-one" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (required, default: 1.0)
-]: nothing -> record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string> {
+]: nothing -> oneof<record<audioUri: string, featurePostKey: string, flickrUri: string, isActive: bool, name: string, topPostKey: string, twitterFeedUsername: string, youtubeUri: string, kind: string, key: string, timestamp: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }

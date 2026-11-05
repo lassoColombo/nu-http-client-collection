@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -125,9 +149,9 @@ def scope-completer [] { ["company" "public"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "drive-groups-all" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["drive-groups-all" "drive-groups-add" "drive-groups-delete" "drive-groups-one" "drive-groups-update" "drives-all" "drives-add" "drives-delete" "drives-one" "drives-update" "files-all" "files-upload" "files-search" "files-delete" "files-one" "files-update" "files-download" "folders-add" "folders-delete" "folders-one" "folders-update" "folders-copy" "shared-links-all" "shared-links-add" "shared-links-delete" "shared-links-one" "shared-links-update" "upload-sessions-add" "upload-sessions-delete" "upload-sessions-one" "upload-sessions-upload" "upload-sessions-finish" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "drive-groups-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<created_at: string, created_by: string, description: string, display_name: string, id: string, name: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<created_at: string, created_by: string, description: string, display_name: string, id: string, name: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -213,7 +237,7 @@ export def "drive-groups-add" [
   --description: string # A description of the object. (nullable, e.g. A description)
   --display-name: string # The display name of the drive group (e.g. accounting)
   name: string # The name of the drive group (e.g. accounting)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -260,7 +284,7 @@ export def "drive-groups-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -306,7 +330,7 @@ export def "drive-groups-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<created_at: string, created_by: string, description: string, display_name: string, id: string, name: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<created_at: string, created_by: string, description: string, display_name: string, id: string, name: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -354,7 +378,7 @@ export def "drive-groups-update" [
   --description: string # A description of the object. (nullable, e.g. A description)
   --display-name: string # The display name of the drive group (e.g. accounting)
   name: string # The name of the drive group (e.g. accounting)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -405,7 +429,7 @@ export def "drives-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<created_at: string, created_by: string, description: string, id: string, name: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<created_at: string, created_by: string, description: string, id: string, name: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -450,7 +474,7 @@ export def "drives-add" [
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
   --description: string # A description of the object. (nullable, e.g. A description)
   name: string # The name of the drive (e.g. Project Resources)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -497,7 +521,7 @@ export def "drives-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -543,7 +567,7 @@ export def "drives-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<created_at: string, created_by: string, description: string, id: string, name: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<created_at: string, created_by: string, description: string, id: string, name: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -590,7 +614,7 @@ export def "drives-update" [
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
   --description: string # A description of the object. (nullable, e.g. A description)
   name: string # The name of the drive (e.g. Project Resources)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -643,7 +667,7 @@ export def "files-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<created_at: string, created_by: string, description: string, downloadable: bool, downstream_id: string, id: string, mime_type: string, name: string, owner: record, parent_folders: list, parent_folders_complete: bool, path: string, size: int, type: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<created_at: string, created_by: string, description: string, downloadable: bool, downstream_id: string, id: string, mime_type: string, name: string, owner: record, parent_folders: list, parent_folders_complete: bool, path: string, size: int, type: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -688,7 +712,7 @@ export def "files-upload" [
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
   --body: string
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.apideck.com")
@@ -738,7 +762,7 @@ export def "files-search" [
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
   --drive-id: string # ID of the drive to filter on (e.g. 1234)
   query: string # The query to search for. May match across multiple fields. (e.g. logo jpg)
-]: any -> record<data: table<created_at: string, created_by: string, description: string, downloadable: bool, downstream_id: string, id: string, mime_type: string, name: string, owner: record, parent_folders: list, parent_folders_complete: bool, path: string, size: int, type: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: table<created_at: string, created_by: string, description: string, downloadable: bool, downstream_id: string, id: string, mime_type: string, name: string, owner: record, parent_folders: list, parent_folders_complete: bool, path: string, size: int, type: string, updated_at: string, updated_by: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -785,7 +809,7 @@ export def "files-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -831,7 +855,7 @@ export def "files-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<created_at: string, created_by: string, description: string, downloadable: bool, downstream_id: string, id: string, mime_type: string, name: string, owner: record<email: string, id: string, name: string>, parent_folders: list<record>, parent_folders_complete: bool, path: string, size: int, type: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<created_at: string, created_by: string, description: string, downloadable: bool, downstream_id: string, id: string, mime_type: string, name: string, owner: record<email: string, id: string, name: string>, parent_folders: list<record>, parent_folders_complete: bool, path: string, size: int, type: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -879,7 +903,7 @@ export def "files-update" [
   --description: string # Optional description of the file. (e.g. Renamed PDF Document)
   --name: string # The name of the file. (e.g. New Name.pdf)
   --parent-folder-id: string # The parent folder to create the new file within. (e.g. 1234)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -977,7 +1001,7 @@ export def "folders-add" [
   --drive-id: string # ID of the drive to create the folder in. (e.g. 1234)
   name: string # The name of the folder. (e.g. Documents)
   parent_folder_id: string # The parent folder to create the new file within. (e.g. 1234)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1024,7 +1048,7 @@ export def "folders-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1070,7 +1094,7 @@ export def "folders-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<created_at: string, created_by: string, description: string, id: string, name: string, owner: record<email: string, id: string, name: string>, parent_folders: list<record>, parent_folders_complete: bool, path: string, size: int, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<created_at: string, created_by: string, description: string, id: string, name: string, owner: record<email: string, id: string, name: string>, parent_folders: list<record>, parent_folders_complete: bool, path: string, size: int, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1118,7 +1142,7 @@ export def "folders-update" [
   --description: string # Optional description of the folder. (e.g. My Personal Documents)
   --name: string # The name of the folder. (e.g. Documents)
   --parent-folder-id: string # The parent folder to create the new file within. (e.g. 1234)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1169,7 +1193,7 @@ export def "folders-copy" [
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
   --name: string # The name of the folder. (e.g. Documents)
   parent_folder_id: string # The parent folder to create the new file within. (e.g. 1234)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1219,7 +1243,7 @@ export def "shared-links-all" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: table<created_at: string, download_url: string, expires_at: string, password: string, password_protected: bool, scope: string, target: record, target_id: string, updated_at: string, url: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: table<created_at: string, download_url: string, expires_at: string, password: string, password_protected: bool, scope: string, target: record, target_id: string, updated_at: string, url: string>, links: record<current: string, next: string, previous: string>, meta: record<cursors: record<current: string, next: string, previous: string>, items_on_page: int>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($x_apideck_consumer_id == null) { error make --unspanned { msg: "required header parameter 'x-apideck-consumer-id' missing: pass --x-apideck-consumer-id" } }
@@ -1248,7 +1272,6 @@ export def "shared-links-all" [
 #
 # POST /file-storage/shared-links
 # operationId: sharedLinksAdd
-# --target shape: {name?: string}
 export def "shared-links-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1267,7 +1290,7 @@ export def "shared-links-add" [
   --password: string # Optional password for the shared link. (nullable)
   --scope: string@scope-completer # The scope of the shared link. (e.g. company)
   target_id: string # The ID of the file or folder to link.
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1314,7 +1337,7 @@ export def "shared-links-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1360,7 +1383,7 @@ export def "shared-links-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<created_at: string, download_url: string, expires_at: string, password: string, password_protected: bool, scope: string, target: record<id: string, name: string, type: string>, target_id: string, updated_at: string, url: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<created_at: string, download_url: string, expires_at: string, password: string, password_protected: bool, scope: string, target: record<id: string, name: string, type: string>, target_id: string, updated_at: string, url: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1390,7 +1413,6 @@ export def "shared-links-one" [
 #
 # PATCH /file-storage/shared-links/{id}
 # operationId: sharedLinksUpdate
-# --target shape: {name?: string}
 export def "shared-links-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1410,7 +1432,7 @@ export def "shared-links-update" [
   --password: string # Optional password for the shared link. (nullable)
   --scope: string@scope-completer # The scope of the shared link. (e.g. company)
   target_id: string # The ID of the file or folder to link.
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1461,7 +1483,7 @@ export def "upload-sessions-add" [
   name: string # The name of the file. (e.g. Documents)
   parent_folder_id: string # The parent folder to create the new file within. (e.g. 1234)
   size: int # The size of the file in bytes (e.g. 1810673)
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.apideck.com")
@@ -1508,7 +1530,7 @@ export def "upload-sessions-delete" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1554,7 +1576,7 @@ export def "upload-sessions-one" [
   --x-apideck-consumer-id: string # ID of the consumer which you want to get or push data from (required)
   --x-apideck-app-id: string # The ID of your Unify application (required, e.g. dSBdXd2H6Mqwfg0atXHXYcysLJE9qyn1VwBtXHX)
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
-]: nothing -> record<data: record<expires_at: string, id: string, parallel_upload_supported: bool, part_size: float, success: bool, uploaded_byte_range: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: nothing -> oneof<record<data: record<expires_at: string, id: string, parallel_upload_supported: bool, part_size: float, success: bool, uploaded_byte_range: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.apideck.com")
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1602,7 +1624,7 @@ export def "upload-sessions-upload" [
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
   --digest: string # The RFC3230 message digest of the uploaded part. Only required for the Box connector. More information on the Box API docs [here](https://developer.box.com/reference/put-files-upload-sessions-id/#param-digest) (e.g. sha=fpRyg5eVQletdZqEKaFlqwBXJzM=)
   --body: string
-]: any -> record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<id: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.apideck.com")
@@ -1653,7 +1675,7 @@ export def "upload-sessions-finish" [
   --x-apideck-service-id: string # Provide the service id you want to call (e.g., pipedrive). Only needed when a consumer has activated multiple integrations for a Unified API.
   --digest: string # The RFC3230 message digest of the uploaded part. Only required for the Box connector. More information on the Box API docs [here](https://developer.box.com/reference/put-files-upload-sessions-id/#param-digest) (e.g. sha=fpRyg5eVQletdZqEKaFlqwBXJzM=)
   --body: record
-]: any -> record<data: record<created_at: string, created_by: string, description: string, downloadable: bool, downstream_id: string, id: string, mime_type: string, name: string, owner: record<email: string, id: string, name: string>, parent_folders: list<record>, parent_folders_complete: bool, path: string, size: int, type: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int> {
+]: any -> oneof<record<data: record<created_at: string, created_by: string, description: string, downloadable: bool, downstream_id: string, id: string, mime_type: string, name: string, owner: record<email: string, id: string, name: string>, parent_folders: list<record>, parent_folders_complete: bool, path: string, size: int, type: string, updated_at: string, updated_by: string>, operation: string, resource: string, service: string, status: string, status_code: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.apideck.com")

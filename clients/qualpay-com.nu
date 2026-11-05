@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -100,9 +123,9 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-card-type-information" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-card-type-information" "authorization" "batch-close" "capture" "credit" "send-receipt" "expire" "force" "recharge" "refund" "sale" "tokenize" "verify" "void" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -136,7 +159,7 @@ export def "get-card-type-information" [
   --dry-run(-n) # Return the request that would be sent without executing it
   card_number: string # Format: Variable length, up to 19 NDescription: Cardholder's card number. (e.g. 4111111111111111)
   merchant_id: int # Format: Variable length, up to 12 NDescription: Unique identifier on the Qualpay system. (format: int64, e.g. <Provide merchant id that links to API Key>)
-]: any -> record<funding_source: string, ind_comm_level2: string, ind_comm_level3: string, issuer_country: string, pg_id: string, rcode: string, rmsg: string> {
+]: any -> oneof<record<funding_source: string, ind_comm_level2: string, ind_comm_level3: string, issuer_country: string, pg_id: string, rcode: string, rmsg: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -163,7 +186,6 @@ export def "get-card-type-information" [
 #
 # POST /auth
 # operationId: Authorization
-# --customer shape: {billing_addr1?: string, billing_addr2?: string, billing_city?: string, billing_country?: string, billing_country_code?: string, billing_state?: string, billing_zip?: string, billing_zip4?: string, customer_email?: string, customer_firm_name?: string, customer_first_name?: string, customer_last_name?: string, customer_phone?: string, shipping_addresses?: list}
 export def "authorization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -229,7 +251,7 @@ export def "authorization" [
   --user-id: int # INTERNAL USE ONLY. (format: int64)
   --vendor-id: int # Format: Variable length, up to 12 NDescription: Identifies the vendor to which this capture request applies. (format: int64, e.g. 212100026512)
   --xid-3ds: string # Format: Fixed length, 28 ANDescription: Base64 encoded transaction ID (XID) returned from the merchant’s third-party 3D Secure Merchant Plug-in (MPI). Use for Visa 3-D Secure transactions. (e.g. ASNFZ4kBI0VniQEjRWeJASNFZ4k=)
-]: any -> record<amt_tran: float, auth_avs_result: string, auth_code: string, auth_cvv2_result: string, card_id: string, echo_fields: string, merchant_advice_code: string, pg_id: string, rcode: string, rmsg: string> {
+]: any -> oneof<record<amt_tran: float, auth_avs_result: string, auth_code: string, auth_cvv2_result: string, card_id: string, echo_fields: string, merchant_advice_code: string, pg_id: string, rcode: string, rmsg: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -277,7 +299,7 @@ export def "batch-close" [
   --session-id: string # INTERNAL USE ONLY.
   --tran-currency: int # Format: Variable length, up to 3 NDefault: 840Description: ISO numeric currency code for the transaction. Refer to Country Codes (/developer/api/reference#country-codes) for a list of currency codes. (format: int32, e.g. 840)
   --user-id: int # INTERNAL USE ONLY. (format: int64)
-]: any -> record<batch_info: string, echo_fields: string, pg_id: string, rcode: string, rmsg: string> {
+]: any -> oneof<record<batch_info: string, echo_fields: string, pg_id: string, rcode: string, rmsg: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -327,7 +349,7 @@ export def "capture" [
   --session-id: string # INTERNAL USE ONLY.
   --user-id: int # INTERNAL USE ONLY. (format: int64)
   --vendor-id: int # Format: Variable length, up to 12 NDescription: Identifies the vendor to which this capture request applies. (format: int64, e.g. 212100026512)
-]: any -> record<echo_fields: string, pg_id: string, rcode: string, rmsg: string> {
+]: any -> oneof<record<echo_fields: string, pg_id: string, rcode: string, rmsg: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -355,7 +377,6 @@ export def "capture" [
 #
 # POST /credit
 # operationId: Credit
-# --customer shape: {billing_addr1?: string, billing_addr2?: string, billing_city?: string, billing_country?: string, billing_country_code?: string, billing_state?: string, billing_zip?: string, billing_zip4?: string, customer_email?: string, customer_firm_name?: string, customer_first_name?: string, customer_last_name?: string, customer_phone?: string, shipping_addresses?: list}
 export def "credit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -421,7 +442,7 @@ export def "credit" [
   --user-id: int # INTERNAL USE ONLY. (format: int64)
   --vendor-id: int # Format: Variable length, up to 12 NDescription: Identifies the vendor to which this capture request applies. (format: int64, e.g. 212100026512)
   --xid-3ds: string # Format: Fixed length, 28 ANDescription: Base64 encoded transaction ID (XID) returned from the merchant’s third-party 3D Secure Merchant Plug-in (MPI). Use for Visa 3-D Secure transactions. (e.g. ASNFZ4kBI0VniQEjRWeJASNFZ4k=)
-]: any -> record<amt_tran: float, auth_avs_result: string, auth_code: string, auth_cvv2_result: string, card_id: string, echo_fields: string, merchant_advice_code: string, pg_id: string, rcode: string, rmsg: string> {
+]: any -> oneof<record<amt_tran: float, auth_avs_result: string, auth_code: string, auth_cvv2_result: string, card_id: string, echo_fields: string, merchant_advice_code: string, pg_id: string, rcode: string, rmsg: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -464,7 +485,7 @@ export def "send-receipt" [
   --logo-url: string # ANDescription: A link to the logo image that will be included in the transaction receipt. (e.g. https://app.qualpay.com/shared/images/qp-icon.png)
   merchant_id: int # Format: Variable length, up to 12 NDescription: Unique identifier on the Qualpay system. (format: int64, e.g. <Provide merchant id that links to API Key>)
   --vendor-id: int # Format: Variable length, up to 12 NDescription: Identifies the vendor to which this email receipt request applies. (format: int64, e.g. 212100026512)
-]: any -> record<pg_id: string, rcode: string, rmsg: string> {
+]: any -> oneof<record<pg_id: string, rcode: string, rmsg: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -514,7 +535,7 @@ export def "expire" [
   --session-id: string # INTERNAL USE ONLY.
   --user-id: int # INTERNAL USE ONLY. (format: int64)
   --vendor-id: int # Format: Variable length, up to 12 NDescription: Identifies the vendor to which this expire token request applies. (format: int64, e.g. 212100026512)
-]: any -> record<echo_fields: string, pg_id: string, rcode: string, rmsg: string> {
+]: any -> oneof<record<echo_fields: string, pg_id: string, rcode: string, rmsg: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -541,7 +562,6 @@ export def "expire" [
 #
 # POST /force
 # operationId: Force
-# --customer shape: {billing_addr1?: string, billing_addr2?: string, billing_city?: string, billing_country?: string, billing_country_code?: string, billing_state?: string, billing_zip?: string, billing_zip4?: string, customer_email?: string, customer_firm_name?: string, customer_first_name?: string, customer_last_name?: string, customer_phone?: string, shipping_addresses?: list}
 export def "force" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -607,7 +627,7 @@ export def "force" [
   --user-id: int # INTERNAL USE ONLY. (format: int64)
   --vendor-id: int # Format: Variable length, up to 12 NDescription: Identifies the vendor to which this capture request applies. (format: int64, e.g. 212100026512)
   --xid-3ds: string # Format: Fixed length, 28 ANDescription: Base64 encoded transaction ID (XID) returned from the merchant’s third-party 3D Secure Merchant Plug-in (MPI). Use for Visa 3-D Secure transactions. (e.g. ASNFZ4kBI0VniQEjRWeJASNFZ4k=)
-]: any -> record<amt_tran: float, auth_avs_result: string, auth_code: string, auth_cvv2_result: string, card_id: string, echo_fields: string, merchant_advice_code: string, pg_id: string, rcode: string, rmsg: string> {
+]: any -> oneof<record<amt_tran: float, auth_avs_result: string, auth_code: string, auth_cvv2_result: string, card_id: string, echo_fields: string, merchant_advice_code: string, pg_id: string, rcode: string, rmsg: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -656,7 +676,7 @@ export def "recharge" [
   --retry-id: int # Format: Variable length, up to 15 NDescription: This field contains a merchant generated number used to identify the request. This value must be unique within the last 24 hours. When present, the payment gateway will use the retry_attempt to determine whether the message is new or a retry of a previous message. (format: int64, e.g. 1234)
   --session-id: string # INTERNAL USE ONLY.
   --user-id: int # INTERNAL USE ONLY. (format: int64)
-]: any -> record<echo_fields: string, pg_id: string, rcode: string, rmsg: string> {
+]: any -> oneof<record<echo_fields: string, pg_id: string, rcode: string, rmsg: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -707,7 +727,7 @@ export def "refund" [
   --session-id: string # INTERNAL USE ONLY.
   --user-id: int # INTERNAL USE ONLY. (format: int64)
   --vendor-id: int # Format: Variable length, up to 12 NDescription: Identifies the vendor to which this refund request applies. (format: int64, e.g. 212100026512)
-]: any -> record<echo_fields: string, pg_id: string, rcode: string, rmsg: string> {
+]: any -> oneof<record<echo_fields: string, pg_id: string, rcode: string, rmsg: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -735,7 +755,6 @@ export def "refund" [
 #
 # POST /sale
 # operationId: Sale
-# --customer shape: {billing_addr1?: string, billing_addr2?: string, billing_city?: string, billing_country?: string, billing_country_code?: string, billing_state?: string, billing_zip?: string, billing_zip4?: string, customer_email?: string, customer_firm_name?: string, customer_first_name?: string, customer_last_name?: string, customer_phone?: string, shipping_addresses?: list}
 export def "sale" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -801,7 +820,7 @@ export def "sale" [
   --user-id: int # INTERNAL USE ONLY. (format: int64)
   --vendor-id: int # Format: Variable length, up to 12 NDescription: Identifies the vendor to which this capture request applies. (format: int64, e.g. 212100026512)
   --xid-3ds: string # Format: Fixed length, 28 ANDescription: Base64 encoded transaction ID (XID) returned from the merchant’s third-party 3D Secure Merchant Plug-in (MPI). Use for Visa 3-D Secure transactions. (e.g. ASNFZ4kBI0VniQEjRWeJASNFZ4k=)
-]: any -> record<amt_tran: float, auth_avs_result: string, auth_code: string, auth_cvv2_result: string, card_id: string, echo_fields: string, merchant_advice_code: string, pg_id: string, rcode: string, rmsg: string> {
+]: any -> oneof<record<amt_tran: float, auth_avs_result: string, auth_code: string, auth_cvv2_result: string, card_id: string, echo_fields: string, merchant_advice_code: string, pg_id: string, rcode: string, rmsg: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -865,7 +884,7 @@ export def "tokenize" [
   --type-id: string # Format: Fixed length, 1 ANDefault: CDescription: Bank Account Type. Applicable for ACH payments. Possible values are: C = Personal checking accountS = Personal savings accountK = Business checking accountV = Business savings account (e.g. S)
   --user-id: int # INTERNAL USE ONLY. (format: int64)
   --vendor-id: int # Format: Variable length, up to 12 NDescription: Identifies the vendor to which this tokenize request applies. (format: int64, e.g. 212100026512)
-]: any -> record<card_id: string, card_number: string, echo_fields: string, pg_id: string, rcode: string, rmsg: string> {
+]: any -> oneof<record<card_id: string, card_number: string, echo_fields: string, pg_id: string, rcode: string, rmsg: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -892,7 +911,6 @@ export def "tokenize" [
 #
 # POST /verify
 # operationId: Verify
-# --customer shape: {billing_addr1?: string, billing_addr2?: string, billing_city?: string, billing_country?: string, billing_country_code?: string, billing_state?: string, billing_zip?: string, billing_zip4?: string, customer_email?: string, customer_firm_name?: string, customer_first_name?: string, customer_last_name?: string, customer_phone?: string, shipping_addresses?: list}
 export def "verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -933,7 +951,7 @@ export def "verify" [
   --tr-number: string # Format: Fixed length, 9 NDescription: Bank transit/routing number. Applicable for ACH payments.Conditional Requirement: Refer to Card or Bank Account Data Sources and Conditional Requirements (/developer/api/reference#card-source-conditional-requirements) (e.g. 011111111)
   --type-id: string # Format: Fixed length, 1 ANDefault: CDescription: Bank Account Type. Applicable for ACH payments. Possible values are: C = Personal checking accountS = Personal savings accountK = Business checking accountV = Business savings account (e.g. S)
   --user-id: int # INTERNAL USE ONLY. (format: int64)
-]: any -> record<auth_avs_result: string, auth_code: string, auth_cvv2_result: string, card_id: string, card_number: string, echo_fields: string, merchant_advice_code: string, pg_id: string, rcode: string, rmsg: string> {
+]: any -> oneof<record<auth_avs_result: string, auth_code: string, auth_cvv2_result: string, card_id: string, card_number: string, echo_fields: string, merchant_advice_code: string, pg_id: string, rcode: string, rmsg: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -982,7 +1000,7 @@ export def "void" [
   --session-id: string # INTERNAL USE ONLY.
   --user-id: int # INTERNAL USE ONLY. (format: int64)
   --vendor-id: int # Format: Variable length, up to 12 NDescription: Identifies the vendor to which this void request applies. (format: int64, e.g. 212100026512)
-]: any -> record<echo_fields: string, pg_id: string, rcode: string, rmsg: string> {
+]: any -> oneof<record<echo_fields: string, pg_id: string, rcode: string, rmsg: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://api.schooldigger.com"] }
@@ -97,9 +121,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "districts-get-all-districts" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["districts-get-all-districts" "districts-get-district" "rankings-get-rank-district" "rankings-get-rank" "schools-get-all-schools" "schools-get-school10" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -150,7 +174,7 @@ export def "districts-get-all-districts" [
   --include-unranked-districts-in-rank-sort: oneof<nothing, bool> # If sortBy is 'rank', this boolean determines if districts with no rank are included in the result (optional, default: false)
   --app-id: string # Your API app id (required)
   --app-key: string # Your API app key (required)
-]: nothing -> record<districtList: table<address: record, county: record, distance: float, districtID: string, districtName: string, districtYearlyDetails: list, hasBoundary: bool, highGrade: string, isWithinBoundary: bool, locationIsWithinBoundary: bool, lowGrade: string, numberAlternativeSchools: int, numberHighSchools: int, numberMiddleSchools: int, numberPrimarySchools: int, numberTotalSchools: int, phone: string, rankHistory: list, url: string>, numberOfDistricts: int, numberOfPages: int> {
+]: nothing -> oneof<record<districtList: table<address: record, county: record, distance: float, districtID: string, districtName: string, districtYearlyDetails: list, hasBoundary: bool, highGrade: string, isWithinBoundary: bool, locationIsWithinBoundary: bool, lowGrade: string, numberAlternativeSchools: int, numberHighSchools: int, numberMiddleSchools: int, numberPrimarySchools: int, numberTotalSchools: int, phone: string, rankHistory: list, url: string>, numberOfDistricts: int, numberOfPages: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($st == null) { error make --unspanned { msg: "required query parameter 'st' missing: pass --st" } }
@@ -191,7 +215,7 @@ export def "districts-get-district" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Your API app id (required)
   --app-key: string # Your API app key (required)
-]: nothing -> record<address: record<city: string, cityURL: string, html: string, latLong: record<latitude: float, longitude: float>, state: string, stateFull: string, street: string, zip: string, zip4: string, zipURL: string>, boundary: record<hasBoundary: bool, polylineCollection: list<record>>, county: record<countyName: string, countyURL: string>, districtID: string, districtName: string, districtYearlyDetails: table<numberOfAids: float, numberOfCoordsSupervisors: float, numberOfEnglishLanguageLearnerStudents: int, numberOfGuidanceElem: float, numberOfGuidanceSecondary: float, numberOfGuidanceTotal: float, numberOfLEAAdministrators: float, numberOfLEASupportStaff: float, numberOfLibrarians: float, numberOfLibraryStaff: float, numberOfOtherSupportStaff: float, numberOfSchoolAdminSupportStaff: float, numberOfSchoolAdministrators: float, numberOfSpecialEdStudents: int, numberOfStudentSupportStaff: float, numberOfStudents: int, numberOfTeachers: float, numberOfTeachersElementary: float, numberOfTeachersK: float, numberOfTeachersPK: float, numberOfTeachersSecondary: float, year: int>, highGrade: string, isWithinBoundary: bool, lowGrade: string, numberAlternativeSchools: int, numberHighSchools: int, numberMiddleSchools: int, numberPrimarySchools: int, numberTotalSchools: int, phone: string, rankHistory: table<rank: int, rankOf: int, rankScore: float, rankStars: int, rankStatewidePercentage: float, year: int>, testScores: table<districtTestScore: record, grade: string, schoolTestScore: record, stateTestScore: record, subject: string, test: string, tier1: string, tier2: string, tier3: string, tier4: string, tier5: string, year: int>, url: string> {
+]: nothing -> oneof<record<address: record<city: string, cityURL: string, html: string, latLong: record<latitude: float, longitude: float>, state: string, stateFull: string, street: string, zip: string, zip4: string, zipURL: string>, boundary: record<hasBoundary: bool, polylineCollection: list<record>>, county: record<countyName: string, countyURL: string>, districtID: string, districtName: string, districtYearlyDetails: table<numberOfAids: float, numberOfCoordsSupervisors: float, numberOfEnglishLanguageLearnerStudents: int, numberOfGuidanceElem: float, numberOfGuidanceSecondary: float, numberOfGuidanceTotal: float, numberOfLEAAdministrators: float, numberOfLEASupportStaff: float, numberOfLibrarians: float, numberOfLibraryStaff: float, numberOfOtherSupportStaff: float, numberOfSchoolAdminSupportStaff: float, numberOfSchoolAdministrators: float, numberOfSpecialEdStudents: int, numberOfStudentSupportStaff: float, numberOfStudents: int, numberOfTeachers: float, numberOfTeachersElementary: float, numberOfTeachersK: float, numberOfTeachersPK: float, numberOfTeachersSecondary: float, year: int>, highGrade: string, isWithinBoundary: bool, lowGrade: string, numberAlternativeSchools: int, numberHighSchools: int, numberMiddleSchools: int, numberPrimarySchools: int, numberTotalSchools: int, phone: string, rankHistory: table<rank: int, rankOf: int, rankScore: float, rankStars: int, rankStatewidePercentage: float, year: int>, testScores: table<districtTestScore: record, grade: string, schoolTestScore: record, stateTestScore: record, subject: string, test: string, tier1: string, tier2: string, tier3: string, tier4: string, tier5: string, year: int>, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -235,7 +259,7 @@ export def "rankings-get-rank-district" [
   --per-page: int # Number of districts to retrieve on a page (50 max) (optional, default: 10) (format: int32)
   --app-id: string # Your API app id (required)
   --app-key: string # Your API app key (required)
-]: nothing -> record<districtList: table<address: record, county: record, distance: float, districtID: string, districtName: string, districtYearlyDetails: list, hasBoundary: bool, highGrade: string, isWithinBoundary: bool, locationIsWithinBoundary: bool, lowGrade: string, numberAlternativeSchools: int, numberHighSchools: int, numberMiddleSchools: int, numberPrimarySchools: int, numberTotalSchools: int, phone: string, rankHistory: list, url: string>, numberOfDistricts: int, numberOfPages: int, rankCompareYear: int, rankYear: int, rankYearCompare: int, rankYearsAvailable: list<int>> {
+]: nothing -> oneof<record<districtList: table<address: record, county: record, distance: float, districtID: string, districtName: string, districtYearlyDetails: list, hasBoundary: bool, highGrade: string, isWithinBoundary: bool, locationIsWithinBoundary: bool, lowGrade: string, numberAlternativeSchools: int, numberHighSchools: int, numberMiddleSchools: int, numberPrimarySchools: int, numberTotalSchools: int, phone: string, rankHistory: list, url: string>, numberOfDistricts: int, numberOfPages: int, rankCompareYear: int, rankYear: int, rankYearCompare: int, rankYearsAvailable: list<int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($st | is-empty) { error make --unspanned { msg: "path parameter 'st' must be non-empty" } }
@@ -280,7 +304,7 @@ export def "rankings-get-rank" [
   --per-page: int # Number of schools to retrieve on a page (50 max) (optional, default: 10) (format: int32)
   --app-id: string # Your API app id (required)
   --app-key: string # Your API app key (required)
-]: nothing -> record<numberOfPages: int, numberOfSchools: int, rankYear: int, rankYearCompare: int, rankYearsAvailable: list<int>, schoolList: table<address: record, county: record, distance: float, district: record, hasBoundary: bool, highGrade: string, isCharterSchool: string, isMagnetSchool: string, isPrivate: bool, isTitleISchool: string, isTitleISchoolwideSchool: string, isVirtualSchool: string, locationIsWithinBoundary: bool, lowGrade: string, phone: string, privateCoed: string, privateDays: int, privateHasLibrary: bool, privateHours: float, privateOrientation: string, rankHistory: list, rankMovement: int, schoolLevel: string, schoolName: string, schoolYearlyDetails: list, schoolid: string, url: string, urlCompare: string>> {
+]: nothing -> oneof<record<numberOfPages: int, numberOfSchools: int, rankYear: int, rankYearCompare: int, rankYearsAvailable: list<int>, schoolList: table<address: record, county: record, distance: float, district: record, hasBoundary: bool, highGrade: string, isCharterSchool: string, isMagnetSchool: string, isPrivate: bool, isTitleISchool: string, isTitleISchoolwideSchool: string, isVirtualSchool: string, locationIsWithinBoundary: bool, lowGrade: string, phone: string, privateCoed: string, privateDays: int, privateHasLibrary: bool, privateHours: float, privateOrientation: string, rankHistory: list, rankMovement: int, schoolLevel: string, schoolName: string, schoolYearlyDetails: list, schoolid: string, url: string, urlCompare: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($st | is-empty) { error make --unspanned { msg: "path parameter 'st' must be non-empty" } }
@@ -345,7 +369,7 @@ export def "schools-get-all-schools" [
   --include-unranked-schools-in-rank-sort: oneof<nothing, bool> # If sortBy is 'rank', this boolean determines if schools with no rank are included in the result (optional, default: false)
   --app-id: string # Your API app id (required)
   --app-key: string # Your API app key (required)
-]: nothing -> record<numberOfPages: int, numberOfSchools: int, schoolList: table<address: record, county: record, distance: float, district: record, hasBoundary: bool, highGrade: string, isCharterSchool: string, isMagnetSchool: string, isPrivate: bool, isTitleISchool: string, isTitleISchoolwideSchool: string, isVirtualSchool: string, locationIsWithinBoundary: bool, lowGrade: string, phone: string, privateCoed: string, privateDays: int, privateHasLibrary: bool, privateHours: float, privateOrientation: string, rankHistory: list, rankMovement: int, schoolLevel: string, schoolName: string, schoolYearlyDetails: list, schoolid: string, url: string, urlCompare: string>> {
+]: nothing -> oneof<record<numberOfPages: int, numberOfSchools: int, schoolList: table<address: record, county: record, distance: float, district: record, hasBoundary: bool, highGrade: string, isCharterSchool: string, isMagnetSchool: string, isPrivate: bool, isTitleISchool: string, isTitleISchoolwideSchool: string, isVirtualSchool: string, locationIsWithinBoundary: bool, lowGrade: string, phone: string, privateCoed: string, privateDays: int, privateHasLibrary: bool, privateHours: float, privateOrientation: string, rankHistory: list, rankMovement: int, schoolLevel: string, schoolName: string, schoolYearlyDetails: list, schoolid: string, url: string, urlCompare: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($st == null) { error make --unspanned { msg: "required query parameter 'st' missing: pass --st" } }
@@ -386,7 +410,7 @@ export def "schools-get-school10" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --app-id: string # Your API app id (required)
   --app-key: string # Your API app key (required)
-]: nothing -> record<address: record<city: string, cityURL: string, html: string, latLong: record<latitude: float, longitude: float>, state: string, stateFull: string, street: string, zip: string, zip4: string, zipURL: string>, boundary: record<hasBoundary: bool, polylineCollection: list<record>>, county: record<countyName: string, countyURL: string>, district: record<districtID: string, districtName: string, rankURL: string, url: string>, highGrade: string, isCharterSchool: string, isMagnetSchool: string, isPrivate: bool, isTitleISchool: string, isTitleISchoolwideSchool: string, isVirtualSchool: string, locale: string, lowGrade: string, phone: string, privateCoed: string, privateDays: int, privateHasLibrary: bool, privateHours: float, privateOrientation: string, rankHistory: table<averageStandardScore: float, rank: int, rankLevel: string, rankOf: int, rankStars: int, rankStatewidePercentage: float, year: int>, rankMovement: int, schoolLevel: string, schoolName: string, schoolYearlyDetails: table<numberOfStudents: int, numberofAfricanAmericanStudents: int, numberofAsianStudents: int, numberofHispanicStudents: int, numberofIndianStudents: int, numberofPacificIslanderStudents: int, numberofTwoOrMoreRaceStudents: int, numberofUnspecifiedRaceStudents: int, numberofWhiteStudents: int, percentFreeDiscLunch: float, percentofAfricanAmericanStudents: float, percentofAsianStudents: float, percentofHispanicStudents: float, percentofIndianStudents: float, percentofPacificIslanderStudents: float, percentofTwoOrMoreRaceStudents: float, percentofUnspecifiedRaceStudents: float, percentofWhiteStudents: float, pupilTeacherRatio: float, teachersFulltime: float, year: int>, schoolid: string, testScores: table<districtTestScore: record, grade: string, schoolTestScore: record, stateTestScore: record, subject: string, test: string, tier1: string, tier2: string, tier3: string, tier4: string, tier5: string, year: int>, url: string, urlCompare: string> {
+]: nothing -> oneof<record<address: record<city: string, cityURL: string, html: string, latLong: record<latitude: float, longitude: float>, state: string, stateFull: string, street: string, zip: string, zip4: string, zipURL: string>, boundary: record<hasBoundary: bool, polylineCollection: list<record>>, county: record<countyName: string, countyURL: string>, district: record<districtID: string, districtName: string, rankURL: string, url: string>, highGrade: string, isCharterSchool: string, isMagnetSchool: string, isPrivate: bool, isTitleISchool: string, isTitleISchoolwideSchool: string, isVirtualSchool: string, locale: string, lowGrade: string, phone: string, privateCoed: string, privateDays: int, privateHasLibrary: bool, privateHours: float, privateOrientation: string, rankHistory: table<averageStandardScore: float, rank: int, rankLevel: string, rankOf: int, rankStars: int, rankStatewidePercentage: float, year: int>, rankMovement: int, schoolLevel: string, schoolName: string, schoolYearlyDetails: table<numberOfStudents: int, numberofAfricanAmericanStudents: int, numberofAsianStudents: int, numberofHispanicStudents: int, numberofIndianStudents: int, numberofPacificIslanderStudents: int, numberofTwoOrMoreRaceStudents: int, numberofUnspecifiedRaceStudents: int, numberofWhiteStudents: int, percentFreeDiscLunch: float, percentofAfricanAmericanStudents: float, percentofAsianStudents: float, percentofHispanicStudents: float, percentofIndianStudents: float, percentofPacificIslanderStudents: float, percentofTwoOrMoreRaceStudents: float, percentofUnspecifiedRaceStudents: float, percentofWhiteStudents: float, pupilTeacherRatio: float, teachersFulltime: float, year: int>, schoolid: string, testScores: table<districtTestScore: record, grade: string, schoolTestScore: record, stateTestScore: record, subject: string, test: string, tier1: string, tier2: string, tier3: string, tier4: string, tier5: string, year: int>, url: string, urlCompare: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

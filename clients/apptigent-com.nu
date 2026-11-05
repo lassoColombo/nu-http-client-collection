@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "x-ibm-client-id" => { {scheme: $scheme, headers: {"X-IBM-Client-Id": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -183,9 +206,9 @@ def target-completer-11 [] { ["AUS Central Standard Time - (GMT+09:30) Darwin" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-to-collection" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-to-collection" "csv-to-json" "calculate-absolute" "calculate-addition" "calculate-average" "calculate-cosine" "calculate-division" "calculate-logarithm" "calculate-median" "calculate-min-max" "calculate-modulo" "calculate-multiplication" "calculate-nth-root" "calculate-power" "calculate-sine" "calculate-square-root" "calculate-subtraction" "calculate-sum" "calculate-tangent" "calculate-variance" "collection-contains-number" "collection-contains-string" "collection-ends-with-string" "collection-starts-with-string" "collection-to-json" "collection-to-xml" "compare-strings" "contains-string" "convert-angle" "convert-area" "convert-case" "convert-currency" "convert-distance" "convert-duration" "convert-energy" "convert-image" "convert-power" "convert-speed" "convert-temperature" "convert-volume" "convert-weight" "count-collection" "crop-image" "date-time-difference" "date-time-info" "decode-string" "encode-string" "file-to-string" "filter-collection" "flip-image" "format-currency" "format-date-time" "generate-guid" "generate-hash" "generate-qr-code" "json-to-csv" "json-to-html" "json-to-xml" "join-strings" "market-index" "query-json" "query-xml" "random-number" "redact-string" "remove-from-collection" "replace-string" "replace-values-in-collection" "resize-image" "rotate-image" "round-number" "shorten-link" "sort-collection" "speech-to-text" "split-collection" "split-string" "standard-deviation" "stock-prices" "string-to-file" "text-to-speech" "translate-string" "trim-string" "url-decode" "url-encode" "validate-email" "verify-hash" "watermark-image" "world-time" "xml-to-json" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -221,7 +244,7 @@ export def "add-to-collection" [
   --body-input: list<string> # Collection of values or objects to modify
   --item: string # Item (for multiple items, leave blank and use Items)
   --items: list<string> # Items (Collection, for a single item leave blank and use Item)
-]: any -> record<result: list<string>> {
+]: any -> oneof<record<result: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -261,7 +284,7 @@ export def "csv-to-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --header: oneof<nothing, bool> # Include header row (default: true)
   --body-input: string # CSV string
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -302,7 +325,7 @@ export def "calculate-absolute" [
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   --body-input: float # Numeric value to calculate
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -343,7 +366,7 @@ export def "calculate-addition" [
   decimals: float # Round to number of decimal places
   --body-input: float # Numeric value
   value: float # Addend, subtrahend, factor, divisor or radicand
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -383,7 +406,7 @@ export def "calculate-average" [
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   --body-input: list<float> # Colllection of values to calculate
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -423,7 +446,7 @@ export def "calculate-cosine" [
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   --body-input: float # Numeric value to calculate
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -464,7 +487,7 @@ export def "calculate-division" [
   decimals: float # Round to number of decimal places
   --body-input: float # Numeric value
   value: float # Addend, subtrahend, factor, divisor or radicand
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -504,7 +527,7 @@ export def "calculate-logarithm" [
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   --body-input: float # Numeric value to calculate
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -544,7 +567,7 @@ export def "calculate-median" [
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   --body-input: list<float> # Colllection of values to calculate
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -584,7 +607,7 @@ export def "calculate-min-max" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-input: list<float> # Colllection of values to calculate
   type: string@type-completer # Minimum or Maximum (default: Minimum)
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -625,7 +648,7 @@ export def "calculate-modulo" [
   decimals: float # Round to number of decimal places
   --body-input: float # Numeric value
   value: float # Addend, subtrahend, factor, divisor or radicand
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -666,7 +689,7 @@ export def "calculate-multiplication" [
   decimals: float # Round to number of decimal places
   --body-input: float # Numeric value
   value: float # Addend, subtrahend, factor, divisor or radicand
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -707,7 +730,7 @@ export def "calculate-nth-root" [
   decimals: float # Round to number of decimal places
   --body-input: float # Numeric value
   value: float # Addend, subtrahend, factor, divisor or radicand
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -748,7 +771,7 @@ export def "calculate-power" [
   decimals: float # Round to number of decimal places
   --body-input: float # Number to raise
   power: float # Power
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -788,7 +811,7 @@ export def "calculate-sine" [
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   --body-input: float # Numeric value to calculate
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -828,7 +851,7 @@ export def "calculate-square-root" [
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   --body-input: float # Numeric value to calculate
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -869,7 +892,7 @@ export def "calculate-subtraction" [
   decimals: float # Round to number of decimal places
   --body-input: float # Numeric value
   value: float # Addend, subtrahend, factor, divisor or radicand
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -909,7 +932,7 @@ export def "calculate-sum" [
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   --body-input: list<float> # Colllection of values to calculate
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -949,7 +972,7 @@ export def "calculate-tangent" [
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   --body-input: float # Numeric value to calculate
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -989,7 +1012,7 @@ export def "calculate-variance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   --body-input: list<float> # Colllection of values to calculate
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1030,7 +1053,7 @@ export def "collection-contains-number" [
   --body-input: list<float> # Collection of strings to search
   match: float # Number to match
   --type: string@type-completer-1 # Type of number - integer or decimal (default: Integer)
-]: any -> record<item: float, items: list<float>, status: bool> {
+]: any -> oneof<record<item: float, items: list<float>, status: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1072,7 +1095,7 @@ export def "collection-contains-string" [
   --body-input: list<string> # Collection of strings to search
   match: string # Text to match
   --trim: string@trim-completer # Trim white space from comparison string
-]: any -> record<item: string, items: list<string>, status: bool> {
+]: any -> oneof<record<item: string, items: list<string>, status: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1114,7 +1137,7 @@ export def "collection-ends-with-string" [
   --body-input: list<string> # Collection of strings to search
   match: string # Text to match
   --trim: string@trim-completer # Trim white space from comparison string
-]: any -> record<item: string, items: list<string>, status: bool> {
+]: any -> oneof<record<item: string, items: list<string>, status: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1156,7 +1179,7 @@ export def "collection-starts-with-string" [
   --body-input: list<string> # Collection of strings to search
   match: string # Text to match
   --trim: string@trim-completer # Trim white space from comparison string
-]: any -> record<item: string, items: list<string>, status: bool> {
+]: any -> oneof<record<item: string, items: list<string>, status: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1196,7 +1219,7 @@ export def "collection-to-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-input: list<string> # Collection containing strings to convert
   name: string # Collection name
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1237,7 +1260,7 @@ export def "collection-to-xml" [
   child: string # Name of child XML node(s)
   --body-input: list<string> # Collection containing strings to convert
   root: string # Name of root XML node
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1279,7 +1302,7 @@ export def "compare-strings" [
   --body-input: string # Original string
   lower: string@lower-completer # Convert strings to lowercase before comparison
   trim: string@trim-completer # Trim strings before comparison
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1320,7 +1343,7 @@ export def "contains-string" [
   find: string # Text to match
   --body-input: string # Text to search
   lower: string@lower-completer # Convert strings to lowercase
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1361,7 +1384,7 @@ export def "convert-angle" [
   --body-input: float
   source: string@source-completer
   target: string@target-completer
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1402,7 +1425,7 @@ export def "convert-area" [
   --body-input: float
   source: string@source-completer-1
   target: string@target-completer-1
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1442,7 +1465,7 @@ export def "convert-case" [
   --dry-run(-n) # Return the request that would be sent without executing it
   alphacase: string@alphacase-completer # Case of conversion result
   --body-input: string # String containing the text to convert
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1483,7 +1506,7 @@ export def "convert-currency" [
   --body-input: float # Amount to convert
   source: string@source-completer-2 # default: USD
   target: string@target-completer-2
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1524,7 +1547,7 @@ export def "convert-distance" [
   --body-input: float
   source: string@source-completer-3
   target: string@target-completer-3
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1565,7 +1588,7 @@ export def "convert-duration" [
   --body-input: float
   source: string@source-completer-4
   target: string@target-completer-4
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1606,7 +1629,7 @@ export def "convert-energy" [
   --body-input: float
   source: string@source-completer-5
   target: string@target-completer-5
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1689,7 +1712,7 @@ export def "convert-power" [
   --body-input: float
   source: string@source-completer-6
   target: string@target-completer-6
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1730,7 +1753,7 @@ export def "convert-speed" [
   --body-input: float
   source: string@source-completer-7
   target: string@target-completer-7
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1771,7 +1794,7 @@ export def "convert-temperature" [
   --body-input: float
   source: string@source-completer-8
   target: string@target-completer-8
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1812,7 +1835,7 @@ export def "convert-volume" [
   --body-input: float
   source: string@source-completer-9
   target: string@target-completer-9
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1853,7 +1876,7 @@ export def "convert-weight" [
   --body-input: float
   source: string@source-completer-10
   target: string@target-completer-10
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1892,7 +1915,7 @@ export def "count-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-input: list<string> # Collection of items to count
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1976,7 +1999,7 @@ export def "date-time-difference" [
   --dry-run(-n) # Return the request that would be sent without executing it
   date_time1: string # First date/time value
   date_time2: string # Second date/time value
-]: any -> record<days: float, hours: float, milliseconds: float, minutes: float, months: float, ticks: float, totalDays: float, totalHours: float, totalMilliseconds: float, totalMinutes: float, totalMonths: float, totalSeconds: float, totalYears: float, years: float> {
+]: any -> oneof<record<days: float, hours: float, milliseconds: float, minutes: float, months: float, ticks: float, totalDays: float, totalHours: float, totalMilliseconds: float, totalMinutes: float, totalMonths: float, totalSeconds: float, totalYears: float, years: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2015,7 +2038,7 @@ export def "date-time-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   culture: string@culture-completer # Language culture (default: en-US)
   --body-input: string # Source date and time
-]: any -> record<DayOfWeek: float, DayOfYear: float, MinutesInDay: float, SecondsInDay: float, Ticks: float, WeekOfYear: float> {
+]: any -> oneof<record<DayOfWeek: float, DayOfYear: float, MinutesInDay: float, SecondsInDay: float, Ticks: float, WeekOfYear: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2054,7 +2077,7 @@ export def "decode-string" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   source: string # Encoded string variable or text value
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2092,7 +2115,7 @@ export def "encode-string" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   source: string # String variable or text value
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2130,7 +2153,7 @@ export def "file-to-string" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # Source file (10MB limit) (format: binary)
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2172,7 +2195,7 @@ export def "filter-collection" [
   --body-input: list<string> # Collection of strings to filter
   keywords: string # Keywords (separate multiple values with commas)
   match: string@match-completer # Match type (default: Any)
-]: any -> record<result: list<string>> {
+]: any -> oneof<record<result: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2253,7 +2276,7 @@ export def "format-currency" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-input: float # Amount to format
   target: string@target-completer-2
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2294,7 +2317,7 @@ export def "format-date-time" [
   culture: string@culture-completer # Language culture (default: en-US)
   format: string # Output format
   --body-input: string # Source date and time
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2333,7 +2356,7 @@ export def "generate-guid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   uppercase: string@uppercase-completer # All uppercase alpha characters
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2372,7 +2395,7 @@ export def "generate-hash" [
   --dry-run(-n) # Return the request that would be sent without executing it
   algorithm: string@algorithm-completer # Hash algorithm
   --body-input: string # Hash source string
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2454,7 +2477,7 @@ export def "json-to-csv" [
   --body-input: string # JSON array object
   --omit: string # Columns to omit (comma separated)
   --order: string # Column order (comma separated)
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2499,7 +2522,7 @@ export def "json-to-html" [
   --body-input: string # JSON array object
   --omit: string # Columns to omit (comma separated)
   --order: string # Column order (comma separated)
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2540,7 +2563,7 @@ export def "json-to-xml" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-input: string # JSON array object
   root: string # Name of root node
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2582,7 +2605,7 @@ export def "join-strings" [
   lower: string@lower-completer # Convert strings in collection to lowercase
   separator: string # Separator character
   trim: string@trim-completer # Trim strings in collection
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2622,7 +2645,7 @@ export def "market-index" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date (yyyy-MM-dd, leave empty for last trading day)
   symbol: string@symbol-completer # Market index
-]: any -> record<adj_close: float, adj_high: float, adj_low: float, adj_open: float, adj_volume: float, close: float, date: string, exchange: string, high: float, low: float, open: float, symbol: string, volume: float> {
+]: any -> oneof<record<adj_close: float, adj_high: float, adj_low: float, adj_open: float, adj_volume: float, close: float, date: string, exchange: string, high: float, low: float, open: float, symbol: string, volume: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2661,7 +2684,7 @@ export def "query-json" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-input: string # XML or JSON string
   query: string # XPath or JSONPath query
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2701,7 +2724,7 @@ export def "query-xml" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-input: string # XML or JSON string
   query: string # XPath or JSONPath query
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2741,7 +2764,7 @@ export def "random-number" [
   --dry-run(-n) # Return the request that would be sent without executing it
   end: float # End of range
   start: float # Start of range
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2782,7 +2805,7 @@ export def "redact-string" [
   source: string # String containing the complete text
   --value: string # Individual string to redact
   --values: list<string> # Collection of strings to redact
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2823,7 +2846,7 @@ export def "remove-from-collection" [
   --body-input: list<string> # Collection of values or objects to modify
   --item: string # Item (for multiple items, leave blank and use Items)
   --items: list<string> # Items (Collection, for a single item leave blank and use Item)
-]: any -> record<result: list<string>> {
+]: any -> oneof<record<result: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2864,7 +2887,7 @@ export def "replace-string" [
   replacement: string # Replacement text
   source: string # String containing the text to be replaced
   value: string # Text to replace
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2905,7 +2928,7 @@ export def "replace-values-in-collection" [
   --body-input: list<string> # Collection of strings
   match: string # Match value
   replacement: string # Replacement value
-]: any -> record<result: list<string>> {
+]: any -> oneof<record<result: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3031,7 +3054,7 @@ export def "round-number" [
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   --body-input: float # Numeric value to calculate
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3070,7 +3093,7 @@ export def "shorten-link" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   source: string # String variable or text value
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3109,7 +3132,7 @@ export def "sort-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-input: list<string> # Collection of strings to sort
   order: string@order-completer # Sort order (default: Ascending)
-]: any -> record<result: list<string>> {
+]: any -> oneof<record<result: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3149,7 +3172,7 @@ export def "speech-to-text" [
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # Source audio file (WAV, MP3, AAC, M4A) (format: binary)
   language: string@language-completer # Language of audio input (default: English (United States))
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3191,7 +3214,7 @@ export def "split-collection" [
   --index: string # Index location to split (leave empty to use Match value)
   --body-input: list<string> # Collection of items to split
   --match: string # String to match (explicit, case-insensitive, leave empty to use Index)
-]: any -> record<result1: list<string>, result2: list<string>> {
+]: any -> oneof<record<result1: list<string>, result2: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3231,7 +3254,7 @@ export def "split-string" [
   --dry-run(-n) # Return the request that would be sent without executing it
   characters: string # One or more characters that will be used to split the text
   --body-input: string # Text to split
-]: any -> record<data: list<string>> {
+]: any -> oneof<record<data: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3271,7 +3294,7 @@ export def "standard-deviation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   decimals: float # Round to number of decimal places
   --body-input: list<float> # Colllection of values to calculate
-]: any -> record<result: float> {
+]: any -> oneof<record<result: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3312,7 +3335,7 @@ export def "stock-prices" [
   --date: string # Date (yyyy-MM-dd, leave empty for latest)
   --exchange: string@exchange-completer # Stock exchange
   symbols: string # Stock ticker symbols (comma-separated, max 20)
-]: any -> record<result: table<close: float, date: string, exchange: string, high: float, low: float, open: float, symbol: string, volume: float>> {
+]: any -> oneof<record<result: table<close: float, date: string, exchange: string, high: float, low: float, open: float, symbol: string, volume: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3433,7 +3456,7 @@ export def "translate-string" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-input: string # String containing the text to be translated
   language: string@language-completer-1 # Translation language
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3473,7 +3496,7 @@ export def "trim-string" [
   --dry-run(-n) # Return the request that would be sent without executing it
   source: string # String containing the text to be trimmed
   type: string@type-completer-3 # Type of white space to remove
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3511,7 +3534,7 @@ export def "url-decode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   source: string # Encoded string variable or text value
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3549,7 +3572,7 @@ export def "url-encode" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   source: string # String variable or text value
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3587,7 +3610,7 @@ export def "validate-email" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   source: string # String variable or text value
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3627,7 +3650,7 @@ export def "verify-hash" [
   algorithm: string@algorithm-completer # Hash algorithm
   hash: string # Hashed result
   --body-input: string # Original source string
-]: any -> record<result: bool> {
+]: any -> oneof<record<result: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3715,7 +3738,7 @@ export def "world-time" [
   --body-input: string # Source date and time
   source: string@source-completer-11 # default: GMT Standard Time - (GMT) Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London
   target: string@target-completer-11 # default: GMT Standard Time - (GMT) Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -3754,7 +3777,7 @@ export def "xml-to-json" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-input: string # XML string
-]: any -> record<result: string> {
+]: any -> oneof<record<result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)

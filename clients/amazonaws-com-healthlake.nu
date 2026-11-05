@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -115,9 +138,9 @@ def x-amz-target-completer-12 [] { ["HealthLake.UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-fhir-datastore" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-fhir-datastore" "delete-fhir-datastore" "describe-fhir-datastore" "describe-fhir-export-job" "describe-fhir-import-job" "list-fhir-datastores" "list-fhir-export-jobs" "list-fhir-import-jobs" "list-tags-for-resource" "start-fhir-export-job" "start-fhir-import-job" "tag-resource" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -139,9 +162,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateFHIRDatastore
-# --SseConfiguration shape: {KmsEncryptionConfig: record}
-# --PreloadDataConfig shape: {PreloadDataType: "SYNTHEA"}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-fhir-datastore" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -166,7 +186,7 @@ export def "create-fhir-datastore" [
   --preload-data-config: record # The input properties for the preloaded Data Store. Only data preloaded from Synthea is supported. — shape: {PreloadDataType: "SYNTHEA"}
   --client-token: string # Optional user provided token used for ensuring idempotency.
   --tags: list # Resource tags that are applied to a Data Store when it is created. — item shape: {Key: string, Value: string}
-]: any -> record<DatastoreId: string, DatastoreArn: string, DatastoreStatus: string, DatastoreEndpoint: string> {
+]: any -> oneof<record<DatastoreId: string, DatastoreArn: string, DatastoreStatus: string, DatastoreEndpoint: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -215,7 +235,7 @@ export def "delete-fhir-datastore" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-1 # required
   --datastore-id: string # The AWS-generated ID for the Data Store to be deleted.
-]: any -> record<DatastoreId: string, DatastoreArn: string, DatastoreStatus: string, DatastoreEndpoint: string> {
+]: any -> oneof<record<DatastoreId: string, DatastoreArn: string, DatastoreStatus: string, DatastoreEndpoint: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -264,7 +284,7 @@ export def "describe-fhir-datastore" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-2 # required
   --datastore-id: string # The AWS-generated Data Store id. This is part of the ‘CreateFHIRDatastore’ output.
-]: any -> record<DatastoreProperties: record<DatastoreId: string, DatastoreArn: string, DatastoreName: string, DatastoreStatus: string, CreatedAt: string, DatastoreTypeVersion: string, DatastoreEndpoint: string, SseConfiguration: record<KmsEncryptionConfig: record>, PreloadDataConfig: record<PreloadDataType: string>>> {
+]: any -> oneof<record<DatastoreProperties: record<DatastoreId: string, DatastoreArn: string, DatastoreName: string, DatastoreStatus: string, CreatedAt: string, DatastoreTypeVersion: string, DatastoreEndpoint: string, SseConfiguration: record<KmsEncryptionConfig: record>, PreloadDataConfig: record<PreloadDataType: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -314,7 +334,7 @@ export def "describe-fhir-export-job" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   datastore_id: string # The AWS generated ID for the Data Store from which files are being exported from for an export job.
   job_id: string # The AWS generated ID for an export job.
-]: any -> record<ExportJobProperties: record<JobId: string, JobName: string, JobStatus: string, SubmitTime: string, EndTime: string, DatastoreId: string, OutputDataConfig: record<S3Configuration: record>, DataAccessRoleArn: string, Message: string>> {
+]: any -> oneof<record<ExportJobProperties: record<JobId: string, JobName: string, JobStatus: string, SubmitTime: string, EndTime: string, DatastoreId: string, OutputDataConfig: record<S3Configuration: record>, DataAccessRoleArn: string, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -364,7 +384,7 @@ export def "describe-fhir-import-job" [
   --x-amz-target: string@x-amz-target-completer-4 # required
   datastore_id: string # The AWS-generated ID of the Data Store.
   job_id: string # The AWS-generated job ID.
-]: any -> record<ImportJobProperties: record<JobId: string, JobName: string, JobStatus: string, SubmitTime: string, EndTime: string, DatastoreId: string, InputDataConfig: record<S3Uri: string>, JobOutputDataConfig: record<S3Configuration: record>, DataAccessRoleArn: string, Message: string>> {
+]: any -> oneof<record<ImportJobProperties: record<JobId: string, JobName: string, JobStatus: string, SubmitTime: string, EndTime: string, DatastoreId: string, InputDataConfig: record<S3Uri: string>, JobOutputDataConfig: record<S3Configuration: record>, DataAccessRoleArn: string, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -394,7 +414,6 @@ export def "describe-fhir-import-job" [
 #
 # POST /
 # operationId: ListFHIRDatastores
-# --Filter shape: {DatastoreName?: string, DatastoreStatus?: "CREATING"|"ACTIVE"|"DELETING"|"DELETED", CreatedBefore?: string, CreatedAfter?: string}
 export def "list-fhir-datastores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -418,7 +437,7 @@ export def "list-fhir-datastores" [
   --filter: record # The filters applied to Data Store query. — shape: {DatastoreName?: string, DatastoreStatus?: "CREATING"|"ACTIVE"|"DELETING"|"DELETED", CreatedBefore?: string, CreatedAfter?: string}
   --next-token-body: string # Fetches the next page of Data Stores when results are paginated. (body field)
   --max-results-body: int # The maximum number of Data Stores returned in a single page of a ListFHIRDatastoresRequest call. (body field)
-]: any -> record<DatastorePropertiesList: table<DatastoreId: string, DatastoreArn: string, DatastoreName: string, DatastoreStatus: string, CreatedAt: string, DatastoreTypeVersion: string, DatastoreEndpoint: string, SseConfiguration: record, PreloadDataConfig: record>, NextToken: string> {
+]: any -> oneof<record<DatastorePropertiesList: table<DatastoreId: string, DatastoreArn: string, DatastoreName: string, DatastoreStatus: string, CreatedAt: string, DatastoreTypeVersion: string, DatastoreEndpoint: string, SseConfiguration: record, PreloadDataConfig: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -476,7 +495,7 @@ export def "list-fhir-export-jobs" [
   --job-status: string@job-status-completer # This parameter limits the response to the export jobs with the specified job status.
   --submitted-before: string # This parameter limits the response to FHIR export jobs submitted before a user specified date. (format: date-time)
   --submitted-after: string # This parameter limits the response to FHIR export jobs submitted after a user specified date. (format: date-time)
-]: any -> record<ExportJobPropertiesList: table<JobId: string, JobName: string, JobStatus: string, SubmitTime: string, EndTime: string, DatastoreId: string, OutputDataConfig: record, DataAccessRoleArn: string, Message: string>, NextToken: string> {
+]: any -> oneof<record<ExportJobPropertiesList: table<JobId: string, JobName: string, JobStatus: string, SubmitTime: string, EndTime: string, DatastoreId: string, OutputDataConfig: record, DataAccessRoleArn: string, Message: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -534,7 +553,7 @@ export def "list-fhir-import-jobs" [
   --job-status: string@job-status-completer # This parameter limits the response to the import job with the specified job status.
   --submitted-before: string # This parameter limits the response to FHIR import jobs submitted before a user specified date. (format: date-time)
   --submitted-after: string # This parameter limits the response to FHIR import jobs submitted after a user specified date. (format: date-time)
-]: any -> record<ImportJobPropertiesList: table<JobId: string, JobName: string, JobStatus: string, SubmitTime: string, EndTime: string, DatastoreId: string, InputDataConfig: record, JobOutputDataConfig: record, DataAccessRoleArn: string, Message: string>, NextToken: string> {
+]: any -> oneof<record<ImportJobPropertiesList: table<JobId: string, JobName: string, JobStatus: string, SubmitTime: string, EndTime: string, DatastoreId: string, InputDataConfig: record, JobOutputDataConfig: record, DataAccessRoleArn: string, Message: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -584,7 +603,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   resource_arn: string # The Amazon Resource Name(ARN) of the Data Store for which tags are being added.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -614,7 +633,6 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: StartFHIRExportJob
-# --OutputDataConfig shape: {S3Configuration?: record}
 export def "start-fhir-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -638,7 +656,7 @@ export def "start-fhir-export-job" [
   datastore_id: string # The AWS generated ID for the Data Store from which files are being exported for an export job.
   data_access_role_arn: string # The Amazon Resource Name used during the initiation of the job.
   client_token: string # An optional user provided token used for ensuring idempotency.
-]: any -> record<JobId: string, JobStatus: string, DatastoreId: string> {
+]: any -> oneof<record<JobId: string, JobStatus: string, DatastoreId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -668,8 +686,6 @@ export def "start-fhir-export-job" [
 #
 # POST /
 # operationId: StartFHIRImportJob
-# --InputDataConfig shape: {S3Uri?: string}
-# --JobOutputDataConfig shape: {S3Configuration?: record}
 export def "start-fhir-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -694,7 +710,7 @@ export def "start-fhir-import-job" [
   datastore_id: string # The AWS-generated Data Store ID.
   data_access_role_arn: string # The Amazon Resource Name (ARN) that gives Amazon HealthLake access permission.
   client_token: string # Optional user provided token used for ensuring idempotency.
-]: any -> record<JobId: string, JobStatus: string, DatastoreId: string> {
+]: any -> oneof<record<JobId: string, JobStatus: string, DatastoreId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -724,7 +740,6 @@ export def "start-fhir-import-job" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -745,7 +760,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-11 # required
   resource_arn: string # The Amazon Resource Name(ARN)that gives Amazon HealthLake access to the Data Store which tags are being added to.
   tags: list # The user specified key and value pair tags being added to a Data Store. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -795,7 +810,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-12 # required
   resource_arn: string # "The Amazon Resource Name(ARN) of the Data Store for which tags are being removed
   tag_keys: list<string> # The keys for the tags to be removed from the Healthlake Data Store.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

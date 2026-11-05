@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -113,9 +137,9 @@ def status-completer [] { ["accepted" "arrived" "canceled" "droppedOff" "pending
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-cost" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-cost" "get-drivers" "get-eta" "get-profile" "get-rides" "new-ride" "get-ride" "cancel-ride" "set-ride-destination" "set-ride-rating" "get-ride-receipt" "get-ride-types" "set-prime-time" "set-ride-status" "set-ride-types" "set-ride-type-availability" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -152,7 +176,7 @@ export def "get-cost" [
   --start-lng: float # Longitude of the starting location (required, format: double)
   --end-lat: float # Latitude of the ending location (format: double)
   --end-lng: float # Longitude of the ending location (format: double)
-]: nothing -> record<cost_estimates: table<cost_token: string, currency: string, display_name: string, estimated_cost_cents_max: int, estimated_cost_cents_min: int, estimated_distance_miles: float, estimated_duration_seconds: int, is_valid_estimate: bool, primetime_confirmation_token: string, primetime_percentage: string, ride_type: string>> {
+]: nothing -> oneof<record<cost_estimates: table<cost_token: string, currency: string, display_name: string, estimated_cost_cents_max: int, estimated_cost_cents_min: int, estimated_distance_miles: float, estimated_duration_seconds: int, is_valid_estimate: bool, primetime_confirmation_token: string, primetime_percentage: string, ride_type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($start_lat == null) { error make --unspanned { msg: "required query parameter 'start_lat' missing: pass --start-lat" } }
@@ -191,7 +215,7 @@ export def "get-drivers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --lat: float # Latitude of a location (required, format: double)
   --lng: float # Longitude of a location (required, format: double)
-]: nothing -> record<nearby_drivers: table<drivers: list, ride_type: string>> {
+]: nothing -> oneof<record<nearby_drivers: table<drivers: list, ride_type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
@@ -233,7 +257,7 @@ export def "get-eta" [
   --destination-lat: float # Latitude of destination location (format: double)
   --destination-lng: float # Longitude of destination location (format: double)
   --ride-type: string@ride-type-completer # ID of a ride type
-]: nothing -> record<eta_estimates: table<display_name: string, eta_seconds: int, eta_seconds_max: int, is_valid_estimate: bool, ride_type: string>> {
+]: nothing -> oneof<record<eta_estimates: table<display_name: string, eta_seconds: int, eta_seconds_max: int, is_valid_estimate: bool, ride_type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
@@ -270,7 +294,7 @@ export def "get-profile" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<first_name: string, has_taken_a_ride: bool, id: string, last_name: string> {
+]: nothing -> oneof<record<first_name: string, has_taken_a_ride: bool, id: string, last_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/profile" $auth.query)
@@ -307,7 +331,7 @@ export def "get-rides" [
   --start-time: string # Restrict to rides starting after this point in time. The earliest supported date is 2015-01-01T00:00:00+00:00 (required, format: date-time)
   --end-time: string # Restrict to rides starting before this point in time. The earliest supported date is 2015-01-01T00:00:00+00:00 (format: date-time)
   --limit: int # The maximum number of rides to return. The default limit is 10 if not specified. The maximum allowed value is 50, an integer greater that 50 will return at most 50 results. (format: int32, default: 10)
-]: nothing -> record<ride_history: table<beacon_color: string, can_cancel: list, canceled_by: string, cancellation_price: record, destination: record, distance_miles: float, driver: record, dropoff: record, duration_seconds: int, feedback: string, generated_at: string, line_items: list, location: record, origin: record, passenger: record, pickup: record, price: record, pricing_details_url: string, primetime_percentage: string, rating: int, requested_at: string, ride_id: string, ride_profile: record, ride_type: string, route_url: string, status: string, vehicle: record>> {
+]: nothing -> oneof<record<ride_history: table<beacon_color: string, can_cancel: list, canceled_by: string, cancellation_price: record, destination: record, distance_miles: float, driver: record, dropoff: record, duration_seconds: int, feedback: string, generated_at: string, line_items: list, location: record, origin: record, passenger: record, pickup: record, price: record, pricing_details_url: string, primetime_percentage: string, rating: int, requested_at: string, ride_id: string, ride_profile: record, ride_type: string, route_url: string, status: string, vehicle: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($start_time == null) { error make --unspanned { msg: "required query parameter 'start_time' missing: pass --start-time" } }
@@ -333,8 +357,6 @@ export def "get-rides" [
 #
 # POST /rides
 # operationId: NewRide
-# --destination shape: {lat: float, lng: float, address?: string}
-# --origin shape: {lat: float, lng: float, address?: string}
 export def "new-ride" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -350,7 +372,7 @@ export def "new-ride" [
   origin: record # The *requested* location for passenger pickup — shape: {lat: float, lng: float, address?: string}
   --primetime-confirmation-token: string # A token that confirms the user has accepted current primetime charges (Deprecated)
   ride_type: string@ride-type-completer # The ID of the ride type
-]: any -> record<destination: record<lat: float, lng: float, address: string>, origin: record<lat: float, lng: float, address: string>, passenger: record<first_name: string, image_url: string, rating: string, last_name: string, user_id: string>, ride_id: string, status: string> {
+]: any -> oneof<record<destination: record<lat: float, lng: float, address: string>, origin: record<lat: float, lng: float, address: string>, passenger: record<first_name: string, image_url: string, rating: string, last_name: string, user_id: string>, ride_id: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -388,7 +410,7 @@ export def "get-ride" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<beacon_color: string, can_cancel: list<string>, canceled_by: string, cancellation_price: record<amount: int, currency: string, description: string, token: string, token_duration: int>, destination: record<lat: float, lng: float, address: string, eta_seconds: int>, distance_miles: float, driver: record<first_name: string, image_url: string, phone_number: string, rating: string, user_id: string>, dropoff: record<lat: float, lng: float, address: string, time: string>, duration_seconds: int, feedback: string, generated_at: string, line_items: table<amount: int, currency: string, type: string>, location: record<lat: float, lng: float, bearing: float>, origin: record<lat: float, lng: float, address: string, eta_seconds: int>, passenger: record<first_name: string, image_url: string, rating: string, last_name: string, user_id: string>, pickup: record<lat: float, lng: float, address: string, time: string>, price: record<amount: int, currency: string, description: string>, pricing_details_url: string, primetime_percentage: string, rating: int, requested_at: string, ride_id: string, ride_profile: record, ride_type: string, route_url: string, status: string, vehicle: record<color: string, image_url: string, license_plate: string, license_plate_state: string, make: string, model: string, year: int>> {
+]: nothing -> oneof<record<beacon_color: string, can_cancel: list<string>, canceled_by: string, cancellation_price: record<amount: int, currency: string, description: string, token: string, token_duration: int>, destination: record<lat: float, lng: float, address: string, eta_seconds: int>, distance_miles: float, driver: record<first_name: string, image_url: string, phone_number: string, rating: string, user_id: string>, dropoff: record<lat: float, lng: float, address: string, time: string>, duration_seconds: int, feedback: string, generated_at: string, line_items: table<amount: int, currency: string, type: string>, location: record<lat: float, lng: float, bearing: float>, origin: record<lat: float, lng: float, address: string, eta_seconds: int>, passenger: record<first_name: string, image_url: string, rating: string, last_name: string, user_id: string>, pickup: record<lat: float, lng: float, address: string, time: string>, price: record<amount: int, currency: string, description: string>, pricing_details_url: string, primetime_percentage: string, rating: int, requested_at: string, ride_id: string, ride_profile: record, ride_type: string, route_url: string, status: string, vehicle: record<color: string, image_url: string, license_plate: string, license_plate_state: string, make: string, model: string, year: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -467,7 +489,7 @@ export def "set-ride-destination" [
   lat: float # The latitude component of a location (format: double)
   lng: float # The longitude component of a location (format: double)
   --address: string # A human readable address at/near the given location
-]: any -> record<lat: float, lng: float, address: string> {
+]: any -> oneof<record<lat: float, lng: float, address: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -495,7 +517,6 @@ export def "set-ride-destination" [
 #
 # PUT /rides/{id}/rating
 # operationId: SetRideRating
-# --tip shape: {amount?: int, currency?: string}
 export def "set-ride-rating" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -549,7 +570,7 @@ export def "get-ride-receipt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<charges: table<amount: int, currency: string, payment_method: string>, line_items: table<amount: int, currency: string, type: string>, price: record<amount: int, currency: string, description: string>, requested_at: string, ride_id: string, ride_profile: record> {
+]: nothing -> oneof<record<charges: table<amount: int, currency: string, payment_method: string>, line_items: table<amount: int, currency: string, type: string>, price: record<amount: int, currency: string, description: string>, requested_at: string, ride_id: string, ride_profile: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -587,7 +608,7 @@ export def "get-ride-types" [
   --lat: float # Latitude of a location (required, format: double)
   --lng: float # Longitude of a location (required, format: double)
   --ride-type: string@ride-type-completer # ID of a ride type
-]: nothing -> record<ride_types: table<display_name: string, image_url: string, pricing_details: record, ride_type: string, scheduled_pricing_details: record, seats: int>> {
+]: nothing -> oneof<record<ride_types: table<display_name: string, image_url: string, pricing_details: record, ride_type: string, scheduled_pricing_details: record, seats: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lat == null) { error make --unspanned { msg: "required query parameter 'lat' missing: pass --lat" } }
@@ -666,7 +687,7 @@ export def "set-ride-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   status: string@status-completer # The status of the ride
-]: any -> record<ride_id: string, status: string> {
+]: any -> oneof<record<ride_id: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -707,7 +728,7 @@ export def "set-ride-types" [
   lat: float # The latitude component of a location (format: double)
   lng: float # The longitude component of a location (format: double)
   ride_types: list<string>
-]: any -> record<lat: float, lng: float, ride_types: list<string>> {
+]: any -> oneof<record<lat: float, lng: float, ride_types: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

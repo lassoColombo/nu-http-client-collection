@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -145,9 +169,9 @@ def type-completer-11 [] { ["comments" "lists"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-calendars-all-dvd-start-date-days" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-calendars-all-dvd-start-date-days" "get-calendars-all-movies-start-date-days" "get-calendars-all-shows-new-start-date-days" "get-calendars-all-shows-premieres-start-date-days" "get-calendars-all-shows-start-date-days" "get-dvd-releases" "get-movies" "get-new-shows" "get-season-premieres" "get-shows" "get-certifications" "delete-any-active-checkins" "check-into-an-item" "post-a-comment" "get-recently-created-comments" "get-trending-comments" "get-recently-updated-comments" "delete-a-comment-or-reply" "get-a-comment-or-reply" "update-a-comment-or-reply" "get-the-attached-media-item" "remove-like-on-a-comment" "like-a-comment" "get-all-users-who-liked-a-comment" "get-replies-for-a-comment" "post-a-reply-for-a-comment" "get-countries" "get-genres" "get-languages" "get-popular-lists" "get-trending-lists" "get-list" "get-all-list-comments" "get-items-on-a-list" "get-all-users-who-liked-a-list" "get-the-most-anticipated-movies" "get-the-weekend-box-office" "get-the-most-collected-movies" "get-the-most-played-movies" "get-popular-movies" "get-the-most-recommended-movies" "get-trending-movies" "get-recently-updated-movie-trakt-i-ds" "get-recently-updated-movies" "get-the-most-watched-movies" "get-a-movie" "get-all-movie-aliases" "get-all-movie-comments" "get-lists-containing-this-movie" "get-all-people-for-a-movie" "get-movie-ratings" "get-related-movies" "get-all-movie-releases" "get-movie-stats" "get-movie-studios" "get-all-movie-translations" "get-users-watching-right-now" "get-networks" "authorize-application" "generate-new-device-codes" "poll-for-the-access-token" "revoke-an-access-token" "exchange-refresh-token-for-access-token" "get-recently-updated-people-trakt-i-ds" "get-recently-updated-people" "get-a-single-person" "get-lists-containing-this-person" "get-movie-credits" "get-show-credits" "get-movie-recommendations" "hide-a-movie-recommendation" "get-show-recommendations" "hide-a-show-recommendation" "pause-watching-in-a-media-center" "start-watching-in-a-media-center" "stop-or-finish-watching-in-a-media-center" "get-id-lookup-results" "get-text-query-results" "get-the-most-anticipated-shows" "get-the-most-collected-shows" "get-the-most-played-shows" "get-popular-shows" "get-the-most-recommended-shows" "get-trending-shows" "get-recently-updated-show-trakt-i-ds" "get-recently-updated-shows" "get-the-most-watched-shows" "get-a-single-show" "get-all-show-aliases" "get-all-show-certifications" "get-all-show-comments" "get-last-episode" "get-lists-containing-this-show" "get-next-episode" "get-all-people-for-a-show" "get-show-collection-progress" "get-show-watched-progress" "undo-reset-show-progress" "reset-show-progress" "get-show-ratings" "get-related-shows" "get-all-seasons-for-a-show" "get-single-season-for-a-show" "get-all-season-comments" "get-a-single-episode-for-a-show" "get-all-episode-comments" "get-lists-containing-this-episode" "get-all-people-for-an-episode" "get-episode-ratings" "get-episode-stats" "get-all-episode-translations" "get-shows-id-seasons-season-episodes-episode-watching" "get-lists-containing-this-season" "get-all-people-for-a-season" "get-season-ratings" "get-season-stats" "get-all-season-translations" "get-shows-id-seasons-season-watching" "get-show-stats" "get-show-studios" "get-all-show-translations" "get-shows-id-watching" "add-items-to-collection" "remove-items-from-collection" "get-collection" "add-items-to-watched-history" "remove-items-from-history" "get-watched-history" "get-last-activity" "remove-a-playback-item" "get-playback-progress" "add-new-ratings" "remove-ratings" "get-ratings" "add-items-to-personal-recommendations" "remove-items-from-personal-recommendations" "reorder-personally-recommended-items" "get-personal-recommendations" "get-watched" "add-items-to-watchlist" "remove-items-from-watchlist" "reorder-watchlist-items" "get-watchlist" "get-hidden-items" "add-hidden-items" "remove-hidden-items" "get-follow-requests" "get-pending-following-requests" "deny-follow-request" "approve-follow-request" "get-saved-filters" "retrieve-settings" "get-user-profile" "get-users-id-collection-type" "get-comments" "unfollow-this-user" "follow-this-user" "get-followers" "get-following" "get-friends" "get-users-id-history-type-item-id" "get-likes" "get-a-users-personal-lists" "create-personal-list" "get-all-lists-a-user-can-collaborate-on" "reorder-a-users-lists" "delete-a-users-personal-list" "get-personal-list" "update-personal-list" "get-users-id-lists-list-id-comments-sort" "add-items-to-personal-list" "remove-items-from-personal-list" "reorder-items-on-a-list" "get-items-on-a-personal-list" "remove-like-on-a-list" "like-a-list" "get-users-id-lists-list-id-likes" "get-users-id-ratings-type-rating" "get-users-id-recommendations-type-sort" "get-stats" "get-users-id-watched-type" "get-watching" "get-users-id-watchlist-type-sort" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -662,8 +686,6 @@ export def "delete-any-active-checkins" [
 #
 # POST /checkin
 # operationId: Check into an item
-# --movie shape: {ids?: record, title?: string, year?: float}
-# --sharing shape: {tumblr?: bool, twitter?: bool}
 export def "check-into-an-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -710,8 +732,6 @@ export def "check-into-an-item" [
 #
 # POST /comments
 # operationId: Post a comment
-# --movie shape: {ids?: record, title?: string, year?: float}
-# --sharing shape: {medium?: bool, tumblr?: bool, twitter?: bool}
 export def "post-a-comment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3147,7 +3167,6 @@ export def "hide-a-show-recommendation" [
 #
 # POST /scrobble/pause
 # operationId: Pause watching in a media center
-# --movie shape: {ids?: record, title?: string, year?: float}
 export def "pause-watching-in-a-media-center" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3193,7 +3212,6 @@ export def "pause-watching-in-a-media-center" [
 #
 # POST /scrobble/start
 # operationId: Start watching in a media center
-# --movie shape: {ids?: record, title?: string, year?: float}
 export def "start-watching-in-a-media-center" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3239,7 +3257,6 @@ export def "start-watching-in-a-media-center" [
 #
 # POST /scrobble/stop
 # operationId: Stop or finish watching in a media center
-# --movie shape: {ids?: record, title?: string, year?: float}
 export def "stop-or-finish-watching-in-a-media-center" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5205,10 +5222,6 @@ export def "get-shows-id-watching" [
 #
 # POST /sync/collection
 # operationId: Add items to collection
-# --episodes item shape: {ids?: record}
-# --movies item shape: {audio?: string, audio_channels?: string, collected_at?: string, hdr?: string, ids: record, media_type?: string, resolution?: string, title?: string, year?: float}
-# --seasons item shape: {ids?: record}
-# --shows item shape: {ids: record, seasons: list, title: string, year: float}
 export def "add-items-to-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5254,10 +5267,6 @@ export def "add-items-to-collection" [
 #
 # POST /sync/collection/remove
 # operationId: Remove items from collection
-# --episodes item shape: {ids?: record}
-# --movies item shape: {ids: record, title?: string, year?: float}
-# --seasons item shape: {ids?: record}
-# --shows item shape: {ids: record, seasons: list, title: string, year: float}
 export def "remove-items-from-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5343,10 +5352,6 @@ export def "get-collection" [
 #
 # POST /sync/history
 # operationId: Add items to watched history
-# --episodes item shape: {ids?: record, watched_at?: string}
-# --movies item shape: {ids: record, title?: string, watched_at?: string, year?: float}
-# --seasons item shape: {ids?: record, watched_at?: string}
-# --shows item shape: {ids: record, seasons: list, title: string, year: float}
 export def "add-items-to-watched-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5392,10 +5397,6 @@ export def "add-items-to-watched-history" [
 #
 # POST /sync/history/remove
 # operationId: Remove items from history
-# --episodes item shape: {ids?: record}
-# --movies item shape: {ids: record, title?: string, year?: float}
-# --seasons item shape: {ids?: record}
-# --shows item shape: {ids: record, seasons: list, title: string, year: float}
 export def "remove-items-from-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5608,10 +5609,6 @@ export def "get-playback-progress" [
 #
 # POST /sync/ratings
 # operationId: Add new ratings
-# --episodes item shape: {ids?: record, rating?: float}
-# --movies item shape: {ids: record, rated_at?: string, rating: float, title?: string, year?: float}
-# --seasons item shape: {ids?: record, rating?: float}
-# --shows item shape: {ids: record, rating?: float, seasons: list, title: string, year: float}
 export def "add-new-ratings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5657,10 +5654,6 @@ export def "add-new-ratings" [
 #
 # POST /sync/ratings/remove
 # operationId: Remove ratings
-# --episodes item shape: {ids?: record}
-# --movies item shape: {ids: record, title?: string, year?: float}
-# --seasons item shape: {ids?: record}
-# --shows item shape: {ids: record, seasons: list, title: string, year: float}
 export def "remove-ratings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5748,8 +5741,6 @@ export def "get-ratings" [
 #
 # POST /sync/recommendations
 # operationId: Add items to personal recommendations
-# --movies item shape: {ids: record, notes?: string, title?: string, year?: float}
-# --shows item shape: {ids: record, notes?: string, title: string, year: float}
 export def "add-items-to-personal-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5793,8 +5784,6 @@ export def "add-items-to-personal-recommendations" [
 #
 # POST /sync/recommendations/remove
 # operationId: Remove items from personal recommendations
-# --movies item shape: {ids: record, title?: string, year?: float}
-# --shows item shape: {ids?: record, title?: string, year?: float}
 export def "remove-items-from-personal-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5962,10 +5951,6 @@ export def "get-watched" [
 #
 # POST /sync/watchlist
 # operationId: Add items to watchlist
-# --episodes item shape: {ids?: record}
-# --movies item shape: {ids: record, notes?: string, title?: string, year?: float}
-# --seasons item shape: {ids?: record}
-# --shows item shape: {ids: record, notes?: string, seasons: list, title: string, year: float}
 export def "add-items-to-watchlist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6011,10 +5996,6 @@ export def "add-items-to-watchlist" [
 #
 # POST /sync/watchlist/remove
 # operationId: Remove items from watchlist
-# --episodes item shape: {ids?: record}
-# --movies item shape: {ids: record, title?: string, year?: float}
-# --seasons item shape: {ids?: record}
-# --shows item shape: {ids: record, seasons: list, title: string, year: float}
 export def "remove-items-from-watchlist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6186,9 +6167,6 @@ export def "get-hidden-items" [
 #
 # POST /users/hidden/{section}
 # operationId: Add hidden items
-# --movies item shape: {ids: record, title?: string, year?: float}
-# --seasons item shape: {ids?: record}
-# --shows item shape: {ids: record, seasons?: list, title: string, year: float}
 export def "add-hidden-items" [
   section: string@section-completer-1
   --base-url(-b): string@base-url-completer # API base URL
@@ -6235,9 +6213,6 @@ export def "add-hidden-items" [
 #
 # POST /users/hidden/{section}/remove
 # operationId: Remove hidden items
-# --movies item shape: {ids: record, title?: string, year?: float}
-# --seasons item shape: {ids?: record}
-# --shows item shape: {ids: record, seasons?: list, title: string, year: float}
 export def "remove-hidden-items" [
   section: string@section-completer-2
   --base-url(-b): string@base-url-completer # API base URL
@@ -7284,11 +7259,6 @@ export def "get-users-id-lists-list-id-comments-sort" [
 #
 # POST /users/{id}/lists/{list_id}/items
 # operationId: Add items to personal list
-# --episodes item shape: {ids?: record}
-# --movies item shape: {ids: record, notes?: string}
-# --people item shape: {ids?: record, name?: string}
-# --seasons item shape: {ids?: record}
-# --shows item shape: {ids: record, notes?: string, seasons: list}
 export def "add-items-to-personal-list" [
   id: string
   list_id: string
@@ -7339,11 +7309,6 @@ export def "add-items-to-personal-list" [
 #
 # POST /users/{id}/lists/{list_id}/items/remove
 # operationId: Remove items from personal list
-# --episodes item shape: {ids?: record}
-# --movies item shape: {ids: record}
-# --people item shape: {ids?: record, name?: string}
-# --seasons item shape: {ids?: record}
-# --shows item shape: {ids: record, seasons: list}
 export def "remove-items-from-personal-list" [
   id: string
   list_id: string

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -155,9 +179,9 @@ def time-range-completer [] { ["12H" "180D" "1D" "1H" "30D" "365D" "6H" "7D" "90
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-private-allowlist-of-the-user-v1-allowlist-private-post" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-private-allowlist-of-the-user-v1-allowlist-private-post" "get-all-private-allowlists-v1-allowlist-private-all-get" "get-all-private-allowlists-by-resource-type-v1-allowlist-private-all-resource-type-get" "query-resource-denylists-v1-allowlist-private-ip-address-get" "delete-the-allowlist-v1-allowlist-private-allowlist-id-delete" "get-single-allowlist-v1-allowlist-private-allowlist-id-get" "update-private-allowlist-of-the-user-v1-allowlist-private-allowlist-id-put" "delete-the-allowlist-content-v1-allowlist-private-allowlist-id-content-delete" "get-allowlist-content-v1-allowlist-private-allowlist-id-content-get" "update-private-content-of-the-allowlist-of-the-user-v1-allowlist-private-allowlist-id-content-put" "change-status-of-the-origin-allowlist-v1-allowlist-private-allowlist-id-origin-put" "get-all-public-allowlists-v1-allowlist-public-all-get" "get-all-public-allowlists-by-resource-type-v1-allowlist-public-all-resource-type-get" "query-resource-allowlists-v1-allowlist-public-ip-address-get" "get-public-allowlists-owned-by-the-user-v1-allowlist-public-owned-get" "get-all-owned-allowlists-by-resource-type-v1-allowlist-public-owned-resource-type-get" "delete-the-allowlist-v1-allowlist-public-allowlist-id-delete" "get-single-allowlist-v1-allowlist-public-allowlist-id-get" "change-status-of-the-allowlist-v1-allowlist-public-allowlist-id-put" "change-status-of-the-origin-allowlist-v1-allowlist-public-allowlist-id-origin-put" "query-ip-address-network-information-v1-asn-ip-ip-address-get" "query-asn-prefix-information-v1-asn-prefix-post" "query-registry-names-v1-asn-registry-all-get" "query-registry-by-the-name-v1-asn-registry-code-get" "query-status-names-v1-asn-status-all-get" "query-status-by-the-name-v1-asn-status-code-get" "query-asn-v1-asn-number-get" "query-asn-prefixes-list-v1-asn-number-prefixes-get" "assess-ip-set-v1-assess-ip-post" "assess-ip-set-csv-v1-assess-ip-csv-post" "assess-ip-v1-assess-ip-ip-address-get" "query-ip-address-network-information-v1-datacenter-ip-ip-address-get" "query-datacenter-prefix-information-v1-datacenter-prefix-post" "query-datacenter-v1-datacenter-datacenter-id-get" "query-datacenter-prefixes-list-v1-datacenter-datacenter-id-prefixes-get" "query-datataset-information-of-all-the-resource-types-v1-dataset-ip-get" "query-datataset-information-of-the-resource-type-v1-dataset-ip-name-get" "create-private-denylist-of-the-user-v1-denylist-private-post" "get-all-private-denylists-v1-denylist-private-all-get" "get-all-private-denylists-by-resource-type-v1-denylist-private-all-resource-type-get" "query-resource-denylists-v1-denylist-private-ip-address-get" "delete-the-denylist-v1-denylist-private-denylist-id-delete" "get-single-denylist-v1-denylist-private-denylist-id-get" "update-private-denylist-of-the-user-v1-denylist-private-denylist-id-put" "delete-the-denylist-content-v1-denylist-private-denylist-id-content-delete" "get-denylist-content-v1-denylist-private-denylist-id-content-get" "update-private-content-of-the-denylist-of-the-user-v1-denylist-private-denylist-id-content-put" "change-status-of-the-origin-denylist-v1-denylist-private-denylist-id-origin-put" "get-all-public-denylists-v1-denylist-public-all-get" "get-all-public-denylists-by-resource-type-v1-denylist-public-all-resource-type-get" "query-resource-denylists-v1-denylist-public-ip-address-get" "get-public-denylists-owned-by-the-user-v1-denylist-public-owned-get" "get-all-owned-denylists-by-resource-type-v1-denylist-public-owned-resource-type-get" "delete-the-denylist-v1-denylist-public-denylist-id-delete" "get-single-denylist-v1-denylist-public-denylist-id-get" "change-status-of-the-denylist-v1-denylist-public-denylist-id-put" "change-status-of-the-origin-denylist-v1-denylist-public-denylist-id-origin-put" "query-all-the-ip-addresses-reported-by-the-user-v1-denylist-reported-ip-get" "delete-all-ip-addresses-reported-by-the-user-v1-denylist-reported-ip-all-delete" "delete-an-ip-address-reported-by-the-user-v1-denylist-reported-ip-ip-address-delete" "query-an-ip-addresses-reported-by-the-user-v1-denylist-reported-ip-ip-address-get" "geolocate-ip-set-v1-geo-post" "assess-ip-set-csv-v1-geo-csv-post" "geolocate-ip-v1-geo-ip-address-get" "log-change-id-v1-log-ip-id-logchange-id-get" "logchanges-ip-v1-log-ip-ip-address-get" "query-origin-information-v1-origin-get" "update-configuration-origin-v1-origin-put" "query-origin-address-status-information-v1-origin-addresses-get" "query-all-origin-information-v1-origin-all-get" "query-origin-traffic-client-v1-origin-client-analysis-get" "query-origin-cookie-id-status-information-v1-origin-cookies-get" "query-origin-scripts-v1-origin-scripts-get" "query-origin-status-v1-origin-status-post" "query-origin-status-detail-v1-origin-status-detail-status-id-get" "query-origin-status-details-v1-origin-status-details-get" "query-origin-traffic-analysis-v1-origin-traffic-analysis-get" "delete-token-v1-origin-token-delete" "query-origin-token-info-v1-origin-token-post" "query-all-origin-tokens-in-the-region-v1-origin-token-all-get" "disable-origin-token-v1-origin-token-disable-put" "enable-origin-token-v1-origin-token-enable-put" "create-a-new-origin-token-v1-origin-token-new-post" "get-all-sources-v1-source-ip-get" "get-source-info-v1-source-ip-source-get" "get-source-and-timerange-info-v1-source-ip-source-range-time-range-get" "query-token-info-v1-token-get" "query-token-activity-v1-token-activity-get" "parse-user-agents-v1-ua-post" "parse-user-agents-csv-v1-ua-csv-post" "query-device-by-code-v1-ua-device-code-get" "query-family-by-code-v1-ua-family-code-get" "query-os-by-code-v1-ua-os-code-get" "query-type-by-code-v1-ua-type-code-get" "query-vendor-by-code-v1-ua-vendor-code-get" "parse-user-agent-v1-ua-user-agent-urlencoded-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -179,7 +203,6 @@ export def commands []: nothing -> table {
 #
 # POST /v1/allowlist/private
 # operationId: create_private_allowlist_of_the_user_v1_allowlist_private_post
-# --payload shape: {description: string, name: string, resource_type: "UNKNOWN"|"CIDR"|"COUNTRY"|"CONTINENT"|"AS"|"DATACENTER"|"USERAGENT", tags: list<string>, ttl?: int}
 export def "create-private-allowlist-of-the-user-v1-allowlist-private-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +251,7 @@ export def "get-all-private-allowlists-v1-allowlist-private-all-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<lists: table<content: string, created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, tags: list, ttl: int, updated_at: int>, self: string> {
+]: nothing -> oneof<record<lists: table<content: string, created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, tags: list, ttl: int, updated_at: int>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/allowlist/private/all" $auth.query)
@@ -263,7 +286,7 @@ export def "get-all-private-allowlists-by-resource-type-v1-allowlist-private-all
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<lists: table<content: string, created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, tags: list, ttl: int, updated_at: int>, self: string> {
+]: nothing -> oneof<record<lists: table<content: string, created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, tags: list, ttl: int, updated_at: int>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resource_type' must be non-empty" } }
@@ -299,7 +322,7 @@ export def "query-resource-denylists-v1-allowlist-private-ip-address-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<asns: list<string>, cidrs: list<string>, continents: list<string>, countries: list<string>, datacenters: list<string>, reported: list<string>, self: string> {
+]: nothing -> oneof<record<asns: list<string>, cidrs: list<string>, continents: list<string>, countries: list<string>, datacenters: list<string>, reported: list<string>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
@@ -371,7 +394,7 @@ export def "get-single-allowlist-v1-allowlist-private-allowlist-id-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content: string, created_at: int, description: string, list_type: string, name: string, origins: record<lists: list<record>, self: string>, resource_type: string, self: string, tags: list<string>, ttl: int, updated_at: int> {
+]: nothing -> oneof<record<content: string, created_at: int, description: string, list_type: string, name: string, origins: record<lists: list<record>, self: string>, resource_type: string, self: string, tags: list<string>, ttl: int, updated_at: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($allowlist_id | is-empty) { error make --unspanned { msg: "path parameter 'allowlist_id' must be non-empty" } }
@@ -486,7 +509,7 @@ export def "get-allowlist-content-v1-allowlist-private-allowlist-id-content-get"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<asns: list<int>, cidrs: list<any>, continents: list<string>, countries: list<string>, datacenters: list<string>, self: string, user_agents: list<string>> {
+]: nothing -> oneof<record<asns: list<int>, cidrs: list<any>, continents: list<string>, countries: list<string>, datacenters: list<string>, self: string, user_agents: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($allowlist_id | is-empty) { error make --unspanned { msg: "path parameter 'allowlist_id' must be non-empty" } }
@@ -603,7 +626,7 @@ export def "get-all-public-allowlists-v1-allowlist-public-all-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string> {
+]: nothing -> oneof<record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/allowlist/public/all" $auth.query)
@@ -638,7 +661,7 @@ export def "get-all-public-allowlists-by-resource-type-v1-allowlist-public-all-r
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string> {
+]: nothing -> oneof<record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resource_type' must be non-empty" } }
@@ -674,7 +697,7 @@ export def "query-resource-allowlists-v1-allowlist-public-ip-address-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<asns: list<string>, cidrs: list<string>, continents: list<string>, countries: list<string>, datacenters: list<string>, reported: list<string>, self: string> {
+]: nothing -> oneof<record<asns: list<string>, cidrs: list<string>, continents: list<string>, countries: list<string>, datacenters: list<string>, reported: list<string>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
@@ -709,7 +732,7 @@ export def "get-public-allowlists-owned-by-the-user-v1-allowlist-public-owned-ge
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string> {
+]: nothing -> oneof<record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/allowlist/public/owned" $auth.query)
@@ -744,7 +767,7 @@ export def "get-all-owned-allowlists-by-resource-type-v1-allowlist-public-owned-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string> {
+]: nothing -> oneof<record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resource_type' must be non-empty" } }
@@ -816,7 +839,7 @@ export def "get-single-allowlist-v1-allowlist-public-allowlist-id-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: int, description: string, list_type: string, name: string, origins: record<lists: list<record>, self: string>, resource_type: string, self: string, status: string, tags: list<string>, ttl: int, updated_at: int> {
+]: nothing -> oneof<record<created_at: int, description: string, list_type: string, name: string, origins: record<lists: list<record>, self: string>, resource_type: string, self: string, status: string, tags: list<string>, ttl: int, updated_at: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($allowlist_id | is-empty) { error make --unspanned { msg: "path parameter 'allowlist_id' must be non-empty" } }
@@ -933,7 +956,7 @@ export def "query-ip-address-network-information-v1-asn-ip-ip-address-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<asn: string, description: string, mantainer: string, object_type: string, registry_date: string, registry_status: string, risk: string, score: int, self: string> {
+]: nothing -> oneof<record<asn: string, description: string, mantainer: string, object_type: string, registry_date: string, registry_status: string, risk: string, score: int, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ip_address | is-empty) { error make --unspanned { msg: "path parameter 'ip_address' must be non-empty" } }
@@ -969,7 +992,7 @@ export def "query-asn-prefix-information-v1-asn-prefix-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   prefix: string # format: ipvanynetwork
-]: any -> record<asn: string, description: string, mantainer: string, object_type: string, registry_date: string, registry_status: string, risk: string, score: int, self: string> {
+]: any -> oneof<record<asn: string, description: string, mantainer: string, object_type: string, registry_date: string, registry_status: string, risk: string, score: int, self: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1006,7 +1029,7 @@ export def "query-registry-names-v1-asn-registry-all-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<code: string, name: string, self: string> {
+]: nothing -> oneof<table<code: string, name: string, self: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/asn/registry/all" $auth.query)
@@ -1041,7 +1064,7 @@ export def "query-registry-by-the-name-v1-asn-registry-code-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, name: string, self: string> {
+]: nothing -> oneof<record<code: string, name: string, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -1076,7 +1099,7 @@ export def "query-status-names-v1-asn-status-all-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<code: string, name: string, self: string> {
+]: nothing -> oneof<table<code: string, name: string, self: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/asn/status/all" $auth.query)
@@ -1111,7 +1134,7 @@ export def "query-status-by-the-name-v1-asn-status-code-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, name: string, self: string> {
+]: nothing -> oneof<record<code: string, name: string, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -1147,7 +1170,7 @@ export def "query-asn-v1-asn-number-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<country_code: string, description: string, name: string, prefixes: string, registry: string, registry_date: string, risk: string, score: int, self: string, status: string> {
+]: nothing -> oneof<record<country_code: string, description: string, name: string, prefixes: string, registry: string, registry_date: string, risk: string, score: int, self: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
@@ -1183,7 +1206,7 @@ export def "query-asn-prefixes-list-v1-asn-number-prefixes-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<asn: string, prefixes_v4: table<asn: string, description: string, mantainer: string, object_type: string, registry_date: string, registry_status: string, risk: string, score: int, self: string>, prefixes_v6: table<asn: string, description: string, mantainer: string, object_type: string, registry_date: string, registry_status: string, risk: string, score: int, self: string>, self: string> {
+]: nothing -> oneof<record<asn: string, prefixes_v4: table<asn: string, description: string, mantainer: string, object_type: string, registry_date: string, registry_status: string, risk: string, score: int, self: string>, prefixes_v6: table<asn: string, description: string, mantainer: string, object_type: string, registry_date: string, registry_status: string, risk: string, score: int, self: string>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($number | is-empty) { error make --unspanned { msg: "path parameter 'number' must be non-empty" } }
@@ -1219,7 +1242,7 @@ export def "assess-ip-set-v1-assess-ip-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<results: table<allowlisted: string, asn: string, asn_prefix: string, datacenter: string, datacenter_prefix: string, datasets: list, denylisted: string, first_appearance: list, last_appearance: list, reason: string, risk: string, score: int, self: string, sources: list>, self: string> {
+]: any -> oneof<record<results: table<allowlisted: string, asn: string, asn_prefix: string, datacenter: string, datacenter_prefix: string, datasets: list, denylisted: string, first_appearance: list, last_appearance: list, reason: string, risk: string, score: int, self: string, sources: list>, self: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1258,7 +1281,7 @@ export def "assess-ip-set-csv-v1-assess-ip-csv-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --strict-parse: oneof<nothing, bool> # When `true`, if any IP address entry in the file is malformed, the assessment is canceled. If `false`, the malformed IP addresses are ignored. Default is `false`. (default: false)
   csv_file: string # The CSV file with the IP addresses (format: binary)
-]: any -> record<results: table<allowlisted: string, asn: string, asn_prefix: string, datacenter: string, datacenter_prefix: string, datasets: list, denylisted: string, first_appearance: list, last_appearance: list, reason: string, risk: string, score: int, self: string, sources: list>, self: string> {
+]: any -> oneof<record<results: table<allowlisted: string, asn: string, asn_prefix: string, datacenter: string, datacenter_prefix: string, datasets: list, denylisted: string, first_appearance: list, last_appearance: list, reason: string, risk: string, score: int, self: string, sources: list>, self: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1299,7 +1322,7 @@ export def "assess-ip-v1-assess-ip-ip-address-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<allowlisted: string, asn: string, asn_prefix: string, datacenter: string, datacenter_prefix: string, datasets: list<string>, denylisted: string, first_appearance: list<string>, last_appearance: list<string>, reason: string, risk: string, score: int, self: string, sources: list<string>> {
+]: nothing -> oneof<record<allowlisted: string, asn: string, asn_prefix: string, datacenter: string, datacenter_prefix: string, datasets: list<string>, denylisted: string, first_appearance: list<string>, last_appearance: list<string>, reason: string, risk: string, score: int, self: string, sources: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ip_address | is-empty) { error make --unspanned { msg: "path parameter 'ip_address' must be non-empty" } }
@@ -1335,7 +1358,7 @@ export def "query-ip-address-network-information-v1-datacenter-ip-ip-address-get
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<datacenter: string, ip_abuse_total: int, max_score: int, min_score: int, risk: string, score: int, self: string> {
+]: nothing -> oneof<record<datacenter: string, ip_abuse_total: int, max_score: int, min_score: int, risk: string, score: int, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ip_address | is-empty) { error make --unspanned { msg: "path parameter 'ip_address' must be non-empty" } }
@@ -1371,7 +1394,7 @@ export def "query-datacenter-prefix-information-v1-datacenter-prefix-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   prefix: string # format: ipvanynetwork
-]: any -> record<datacenter: string, ip_abuse_total: int, max_score: int, min_score: int, risk: string, score: int, self: string> {
+]: any -> oneof<record<datacenter: string, ip_abuse_total: int, max_score: int, min_score: int, risk: string, score: int, self: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1409,7 +1432,7 @@ export def "query-datacenter-v1-datacenter-datacenter-id-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<asn: string, description: string, name: string, prefixes: string, risk: string, score: int, self: string, source: string, status: string> {
+]: nothing -> oneof<record<asn: string, description: string, name: string, prefixes: string, risk: string, score: int, self: string, source: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($datacenter_id | is-empty) { error make --unspanned { msg: "path parameter 'datacenter_id' must be non-empty" } }
@@ -1445,7 +1468,7 @@ export def "query-datacenter-prefixes-list-v1-datacenter-datacenter-id-prefixes-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<prefixes_v4: table<datacenter: string, ip_abuse_total: int, max_score: int, min_score: int, risk: string, score: int, self: string>, prefixes_v6: table<datacenter: string, ip_abuse_total: int, max_score: int, min_score: int, risk: string, score: int, self: string>, self: string> {
+]: nothing -> oneof<record<prefixes_v4: table<datacenter: string, ip_abuse_total: int, max_score: int, min_score: int, risk: string, score: int, self: string>, prefixes_v6: table<datacenter: string, ip_abuse_total: int, max_score: int, min_score: int, risk: string, score: int, self: string>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($datacenter_id | is-empty) { error make --unspanned { msg: "path parameter 'datacenter_id' must be non-empty" } }
@@ -1480,7 +1503,7 @@ export def "query-datataset-information-of-all-the-resource-types-v1-dataset-ip-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<self: string, types: table<description: string, items: int, name: string, self: string, status: string, type: string>> {
+]: nothing -> oneof<record<self: string, types: table<description: string, items: int, name: string, self: string, status: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/dataset/ip" $auth.query)
@@ -1515,7 +1538,7 @@ export def "query-datataset-information-of-the-resource-type-v1-dataset-ip-name-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, items: int, name: string, self: string, status: string, type: string> {
+]: nothing -> oneof<record<description: string, items: int, name: string, self: string, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1540,7 +1563,6 @@ export def "query-datataset-information-of-the-resource-type-v1-dataset-ip-name-
 #
 # POST /v1/denylist/private
 # operationId: create_private_denylist_of_the_user_v1_denylist_private_post
-# --payload shape: {description: string, name: string, resource_type: "UNKNOWN"|"CIDR"|"COUNTRY"|"CONTINENT"|"AS"|"DATACENTER"|"USERAGENT", tags: list<string>, ttl?: int}
 export def "create-private-denylist-of-the-user-v1-denylist-private-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1589,7 +1611,7 @@ export def "get-all-private-denylists-v1-denylist-private-all-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<lists: table<content: string, created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, tags: list, ttl: int, updated_at: int>, self: string> {
+]: nothing -> oneof<record<lists: table<content: string, created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, tags: list, ttl: int, updated_at: int>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/denylist/private/all" $auth.query)
@@ -1624,7 +1646,7 @@ export def "get-all-private-denylists-by-resource-type-v1-denylist-private-all-r
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<lists: table<content: string, created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, tags: list, ttl: int, updated_at: int>, self: string> {
+]: nothing -> oneof<record<lists: table<content: string, created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, tags: list, ttl: int, updated_at: int>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resource_type' must be non-empty" } }
@@ -1660,7 +1682,7 @@ export def "query-resource-denylists-v1-denylist-private-ip-address-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<asns: list<string>, cidrs: list<string>, continents: list<string>, countries: list<string>, datacenters: list<string>, reported: list<string>, self: string> {
+]: nothing -> oneof<record<asns: list<string>, cidrs: list<string>, continents: list<string>, countries: list<string>, datacenters: list<string>, reported: list<string>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
@@ -1732,7 +1754,7 @@ export def "get-single-denylist-v1-denylist-private-denylist-id-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content: string, created_at: int, description: string, list_type: string, name: string, origins: record<lists: list<record>, self: string>, resource_type: string, self: string, tags: list<string>, ttl: int, updated_at: int> {
+]: nothing -> oneof<record<content: string, created_at: int, description: string, list_type: string, name: string, origins: record<lists: list<record>, self: string>, resource_type: string, self: string, tags: list<string>, ttl: int, updated_at: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($denylist_id | is-empty) { error make --unspanned { msg: "path parameter 'denylist_id' must be non-empty" } }
@@ -1847,7 +1869,7 @@ export def "get-denylist-content-v1-denylist-private-denylist-id-content-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<asns: list<int>, cidrs: list<any>, continents: list<string>, countries: list<string>, datacenters: list<string>, self: string, user_agents: list<string>> {
+]: nothing -> oneof<record<asns: list<int>, cidrs: list<any>, continents: list<string>, countries: list<string>, datacenters: list<string>, self: string, user_agents: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($denylist_id | is-empty) { error make --unspanned { msg: "path parameter 'denylist_id' must be non-empty" } }
@@ -1964,7 +1986,7 @@ export def "get-all-public-denylists-v1-denylist-public-all-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string> {
+]: nothing -> oneof<record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/denylist/public/all" $auth.query)
@@ -1999,7 +2021,7 @@ export def "get-all-public-denylists-by-resource-type-v1-denylist-public-all-res
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string> {
+]: nothing -> oneof<record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resource_type' must be non-empty" } }
@@ -2035,7 +2057,7 @@ export def "query-resource-denylists-v1-denylist-public-ip-address-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<asns: list<string>, cidrs: list<string>, continents: list<string>, countries: list<string>, datacenters: list<string>, reported: list<string>, self: string> {
+]: nothing -> oneof<record<asns: list<string>, cidrs: list<string>, continents: list<string>, countries: list<string>, datacenters: list<string>, reported: list<string>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
@@ -2070,7 +2092,7 @@ export def "get-public-denylists-owned-by-the-user-v1-denylist-public-owned-get"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string> {
+]: nothing -> oneof<record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/denylist/public/owned" $auth.query)
@@ -2105,7 +2127,7 @@ export def "get-all-owned-denylists-by-resource-type-v1-denylist-public-owned-re
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string> {
+]: nothing -> oneof<record<lists: table<created_at: int, description: string, list_type: string, name: string, origins: record, resource_type: string, self: string, status: string, tags: list, ttl: int, updated_at: int>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'resource_type' must be non-empty" } }
@@ -2177,7 +2199,7 @@ export def "get-single-denylist-v1-denylist-public-denylist-id-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: int, description: string, list_type: string, name: string, origins: record<lists: list<record>, self: string>, resource_type: string, self: string, status: string, tags: list<string>, ttl: int, updated_at: int> {
+]: nothing -> oneof<record<created_at: int, description: string, list_type: string, name: string, origins: record<lists: list<record>, self: string>, resource_type: string, self: string, status: string, tags: list<string>, ttl: int, updated_at: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($denylist_id | is-empty) { error make --unspanned { msg: "path parameter 'denylist_id' must be non-empty" } }
@@ -2302,7 +2324,7 @@ export def "query-all-the-ip-addresses-reported-by-the-user-v1-denylist-reported
   --less-than: int # Restricts the result displaying only the IP addresses reported less times than `less_than`. It must be an integer greater than 1.
   --ip-protocol-version: string@ip-protocol-version-completer # Restrict the result displaying the IP protocol version requested (IPV4 or IPV6) or both (ALL). Some output formats MUST filter by IP protocol version first. (default: ALL)
   --output-format: string@output-format-completer # The output format of the datasets. (default: JSON)
-]: nothing -> record<addresses: table<dataset: string, expiry: int, last_report: int, protocol: string, self: string, tags: list, total_reports: int>, self: string> {
+]: nothing -> oneof<record<addresses: table<dataset: string, expiry: int, last_report: int, protocol: string, self: string, tags: list, total_reports: int>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dataset" $dataset "scalar") (serialize-qp "reported_before" $reported_before "scalar") (serialize-qp "reported_after" $reported_after "scalar") (serialize-qp "expires_before" $expires_before "scalar") (serialize-qp "expires_after" $expires_after "scalar") (serialize-qp "greater_than" $greater_than "scalar") (serialize-qp "less_than" $less_than "scalar") (serialize-qp "ip_protocol_version" $ip_protocol_version "scalar") (serialize-qp "output_format" $output_format "scalar")] | flatten | str join "&"
@@ -2408,7 +2430,7 @@ export def "query-an-ip-addresses-reported-by-the-user-v1-denylist-reported-ip-i
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<dataset: string, expiry: int, last_report: int, protocol: string, self: string, tags: list<string>, total_reports: int> {
+]: nothing -> oneof<record<dataset: string, expiry: int, last_report: int, protocol: string, self: string, tags: list<string>, total_reports: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ip_address | is-empty) { error make --unspanned { msg: "path parameter 'ip_address' must be non-empty" } }
@@ -2444,7 +2466,7 @@ export def "geolocate-ip-set-v1-geo-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<results: table<accuracy_radius: float, asn_country_iso_code: string, city_geoname_code: int, city_name: string, continent_code: string, country_iso_code: string, hostnames: list, latitude: float, longitude: float, postal_code: string, region_geoname_code: int, region_name: string, self: string, time_zone: string>, self: string> {
+]: any -> oneof<record<results: table<accuracy_radius: float, asn_country_iso_code: string, city_geoname_code: int, city_name: string, continent_code: string, country_iso_code: string, hostnames: list, latitude: float, longitude: float, postal_code: string, region_geoname_code: int, region_name: string, self: string, time_zone: string>, self: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2483,7 +2505,7 @@ export def "assess-ip-set-csv-v1-geo-csv-post" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --strict-parse: oneof<nothing, bool> # When `true`, if any IP address entry in the file is malformed, the assessment is canceled. If `false`, the malformed IP addresses are ignored. Default is `false`. (default: false)
   csv_file: string # The CSV file with the IP addresses (format: binary)
-]: any -> record<results: table<accuracy_radius: float, asn_country_iso_code: string, city_geoname_code: int, city_name: string, continent_code: string, country_iso_code: string, hostnames: list, latitude: float, longitude: float, postal_code: string, region_geoname_code: int, region_name: string, self: string, time_zone: string>, self: string> {
+]: any -> oneof<record<results: table<accuracy_radius: float, asn_country_iso_code: string, city_geoname_code: int, city_name: string, continent_code: string, country_iso_code: string, hostnames: list, latitude: float, longitude: float, postal_code: string, region_geoname_code: int, region_name: string, self: string, time_zone: string>, self: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2524,7 +2546,7 @@ export def "geolocate-ip-v1-geo-ip-address-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accuracy_radius: float, asn_country_iso_code: string, city_geoname_code: int, city_name: string, continent_code: string, country_iso_code: string, hostnames: list<string>, latitude: float, longitude: float, postal_code: string, region_geoname_code: int, region_name: string, self: string, time_zone: string> {
+]: nothing -> oneof<record<accuracy_radius: float, asn_country_iso_code: string, city_geoname_code: int, city_name: string, continent_code: string, country_iso_code: string, hostnames: list<string>, latitude: float, longitude: float, postal_code: string, region_geoname_code: int, region_name: string, self: string, time_zone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ip_address | is-empty) { error make --unspanned { msg: "path parameter 'ip_address' must be non-empty" } }
@@ -2560,7 +2582,7 @@ export def "log-change-id-v1-log-ip-id-logchange-id-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, cidr: string, dataset: string, lapse: string, risk: string, score: int, self: string, source: string, timestamp: int> {
+]: nothing -> oneof<record<action: string, cidr: string, dataset: string, lapse: string, risk: string, score: int, self: string, source: string, timestamp: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($logchange_id | is-empty) { error make --unspanned { msg: "path parameter 'logchange_id' must be non-empty" } }
@@ -2598,7 +2620,7 @@ export def "logchanges-ip-v1-log-ip-ip-address-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --dataset: string # The name of the dataset to restrict the query
   --logged-after: int # A UNIX timestamp in milliseconds to restrict the results of the query to entries logged after this value.
-]: nothing -> record<logs: table<action: string, cidr: string, dataset: string, lapse: string, risk: string, score: int, self: string, source: string, timestamp: int>, self: string> {
+]: nothing -> oneof<record<logs: table<action: string, cidr: string, dataset: string, lapse: string, risk: string, score: int, self: string, source: string, timestamp: int>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ip_address | is-empty) { error make --unspanned { msg: "path parameter 'ip_address' must be non-empty" } }
@@ -2635,7 +2657,7 @@ export def "query-origin-information-v1-origin-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # The origin site to query (required)
-]: nothing -> record<actions: string, addresses: string, config: record, cookies: string, created_at: int, logs: string, origin: string, scripts: string, self: string, status: string, token: string, updated_at: int> {
+]: nothing -> oneof<record<actions: string, addresses: string, config: record, cookies: string, created_at: int, logs: string, origin: string, scripts: string, self: string, status: string, token: string, updated_at: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -2673,7 +2695,7 @@ export def "update-configuration-origin-v1-origin-put" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --config: record # The configuration information to store in the origin.
   origin: string # The origin site to modify the configruation
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2713,7 +2735,7 @@ export def "query-origin-address-status-information-v1-origin-addresses-get" [
   --query: string # The origin site to query (required)
   --page: int # The page to be returned (default: 1)
   --page-size: int # The number of items per page (default: 20)
-]: nothing -> record<addresses: table<address: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, page: int, page_size: int, self: string> {
+]: nothing -> oneof<record<addresses: table<address: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, page: int, page_size: int, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -2749,7 +2771,7 @@ export def "query-all-origin-information-v1-origin-all-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<origins: table<actions: string, addresses: string, config: record, cookies: string, created_at: int, logs: string, origin: string, scripts: string, self: string, status: string, token: string, updated_at: int>, self: string> {
+]: nothing -> oneof<record<origins: table<actions: string, addresses: string, config: record, cookies: string, created_at: int, logs: string, origin: string, scripts: string, self: string, status: string, token: string, updated_at: int>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/origin/all" $auth.query)
@@ -2787,7 +2809,7 @@ export def "query-origin-traffic-client-v1-origin-client-analysis-get" [
   --interval: string@interval-completer # The data inteval to aggregate the result dataset (required)
   --from-timestamp: int # A UNIX timestamp in milliseconds to restrict the results of the query to entries logged after or equal to this value. (required)
   --to-timestamp: int # A UNIX timestamp in milliseconds to restrict the results of the query to entries logged before this value.
-]: nothing -> record<data: table<client_browser: int, client_crawler: int, client_email: int, client_library: int, client_mobile_browser: int, client_multimedia_player: int, client_offline_browser: int, client_total: int, client_ua_anonymizer: int, client_unrecognized: int, client_validator: int, client_wap_browser: int, crawler_feed_fetcher: int, crawler_link_checker: int, crawler_marketing: int, crawler_screenshot_creator: int, crawler_search_engine_bot: int, crawler_site_monitor: int, crawler_speed_tester: int, crawler_tool: int, crawler_total: int, crawler_uncategorised: int, crawler_unrecognized: int, crawler_virus_scanner: int, crawler_vulnerability_scanner: int, crawler_web_scraper: int, timestamp: int, total: int>, from_timestamp: int, interval: string, self: string, to_timestamp: int> {
+]: nothing -> oneof<record<data: table<client_browser: int, client_crawler: int, client_email: int, client_library: int, client_mobile_browser: int, client_multimedia_player: int, client_offline_browser: int, client_total: int, client_ua_anonymizer: int, client_unrecognized: int, client_validator: int, client_wap_browser: int, crawler_feed_fetcher: int, crawler_link_checker: int, crawler_marketing: int, crawler_screenshot_creator: int, crawler_search_engine_bot: int, crawler_site_monitor: int, crawler_speed_tester: int, crawler_tool: int, crawler_total: int, crawler_uncategorised: int, crawler_unrecognized: int, crawler_virus_scanner: int, crawler_vulnerability_scanner: int, crawler_web_scraper: int, timestamp: int, total: int>, from_timestamp: int, interval: string, self: string, to_timestamp: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -2828,7 +2850,7 @@ export def "query-origin-cookie-id-status-information-v1-origin-cookies-get" [
   --query: string # The origin site to query (required)
   --page: int # The page to be returned (default: 1)
   --page-size: int # The number of items per page (default: 20)
-]: nothing -> record<cookie_ids: table<cookie_id: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, page: int, page_size: int, self: string> {
+]: nothing -> oneof<record<cookie_ids: table<cookie_id: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, page: int, page_size: int, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -2865,7 +2887,7 @@ export def "query-origin-scripts-v1-origin-scripts-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --query: string # The origin site to query (required)
-]: nothing -> record<detection: string, self: string> {
+]: nothing -> oneof<record<detection: string, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -2904,7 +2926,7 @@ export def "query-origin-status-v1-origin-status-post" [
   --query: string # The origin site to query (required)
   --address: any # The IP address to query the status
   --cookie-id: string # The cookie id to query the status (format: uuid)
-]: any -> record<address: record<address: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, cookie_id: record<cookie_id: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, self: string> {
+]: any -> oneof<record<address: record<address: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, cookie_id: record<cookie_id: string, created_at: int, expiry: int, log_id: string, status: string, updated_at: int>, self: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2944,7 +2966,7 @@ export def "query-origin-status-detail-v1-origin-status-detail-status-id-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cardinality: int, description: string, self: string, status: string> {
+]: nothing -> oneof<record<cardinality: int, description: string, self: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($status_id | is-empty) { error make --unspanned { msg: "path parameter 'status_id' must be non-empty" } }
@@ -2979,7 +3001,7 @@ export def "query-origin-status-details-v1-origin-status-details-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<list: table<cardinality: int, description: string, self: string, status: string>, self: string> {
+]: nothing -> oneof<record<list: table<cardinality: int, description: string, self: string, status: string>, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/origin/status/details" $auth.query)
@@ -3017,7 +3039,7 @@ export def "query-origin-traffic-analysis-v1-origin-traffic-analysis-get" [
   --interval: string@interval-completer # The data inteval to aggregate the result dataset (required)
   --from-timestamp: int # A UNIX timestamp in milliseconds to restrict the results of the query to entries logged after or equal to this value. (required)
   --to-timestamp: int # A UNIX timestamp in milliseconds to restrict the results of the query to entries logged before this value.
-]: nothing -> record<data: table<asn_risky: int, bots: int, datacenters: int, denylists: int, network_country_mismatches: int, score_high: int, timestamp: int, total: int, webdrivers: int>, from_timestamp: int, interval: string, self: string, to_timestamp: int> {
+]: nothing -> oneof<record<data: table<asn_risky: int, bots: int, datacenters: int, denylists: int, network_country_mismatches: int, score_high: int, timestamp: int, total: int, webdrivers: int>, from_timestamp: int, interval: string, self: string, to_timestamp: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($query == null) { error make --unspanned { msg: "required query parameter 'query' missing: pass --query" } }
@@ -3094,7 +3116,7 @@ export def "query-origin-token-info-v1-origin-token-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   origin_token_id: string
-]: any -> record<created_at: int, origin: string, region_id: string, self: string, status: string, updated_at: int> {
+]: any -> oneof<record<created_at: int, origin: string, region_id: string, self: string, status: string, updated_at: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3131,7 +3153,7 @@ export def "query-all-origin-tokens-in-the-region-v1-origin-token-all-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<self: string, tokens: table<created_at: int, origin: string, region_id: string, self: string, status: string, updated_at: int>> {
+]: nothing -> oneof<record<self: string, tokens: table<created_at: int, origin: string, region_id: string, self: string, status: string, updated_at: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/origin_token/all" $auth.query)
@@ -3242,7 +3264,7 @@ export def "create-a-new-origin-token-v1-origin-token-new-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   origin: string
-]: any -> record<created_at: int, origin: string, region_id: string, self: string, status: string, updated_at: int> {
+]: any -> oneof<record<created_at: int, origin: string, region_id: string, self: string, status: string, updated_at: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3279,7 +3301,7 @@ export def "get-all-sources-v1-source-ip-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<self: string, sources: table<dataset: string, description: string, maximum_risk: string, maximum_score: int, minimum_risk: string, minimum_score: int, name: string, refresh: string, self: string, source: string, time_ranges: list, updated_at: int, url: string>> {
+]: nothing -> oneof<record<self: string, sources: table<dataset: string, description: string, maximum_risk: string, maximum_score: int, minimum_risk: string, minimum_score: int, name: string, refresh: string, self: string, source: string, time_ranges: list, updated_at: int, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/source/ip" $auth.query)
@@ -3314,7 +3336,7 @@ export def "get-source-info-v1-source-ip-source-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<dataset: string, description: string, maximum_risk: string, maximum_score: int, minimum_risk: string, minimum_score: int, name: string, refresh: string, self: string, source: string, time_ranges: list<string>, updated_at: int, url: string> {
+]: nothing -> oneof<record<dataset: string, description: string, maximum_risk: string, maximum_score: int, minimum_risk: string, minimum_score: int, name: string, refresh: string, self: string, source: string, time_ranges: list<string>, updated_at: int, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -3351,7 +3373,7 @@ export def "get-source-and-timerange-info-v1-source-ip-source-range-time-range-g
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<items: int, lapse: string, risk: string, score: int, self: string, source: string, updated_at: int> {
+]: nothing -> oneof<record<items: int, lapse: string, risk: string, score: int, self: string, source: string, updated_at: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source | is-empty) { error make --unspanned { msg: "path parameter 'source' must be non-empty" } }
@@ -3387,7 +3409,7 @@ export def "query-token-info-v1-token-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: int, last_minute_bucket_init_value: int, last_minute_bucket_refill_ratio: int, last_minute_bucket_refresh: int, last_minute_bucket_value: int, last_month_bucket_init_value: int, last_month_bucket_refresh: int, last_month_bucket_value: int, region_id: string, self: string, status: string, updated_at: int> {
+]: nothing -> oneof<record<created_at: int, last_minute_bucket_init_value: int, last_minute_bucket_refill_ratio: int, last_minute_bucket_refresh: int, last_minute_bucket_value: int, last_month_bucket_init_value: int, last_month_bucket_refresh: int, last_month_bucket_value: int, region_id: string, self: string, status: string, updated_at: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/token" $auth.query)
@@ -3423,7 +3445,7 @@ export def "query-token-activity-v1-token-activity-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # The page to be returned (default: 1)
   --page-size: int # The number of items per page (default: 20)
-]: nothing -> record<activities: table<created_at: int, data: record, description: string, event: string, self: string, source: record>, page: int, page_size: int, self: string> {
+]: nothing -> oneof<record<activities: table<created_at: int, data: record, description: string, event: string, self: string, source: record>, page: int, page_size: int, self: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar")] | flatten | str join "&"
@@ -3459,7 +3481,7 @@ export def "parse-user-agents-v1-ua-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<results: table<agent: string, classification: string, device: string, engine: string, family: string, frequent: string, latest: string, os: string, self: string, string: string, type: string, vendor: string, version: string>, self: string> {
+]: any -> oneof<record<results: table<agent: string, classification: string, device: string, engine: string, family: string, frequent: string, latest: string, os: string, self: string, string: string, type: string, vendor: string, version: string>, self: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3497,7 +3519,7 @@ export def "parse-user-agents-csv-v1-ua-csv-post" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   csv_file: string # The CSV file with the User Agents to parse (format: binary)
-]: any -> record<results: table<agent: string, classification: string, device: string, engine: string, family: string, frequent: string, latest: string, os: string, self: string, string: string, type: string, vendor: string, version: string>, self: string> {
+]: any -> oneof<record<results: table<agent: string, classification: string, device: string, engine: string, family: string, frequent: string, latest: string, os: string, self: string, string: string, type: string, vendor: string, version: string>, self: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3537,7 +3559,7 @@ export def "query-device-by-code-v1-ua-device-code-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, description: string> {
+]: nothing -> oneof<record<code: string, description: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -3573,7 +3595,7 @@ export def "query-family-by-code-v1-ua-family-code-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, description: string> {
+]: nothing -> oneof<record<code: string, description: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -3609,7 +3631,7 @@ export def "query-os-by-code-v1-ua-os-code-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, description: string, family: string, vendor: string> {
+]: nothing -> oneof<record<code: string, description: string, family: string, vendor: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -3645,7 +3667,7 @@ export def "query-type-by-code-v1-ua-type-code-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, description: string, type: string> {
+]: nothing -> oneof<record<code: string, description: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -3681,7 +3703,7 @@ export def "query-vendor-by-code-v1-ua-vendor-code-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, description: string> {
+]: nothing -> oneof<record<code: string, description: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -3717,7 +3739,7 @@ export def "parse-user-agent-v1-ua-user-agent-urlencoded-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<agent: string, classification: string, device: string, engine: string, family: string, frequent: string, latest: string, os: string, self: string, string: string, type: string, vendor: string, version: string> {
+]: nothing -> oneof<record<agent: string, classification: string, device: string, engine: string, family: string, frequent: string, latest: string, os: string, self: string, string: string, type: string, vendor: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_agent_urlencoded | is-empty) { error make --unspanned { msg: "path parameter 'user_agent_urlencoded' must be non-empty" } }

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -177,9 +200,9 @@ def x-amz-target-completer-62 [] { ["Route53Resolver.UpdateResolverRule"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-firewall-rule-group" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-firewall-rule-group" "associate-resolver-endpoint-ip-address" "associate-resolver-query-log-config" "associate-resolver-rule" "create-firewall-domain-list" "create-firewall-rule" "create-firewall-rule-group" "create-resolver-endpoint" "create-resolver-query-log-config" "create-resolver-rule" "delete-firewall-domain-list" "delete-firewall-rule" "delete-firewall-rule-group" "delete-resolver-endpoint" "delete-resolver-query-log-config" "delete-resolver-rule" "disassociate-firewall-rule-group" "disassociate-resolver-endpoint-ip-address" "disassociate-resolver-query-log-config" "disassociate-resolver-rule" "get-firewall-config" "get-firewall-domain-list" "get-firewall-rule-group" "get-firewall-rule-group-association" "get-firewall-rule-group-policy" "get-resolver-config" "get-resolver-dnssec-config" "get-resolver-endpoint" "get-resolver-query-log-config" "get-resolver-query-log-config-association" "get-resolver-query-log-config-policy" "get-resolver-rule" "get-resolver-rule-association" "get-resolver-rule-policy" "import-firewall-domains" "list-firewall-configs" "list-firewall-domain-lists" "list-firewall-domains" "list-firewall-rule-group-associations" "list-firewall-rule-groups" "list-firewall-rules" "list-resolver-configs" "list-resolver-dnssec-configs" "list-resolver-endpoint-ip-addresses" "list-resolver-endpoints" "list-resolver-query-log-config-associations" "list-resolver-query-log-configs" "list-resolver-rule-associations" "list-resolver-rules" "list-tags-for-resource" "put-firewall-rule-group-policy" "put-resolver-query-log-config-policy" "put-resolver-rule-policy" "tag-resource" "untag-resource" "update-firewall-config" "update-firewall-domains" "update-firewall-rule" "update-firewall-rule-group-association" "update-resolver-config" "update-resolver-dnssec-config" "update-resolver-endpoint" "update-resolver-rule" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -201,7 +224,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateFirewallRuleGroup
-# --Tags item shape: {Key: string, Value: string}
 export def "associate-firewall-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -227,7 +249,7 @@ export def "associate-firewall-rule-group" [
   name: string # A name that lets you identify the association, to manage and use it.
   --mutation-protection: string@mutation-protection-completer # If enabled, this setting disallows modification or removal of the association, to help prevent against accidentally altering DNS firewall protections. When you create the association, the default setting is DISABLED.
   --tags: list # A list of the tag keys and values that you want to associate with the rule group association. — item shape: {Key: string, Value: string}
-]: any -> record<FirewallRuleGroupAssociation: record<Id: string, Arn: string, FirewallRuleGroupId: string, VpcId: string, Name: string, Priority: int, MutationProtection: string, ManagedOwnerName: string, Status: string, StatusMessage: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<FirewallRuleGroupAssociation: record<Id: string, Arn: string, FirewallRuleGroupId: string, VpcId: string, Name: string, Priority: int, MutationProtection: string, ManagedOwnerName: string, Status: string, StatusMessage: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -257,7 +279,6 @@ export def "associate-firewall-rule-group" [
 #
 # POST /
 # operationId: AssociateResolverEndpointIpAddress
-# --IpAddress shape: {IpId?: string, SubnetId?: string, Ip?: string, Ipv6?: string}
 export def "associate-resolver-endpoint-ip-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,7 +299,7 @@ export def "associate-resolver-endpoint-ip-address" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   resolver_endpoint_id: string # The ID of the Resolver endpoint that you want to associate IP addresses with.
   ip_address: record # In an UpdateResolverEndpoint (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_UpdateResolverEndpoint.html) request, information about an IP address to update. — shape: {IpId?: string, SubnetId?: string, Ip?: string, Ipv6?: string}
-]: any -> record<ResolverEndpoint: record<Id: string, CreatorRequestId: string, Arn: string, Name: string, SecurityGroupIds: list<string>, Direction: string, IpAddressCount: int, HostVPCId: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string, ResolverEndpointType: string>> {
+]: any -> oneof<record<ResolverEndpoint: record<Id: string, CreatorRequestId: string, Arn: string, Name: string, SecurityGroupIds: list<string>, Direction: string, IpAddressCount: int, HostVPCId: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string, ResolverEndpointType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -328,7 +349,7 @@ export def "associate-resolver-query-log-config" [
   --x-amz-target: string@x-amz-target-completer-2 # required
   resolver_query_log_config_id: string # The ID of the query logging configuration that you want to associate a VPC with.
   resource_id: string # The ID of an Amazon VPC that you want this query logging configuration to log queries for. The VPCs and the query logging configuration must be in the same Region.
-]: any -> record<ResolverQueryLogConfigAssociation: record<Id: string, ResolverQueryLogConfigId: string, ResourceId: string, Status: string, Error: string, ErrorMessage: string, CreationTime: string>> {
+]: any -> oneof<record<ResolverQueryLogConfigAssociation: record<Id: string, ResolverQueryLogConfigId: string, ResourceId: string, Status: string, Error: string, ErrorMessage: string, CreationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -379,7 +400,7 @@ export def "associate-resolver-rule" [
   resolver_rule_id: string # The ID of the Resolver rule that you want to associate with the VPC. To list the existing Resolver rules, use ListResolverRules (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_ListResolverRules.html).
   --name: string # A name for the association that you're creating between a Resolver rule and a VPC.
   vpc_id: string # The ID of the VPC that you want to associate the Resolver rule with.
-]: any -> record<ResolverRuleAssociation: record<Id: string, ResolverRuleId: string, Name: string, VPCId: string, Status: string, StatusMessage: string>> {
+]: any -> oneof<record<ResolverRuleAssociation: record<Id: string, ResolverRuleId: string, Name: string, VPCId: string, Status: string, StatusMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -409,7 +430,6 @@ export def "associate-resolver-rule" [
 #
 # POST /
 # operationId: CreateFirewallDomainList
-# --Tags item shape: {Key: string, Value: string}
 export def "create-firewall-domain-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,7 +451,7 @@ export def "create-firewall-domain-list" [
   creator_request_id: string # A unique string that identifies the request and that allows you to retry failed requests without the risk of running the operation twice. CreatorRequestId can be any unique string, for example, a date/time stamp.
   name: string # A name that lets you identify the domain list to manage and use it.
   --tags: list # A list of the tag keys and values that you want to associate with the domain list. — item shape: {Key: string, Value: string}
-]: any -> record<FirewallDomainList: record<Id: string, Arn: string, Name: string, DomainCount: int, Status: string, StatusMessage: string, ManagedOwnerName: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<FirewallDomainList: record<Id: string, Arn: string, Name: string, DomainCount: int, Status: string, StatusMessage: string, ManagedOwnerName: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -489,7 +509,7 @@ export def "create-firewall-rule" [
   --block-override-dns-type: string@block-override-dns-type-completer # The DNS record's type. This determines the format of the record value that you provided in BlockOverrideDomain. Used for the rule action BLOCK with a BlockResponse setting of OVERRIDE. This setting is required if the BlockResponse setting is OVERRIDE.
   --block-override-ttl: int # The recommended amount of time, in seconds, for the DNS resolver or web browser to cache the provided override record. Used for the rule action BLOCK with a BlockResponse setting of OVERRIDE. This setting is required if the BlockResponse setting is OVERRIDE.
   name: string # A name that lets you identify the rule in the rule group.
-]: any -> record<FirewallRule: record<FirewallRuleGroupId: string, FirewallDomainListId: string, Name: string, Priority: int, Action: string, BlockResponse: string, BlockOverrideDomain: string, BlockOverrideDnsType: string, BlockOverrideTtl: int, CreatorRequestId: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<FirewallRule: record<FirewallRuleGroupId: string, FirewallDomainListId: string, Name: string, Priority: int, Action: string, BlockResponse: string, BlockOverrideDomain: string, BlockOverrideDnsType: string, BlockOverrideTtl: int, CreatorRequestId: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -519,7 +539,6 @@ export def "create-firewall-rule" [
 #
 # POST /
 # operationId: CreateFirewallRuleGroup
-# --Tags item shape: {Key: string, Value: string}
 export def "create-firewall-rule-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -541,7 +560,7 @@ export def "create-firewall-rule-group" [
   creator_request_id: string # A unique string defined by you to identify the request. This allows you to retry failed requests without the risk of running the operation twice. This can be any unique string, for example, a timestamp.
   name: string # A name that lets you identify the rule group, to manage and use it.
   --tags: list # A list of the tag keys and values that you want to associate with the rule group. — item shape: {Key: string, Value: string}
-]: any -> record<FirewallRuleGroup: record<Id: string, Arn: string, Name: string, RuleCount: int, Status: string, StatusMessage: string, OwnerId: string, CreatorRequestId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<FirewallRuleGroup: record<Id: string, Arn: string, Name: string, RuleCount: int, Status: string, StatusMessage: string, OwnerId: string, CreatorRequestId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -571,8 +590,6 @@ export def "create-firewall-rule-group" [
 #
 # POST /
 # operationId: CreateResolverEndpoint
-# --IpAddresses item shape: {SubnetId: string, Ip?: string, Ipv6?: string}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-resolver-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -598,7 +615,7 @@ export def "create-resolver-endpoint" [
   ip_addresses: list # The subnets and IP addresses in your VPC that DNS queries originate from (for outbound endpoints) or that you forward DNS queries to (for inbound endpoints). The subnet ID uniquely identifies a VPC. — item shape: {SubnetId: string, Ip?: string, Ipv6?: string}
   --tags: list # A list of the tag keys and values that you want to associate with the endpoint. — item shape: {Key: string, Value: string}
   --resolver-endpoint-type: string@resolver-endpoint-type-completer # For the endpoint type you can choose either IPv4, IPv6. or dual-stack. A dual-stack endpoint means that it will resolve via both IPv4 and IPv6. This endpoint type is applied to all IP addresses.
-]: any -> record<ResolverEndpoint: record<Id: string, CreatorRequestId: string, Arn: string, Name: string, SecurityGroupIds: list<string>, Direction: string, IpAddressCount: int, HostVPCId: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string, ResolverEndpointType: string>> {
+]: any -> oneof<record<ResolverEndpoint: record<Id: string, CreatorRequestId: string, Arn: string, Name: string, SecurityGroupIds: list<string>, Direction: string, IpAddressCount: int, HostVPCId: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string, ResolverEndpointType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -628,7 +645,6 @@ export def "create-resolver-endpoint" [
 #
 # POST /
 # operationId: CreateResolverQueryLogConfig
-# --Tags item shape: {Key: string, Value: string}
 export def "create-resolver-query-log-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -651,7 +667,7 @@ export def "create-resolver-query-log-config" [
   destination_arn: string # The ARN of the resource that you want Resolver to send query logs. You can send query logs to an S3 bucket, a CloudWatch Logs log group, or a Kinesis Data Firehose delivery stream. Examples of valid values include the following: S3 bucket: arn:aws:s3:::examplebucket You can optionally append a file prefix to the end of the ARN. arn:aws:s3:::examplebucket/development/ CloudWatch Logs log group: arn:aws:logs:us-west-1:123456789012:log-group:/mystack-testgroup-12ABC1AB12A1:* Kinesis Data Firehose delivery stream: arn:aws:kinesis:us-east-2:0123456789:stream/my_stream_name
   creator_request_id: string # A unique string that identifies the request and that allows failed requests to be retried without the risk of running the operation twice. CreatorRequestId can be any unique string, for example, a date/time stamp.
   --tags: list # A list of the tag keys and values that you want to associate with the query logging configuration. — item shape: {Key: string, Value: string}
-]: any -> record<ResolverQueryLogConfig: record<Id: string, OwnerId: string, Status: string, ShareStatus: string, AssociationCount: int, Arn: string, Name: string, DestinationArn: string, CreatorRequestId: string, CreationTime: string>> {
+]: any -> oneof<record<ResolverQueryLogConfig: record<Id: string, OwnerId: string, Status: string, ShareStatus: string, AssociationCount: int, Arn: string, Name: string, DestinationArn: string, CreatorRequestId: string, CreationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -681,8 +697,6 @@ export def "create-resolver-query-log-config" [
 #
 # POST /
 # operationId: CreateResolverRule
-# --TargetIps item shape: {Ip?: string, Port?: int, Ipv6?: string}
-# --Tags item shape: {Key: string, Value: string}
 export def "create-resolver-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -708,7 +722,7 @@ export def "create-resolver-rule" [
   --target-ips: list # The IPs that you want Resolver to forward DNS queries to. You can specify only IPv4 addresses. Separate IP addresses with a space. TargetIps is available only when the value of Rule type is FORWARD. — item shape: {Ip?: string, Port?: int, Ipv6?: string}
   --resolver-endpoint-id: string # The ID of the outbound Resolver endpoint that you want to use to route DNS queries to the IP addresses that you specify in TargetIps.
   --tags: list # A list of the tag keys and values that you want to associate with the endpoint. — item shape: {Key: string, Value: string}
-]: any -> record<ResolverRule: record<Id: string, CreatorRequestId: string, Arn: string, DomainName: string, Status: string, StatusMessage: string, RuleType: string, Name: string, TargetIps: list<record>, ResolverEndpointId: string, OwnerId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<ResolverRule: record<Id: string, CreatorRequestId: string, Arn: string, DomainName: string, Status: string, StatusMessage: string, RuleType: string, Name: string, TargetIps: list<record>, ResolverEndpointId: string, OwnerId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -757,7 +771,7 @@ export def "delete-firewall-domain-list" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   firewall_domain_list_id: string # The ID of the domain list that you want to delete.
-]: any -> record<FirewallDomainList: record<Id: string, Arn: string, Name: string, DomainCount: int, Status: string, StatusMessage: string, ManagedOwnerName: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<FirewallDomainList: record<Id: string, Arn: string, Name: string, DomainCount: int, Status: string, StatusMessage: string, ManagedOwnerName: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -807,7 +821,7 @@ export def "delete-firewall-rule" [
   --x-amz-target: string@x-amz-target-completer-11 # required
   firewall_rule_group_id: string # The unique identifier of the firewall rule group that you want to delete the rule from.
   firewall_domain_list_id: string # The ID of the domain list that's used in the rule.
-]: any -> record<FirewallRule: record<FirewallRuleGroupId: string, FirewallDomainListId: string, Name: string, Priority: int, Action: string, BlockResponse: string, BlockOverrideDomain: string, BlockOverrideDnsType: string, BlockOverrideTtl: int, CreatorRequestId: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<FirewallRule: record<FirewallRuleGroupId: string, FirewallDomainListId: string, Name: string, Priority: int, Action: string, BlockResponse: string, BlockOverrideDomain: string, BlockOverrideDnsType: string, BlockOverrideTtl: int, CreatorRequestId: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -856,7 +870,7 @@ export def "delete-firewall-rule-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   firewall_rule_group_id: string # The unique identifier of the firewall rule group that you want to delete.
-]: any -> record<FirewallRuleGroup: record<Id: string, Arn: string, Name: string, RuleCount: int, Status: string, StatusMessage: string, OwnerId: string, CreatorRequestId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<FirewallRuleGroup: record<Id: string, Arn: string, Name: string, RuleCount: int, Status: string, StatusMessage: string, OwnerId: string, CreatorRequestId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -905,7 +919,7 @@ export def "delete-resolver-endpoint" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   resolver_endpoint_id: string # The ID of the Resolver endpoint that you want to delete.
-]: any -> record<ResolverEndpoint: record<Id: string, CreatorRequestId: string, Arn: string, Name: string, SecurityGroupIds: list<string>, Direction: string, IpAddressCount: int, HostVPCId: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string, ResolverEndpointType: string>> {
+]: any -> oneof<record<ResolverEndpoint: record<Id: string, CreatorRequestId: string, Arn: string, Name: string, SecurityGroupIds: list<string>, Direction: string, IpAddressCount: int, HostVPCId: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string, ResolverEndpointType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -954,7 +968,7 @@ export def "delete-resolver-query-log-config" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   resolver_query_log_config_id: string # The ID of the query logging configuration that you want to delete.
-]: any -> record<ResolverQueryLogConfig: record<Id: string, OwnerId: string, Status: string, ShareStatus: string, AssociationCount: int, Arn: string, Name: string, DestinationArn: string, CreatorRequestId: string, CreationTime: string>> {
+]: any -> oneof<record<ResolverQueryLogConfig: record<Id: string, OwnerId: string, Status: string, ShareStatus: string, AssociationCount: int, Arn: string, Name: string, DestinationArn: string, CreatorRequestId: string, CreationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1003,7 +1017,7 @@ export def "delete-resolver-rule" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   resolver_rule_id: string # The ID of the Resolver rule that you want to delete.
-]: any -> record<ResolverRule: record<Id: string, CreatorRequestId: string, Arn: string, DomainName: string, Status: string, StatusMessage: string, RuleType: string, Name: string, TargetIps: list<record>, ResolverEndpointId: string, OwnerId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<ResolverRule: record<Id: string, CreatorRequestId: string, Arn: string, DomainName: string, Status: string, StatusMessage: string, RuleType: string, Name: string, TargetIps: list<record>, ResolverEndpointId: string, OwnerId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1052,7 +1066,7 @@ export def "disassociate-firewall-rule-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   firewall_rule_group_association_id: string # The identifier of the FirewallRuleGroupAssociation.
-]: any -> record<FirewallRuleGroupAssociation: record<Id: string, Arn: string, FirewallRuleGroupId: string, VpcId: string, Name: string, Priority: int, MutationProtection: string, ManagedOwnerName: string, Status: string, StatusMessage: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<FirewallRuleGroupAssociation: record<Id: string, Arn: string, FirewallRuleGroupId: string, VpcId: string, Name: string, Priority: int, MutationProtection: string, ManagedOwnerName: string, Status: string, StatusMessage: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1082,7 +1096,6 @@ export def "disassociate-firewall-rule-group" [
 #
 # POST /
 # operationId: DisassociateResolverEndpointIpAddress
-# --IpAddress shape: {IpId?: string, SubnetId?: string, Ip?: string, Ipv6?: string}
 export def "disassociate-resolver-endpoint-ip-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1103,7 +1116,7 @@ export def "disassociate-resolver-endpoint-ip-address" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   resolver_endpoint_id: string # The ID of the Resolver endpoint that you want to disassociate an IP address from.
   ip_address: record # In an UpdateResolverEndpoint (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_UpdateResolverEndpoint.html) request, information about an IP address to update. — shape: {IpId?: string, SubnetId?: string, Ip?: string, Ipv6?: string}
-]: any -> record<ResolverEndpoint: record<Id: string, CreatorRequestId: string, Arn: string, Name: string, SecurityGroupIds: list<string>, Direction: string, IpAddressCount: int, HostVPCId: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string, ResolverEndpointType: string>> {
+]: any -> oneof<record<ResolverEndpoint: record<Id: string, CreatorRequestId: string, Arn: string, Name: string, SecurityGroupIds: list<string>, Direction: string, IpAddressCount: int, HostVPCId: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string, ResolverEndpointType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1153,7 +1166,7 @@ export def "disassociate-resolver-query-log-config" [
   --x-amz-target: string@x-amz-target-completer-18 # required
   resolver_query_log_config_id: string # The ID of the query logging configuration that you want to disassociate a specified VPC from.
   resource_id: string # The ID of the Amazon VPC that you want to disassociate from a specified query logging configuration.
-]: any -> record<ResolverQueryLogConfigAssociation: record<Id: string, ResolverQueryLogConfigId: string, ResourceId: string, Status: string, Error: string, ErrorMessage: string, CreationTime: string>> {
+]: any -> oneof<record<ResolverQueryLogConfigAssociation: record<Id: string, ResolverQueryLogConfigId: string, ResourceId: string, Status: string, Error: string, ErrorMessage: string, CreationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1203,7 +1216,7 @@ export def "disassociate-resolver-rule" [
   --x-amz-target: string@x-amz-target-completer-19 # required
   vpc_id: string # The ID of the VPC that you want to disassociate the Resolver rule from.
   resolver_rule_id: string # The ID of the Resolver rule that you want to disassociate from the specified VPC.
-]: any -> record<ResolverRuleAssociation: record<Id: string, ResolverRuleId: string, Name: string, VPCId: string, Status: string, StatusMessage: string>> {
+]: any -> oneof<record<ResolverRuleAssociation: record<Id: string, ResolverRuleId: string, Name: string, VPCId: string, Status: string, StatusMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1252,7 +1265,7 @@ export def "get-firewall-config" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   resource_id: string # The ID of the VPC from Amazon VPC that the configuration is for.
-]: any -> record<FirewallConfig: record<Id: string, ResourceId: string, OwnerId: string, FirewallFailOpen: string>> {
+]: any -> oneof<record<FirewallConfig: record<Id: string, ResourceId: string, OwnerId: string, FirewallFailOpen: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1301,7 +1314,7 @@ export def "get-firewall-domain-list" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   firewall_domain_list_id: string # The ID of the domain list.
-]: any -> record<FirewallDomainList: record<Id: string, Arn: string, Name: string, DomainCount: int, Status: string, StatusMessage: string, ManagedOwnerName: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<FirewallDomainList: record<Id: string, Arn: string, Name: string, DomainCount: int, Status: string, StatusMessage: string, ManagedOwnerName: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1350,7 +1363,7 @@ export def "get-firewall-rule-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-22 # required
   firewall_rule_group_id: string # The unique identifier of the firewall rule group.
-]: any -> record<FirewallRuleGroup: record<Id: string, Arn: string, Name: string, RuleCount: int, Status: string, StatusMessage: string, OwnerId: string, CreatorRequestId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<FirewallRuleGroup: record<Id: string, Arn: string, Name: string, RuleCount: int, Status: string, StatusMessage: string, OwnerId: string, CreatorRequestId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1399,7 +1412,7 @@ export def "get-firewall-rule-group-association" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   firewall_rule_group_association_id: string # The identifier of the FirewallRuleGroupAssociation.
-]: any -> record<FirewallRuleGroupAssociation: record<Id: string, Arn: string, FirewallRuleGroupId: string, VpcId: string, Name: string, Priority: int, MutationProtection: string, ManagedOwnerName: string, Status: string, StatusMessage: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<FirewallRuleGroupAssociation: record<Id: string, Arn: string, FirewallRuleGroupId: string, VpcId: string, Name: string, Priority: int, MutationProtection: string, ManagedOwnerName: string, Status: string, StatusMessage: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1448,7 +1461,7 @@ export def "get-firewall-rule-group-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-24 # required
   arn: string # The ARN (Amazon Resource Name) for the rule group.
-]: any -> record<FirewallRuleGroupPolicy: string> {
+]: any -> oneof<record<FirewallRuleGroupPolicy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1497,7 +1510,7 @@ export def "get-resolver-config" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-25 # required
   resource_id: string # Resource ID of the Amazon VPC that you want to get information about.
-]: any -> record<ResolverConfig: record<Id: string, ResourceId: string, OwnerId: string, AutodefinedReverse: string>> {
+]: any -> oneof<record<ResolverConfig: record<Id: string, ResourceId: string, OwnerId: string, AutodefinedReverse: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1546,7 +1559,7 @@ export def "get-resolver-dnssec-config" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-26 # required
   resource_id: string # The ID of the virtual private cloud (VPC) for the DNSSEC validation status.
-]: any -> record<ResolverDNSSECConfig: record<Id: string, OwnerId: string, ResourceId: string, ValidationStatus: string>> {
+]: any -> oneof<record<ResolverDNSSECConfig: record<Id: string, OwnerId: string, ResourceId: string, ValidationStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1595,7 +1608,7 @@ export def "get-resolver-endpoint" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   resolver_endpoint_id: string # The ID of the Resolver endpoint that you want to get information about.
-]: any -> record<ResolverEndpoint: record<Id: string, CreatorRequestId: string, Arn: string, Name: string, SecurityGroupIds: list<string>, Direction: string, IpAddressCount: int, HostVPCId: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string, ResolverEndpointType: string>> {
+]: any -> oneof<record<ResolverEndpoint: record<Id: string, CreatorRequestId: string, Arn: string, Name: string, SecurityGroupIds: list<string>, Direction: string, IpAddressCount: int, HostVPCId: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string, ResolverEndpointType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1644,7 +1657,7 @@ export def "get-resolver-query-log-config" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-28 # required
   resolver_query_log_config_id: string # The ID of the Resolver query logging configuration that you want to get information about.
-]: any -> record<ResolverQueryLogConfig: record<Id: string, OwnerId: string, Status: string, ShareStatus: string, AssociationCount: int, Arn: string, Name: string, DestinationArn: string, CreatorRequestId: string, CreationTime: string>> {
+]: any -> oneof<record<ResolverQueryLogConfig: record<Id: string, OwnerId: string, Status: string, ShareStatus: string, AssociationCount: int, Arn: string, Name: string, DestinationArn: string, CreatorRequestId: string, CreationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1693,7 +1706,7 @@ export def "get-resolver-query-log-config-association" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-29 # required
   resolver_query_log_config_association_id: string # The ID of the Resolver query logging configuration association that you want to get information about.
-]: any -> record<ResolverQueryLogConfigAssociation: record<Id: string, ResolverQueryLogConfigId: string, ResourceId: string, Status: string, Error: string, ErrorMessage: string, CreationTime: string>> {
+]: any -> oneof<record<ResolverQueryLogConfigAssociation: record<Id: string, ResolverQueryLogConfigId: string, ResourceId: string, Status: string, Error: string, ErrorMessage: string, CreationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1742,7 +1755,7 @@ export def "get-resolver-query-log-config-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-30 # required
   arn: string # The ARN of the query logging configuration that you want to get the query logging policy for.
-]: any -> record<ResolverQueryLogConfigPolicy: string> {
+]: any -> oneof<record<ResolverQueryLogConfigPolicy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1791,7 +1804,7 @@ export def "get-resolver-rule" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-31 # required
   resolver_rule_id: string # The ID of the Resolver rule that you want to get information about.
-]: any -> record<ResolverRule: record<Id: string, CreatorRequestId: string, Arn: string, DomainName: string, Status: string, StatusMessage: string, RuleType: string, Name: string, TargetIps: list<record>, ResolverEndpointId: string, OwnerId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<ResolverRule: record<Id: string, CreatorRequestId: string, Arn: string, DomainName: string, Status: string, StatusMessage: string, RuleType: string, Name: string, TargetIps: list<record>, ResolverEndpointId: string, OwnerId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1840,7 +1853,7 @@ export def "get-resolver-rule-association" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-32 # required
   resolver_rule_association_id: string # The ID of the Resolver rule association that you want to get information about.
-]: any -> record<ResolverRuleAssociation: record<Id: string, ResolverRuleId: string, Name: string, VPCId: string, Status: string, StatusMessage: string>> {
+]: any -> oneof<record<ResolverRuleAssociation: record<Id: string, ResolverRuleId: string, Name: string, VPCId: string, Status: string, StatusMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1889,7 +1902,7 @@ export def "get-resolver-rule-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-33 # required
   arn: string # The ID of the Resolver rule that you want to get the Resolver rule policy for.
-]: any -> record<ResolverRulePolicy: string> {
+]: any -> oneof<record<ResolverRulePolicy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1940,7 +1953,7 @@ export def "import-firewall-domains" [
   firewall_domain_list_id: string # The ID of the domain list that you want to modify with the import operation.
   operation: string@operation-completer # What you want DNS Firewall to do with the domains that are listed in the file. This must be set to REPLACE, which updates the domain list to exactly match the list in the file.
   domain_file_url: string # The fully qualified URL or URI of the file stored in Amazon Simple Storage Service (Amazon S3) that contains the list of domains to import. The file must be in an S3 bucket that's in the same Region as your DNS Firewall. The file must be a text file and must contain a single domain per line.
-]: any -> record<Id: string, Name: string, Status: string, StatusMessage: string> {
+]: any -> oneof<record<Id: string, Name: string, Status: string, StatusMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1992,7 +2005,7 @@ export def "list-firewall-configs" [
   --x-amz-target: string@x-amz-target-completer-35 # required
   --max-results-body: int # The maximum number of objects that you want Resolver to return for this request. If more objects are available, in the response, Resolver provides a NextToken value that you can use in a subsequent call to get the next batch of objects. If you don't specify a value for MaxResults, Resolver returns up to 100 objects. (body field)
   --next-token-body: string # For the first call to this list request, omit this value. When you request a list of objects, Resolver returns at most the number of objects specified in MaxResults. If more objects are available for retrieval, Resolver returns a NextToken value in the response. To retrieve the next batch of objects, use the token that was returned for the prior request in your next request. (body field)
-]: any -> record<NextToken: string, FirewallConfigs: table<Id: string, ResourceId: string, OwnerId: string, FirewallFailOpen: string>> {
+]: any -> oneof<record<NextToken: string, FirewallConfigs: table<Id: string, ResourceId: string, OwnerId: string, FirewallFailOpen: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2045,7 +2058,7 @@ export def "list-firewall-domain-lists" [
   --x-amz-target: string@x-amz-target-completer-36 # required
   --max-results-body: int # The maximum number of objects that you want Resolver to return for this request. If more objects are available, in the response, Resolver provides a NextToken value that you can use in a subsequent call to get the next batch of objects. If you don't specify a value for MaxResults, Resolver returns up to 100 objects. (body field)
   --next-token-body: string # For the first call to this list request, omit this value. When you request a list of objects, Resolver returns at most the number of objects specified in MaxResults. If more objects are available for retrieval, Resolver returns a NextToken value in the response. To retrieve the next batch of objects, use the token that was returned for the prior request in your next request. (body field)
-]: any -> record<NextToken: string, FirewallDomainLists: table<Id: string, Arn: string, Name: string, CreatorRequestId: string, ManagedOwnerName: string>> {
+]: any -> oneof<record<NextToken: string, FirewallDomainLists: table<Id: string, Arn: string, Name: string, CreatorRequestId: string, ManagedOwnerName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2099,7 +2112,7 @@ export def "list-firewall-domains" [
   firewall_domain_list_id: string # The ID of the domain list whose domains you want to retrieve.
   --max-results-body: int # The maximum number of objects that you want Resolver to return for this request. If more objects are available, in the response, Resolver provides a NextToken value that you can use in a subsequent call to get the next batch of objects. If you don't specify a value for MaxResults, Resolver returns up to 100 objects. (body field)
   --next-token-body: string # For the first call to this list request, omit this value. When you request a list of objects, Resolver returns at most the number of objects specified in MaxResults. If more objects are available for retrieval, Resolver returns a NextToken value in the response. To retrieve the next batch of objects, use the token that was returned for the prior request in your next request. (body field)
-]: any -> record<NextToken: string, Domains: list<string>> {
+]: any -> oneof<record<NextToken: string, Domains: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2156,7 +2169,7 @@ export def "list-firewall-rule-group-associations" [
   --status: string@status-completer # The association Status setting that you want DNS Firewall to filter on for the list. If you don't specify this, then DNS Firewall returns all associations, regardless of status.
   --max-results-body: int # The maximum number of objects that you want Resolver to return for this request. If more objects are available, in the response, Resolver provides a NextToken value that you can use in a subsequent call to get the next batch of objects. If you don't specify a value for MaxResults, Resolver returns up to 100 objects. (body field)
   --next-token-body: string # For the first call to this list request, omit this value. When you request a list of objects, Resolver returns at most the number of objects specified in MaxResults. If more objects are available for retrieval, Resolver returns a NextToken value in the response. To retrieve the next batch of objects, use the token that was returned for the prior request in your next request. (body field)
-]: any -> record<NextToken: string, FirewallRuleGroupAssociations: table<Id: string, Arn: string, FirewallRuleGroupId: string, VpcId: string, Name: string, Priority: int, MutationProtection: string, ManagedOwnerName: string, Status: string, StatusMessage: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<NextToken: string, FirewallRuleGroupAssociations: table<Id: string, Arn: string, FirewallRuleGroupId: string, VpcId: string, Name: string, Priority: int, MutationProtection: string, ManagedOwnerName: string, Status: string, StatusMessage: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2209,7 +2222,7 @@ export def "list-firewall-rule-groups" [
   --x-amz-target: string@x-amz-target-completer-39 # required
   --max-results-body: int # The maximum number of objects that you want Resolver to return for this request. If more objects are available, in the response, Resolver provides a NextToken value that you can use in a subsequent call to get the next batch of objects. If you don't specify a value for MaxResults, Resolver returns up to 100 objects. (body field)
   --next-token-body: string # For the first call to this list request, omit this value. When you request a list of objects, Resolver returns at most the number of objects specified in MaxResults. If more objects are available for retrieval, Resolver returns a NextToken value in the response. To retrieve the next batch of objects, use the token that was returned for the prior request in your next request. (body field)
-]: any -> record<NextToken: string, FirewallRuleGroups: table<Id: string, Arn: string, Name: string, OwnerId: string, CreatorRequestId: string, ShareStatus: string>> {
+]: any -> oneof<record<NextToken: string, FirewallRuleGroups: table<Id: string, Arn: string, Name: string, OwnerId: string, CreatorRequestId: string, ShareStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2265,7 +2278,7 @@ export def "list-firewall-rules" [
   --action: string@action-completer # Optional additional filter for the rules to retrieve. The action that DNS Firewall should take on a DNS query when it matches one of the domains in the rule's domain list: ALLOW - Permit the request to go through. ALERT - Permit the request to go through but send an alert to the logs. BLOCK - Disallow the request. If this is specified, additional handling details are provided in the rule's BlockResponse setting.
   --max-results-body: int # The maximum number of objects that you want Resolver to return for this request. If more objects are available, in the response, Resolver provides a NextToken value that you can use in a subsequent call to get the next batch of objects. If you don't specify a value for MaxResults, Resolver returns up to 100 objects. (body field)
   --next-token-body: string # For the first call to this list request, omit this value. When you request a list of objects, Resolver returns at most the number of objects specified in MaxResults. If more objects are available for retrieval, Resolver returns a NextToken value in the response. To retrieve the next batch of objects, use the token that was returned for the prior request in your next request. (body field)
-]: any -> record<NextToken: string, FirewallRules: table<FirewallRuleGroupId: string, FirewallDomainListId: string, Name: string, Priority: int, Action: string, BlockResponse: string, BlockOverrideDomain: string, BlockOverrideDnsType: string, BlockOverrideTtl: int, CreatorRequestId: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<NextToken: string, FirewallRules: table<FirewallRuleGroupId: string, FirewallDomainListId: string, Name: string, Priority: int, Action: string, BlockResponse: string, BlockOverrideDomain: string, BlockOverrideDnsType: string, BlockOverrideTtl: int, CreatorRequestId: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2318,7 +2331,7 @@ export def "list-resolver-configs" [
   --x-amz-target: string@x-amz-target-completer-41 # required
   --max-results-body: int # The maximum number of Resolver configurations that you want to return in the response to a ListResolverConfigs request. If you don't specify a value for MaxResults, up to 100 Resolver configurations are returned. (body field)
   --next-token-body: string # (Optional) If the current Amazon Web Services account has more than MaxResults Resolver configurations, use NextToken to get the second and subsequent pages of results. For the first ListResolverConfigs request, omit this value. For the second and subsequent requests, get the value of NextToken from the previous response and specify that value for NextToken in the request. (body field)
-]: any -> record<NextToken: string, ResolverConfigs: table<Id: string, ResourceId: string, OwnerId: string, AutodefinedReverse: string>> {
+]: any -> oneof<record<NextToken: string, ResolverConfigs: table<Id: string, ResourceId: string, OwnerId: string, AutodefinedReverse: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2349,7 +2362,6 @@ export def "list-resolver-configs" [
 #
 # POST /
 # operationId: ListResolverDnssecConfigs
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-resolver-dnssec-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2373,7 +2385,7 @@ export def "list-resolver-dnssec-configs" [
   --max-results-body: int # Optional: An integer that specifies the maximum number of DNSSEC configuration results that you want Amazon Route 53 to return. If you don't specify a value for MaxResults, Route 53 returns up to 100 configuration per page. (body field)
   --next-token-body: string # (Optional) If the current Amazon Web Services account has more than MaxResults DNSSEC configurations, use NextToken to get the second and subsequent pages of results. For the first ListResolverDnssecConfigs request, omit this value. For the second and subsequent requests, get the value of NextToken from the previous response and specify that value for NextToken in the request. (body field)
   --filters: list # An optional specification to return a subset of objects. — item shape: {Name?: string, Values?: list<string>}
-]: any -> record<NextToken: string, ResolverDnssecConfigs: table<Id: string, OwnerId: string, ResourceId: string, ValidationStatus: string>> {
+]: any -> oneof<record<NextToken: string, ResolverDnssecConfigs: table<Id: string, OwnerId: string, ResourceId: string, ValidationStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2427,7 +2439,7 @@ export def "list-resolver-endpoint-ip-addresses" [
   resolver_endpoint_id: string # The ID of the Resolver endpoint that you want to get IP addresses for.
   --max-results-body: int # The maximum number of IP addresses that you want to return in the response to a ListResolverEndpointIpAddresses request. If you don't specify a value for MaxResults, Resolver returns up to 100 IP addresses. (body field)
   --next-token-body: string # For the first ListResolverEndpointIpAddresses request, omit this value. If the specified Resolver endpoint has more than MaxResults IP addresses, you can submit another ListResolverEndpointIpAddresses request to get the next group of IP addresses. In the next request, specify the value of NextToken from the previous response. (body field)
-]: any -> record<NextToken: string, MaxResults: int, IpAddresses: table<IpId: string, SubnetId: string, Ip: string, Ipv6: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<NextToken: string, MaxResults: int, IpAddresses: table<IpId: string, SubnetId: string, Ip: string, Ipv6: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2458,7 +2470,6 @@ export def "list-resolver-endpoint-ip-addresses" [
 #
 # POST /
 # operationId: ListResolverEndpoints
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-resolver-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2482,7 +2493,7 @@ export def "list-resolver-endpoints" [
   --max-results-body: int # The maximum number of Resolver endpoints that you want to return in the response to a ListResolverEndpoints request. If you don't specify a value for MaxResults, Resolver returns up to 100 Resolver endpoints. (body field)
   --next-token-body: string # For the first ListResolverEndpoints request, omit this value. If you have more than MaxResults Resolver endpoints, you can submit another ListResolverEndpoints request to get the next group of Resolver endpoints. In the next request, specify the value of NextToken from the previous response. (body field)
   --filters: list # An optional specification to return a subset of Resolver endpoints, such as all inbound Resolver endpoints. If you submit a second or subsequent ListResolverEndpoints request and specify the NextToken parameter, you must use the same values for Filters, if any, as in the previous request. — item shape: {Name?: string, Values?: list<string>}
-]: any -> record<NextToken: string, MaxResults: int, ResolverEndpoints: table<Id: string, CreatorRequestId: string, Arn: string, Name: string, SecurityGroupIds: list, Direction: string, IpAddressCount: int, HostVPCId: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string, ResolverEndpointType: string>> {
+]: any -> oneof<record<NextToken: string, MaxResults: int, ResolverEndpoints: table<Id: string, CreatorRequestId: string, Arn: string, Name: string, SecurityGroupIds: list, Direction: string, IpAddressCount: int, HostVPCId: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string, ResolverEndpointType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2513,7 +2524,6 @@ export def "list-resolver-endpoints" [
 #
 # POST /
 # operationId: ListResolverQueryLogConfigAssociations
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-resolver-query-log-config-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2539,7 +2549,7 @@ export def "list-resolver-query-log-config-associations" [
   --filters: list # An optional specification to return a subset of query logging associations. If you submit a second or subsequent ListResolverQueryLogConfigAssociations request and specify the NextToken parameter, you must use the same values for Filters, if any, as in the previous request. — item shape: {Name?: string, Values?: list<string>}
   --sort-by: string # The element that you want Resolver to sort query logging associations by. If you submit a second or subsequent ListResolverQueryLogConfigAssociations request and specify the NextToken parameter, you must use the same value for SortBy, if any, as in the previous request. Valid values include the following elements: CreationTime: The ID of the query logging association. Error: If the value of Status is FAILED, the value of Error indicates the cause: DESTINATION_NOT_FOUND: The specified destination (for example, an Amazon S3 bucket) was deleted. ACCESS_DENIED: Permissions don't allow sending logs to the destination. If Status is a value other than FAILED, ERROR is null. Id: The ID of the query logging association ResolverQueryLogConfigId: The ID of the query logging configuration ResourceId: The ID of the VPC that is associated with the query logging configuration Status: The current status of the configuration. Valid values include the following: CREATING: Resolver is creating an association between an Amazon VPC and a query logging configuration. CREATED: The association between an Amazon VPC and a query logging configuration was successfully created. Resolver is logging queries that originate in the specified VPC. DELETING: Resolver is deleting this query logging association. FAILED: Resolver either couldn't create or couldn't delete the query logging association. Here are two common causes: The specified destination (for example, an Amazon S3 bucket) was deleted. Permissions don't allow sending logs to the destination.
   --sort-order: string@sort-order-completer # If you specified a value for SortBy, the order that you want query logging associations to be listed in, ASCENDING or DESCENDING. If you submit a second or subsequent ListResolverQueryLogConfigAssociations request and specify the NextToken parameter, you must use the same value for SortOrder, if any, as in the previous request.
-]: any -> record<NextToken: string, TotalCount: int, TotalFilteredCount: int, ResolverQueryLogConfigAssociations: table<Id: string, ResolverQueryLogConfigId: string, ResourceId: string, Status: string, Error: string, ErrorMessage: string, CreationTime: string>> {
+]: any -> oneof<record<NextToken: string, TotalCount: int, TotalFilteredCount: int, ResolverQueryLogConfigAssociations: table<Id: string, ResolverQueryLogConfigId: string, ResourceId: string, Status: string, Error: string, ErrorMessage: string, CreationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2570,7 +2580,6 @@ export def "list-resolver-query-log-config-associations" [
 #
 # POST /
 # operationId: ListResolverQueryLogConfigs
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-resolver-query-log-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2596,7 +2605,7 @@ export def "list-resolver-query-log-configs" [
   --filters: list # An optional specification to return a subset of query logging configurations. If you submit a second or subsequent ListResolverQueryLogConfigs request and specify the NextToken parameter, you must use the same values for Filters, if any, as in the previous request. — item shape: {Name?: string, Values?: list<string>}
   --sort-by: string # The element that you want Resolver to sort query logging configurations by. If you submit a second or subsequent ListResolverQueryLogConfigs request and specify the NextToken parameter, you must use the same value for SortBy, if any, as in the previous request. Valid values include the following elements: Arn: The ARN of the query logging configuration AssociationCount: The number of VPCs that are associated with the specified configuration CreationTime: The date and time that Resolver returned when the configuration was created CreatorRequestId: The value that was specified for CreatorRequestId when the configuration was created DestinationArn: The location that logs are sent to Id: The ID of the configuration Name: The name of the configuration OwnerId: The Amazon Web Services account number of the account that created the configuration ShareStatus: Whether the configuration is shared with other Amazon Web Services accounts or shared with the current account by another Amazon Web Services account. Sharing is configured through Resource Access Manager (RAM). Status: The current status of the configuration. Valid values include the following: CREATING: Resolver is creating the query logging configuration. CREATED: The query logging configuration was successfully created. Resolver is logging queries that originate in the specified VPC. DELETING: Resolver is deleting this query logging configuration. FAILED: Resolver either couldn't create or couldn't delete the query logging configuration. Here are two common causes: The specified destination (for example, an Amazon S3 bucket) was deleted. Permissions don't allow sending logs to the destination.
   --sort-order: string@sort-order-completer # If you specified a value for SortBy, the order that you want query logging configurations to be listed in, ASCENDING or DESCENDING. If you submit a second or subsequent ListResolverQueryLogConfigs request and specify the NextToken parameter, you must use the same value for SortOrder, if any, as in the previous request.
-]: any -> record<NextToken: string, TotalCount: int, TotalFilteredCount: int, ResolverQueryLogConfigs: table<Id: string, OwnerId: string, Status: string, ShareStatus: string, AssociationCount: int, Arn: string, Name: string, DestinationArn: string, CreatorRequestId: string, CreationTime: string>> {
+]: any -> oneof<record<NextToken: string, TotalCount: int, TotalFilteredCount: int, ResolverQueryLogConfigs: table<Id: string, OwnerId: string, Status: string, ShareStatus: string, AssociationCount: int, Arn: string, Name: string, DestinationArn: string, CreatorRequestId: string, CreationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2627,7 +2636,6 @@ export def "list-resolver-query-log-configs" [
 #
 # POST /
 # operationId: ListResolverRuleAssociations
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-resolver-rule-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2651,7 +2659,7 @@ export def "list-resolver-rule-associations" [
   --max-results-body: int # The maximum number of rule associations that you want to return in the response to a ListResolverRuleAssociations request. If you don't specify a value for MaxResults, Resolver returns up to 100 rule associations. (body field)
   --next-token-body: string # For the first ListResolverRuleAssociation request, omit this value. If you have more than MaxResults rule associations, you can submit another ListResolverRuleAssociation request to get the next group of rule associations. In the next request, specify the value of NextToken from the previous response. (body field)
   --filters: list # An optional specification to return a subset of Resolver rules, such as Resolver rules that are associated with the same VPC ID. If you submit a second or subsequent ListResolverRuleAssociations request and specify the NextToken parameter, you must use the same values for Filters, if any, as in the previous request. — item shape: {Name?: string, Values?: list<string>}
-]: any -> record<NextToken: string, MaxResults: int, ResolverRuleAssociations: table<Id: string, ResolverRuleId: string, Name: string, VPCId: string, Status: string, StatusMessage: string>> {
+]: any -> oneof<record<NextToken: string, MaxResults: int, ResolverRuleAssociations: table<Id: string, ResolverRuleId: string, Name: string, VPCId: string, Status: string, StatusMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2682,7 +2690,6 @@ export def "list-resolver-rule-associations" [
 #
 # POST /
 # operationId: ListResolverRules
-# --Filters item shape: {Name?: string, Values?: list<string>}
 export def "list-resolver-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2706,7 +2713,7 @@ export def "list-resolver-rules" [
   --max-results-body: int # The maximum number of Resolver rules that you want to return in the response to a ListResolverRules request. If you don't specify a value for MaxResults, Resolver returns up to 100 Resolver rules. (body field)
   --next-token-body: string # For the first ListResolverRules request, omit this value. If you have more than MaxResults Resolver rules, you can submit another ListResolverRules request to get the next group of Resolver rules. In the next request, specify the value of NextToken from the previous response. (body field)
   --filters: list # An optional specification to return a subset of Resolver rules, such as all Resolver rules that are associated with the same Resolver endpoint. If you submit a second or subsequent ListResolverRules request and specify the NextToken parameter, you must use the same values for Filters, if any, as in the previous request. — item shape: {Name?: string, Values?: list<string>}
-]: any -> record<NextToken: string, MaxResults: int, ResolverRules: table<Id: string, CreatorRequestId: string, Arn: string, DomainName: string, Status: string, StatusMessage: string, RuleType: string, Name: string, TargetIps: list, ResolverEndpointId: string, OwnerId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<NextToken: string, MaxResults: int, ResolverRules: table<Id: string, CreatorRequestId: string, Arn: string, DomainName: string, Status: string, StatusMessage: string, RuleType: string, Name: string, TargetIps: list, ResolverEndpointId: string, OwnerId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2760,7 +2767,7 @@ export def "list-tags-for-resource" [
   resource_arn: string # The Amazon Resource Name (ARN) for the resource that you want to list tags for.
   --max-results-body: int # The maximum number of tags that you want to return in the response to a ListTagsForResource request. If you don't specify a value for MaxResults, Resolver returns up to 100 tags. (body field)
   --next-token-body: string # For the first ListTagsForResource request, omit this value. If you have more than MaxResults tags, you can submit another ListTagsForResource request to get the next group of tags for the resource. In the next request, specify the value of NextToken from the previous response. (body field)
-]: any -> record<Tags: table<Key: string, Value: string>, NextToken: string> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2811,7 +2818,7 @@ export def "put-firewall-rule-group-policy" [
   --x-amz-target: string@x-amz-target-completer-50 # required
   arn: string # The ARN (Amazon Resource Name) for the rule group that you want to share.
   firewall_rule_group_policy: string # The Identity and Access Management (Amazon Web Services IAM) policy to attach to the rule group.
-]: any -> record<ReturnValue: bool> {
+]: any -> oneof<record<ReturnValue: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2861,7 +2868,7 @@ export def "put-resolver-query-log-config-policy" [
   --x-amz-target: string@x-amz-target-completer-51 # required
   arn: string # The Amazon Resource Name (ARN) of the account that you want to share rules with.
   resolver_query_log_config_policy: string # An Identity and Access Management policy statement that lists the query logging configurations that you want to share with another Amazon Web Services account and the operations that you want the account to be able to perform. You can specify the following operations in the Actions section of the statement: route53resolver:AssociateResolverQueryLogConfig route53resolver:DisassociateResolverQueryLogConfig route53resolver:ListResolverQueryLogConfigAssociations route53resolver:ListResolverQueryLogConfigs In the Resource section of the statement, you specify the ARNs for the query logging configurations that you want to share with the account that you specified in Arn.
-]: any -> record<ReturnValue: bool> {
+]: any -> oneof<record<ReturnValue: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2911,7 +2918,7 @@ export def "put-resolver-rule-policy" [
   --x-amz-target: string@x-amz-target-completer-52 # required
   arn: string # The Amazon Resource Name (ARN) of the rule that you want to share with another account.
   resolver_rule_policy: string # An Identity and Access Management policy statement that lists the rules that you want to share with another Amazon Web Services account and the operations that you want the account to be able to perform. You can specify the following operations in the Action section of the statement: route53resolver:GetResolverRule route53resolver:AssociateResolverRule route53resolver:DisassociateResolverRule route53resolver:ListResolverRules route53resolver:ListResolverRuleAssociations In the Resource section of the statement, specify the ARN for the rule that you want to share with another account. Specify the same ARN that you specified in Arn.
-]: any -> record<ReturnValue: bool> {
+]: any -> oneof<record<ReturnValue: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2941,7 +2948,6 @@ export def "put-resolver-rule-policy" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2962,7 +2968,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-53 # required
   resource_arn: string # The Amazon Resource Name (ARN) for the resource that you want to add tags to. To get the ARN for a resource, use the applicable Get or List command: GetResolverEndpoint (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_GetResolverEndpoint.html) GetResolverRule (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_GetResolverRule.html) GetResolverRuleAssociation (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_GetResolverRuleAssociation.html) ListResolverEndpoints (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_ListResolverEndpoints.html) ListResolverRuleAssociations (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_ListResolverRuleAssociations.html) ListResolverRules (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_ListResolverRules.html)
   tags: list # The tags that you want to add to the specified resource. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3012,7 +3018,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-54 # required
   resource_arn: string # The Amazon Resource Name (ARN) for the resource that you want to remove tags from. To get the ARN for a resource, use the applicable Get or List command: GetResolverEndpoint (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_GetResolverEndpoint.html) GetResolverRule (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_GetResolverRule.html) GetResolverRuleAssociation (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_GetResolverRuleAssociation.html) ListResolverEndpoints (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_ListResolverEndpoints.html) ListResolverRuleAssociations (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_ListResolverRuleAssociations.html) ListResolverRules (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_ListResolverRules.html)
   tag_keys: list<string> # The tags that you want to remove to the specified resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3062,7 +3068,7 @@ export def "update-firewall-config" [
   --x-amz-target: string@x-amz-target-completer-55 # required
   resource_id: string # The ID of the VPC that the configuration is for.
   firewall_fail_open: string@firewall-fail-open-completer # Determines how Route 53 Resolver handles queries during failures, for example when all traffic that is sent to DNS Firewall fails to receive a reply. By default, fail open is disabled, which means the failure mode is closed. This approach favors security over availability. DNS Firewall blocks queries that it is unable to evaluate properly. If you enable this option, the failure mode is open. This approach favors availability over security. DNS Firewall allows queries to proceed if it is unable to properly evaluate them. This behavior is only enforced for VPCs that have at least one DNS Firewall rule group association.
-]: any -> record<FirewallConfig: record<Id: string, ResourceId: string, OwnerId: string, FirewallFailOpen: string>> {
+]: any -> oneof<record<FirewallConfig: record<Id: string, ResourceId: string, OwnerId: string, FirewallFailOpen: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3113,7 +3119,7 @@ export def "update-firewall-domains" [
   firewall_domain_list_id: string # The ID of the domain list whose domains you want to update.
   operation: string@operation-completer-1 # What you want DNS Firewall to do with the domains that you are providing: ADD - Add the domains to the ones that are already in the domain list. REMOVE - Search the domain list for the domains and remove them from the list. REPLACE - Update the domain list to exactly match the list that you are providing.
   domains: list<string> # A list of domains to use in the update operation. There is a limit of 1000 domains per request. Each domain specification in your domain list must satisfy the following requirements: It can optionally start with * (asterisk). With the exception of the optional starting asterisk, it must only contain the following characters: A-Z, a-z, 0-9, - (hyphen). It must be from 1-255 characters in length.
-]: any -> record<Id: string, Name: string, Status: string, StatusMessage: string> {
+]: any -> oneof<record<Id: string, Name: string, Status: string, StatusMessage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3170,7 +3176,7 @@ export def "update-firewall-rule" [
   --block-override-dns-type: string@block-override-dns-type-completer # The DNS record's type. This determines the format of the record value that you provided in BlockOverrideDomain. Used for the rule action BLOCK with a BlockResponse setting of OVERRIDE.
   --block-override-ttl: int # The recommended amount of time, in seconds, for the DNS resolver or web browser to cache the provided override record. Used for the rule action BLOCK with a BlockResponse setting of OVERRIDE.
   --name: string # The name of the rule.
-]: any -> record<FirewallRule: record<FirewallRuleGroupId: string, FirewallDomainListId: string, Name: string, Priority: int, Action: string, BlockResponse: string, BlockOverrideDomain: string, BlockOverrideDnsType: string, BlockOverrideTtl: int, CreatorRequestId: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<FirewallRule: record<FirewallRuleGroupId: string, FirewallDomainListId: string, Name: string, Priority: int, Action: string, BlockResponse: string, BlockOverrideDomain: string, BlockOverrideDnsType: string, BlockOverrideTtl: int, CreatorRequestId: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3222,7 +3228,7 @@ export def "update-firewall-rule-group-association" [
   --priority: int # The setting that determines the processing order of the rule group among the rule groups that you associate with the specified VPC. DNS Firewall filters VPC traffic starting from the rule group with the lowest numeric priority setting. You must specify a unique priority for each rule group that you associate with a single VPC. To make it easier to insert rule groups later, leave space between the numbers, for example, use 100, 200, and so on. You can change the priority setting for a rule group association after you create it.
   --mutation-protection: string@mutation-protection-completer # If enabled, this setting disallows modification or removal of the association, to help prevent against accidentally altering DNS firewall protections.
   --name: string # The name of the rule group association.
-]: any -> record<FirewallRuleGroupAssociation: record<Id: string, Arn: string, FirewallRuleGroupId: string, VpcId: string, Name: string, Priority: int, MutationProtection: string, ManagedOwnerName: string, Status: string, StatusMessage: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<FirewallRuleGroupAssociation: record<Id: string, Arn: string, FirewallRuleGroupId: string, VpcId: string, Name: string, Priority: int, MutationProtection: string, ManagedOwnerName: string, Status: string, StatusMessage: string, CreatorRequestId: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3272,7 +3278,7 @@ export def "update-resolver-config" [
   --x-amz-target: string@x-amz-target-completer-59 # required
   resource_id: string # Resource ID of the Amazon VPC that you want to update the Resolver configuration for.
   autodefined_reverse_flag: string@autodefined-reverse-flag-completer # Indicates whether or not the Resolver will create autodefined rules for reverse DNS lookups. This is enabled by default. Disabling this option will also affect EC2-Classic instances using ClassicLink. For more information, see ClassicLink (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/vpc-classiclink.html) in the Amazon EC2 guide. We are retiring EC2-Classic on August 15, 2022. We recommend that you migrate from EC2-Classic to a VPC. For more information, see Migrate from EC2-Classic to a VPC (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/vpc-migrate.html) in the Amazon EC2 guide and the blog EC2-Classic Networking is Retiring – Here’s How to Prepare (http://aws.amazon.com/blogs/aws/ec2-classic-is-retiring-heres-how-to-prepare/). It can take some time for the status change to be completed.
-]: any -> record<ResolverConfig: record<Id: string, ResourceId: string, OwnerId: string, AutodefinedReverse: string>> {
+]: any -> oneof<record<ResolverConfig: record<Id: string, ResourceId: string, OwnerId: string, AutodefinedReverse: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3322,7 +3328,7 @@ export def "update-resolver-dnssec-config" [
   --x-amz-target: string@x-amz-target-completer-60 # required
   resource_id: string # The ID of the virtual private cloud (VPC) that you're updating the DNSSEC validation status for.
   validation: string@validation-completer # The new value that you are specifying for DNSSEC validation for the VPC. The value can be ENABLE or DISABLE. Be aware that it can take time for a validation status change to be completed.
-]: any -> record<ResolverDNSSECConfig: record<Id: string, OwnerId: string, ResourceId: string, ValidationStatus: string>> {
+]: any -> oneof<record<ResolverDNSSECConfig: record<Id: string, OwnerId: string, ResourceId: string, ValidationStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3352,7 +3358,6 @@ export def "update-resolver-dnssec-config" [
 #
 # POST /
 # operationId: UpdateResolverEndpoint
-# --UpdateIpAddresses item shape: {IpId: string, Ipv6: string}
 export def "update-resolver-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3375,7 +3380,7 @@ export def "update-resolver-endpoint" [
   --name: string # The name of the Resolver endpoint that you want to update.
   --resolver-endpoint-type: string@resolver-endpoint-type-completer # Specifies the endpoint type for what type of IP address the endpoint uses to forward DNS queries.
   --update-ip-addresses: list # Updates the Resolver endpoint type to IpV4, Ipv6, or dual-stack. — item shape: {IpId: string, Ipv6: string}
-]: any -> record<ResolverEndpoint: record<Id: string, CreatorRequestId: string, Arn: string, Name: string, SecurityGroupIds: list<string>, Direction: string, IpAddressCount: int, HostVPCId: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string, ResolverEndpointType: string>> {
+]: any -> oneof<record<ResolverEndpoint: record<Id: string, CreatorRequestId: string, Arn: string, Name: string, SecurityGroupIds: list<string>, Direction: string, IpAddressCount: int, HostVPCId: string, Status: string, StatusMessage: string, CreationTime: string, ModificationTime: string, ResolverEndpointType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3405,7 +3410,6 @@ export def "update-resolver-endpoint" [
 #
 # POST /
 # operationId: UpdateResolverRule
-# --Config shape: {Name?: string, TargetIps?: list, ResolverEndpointId?: string}
 export def "update-resolver-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3426,7 +3430,7 @@ export def "update-resolver-rule" [
   --x-amz-target: string@x-amz-target-completer-62 # required
   resolver_rule_id: string # The ID of the Resolver rule that you want to update.
   config: record # In an UpdateResolverRule (https://docs.aws.amazon.com/Route53/latest/APIReference/API_route53resolver_UpdateResolverRule.html) request, information about the changes that you want to make. — shape: {Name?: string, TargetIps?: list, ResolverEndpointId?: string}
-]: any -> record<ResolverRule: record<Id: string, CreatorRequestId: string, Arn: string, DomainName: string, Status: string, StatusMessage: string, RuleType: string, Name: string, TargetIps: list<record>, ResolverEndpointId: string, OwnerId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>> {
+]: any -> oneof<record<ResolverRule: record<Id: string, CreatorRequestId: string, Arn: string, DomainName: string, Status: string, StatusMessage: string, RuleType: string, Name: string, TargetIps: list<record>, ResolverEndpointId: string, OwnerId: string, ShareStatus: string, CreationTime: string, ModificationTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

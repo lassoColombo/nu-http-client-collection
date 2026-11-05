@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "x-api-key" => { {scheme: $scheme, headers: {"X-API-Key": $token_val}, query: "", location: "header"} }
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -101,9 +124,9 @@ def auth-scheme-completer [] { ["x-api-key" "basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-create-permit" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-create-permit" "post-disable" "post-disable-permit" "post-list-recurring-details" "post-notify-shopper" "post-schedule-account-updater" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -125,7 +148,6 @@ export def commands []: nothing -> table {
 #
 # POST /createPermit
 # operationId: post-createPermit
-# --permits item shape: {partnerId?: string, profileReference?: string, restriction?: record, resultKey?: string, validTillDate?: string}
 export def "post-create-permit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -140,7 +162,7 @@ export def "post-create-permit" [
   permits: list # The permits to create for this recurring contract. — item shape: {partnerId?: string, profileReference?: string, restriction?: record, resultKey?: string, validTillDate?: string}
   recurring_detail_reference: string # The recurring contract the new permits will use.
   shopper_reference: string # The shopper's reference to uniquely identify this shopper (e.g. user ID or account ID).
-]: any -> record<permitResultList: table<resultKey: string, token: string>, pspReference: string> {
+]: any -> oneof<record<permitResultList: table<resultKey: string, token: string>, pspReference: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -181,7 +203,7 @@ export def "post-disable" [
   merchant_account: string # The merchant account identifier with which you want to process the transaction.
   --recurring-detail-reference: string # The ID that uniquely identifies the recurring detail reference. If it is not provided, the whole recurring contract of the `shopperReference` will be disabled, which includes all recurring details.
   shopper_reference: string # The ID that uniquely identifies the shopper. This `shopperReference` must be the same as the `shopperReference` used in the initial payment.
-]: any -> record<response: string> {
+]: any -> oneof<record<response: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -220,7 +242,7 @@ export def "post-disable-permit" [
   --dry-run(-n) # Return the request that would be sent without executing it
   merchant_account: string # The merchant account identifier, with which you want to process the transaction.
   --body-token: string # The permit token to disable.
-]: any -> record<pspReference: string, status: string> {
+]: any -> oneof<record<pspReference: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -248,7 +270,6 @@ export def "post-disable-permit" [
 #
 # POST /listRecurringDetails
 # operationId: post-listRecurringDetails
-# --recurring shape: {contract?: "ONECLICK"|"RECURRING"|"PAYOUT", recurringDetailName?: string, recurringExpiry?: string, recurringFrequency?: string, tokenService?: "VISATOKENSERVICE"|"MCTOKENSERVICE"}
 export def "post-list-recurring-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +283,7 @@ export def "post-list-recurring-details" [
   merchant_account: string # The merchant account identifier you want to process the (transaction) request with.
   --recurring: record # shape: {contract?: "ONECLICK"|"RECURRING"|"PAYOUT", recurringDetailName?: string, recurringExpiry?: string, recurringFrequency?: string, tokenService?: "VISATOKENSERVICE"|"MCTOKENSERVICE"}
   shopper_reference: string # The reference you use to uniquely identify the shopper (e.g. user ID or account ID).
-]: any -> record<creationDate: string, details: table<RecurringDetail: record>, lastKnownShopperEmail: string, shopperReference: string> {
+]: any -> oneof<record<creationDate: string, details: table<RecurringDetail: record>, lastKnownShopperEmail: string, shopperReference: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -289,7 +310,6 @@ export def "post-list-recurring-details" [
 #
 # POST /notifyShopper
 # operationId: post-notifyShopper
-# --amount shape: {currency: string, value: int}
 export def "post-notify-shopper" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +329,7 @@ export def "post-notify-shopper" [
   reference: string # Pre-debit notification reference sent by the merchant. This is a mandatory field
   shopper_reference: string # The ID that uniquely identifies the shopper. This `shopperReference` must be the same as the `shopperReference` used in the initial payment.
   --stored-payment-method-id: string # This is the `recurringDetailReference` returned in the response when you created the token.
-]: any -> record<displayedReference: string, message: string, pspReference: string, reference: string, resultCode: string, shopperNotificationReference: string, storedPaymentMethodId: string> {
+]: any -> oneof<record<displayedReference: string, message: string, pspReference: string, reference: string, resultCode: string, shopperNotificationReference: string, storedPaymentMethodId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -336,7 +356,6 @@ export def "post-notify-shopper" [
 #
 # POST /scheduleAccountUpdater
 # operationId: post-scheduleAccountUpdater
-# --card shape: {cvc?: string, expiryMonth?: string, expiryYear?: string, holderName?: string, issueNumber?: string, number?: string, startMonth?: string, startYear?: string}
 export def "post-schedule-account-updater" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,7 +372,7 @@ export def "post-schedule-account-updater" [
   reference: string # A reference that merchants can apply for the call.
   --selected-recurring-detail-reference: string # The selected detail recurring reference. Optional if `card` is provided.
   --shopper-reference: string # The reference of the shopper that owns the recurring contract. Optional if `card` is provided.
-]: any -> record<pspReference: string, result: string> {
+]: any -> oneof<record<pspReference: string, result: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

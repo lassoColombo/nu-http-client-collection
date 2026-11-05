@@ -15,7 +15,6 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-api-key" => { {scheme: $scheme, headers: {"x-api-key": $token_val}, query: "", location: "header"} }
     "hhpartnerid" => { {scheme: $scheme, headers: {"hhPartnerId": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
@@ -30,22 +29,32 @@ def merge-auth [parts: list]: nothing -> record {
   {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -53,8 +62,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -65,7 +79,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -100,7 +123,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://apis.hubhopper.com/partner"] }
@@ -110,9 +134,9 @@ def auth-scheme-completer [] { ["x-api-key" "hhpartnerid"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-apikey" "token-partnerid"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-categories" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-categories" "get-categories-category-id" "get-categories-category-id-podcasts" "get-podcasts" "get-podcasts-podcast-id" "get-podcasts-podcast-id-episodes" "get-util-languages" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -145,7 +169,7 @@ export def "get-categories" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # Provide the size of the page to fetch.
   --page: string # Provide the page number to fetch.
-]: nothing -> record<categories: table<id: int, name: string, url: string>, noOfPages: int, page: int, pageSize: int, total: int> {
+]: nothing -> oneof<record<categories: table<id: int, name: string, url: string>, noOfPages: int, page: int, pageSize: int, total: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_partnerid | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_PARTNERID_TOKEN | default "")) "hhpartnerid")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
@@ -180,7 +204,7 @@ export def "get-categories-category-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<category: record<id: int, name: string, url: string>> {
+]: nothing -> oneof<record<category: record<id: int, name: string, url: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_partnerid | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_PARTNERID_TOKEN | default "")) "hhpartnerid")])
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
@@ -219,7 +243,7 @@ export def "get-categories-category-id-podcasts" [
   --page-size: string # Provide the size of the page to fetch.
   --order: string # Order the items by 'newest' | 'random'
   --filters: string # Takes filters like 'lang' in a url encoded json. Example: 1)Single -> var filterJson = {"lang":["en"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson)); 2)Multiple -> var filterJson = {"lang":["en","hi"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson));
-]: nothing -> record<noOfPages: int, page: int, pageSize: int, podcasts: table<author: string, category: record, categoryId: int, description: string, episodes: int, featured: record, featuredId: int, image: string, keywords: string, latestEpisodeTime: string, podcastId: int, title: string, url: string>, total: int> {
+]: nothing -> oneof<record<noOfPages: int, page: int, pageSize: int, podcasts: table<author: string, category: record, categoryId: int, description: string, episodes: int, featured: record, featuredId: int, image: string, keywords: string, latestEpisodeTime: string, podcastId: int, title: string, url: string>, total: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_partnerid | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_PARTNERID_TOKEN | default "")) "hhpartnerid")])
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
@@ -258,7 +282,7 @@ export def "get-podcasts" [
   --page-size: string # Provide the size of the page to fetch.
   --order: string # Order the items by 'newest' | 'random'
   --filters: string # Takes filters like 'lang' in a url encoded json. Example: 1)Single -> var filterJson = {"lang":["en"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson)); 2)Multiple -> var filterJson = {"lang":["en","hi"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson));
-]: nothing -> record<noOfPages: int, page: int, pageSize: int, podcasts: table<author: string, category: record, categoryId: int, description: string, episodes: int, featured: record, featuredId: int, image: string, keywords: string, latestEpisodeTime: string, podcastId: int, title: string, url: string>, total: int> {
+]: nothing -> oneof<record<noOfPages: int, page: int, pageSize: int, podcasts: table<author: string, category: record, categoryId: int, description: string, episodes: int, featured: record, featuredId: int, image: string, keywords: string, latestEpisodeTime: string, podcastId: int, title: string, url: string>, total: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_partnerid | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_PARTNERID_TOKEN | default "")) "hhpartnerid")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -293,7 +317,7 @@ export def "get-podcasts-podcast-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<podcast: record<author: string, category: record<id: int, name: string>, categoryId: int, description: string, episodes: int, featured: record<id: int, name: string>, featuredId: int, image: string, keywords: string, latest_episode_time: string, podcastId: int, title: string, url: string, website: string>> {
+]: nothing -> oneof<record<podcast: record<author: string, category: record<id: int, name: string>, categoryId: int, description: string, episodes: int, featured: record<id: int, name: string>, featuredId: int, image: string, keywords: string, latest_episode_time: string, podcastId: int, title: string, url: string, website: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_partnerid | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_PARTNERID_TOKEN | default "")) "hhpartnerid")])
   let base = ($base_url | default $BASE_URL)
   if ($podcast_id | is-empty) { error make --unspanned { msg: "path parameter 'podcastId' must be non-empty" } }
@@ -332,7 +356,7 @@ export def "get-podcasts-podcast-id-episodes" [
   --page-size: string # Provide the size of the page to fetch.
   --order: string # Order the items by 'newest' | 'random'
   --filters: string # Takes filters like 'lang' in a url encoded json. Example: 1)Single -> var filterJson = {"lang":["en"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson)); 2)Multiple -> var filterJson = {"lang":["en","hi"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson));
-]: nothing -> record<episodes: table<author: string, description: string, episodeId: int, episodeUrl: string, image: string, isNew: bool, play: record, podcastId: int, podcastUrl: string, publishTime: string, publishedOn: int, title: string>, noOfPages: int, page: int, pageSize: int, total: int> {
+]: nothing -> oneof<record<episodes: table<author: string, description: string, episodeId: int, episodeUrl: string, image: string, isNew: bool, play: record, podcastId: int, podcastUrl: string, publishTime: string, publishedOn: int, title: string>, noOfPages: int, page: int, pageSize: int, total: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_partnerid | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_PARTNERID_TOKEN | default "")) "hhpartnerid")])
   let base = ($base_url | default $BASE_URL)
   if ($podcast_id | is-empty) { error make --unspanned { msg: "path parameter 'podcastId' must be non-empty" } }
@@ -367,7 +391,7 @@ export def "get-util-languages" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: string # Provide the size of the page to fetch.
   --page: string # Provide the page number to fetch.
-]: nothing -> record<languages: table<code: string, id: int, name: string>, noOfPages: int, page: int, pageSize: int, total: int> {
+]: nothing -> oneof<record<languages: table<code: string, id: int, name: string>, noOfPages: int, page: int, pageSize: int, total: int>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_partnerid | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_PARTNERID_TOKEN | default "")) "hhpartnerid")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"

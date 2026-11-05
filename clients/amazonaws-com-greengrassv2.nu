@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def topology-filter-completer [] { ["ALL" "ROOT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-service-role-to-account" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-service-role-to-account" "disassociate-service-role-from-account" "get-service-role-for-account" "batch-associate-client-device-with-core-device" "batch-disassociate-client-device-from-core-device" "cancel-deployment" "create-component-version" "create-deployment" "list-deployments" "delete-component" "get-component" "delete-core-device" "get-core-device" "delete-deployment" "get-deployment" "describe-component" "get-component-version-artifact" "get-connectivity-info" "update-connectivity-info" "list-client-devices-associated-with-core-device" "list-component-versions" "list-components" "list-core-devices" "list-effective-deployments" "list-installed-components" "list-tags-for-resource" "tag-resource" "resolve-component-candidates" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -164,7 +188,7 @@ export def "associate-service-role-to-account" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   role_arn: string # The Amazon Resource Name (ARN) of the service role to associate with IoT Greengrass for your Amazon Web Services account in this Amazon Web Services Region.
-]: any -> record<associatedAt: string> {
+]: any -> oneof<record<associatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -210,7 +234,7 @@ export def "disassociate-service-role-from-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<disassociatedAt: string> {
+]: nothing -> oneof<record<disassociatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/greengrass/servicerole" $auth.query)
@@ -253,7 +277,7 @@ export def "get-service-role-for-account" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<associatedAt: string, roleArn: string> {
+]: nothing -> oneof<record<associatedAt: string, roleArn: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/greengrass/servicerole" $auth.query)
@@ -279,7 +303,6 @@ export def "get-service-role-for-account" [
 #
 # POST /greengrass/v2/coreDevices/{coreDeviceThingName}/associateClientDevices
 # operationId: BatchAssociateClientDeviceWithCoreDevice
-# --entries item shape: {thingName: string}
 export def "batch-associate-client-device-with-core-device" [
   core_device_thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -299,7 +322,7 @@ export def "batch-associate-client-device-with-core-device" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --entries: list # The list of client devices to associate. — item shape: {thingName: string}
-]: any -> record<errorEntries: table<thingName: string, code: string, message: string>> {
+]: any -> oneof<record<errorEntries: table<thingName: string, code: string, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -329,7 +352,6 @@ export def "batch-associate-client-device-with-core-device" [
 #
 # POST /greengrass/v2/coreDevices/{coreDeviceThingName}/disassociateClientDevices
 # operationId: BatchDisassociateClientDeviceFromCoreDevice
-# --entries item shape: {thingName: string}
 export def "batch-disassociate-client-device-from-core-device" [
   core_device_thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -349,7 +371,7 @@ export def "batch-disassociate-client-device-from-core-device" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --entries: list # The list of client devices to disassociate. — item shape: {thingName: string}
-]: any -> record<errorEntries: table<thingName: string, code: string, message: string>> {
+]: any -> oneof<record<errorEntries: table<thingName: string, code: string, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -397,7 +419,7 @@ export def "cancel-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentId' must be non-empty" } }
@@ -424,7 +446,6 @@ export def "cancel-deployment" [
 #
 # POST /greengrass/v2/createComponentVersion
 # operationId: CreateComponentVersion
-# --lambdaFunction shape: {lambdaArn?: string, componentName?: string, componentVersion?: string, componentPlatforms?: list, componentDependencies?: record, componentLambdaParameters?: record}
 export def "create-component-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -446,7 +467,7 @@ export def "create-component-version" [
   --lambda-function: record # Contains information about an Lambda function to import to create a component. — shape: {lambdaArn?: string, componentName?: string, componentVersion?: string, componentPlatforms?: list, componentDependencies?: record, componentLambdaParameters?: record}
   --tags: record # A list of key-value pairs that contain metadata for the resource. For more information, see Tag your resources (https://docs.aws.amazon.com/greengrass/v2/developerguide/tag-resources.html) in the IoT Greengrass V2 Developer Guide.
   --client-token: string # A unique, case-sensitive identifier that you can provide to ensure that the request is idempotent. Idempotency means that the request is successfully processed only once, even if you send the request multiple times. When a request succeeds, and you specify the same client token for subsequent successful requests, the IoT Greengrass V2 service returns the successful response that it caches from the previous request. IoT Greengrass V2 caches successful responses for idempotent requests for up to 8 hours.
-]: any -> record<arn: string, componentName: string, componentVersion: string, creationTimestamp: string, status: record<componentState: string, message: string, errors: record, vendorGuidance: string, vendorGuidanceMessage: string>> {
+]: any -> oneof<record<arn: string, componentName: string, componentVersion: string, creationTimestamp: string, status: record<componentState: string, message: string, errors: record, vendorGuidance: string, vendorGuidanceMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -475,8 +496,6 @@ export def "create-component-version" [
 #
 # POST /greengrass/v2/deployments
 # operationId: CreateDeployment
-# --iotJobConfiguration shape: {jobExecutionsRolloutConfig?: record, abortConfig?: record, timeoutConfig?: record}
-# --deploymentPolicies shape: {failureHandlingPolicy?: "ROLLBACK"|"DO_NOTHING", componentUpdatePolicy?: record, configurationValidationPolicy?: record}
 export def "create-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -502,7 +521,7 @@ export def "create-deployment" [
   --parent-target-arn: string # The parent deployment's target ARN (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html) within a subdeployment.
   --tags: record # A list of key-value pairs that contain metadata for the resource. For more information, see Tag your resources (https://docs.aws.amazon.com/greengrass/v2/developerguide/tag-resources.html) in the IoT Greengrass V2 Developer Guide.
   --client-token: string # A unique, case-sensitive identifier that you can provide to ensure that the request is idempotent. Idempotency means that the request is successfully processed only once, even if you send the request multiple times. When a request succeeds, and you specify the same client token for subsequent successful requests, the IoT Greengrass V2 service returns the successful response that it caches from the previous request. IoT Greengrass V2 caches successful responses for idempotent requests for up to 8 hours.
-]: any -> record<deploymentId: string, iotJobId: string, iotJobArn: string> {
+]: any -> oneof<record<deploymentId: string, iotJobId: string, iotJobArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -553,7 +572,7 @@ export def "list-deployments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<deployments: table<targetArn: string, revisionId: string, deploymentId: string, deploymentName: string, creationTimestamp: string, deploymentStatus: string, isLatestForTarget: bool, parentTargetArn: string>, nextToken: string> {
+]: nothing -> oneof<record<deployments: table<targetArn: string, revisionId: string, deploymentId: string, deploymentName: string, creationTimestamp: string, deploymentStatus: string, isLatestForTarget: bool, parentTargetArn: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "targetArn" $target_arn "scalar") (serialize-qp "historyFilter" $history_filter "scalar") (serialize-qp "parentTargetArn" $parent_target_arn "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -644,7 +663,7 @@ export def "get-component" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<recipeOutputFormat: string, recipe: string, tags: record> {
+]: nothing -> oneof<record<recipeOutputFormat: string, recipe: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'arn' must be non-empty" } }
@@ -735,7 +754,7 @@ export def "get-core-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<coreDeviceThingName: string, coreVersion: string, platform: string, architecture: string, status: string, lastStatusUpdateTimestamp: string, tags: record> {
+]: nothing -> oneof<record<coreDeviceThingName: string, coreVersion: string, platform: string, architecture: string, status: string, lastStatusUpdateTimestamp: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_device_thing_name | is-empty) { error make --unspanned { msg: "path parameter 'coreDeviceThingName' must be non-empty" } }
@@ -825,7 +844,7 @@ export def "get-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<targetArn: string, revisionId: string, deploymentId: string, deploymentName: string, deploymentStatus: string, iotJobId: string, iotJobArn: string, components: record, deploymentPolicies: record<failureHandlingPolicy: string, componentUpdatePolicy: record<timeoutInSeconds: int, action: string>, configurationValidationPolicy: record<timeoutInSeconds: int>>, iotJobConfiguration: record<jobExecutionsRolloutConfig: record<exponentialRate: record, maximumPerMinute: int>, abortConfig: record<criteriaList: list>, timeoutConfig: record<inProgressTimeoutInMinutes: int>>, creationTimestamp: string, isLatestForTarget: bool, parentTargetArn: string, tags: record> {
+]: nothing -> oneof<record<targetArn: string, revisionId: string, deploymentId: string, deploymentName: string, deploymentStatus: string, iotJobId: string, iotJobArn: string, components: record, deploymentPolicies: record<failureHandlingPolicy: string, componentUpdatePolicy: record<timeoutInSeconds: int, action: string>, configurationValidationPolicy: record<timeoutInSeconds: int>>, iotJobConfiguration: record<jobExecutionsRolloutConfig: record<exponentialRate: record, maximumPerMinute: int>, abortConfig: record<criteriaList: list>, timeoutConfig: record<inProgressTimeoutInMinutes: int>>, creationTimestamp: string, isLatestForTarget: bool, parentTargetArn: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deployment_id | is-empty) { error make --unspanned { msg: "path parameter 'deploymentId' must be non-empty" } }
@@ -870,7 +889,7 @@ export def "describe-component" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<arn: string, componentName: string, componentVersion: string, creationTimestamp: string, publisher: string, description: string, status: record<componentState: string, message: string, errors: record, vendorGuidance: string, vendorGuidanceMessage: string>, platforms: table<name: string, attributes: record>, tags: record> {
+]: nothing -> oneof<record<arn: string, componentName: string, componentVersion: string, creationTimestamp: string, publisher: string, description: string, status: record<componentState: string, message: string, errors: record, vendorGuidance: string, vendorGuidanceMessage: string>, platforms: table<name: string, attributes: record>, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'arn' must be non-empty" } }
@@ -916,7 +935,7 @@ export def "get-component-version-artifact" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<preSignedUrl: string> {
+]: nothing -> oneof<record<preSignedUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'arn' must be non-empty" } }
@@ -962,7 +981,7 @@ export def "get-connectivity-info" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<connectivityInfo: table<id: string, hostAddress: string, portNumber: int, metadata: string>, message: string> {
+]: nothing -> oneof<record<connectivityInfo: table<id: string, hostAddress: string, portNumber: int, metadata: string>, message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($thing_name | is-empty) { error make --unspanned { msg: "path parameter 'thingName' must be non-empty" } }
@@ -989,7 +1008,6 @@ export def "get-connectivity-info" [
 #
 # PUT /greengrass/things/{thingName}/connectivityInfo
 # operationId: UpdateConnectivityInfo
-# --ConnectivityInfo item shape: {id?: string, hostAddress?: string, portNumber?: int, metadata?: string}
 export def "update-connectivity-info" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1009,7 +1027,7 @@ export def "update-connectivity-info" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   connectivity_info: list # The connectivity information for the core device. — item shape: {id?: string, hostAddress?: string, portNumber?: int, metadata?: string}
-]: any -> record<version: string, message: string> {
+]: any -> oneof<record<version: string, message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1059,7 +1077,7 @@ export def "list-client-devices-associated-with-core-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<associatedClientDevices: table<thingName: string, associationTimestamp: string>, nextToken: string> {
+]: nothing -> oneof<record<associatedClientDevices: table<thingName: string, associationTimestamp: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_device_thing_name | is-empty) { error make --unspanned { msg: "path parameter 'coreDeviceThingName' must be non-empty" } }
@@ -1107,7 +1125,7 @@ export def "list-component-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<componentVersions: table<componentName: string, componentVersion: string, arn: string>, nextToken: string> {
+]: nothing -> oneof<record<componentVersions: table<componentName: string, componentVersion: string, arn: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn | is-empty) { error make --unspanned { msg: "path parameter 'arn' must be non-empty" } }
@@ -1155,7 +1173,7 @@ export def "list-components" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<components: table<arn: string, componentName: string, latestVersion: record>, nextToken: string> {
+]: nothing -> oneof<record<components: table<arn: string, componentName: string, latestVersion: record>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -1203,7 +1221,7 @@ export def "list-core-devices" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<coreDevices: table<coreDeviceThingName: string, status: string, lastStatusUpdateTimestamp: string>, nextToken: string> {
+]: nothing -> oneof<record<coreDevices: table<coreDeviceThingName: string, status: string, lastStatusUpdateTimestamp: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "thingGroupArn" $thing_group_arn "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -1250,7 +1268,7 @@ export def "list-effective-deployments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<effectiveDeployments: table<deploymentId: string, deploymentName: string, iotJobId: string, iotJobArn: string, description: string, targetArn: string, coreDeviceExecutionStatus: string, reason: string, creationTimestamp: string, modifiedTimestamp: string, statusDetails: record>, nextToken: string> {
+]: nothing -> oneof<record<effectiveDeployments: table<deploymentId: string, deploymentName: string, iotJobId: string, iotJobArn: string, description: string, targetArn: string, coreDeviceExecutionStatus: string, reason: string, creationTimestamp: string, modifiedTimestamp: string, statusDetails: record>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_device_thing_name | is-empty) { error make --unspanned { msg: "path parameter 'coreDeviceThingName' must be non-empty" } }
@@ -1299,7 +1317,7 @@ export def "list-installed-components" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<installedComponents: table<componentName: string, componentVersion: string, lifecycleState: string, lifecycleStateDetails: string, isRoot: bool, lastStatusChangeTimestamp: string, lastReportedTimestamp: string, lastInstallationSource: string, lifecycleStatusCodes: list>, nextToken: string> {
+]: nothing -> oneof<record<installedComponents: table<componentName: string, componentVersion: string, lifecycleState: string, lifecycleStateDetails: string, isRoot: bool, lastStatusChangeTimestamp: string, lastReportedTimestamp: string, lastInstallationSource: string, lifecycleStatusCodes: list>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($core_device_thing_name | is-empty) { error make --unspanned { msg: "path parameter 'coreDeviceThingName' must be non-empty" } }
@@ -1345,7 +1363,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> oneof<record<tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1391,7 +1409,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # A list of key-value pairs that contain metadata for the resource. For more information, see Tag your resources (https://docs.aws.amazon.com/greengrass/v2/developerguide/tag-resources.html) in the IoT Greengrass V2 Developer Guide.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1421,8 +1439,6 @@ export def "tag-resource" [
 #
 # POST /greengrass/v2/resolveComponentCandidates
 # operationId: ResolveComponentCandidates
-# --platform shape: {name?: string, attributes?: record}
-# --componentCandidates item shape: {componentName?: string, componentVersion?: string, versionRequirements?: record}
 export def "resolve-component-candidates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1442,7 +1458,7 @@ export def "resolve-component-candidates" [
   --x-amz-signed-headers: string
   --platform: record # Contains information about a platform that a component supports. — shape: {name?: string, attributes?: record}
   --component-candidates: list # The list of components to resolve. — item shape: {componentName?: string, componentVersion?: string, versionRequirements?: record}
-]: any -> record<resolvedComponentVersions: table<arn: string, componentName: string, componentVersion: string, recipe: string, vendorGuidance: string, message: string>> {
+]: any -> oneof<record<resolvedComponentVersions: table<arn: string, componentName: string, componentVersion: string, recipe: string, vendorGuidance: string, message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1490,7 +1506,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }

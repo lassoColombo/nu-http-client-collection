@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-developer-key" => { {scheme: $scheme, headers: {"X-Developer-Key": $token_val}, query: "", location: "header"} }
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -116,7 +140,7 @@ def auth-scheme-completer [] { ["x-developer-key" "bearer"] }
 # Completers for enum parameters
 def type-completer [] { ["bank" "cash" "credits" "insurance" "loans" "mortgage" "other_asset" "other_liability" "property" "stocks" "vehicle"] }
 def type-completer-1 [] { ["credit" "debit"] }
-def refund-behaviour-completer [] { ["" "credits_are_refunds" "debits_are_deductions"] }
+def refund-behaviour-completer [] { ["credits_are_refunds" "debits_are_deductions"] }
 def behaviour-completer [] { ["all" "forward" "one"] }
 def repeat-type-completer [] { ["daily" "each weekday" "fortnightly" "monthly" "once" "weekly" "yearly"] }
 def period-completer [] { ["event" "months" "weeks" "years"] }
@@ -124,9 +148,9 @@ def period-completer [] { ["event" "months" "weeks" "years"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-accounts-id" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["delete-accounts-id" "get-accounts-id" "put-accounts-id" "get-accounts-id-transactions" "delete-attachments-id" "get-attachments-id" "put-attachments-id" "delete-categories-id" "get-categories-id" "put-categories-id" "post-categories-id-category-rules" "get-categories-id-transactions" "get-currencies" "get-currencies-id" "delete-events-id" "get-events-id" "put-events-id" "delete-institutions-id" "get-institutions-id" "put-institutions-id" "get-institutions-id-accounts" "get-me" "get-scenarios-id-events" "post-scenarios-id-events" "get-time-zones" "get-transaction-accounts-id" "put-transaction-accounts-id" "get-transaction-accounts-id-transactions" "post-transaction-accounts-id-transactions" "delete-transactions-id" "get-transactions-id" "put-transactions-id" "get-transactions-id-attachments" "post-transactions-id-attachments" "delete-transactions-transaction-id-attachments-attachment-id" "get-users-id" "put-users-id" "get-users-id-accounts" "post-users-id-accounts" "put-users-id-accounts" "get-users-id-attachments" "post-users-id-attachments" "get-users-id-budget" "get-users-id-budget-summary" "get-users-id-categories" "post-users-id-categories" "get-users-id-category-rules" "get-users-id-events" "delete-users-id-forecast-cache" "get-users-id-institutions" "post-users-id-institutions" "get-users-id-labels" "get-users-id-saved-searches" "get-users-id-transaction-accounts" "get-users-id-transactions" "get-users-id-trend-analysis" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -193,7 +217,7 @@ export def "get-accounts-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: table<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, title: string, transaction_accounts: table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: table<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, title: string, transaction_accounts: table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -232,7 +256,7 @@ export def "put-accounts-id" [
   --is-net-worth: oneof<nothing, bool> # Whether the account is a net worth account. (e.g. false)
   --title: string # A new title for the account. (e.g. Savings)
   --type: string@type-completer # The type of the account. (e.g. bank)
-]: any -> record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: table<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, title: string, transaction_accounts: table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string> {
+]: any -> oneof<record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: table<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, title: string, transaction_accounts: table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -278,7 +302,7 @@ export def "get-accounts-id-transactions" [
   --needs-review: int # Limit to transactions that need to be reviewed. (e.g. 1)
   --search: string # Limit to transactions matching a keyword search string. The provided string is matched against the transaction amount, account name, payee, category title, note, labels, and the date in ISO 8601 format. (e.g. Paypal)
   --page: int # Choose a particular page of the results. (e.g. 3)
-]: nothing -> table<amount: float, amount_in_base_currency: float, category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, cheque_number: string, closing_balance: float, created_at: string, date: string, id: int, is_transfer: bool, labels: list<string>, memo: string, needs_review: bool, note: string, original_payee: string, payee: string, status: string, transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string, upload_source: string> {
+]: nothing -> oneof<table<amount: float, amount_in_base_currency: float, category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, cheque_number: string, closing_balance: float, created_at: string, date: string, id: int, is_transfer: bool, labels: list<string>, memo: string, needs_review: bool, note: string, original_payee: string, payee: string, status: string, transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string, upload_source: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -349,7 +373,7 @@ export def "get-attachments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<content_type: string, content_type_meta: record<description: string, extension: string, title: string>, created_at: string, file_name: string, id: int, original_url: string, title: string, type: string, updated_at: string, variants: record<large_url: string, thumb_url: string>> {
+]: nothing -> oneof<record<content_type: string, content_type_meta: record<description: string, extension: string, title: string>, created_at: string, file_name: string, id: int, original_url: string, title: string, type: string, updated_at: string, variants: record<large_url: string, thumb_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -385,7 +409,7 @@ export def "put-attachments-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --title: string # The new title of the attachment. If the title is blank or not provided, the server will derive a title from the file name. (e.g. Invoice for taxi)
-]: any -> record<content_type: string, content_type_meta: record<description: string, extension: string, title: string>, created_at: string, file_name: string, id: int, original_url: string, title: string, type: string, updated_at: string, variants: record<large_url: string, thumb_url: string>> {
+]: any -> oneof<record<content_type: string, content_type_meta: record<description: string, extension: string, title: string>, created_at: string, file_name: string, id: int, original_url: string, title: string, type: string, updated_at: string, variants: record<large_url: string, thumb_url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -458,7 +482,7 @@ export def "get-categories-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string> {
+]: nothing -> oneof<record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -500,7 +524,7 @@ export def "put-categories-id" [
   --refund-behaviour: string@refund-behaviour-completer # Set the refund behaviour of the category. (nullable, e.g. credits_are_refunds)
   --roll-up: oneof<nothing, bool> # Set the category to be rolled up into its parent category. (e.g. false)
   --title: string # A new title for the category. (e.g. Food)
-]: any -> record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string> {
+]: any -> oneof<record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -541,7 +565,7 @@ export def "post-categories-id-category-rules" [
   --apply-to-all: oneof<nothing, bool> # Apply the created category rule to all transactions. (e.g. false)
   --apply-to-uncategorised: oneof<nothing, bool> # Apply the created category rule to all uncategorised transactions. (e.g. true)
   payee_matches: string # The keyword/s to match the transaction payees. (e.g. Countdown)
-]: any -> record<category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, created_at: string, id: int, payee_matches: string, updated_at: string> {
+]: any -> oneof<record<category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, created_at: string, id: int, payee_matches: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -587,7 +611,7 @@ export def "get-categories-id-transactions" [
   --needs-review: int # Limit to transactions that need to be reviewed. (e.g. 1)
   --search: string # Limit to transactions matching a keyword search string. The provided string is matched against the transaction amount, account name, payee, category title, note, labels, and the date in ISO 8601 format. (e.g. Paypal)
   --page: int # Choose a particular page of the results. (e.g. 3)
-]: nothing -> table<amount: float, amount_in_base_currency: float, category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, cheque_number: string, closing_balance: float, created_at: string, date: string, id: int, is_transfer: bool, labels: list<string>, memo: string, needs_review: bool, note: string, original_payee: string, payee: string, status: string, transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string, upload_source: string> {
+]: nothing -> oneof<table<amount: float, amount_in_base_currency: float, category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, cheque_number: string, closing_balance: float, created_at: string, date: string, id: int, is_transfer: bool, labels: list<string>, memo: string, needs_review: bool, note: string, original_payee: string, payee: string, status: string, transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string, upload_source: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -622,7 +646,7 @@ export def "get-currencies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: string, minor_unit: int, name: string, separators: record<major: string, minor: string>, symbol: string> {
+]: nothing -> oneof<table<id: string, minor_unit: int, name: string, separators: record<major: string, minor: string>, symbol: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/currencies" $auth.query)
@@ -656,7 +680,7 @@ export def "get-currencies-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, minor_unit: int, name: string, separators: record<major: string, minor: string>, symbol: string> {
+]: nothing -> oneof<record<id: string, minor_unit: int, name: string, separators: record<major: string, minor: string>, symbol: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -729,7 +753,7 @@ export def "get-events-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<amount: float, amount_in_base_currency: float, category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, colour: string, currency_code: string, date: string, id: string, infinite_series: bool, note: string, repeat_interval: int, repeat_type: string, scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, series_id: int, series_start_id: string> {
+]: nothing -> oneof<record<amount: float, amount_in_base_currency: float, category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, colour: string, currency_code: string, date: string, id: string, infinite_series: bool, note: string, repeat_interval: int, repeat_type: string, scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, series_id: int, series_start_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -769,7 +793,7 @@ export def "put-events-id" [
   --note: string # A note for the event. (e.g. Need more beer.)
   --repeat-interval: int # The repeat interval of the event. (e.g. 1)
   --repeat-type: string@repeat-type-completer # The repeat type of the event. (e.g. weekly)
-]: any -> record<amount: float, amount_in_base_currency: float, category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, colour: string, currency_code: string, date: string, id: string, infinite_series: bool, note: string, repeat_interval: int, repeat_type: string, scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, series_id: int, series_start_id: string> {
+]: any -> oneof<record<amount: float, amount_in_base_currency: float, category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, colour: string, currency_code: string, date: string, id: string, infinite_series: bool, note: string, repeat_interval: int, repeat_type: string, scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, series_id: int, series_start_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -844,7 +868,7 @@ export def "get-institutions-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, currency_code: string, id: int, title: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -881,7 +905,7 @@ export def "put-institutions-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --currency-code: string # A new currency code for the institution. (e.g. NZD)
   --title: string # A new title for the institution. (e.g. Bank of Foo)
-]: any -> record<created_at: string, currency_code: string, id: int, title: string, updated_at: string> {
+]: any -> oneof<record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -919,7 +943,7 @@ export def "get-institutions-id-accounts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: list<record>, title: string, transaction_accounts: list<record>, type: string, updated_at: string> {
+]: nothing -> oneof<table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: list<record>, title: string, transaction_accounts: list<record>, type: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -953,7 +977,7 @@ export def "get-me" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<always_show_base_currency: bool, available_accounts: int, available_budgets: int, avatar_url: string, base_currency_code: string, beta_user: bool, created_at: string, email: string, forecast_defer_recalculate: bool, forecast_end_date: string, forecast_last_accessed_at: string, forecast_last_updated_at: string, forecast_needs_recalculate: bool, forecast_start_date: string, id: int, is_reviewing_transactions: bool, last_activity_at: string, last_logged_in_at: string, login: string, name: string, time_zone: string, updated_at: string, using_multiple_currencies: bool, week_start_day: int> {
+]: nothing -> oneof<record<always_show_base_currency: bool, available_accounts: int, available_budgets: int, avatar_url: string, base_currency_code: string, beta_user: bool, created_at: string, email: string, forecast_defer_recalculate: bool, forecast_end_date: string, forecast_last_accessed_at: string, forecast_last_updated_at: string, forecast_needs_recalculate: bool, forecast_start_date: string, id: int, is_reviewing_transactions: bool, last_activity_at: string, last_logged_in_at: string, login: string, name: string, time_zone: string, updated_at: string, using_multiple_currencies: bool, week_start_day: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me" $auth.query)
@@ -989,7 +1013,7 @@ export def "get-scenarios-id-events" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Return the events from and including this date. (required, e.g. 2020-10-01)
   --end-date: string # Return the events until and including this date. (required, e.g. 2020-10-30)
-]: nothing -> table<amount: float, amount_in_base_currency: float, category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, colour: string, currency_code: string, date: string, id: string, infinite_series: bool, note: string, repeat_interval: int, repeat_type: string, scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, series_id: int, series_start_id: string> {
+]: nothing -> oneof<table<amount: float, amount_in_base_currency: float, category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, colour: string, currency_code: string, date: string, id: string, infinite_series: bool, note: string, repeat_interval: int, repeat_type: string, scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, series_id: int, series_start_id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1033,7 +1057,7 @@ export def "post-scenarios-id-events" [
   --note: string # A note for the event. (e.g. New beers for sampling over the weekends.)
   --repeat-interval: int # The repeat interval of the event. (default: 1, e.g. 1)
   repeat_type: string@repeat-type-completer # The repeat type of the event. (e.g. weekly)
-]: any -> record<amount: float, amount_in_base_currency: float, category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, colour: string, currency_code: string, date: string, id: string, infinite_series: bool, note: string, repeat_interval: int, repeat_type: string, scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, series_id: int, series_start_id: string> {
+]: any -> oneof<record<amount: float, amount_in_base_currency: float, category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, colour: string, currency_code: string, date: string, id: string, infinite_series: bool, note: string, repeat_interval: int, repeat_type: string, scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, series_id: int, series_start_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1070,7 +1094,7 @@ export def "get-time-zones" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<abbreviation: string, formatted_name: string, formatted_offset: string, identifier: string, name: string, utc_offset: int> {
+]: nothing -> oneof<table<abbreviation: string, formatted_name: string, formatted_offset: string, identifier: string, name: string, utc_offset: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/time_zones" $auth.query)
@@ -1104,7 +1128,7 @@ export def "get-transaction-accounts-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1142,7 +1166,7 @@ export def "put-transaction-accounts-id" [
   --institution-id: int # The unique identifier of a new institution for the transaction account. (e.g. 42)
   --starting-balance: float # The starting balance amount of the transaction account. (e.g. 3547.45)
   --starting-balance-date: string # The starting balance date of the transaction account. (e.g. 2015-03-15)
-]: any -> record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string> {
+]: any -> oneof<record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1188,7 +1212,7 @@ export def "get-transaction-accounts-id-transactions" [
   --needs-review: int # Limit to transactions that need to be reviewed. (e.g. 1)
   --search: string # Limit to transactions matching a keyword search string. The provided string is matched against the transaction amount, account name, payee, category title, note, labels, and the date in ISO 8601 format. (e.g. Paypal)
   --page: int # Choose a particular page of the results. (e.g. 3)
-]: nothing -> table<amount: float, amount_in_base_currency: float, category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, cheque_number: string, closing_balance: float, created_at: string, date: string, id: int, is_transfer: bool, labels: list<string>, memo: string, needs_review: bool, note: string, original_payee: string, payee: string, status: string, transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string, upload_source: string> {
+]: nothing -> oneof<table<amount: float, amount_in_base_currency: float, category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, cheque_number: string, closing_balance: float, created_at: string, date: string, id: int, is_transfer: bool, labels: list<string>, memo: string, needs_review: bool, note: string, original_payee: string, payee: string, status: string, transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string, upload_source: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1234,7 +1258,7 @@ export def "post-transaction-accounts-id-transactions" [
   --needs-review: oneof<nothing, bool> # Whether the transaction needs to be reviewed or not. (e.g. false)
   --note: string # A note for the transaction. (e.g. I really enjoyed the loaded corn chips)
   payee: string # The payee/merchant of the transaction. (e.g. Tex Otago)
-]: any -> record<amount: float, amount_in_base_currency: float, category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, cheque_number: string, closing_balance: float, created_at: string, date: string, id: int, is_transfer: bool, labels: list<string>, memo: string, needs_review: bool, note: string, original_payee: string, payee: string, status: string, transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string, upload_source: string> {
+]: any -> oneof<record<amount: float, amount_in_base_currency: float, category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, cheque_number: string, closing_balance: float, created_at: string, date: string, id: int, is_transfer: bool, labels: list<string>, memo: string, needs_review: bool, note: string, original_payee: string, payee: string, status: string, transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string, upload_source: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1307,7 +1331,7 @@ export def "get-transactions-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<amount: float, amount_in_base_currency: float, category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, cheque_number: string, closing_balance: float, created_at: string, date: string, id: int, is_transfer: bool, labels: list<string>, memo: string, needs_review: bool, note: string, original_payee: string, payee: string, status: string, transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string, upload_source: string> {
+]: nothing -> oneof<record<amount: float, amount_in_base_currency: float, category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, cheque_number: string, closing_balance: float, created_at: string, date: string, id: int, is_transfer: bool, labels: list<string>, memo: string, needs_review: bool, note: string, original_payee: string, payee: string, status: string, transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string, upload_source: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1352,7 +1376,7 @@ export def "put-transactions-id" [
   --needs-review: oneof<nothing, bool> # Whether the transaction needs to be reviewed or not. (e.g. false)
   --note: string # A new note for the transaction.
   --payee: string # A new payee for the transaction. (e.g. Bill)
-]: any -> record<amount: float, amount_in_base_currency: float, category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, cheque_number: string, closing_balance: float, created_at: string, date: string, id: int, is_transfer: bool, labels: list<string>, memo: string, needs_review: bool, note: string, original_payee: string, payee: string, status: string, transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string, upload_source: string> {
+]: any -> oneof<record<amount: float, amount_in_base_currency: float, category: record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, cheque_number: string, closing_balance: float, created_at: string, date: string, id: int, is_transfer: bool, labels: list<string>, memo: string, needs_review: bool, note: string, original_payee: string, payee: string, status: string, transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string, upload_source: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1390,7 +1414,7 @@ export def "get-transactions-id-attachments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<content_type: string, content_type_meta: record<description: string, extension: string, title: string>, created_at: string, file_name: string, id: int, original_url: string, title: string, type: string, updated_at: string, variants: record<large_url: string, thumb_url: string>> {
+]: nothing -> oneof<table<content_type: string, content_type_meta: record<description: string, extension: string, title: string>, created_at: string, file_name: string, id: int, original_url: string, title: string, type: string, updated_at: string, variants: record<large_url: string, thumb_url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1426,7 +1450,7 @@ export def "post-transactions-id-attachments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --attachment-id: int # The unique identifier of the attachment. (e.g. 1438154)
-]: any -> record<content_type: string, content_type_meta: record<description: string, extension: string, title: string>, created_at: string, file_name: string, id: int, original_url: string, title: string, type: string, updated_at: string, variants: record<large_url: string, thumb_url: string>> {
+]: any -> oneof<record<content_type: string, content_type_meta: record<description: string, extension: string, title: string>, created_at: string, file_name: string, id: int, original_url: string, title: string, type: string, updated_at: string, variants: record<large_url: string, thumb_url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1501,7 +1525,7 @@ export def "get-users-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<always_show_base_currency: bool, available_accounts: int, available_budgets: int, avatar_url: string, base_currency_code: string, beta_user: bool, created_at: string, email: string, forecast_defer_recalculate: bool, forecast_end_date: string, forecast_last_accessed_at: string, forecast_last_updated_at: string, forecast_needs_recalculate: bool, forecast_start_date: string, id: int, is_reviewing_transactions: bool, last_activity_at: string, last_logged_in_at: string, login: string, name: string, time_zone: string, updated_at: string, using_multiple_currencies: bool, week_start_day: int> {
+]: nothing -> oneof<record<always_show_base_currency: bool, available_accounts: int, available_budgets: int, avatar_url: string, base_currency_code: string, beta_user: bool, created_at: string, email: string, forecast_defer_recalculate: bool, forecast_end_date: string, forecast_last_accessed_at: string, forecast_last_updated_at: string, forecast_needs_recalculate: bool, forecast_start_date: string, id: int, is_reviewing_transactions: bool, last_activity_at: string, last_logged_in_at: string, login: string, name: string, time_zone: string, updated_at: string, using_multiple_currencies: bool, week_start_day: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1543,7 +1567,7 @@ export def "put-users-id" [
   --name: string # A new name for the user. (e.g. John Appleseed)
   --time-zone: string # A new time zone for the user. (e.g. Auckland)
   --week-start-day: int # The day of the week the user wishes their calendars to start on. A number between 0 and 6, where 0 is Sunday and 6 is Saturday. (e.g. 1)
-]: any -> record<always_show_base_currency: bool, available_accounts: int, available_budgets: int, avatar_url: string, base_currency_code: string, beta_user: bool, created_at: string, email: string, forecast_defer_recalculate: bool, forecast_end_date: string, forecast_last_accessed_at: string, forecast_last_updated_at: string, forecast_needs_recalculate: bool, forecast_start_date: string, id: int, is_reviewing_transactions: bool, last_activity_at: string, last_logged_in_at: string, login: string, name: string, time_zone: string, updated_at: string, using_multiple_currencies: bool, week_start_day: int> {
+]: any -> oneof<record<always_show_base_currency: bool, available_accounts: int, available_budgets: int, avatar_url: string, base_currency_code: string, beta_user: bool, created_at: string, email: string, forecast_defer_recalculate: bool, forecast_end_date: string, forecast_last_accessed_at: string, forecast_last_updated_at: string, forecast_needs_recalculate: bool, forecast_start_date: string, id: int, is_reviewing_transactions: bool, last_activity_at: string, last_logged_in_at: string, login: string, name: string, time_zone: string, updated_at: string, using_multiple_currencies: bool, week_start_day: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1581,7 +1605,7 @@ export def "get-users-id-accounts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: list<record>, title: string, transaction_accounts: list<record>, type: string, updated_at: string> {
+]: nothing -> oneof<table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: list<record>, title: string, transaction_accounts: list<record>, type: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1620,7 +1644,7 @@ export def "post-users-id-accounts" [
   institution_id: int # The ID of the institution to create this account in. (e.g. 42)
   title: string # A title for the account. (e.g. Foo)
   type: string@type-completer # The type of the account. (e.g. bank)
-]: any -> record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: table<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, title: string, transaction_accounts: table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string> {
+]: any -> oneof<record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: table<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, title: string, transaction_accounts: table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1647,7 +1671,6 @@ export def "post-users-id-accounts" [
 # Update the display order of accounts in user
 #
 # PUT /users/{id}/accounts
-# --accounts item shape: {created_at?: string, currency_code?: string, current_balance?: float, current_balance_date?: string, current_balance_exchange_rate?: float, current_balance_in_base_currency?: float, id?: int, is_net_worth?: bool, primary_scenario?: record, primary_transaction_account?: record, safe_balance?: float, safe_balance_in_base_currency?: float, scenarios?: list, title?: string, transaction_accounts?: list, ... (2 more fields)}
 export def "put-users-id-accounts" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1660,7 +1683,7 @@ export def "put-users-id-accounts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   accounts: list # List the account objects in their new display order. — item shape: {created_at?: string, currency_code?: string, current_balance?: float, current_balance_date?: string, current_balance_exchange_rate?: float, current_balance_in_base_currency?: float, id?: int, is_net_worth?: bool, primary_scenario?: record, primary_transaction_account?: record, safe_balance?: float, safe_balance_in_base_currency?: float, scenarios?: list, title?: string, transaction_accounts?: list, ... (2 more fields)}
-]: any -> table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: list<record>, title: string, transaction_accounts: list<record>, type: string, updated_at: string> {
+]: any -> oneof<table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, is_net_worth: bool, primary_scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, primary_transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, safe_balance: float, safe_balance_in_base_currency: float, scenarios: list<record>, title: string, transaction_accounts: list<record>, type: string, updated_at: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1699,7 +1722,7 @@ export def "get-users-id-attachments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --unassigned: int # If set, returns unassigned attachments, that are available for assigning to a transaction. (e.g. 1)
-]: nothing -> table<content_type: string, content_type_meta: record<description: string, extension: string, title: string>, created_at: string, file_name: string, id: int, original_url: string, title: string, type: string, updated_at: string, variants: record<large_url: string, thumb_url: string>> {
+]: nothing -> oneof<table<content_type: string, content_type_meta: record<description: string, extension: string, title: string>, created_at: string, file_name: string, id: int, original_url: string, title: string, type: string, updated_at: string, variants: record<large_url: string, thumb_url: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1738,7 +1761,7 @@ export def "post-users-id-attachments" [
   --file-data: string # The base64-encoded contents of the source file. The supported file types are png, jpg, pdf, xls, xlsx, doc, docx. (format: base64)
   --file-name: string # The file name of the attachment. (e.g. taxi.png)
   --title: string # The title of the attachment. If the title is blank or not provided, the title will derived from the file name. (e.g. Invoice for taxi)
-]: any -> record<content_type: string, content_type_meta: record<description: string, extension: string, title: string>, created_at: string, file_name: string, id: int, original_url: string, title: string, type: string, updated_at: string, variants: record<large_url: string, thumb_url: string>> {
+]: any -> oneof<record<content_type: string, content_type_meta: record<description: string, extension: string, title: string>, created_at: string, file_name: string, id: int, original_url: string, title: string, type: string, updated_at: string, variants: record<large_url: string, thumb_url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1777,7 +1800,7 @@ export def "get-users-id-budget" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --roll-up: oneof<nothing, bool> # Whether parent categories should have their children rolled up into them. When used, the children will still appear in the collection on their own, but their actual and forecast figures will be rolled up to the root parent. (e.g. true)
-]: nothing -> table<category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, expense: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, income: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, is_transfer: bool> {
+]: nothing -> oneof<table<category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, expense: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, income: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, is_transfer: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1817,7 +1840,7 @@ export def "get-users-id-budget-summary" [
   --interval: int # The period interval, e.g. if the interval is 2 and the period is weeks, the budget will be analysed fortnightly. (required, e.g. 2)
   --start-date: string # The date to start analysing the budget from. This will be bumped out to make full periods as necessary. (required, e.g. 2016-11-01)
   --end-date: string # The date to stop analysing the budget from. This will be bumped out to make full periods as necessary. (required, e.g. 2016-11-30)
-]: nothing -> table<category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, expense: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, income: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, is_transfer: bool> {
+]: nothing -> oneof<table<category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, expense: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, income: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, is_transfer: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1857,7 +1880,7 @@ export def "get-users-id-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string> {
+]: nothing -> oneof<table<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1899,7 +1922,7 @@ export def "post-users-id-categories" [
   --refund-behaviour: string@refund-behaviour-completer # Set the refund behaviour of the category. (nullable, e.g. credits_are_refunds)
   --roll-up: oneof<nothing, bool> # Set the category to be rolled up into its parent category. (e.g. false)
   title: string # A title for the category. (e.g. Food)
-]: any -> record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string> {
+]: any -> oneof<record<children: list<any>, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1937,7 +1960,7 @@ export def "get-users-id-category-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, created_at: string, id: int, payee_matches: string, updated_at: string> {
+]: nothing -> oneof<table<category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, created_at: string, id: int, payee_matches: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1974,7 +1997,7 @@ export def "get-users-id-events" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --start-date: string # Return the events from and including this date. (required, e.g. 2020-10-01)
   --end-date: string # Return the events until and including this date. (required, e.g. 2020-10-30)
-]: nothing -> table<amount: float, amount_in_base_currency: float, category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, colour: string, currency_code: string, date: string, id: string, infinite_series: bool, note: string, repeat_interval: int, repeat_type: string, scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, series_id: int, series_start_id: string> {
+]: nothing -> oneof<table<amount: float, amount_in_base_currency: float, category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, colour: string, currency_code: string, date: string, id: string, infinite_series: bool, note: string, repeat_interval: int, repeat_type: string, scenario: record<achieve_date: string, closing_balance: float, closing_balance_date: string, created_at: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, description: string, id: int, interest_rate: float, interest_rate_repeat_id: int, maximum_value: float, minimum_value: float, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, title: string, type: string, updated_at: string>, series_id: int, series_start_id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2047,7 +2070,7 @@ export def "get-users-id-institutions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<created_at: string, currency_code: string, id: int, title: string, updated_at: string> {
+]: nothing -> oneof<table<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2084,7 +2107,7 @@ export def "post-users-id-institutions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   currency_code: string # A currency code for the institution. (e.g. NZD)
   title: string # A title for the institution. (e.g. Bank of Foo)
-]: any -> record<created_at: string, currency_code: string, id: int, title: string, updated_at: string> {
+]: any -> oneof<record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2122,7 +2145,7 @@ export def "get-users-id-labels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2157,7 +2180,7 @@ export def "get-users-id-saved-searches" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<created_at: string, id: int, title: string, updated_at: string> {
+]: nothing -> oneof<table<created_at: string, id: int, title: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2192,7 +2215,7 @@ export def "get-users-id-transaction-accounts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string> {
+]: nothing -> oneof<table<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record<created_at: string, currency_code: string, id: int, title: string, updated_at: string>, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2235,7 +2258,7 @@ export def "get-users-id-transactions" [
   --needs-review: int # Limit to transactions that need to be reviewed. (e.g. 1)
   --search: string # Limit to transactions matching a keyword search string. The provided string is matched against the transaction amount, account name, payee, category title, note, labels, and the date in ISO 8601 format. (e.g. Paypal)
   --page: int # Choose a particular page of the results. (e.g. 3)
-]: nothing -> table<amount: float, amount_in_base_currency: float, category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, cheque_number: string, closing_balance: float, created_at: string, date: string, id: int, is_transfer: bool, labels: list<string>, memo: string, needs_review: bool, note: string, original_payee: string, payee: string, status: string, transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string, upload_source: string> {
+]: nothing -> oneof<table<amount: float, amount_in_base_currency: float, category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, cheque_number: string, closing_balance: float, created_at: string, date: string, id: int, is_transfer: bool, labels: list<string>, memo: string, needs_review: bool, note: string, original_payee: string, payee: string, status: string, transaction_account: record<created_at: string, currency_code: string, current_balance: float, current_balance_date: string, current_balance_exchange_rate: float, current_balance_in_base_currency: float, id: int, institution: record, name: string, number: string, safe_balance: float, safe_balance_in_base_currency: float, starting_balance: float, starting_balance_date: string, type: string, updated_at: string>, type: string, updated_at: string, upload_source: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2277,7 +2300,7 @@ export def "get-users-id-trend-analysis" [
   --end-date: string # The date to stop analysing the budget from. This will be bumped out to make full periods as necessary. (required, e.g. 2016-11-30)
   --categories: string # A comma-separated list of category IDs to analyse. (required, e.g. 42,49)
   --scenarios: string # A comma-separated list of scenario IDs to analyse. You're likely going to want to include all a user's scenarios here, unless you have reason to only analyse for a subset of scenarios. Regardless of what scenarios are analysed, all actuals (transactions) across all accounts will be included. (required, e.g. 11,29)
-]: nothing -> table<category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, expense: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, income: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, is_transfer: bool> {
+]: nothing -> oneof<table<category: record<children: list, colour: string, created_at: string, id: int, is_bill: bool, is_transfer: bool, parent_id: int, refund_behaviour: string, roll_up: bool, title: string, updated_at: string>, expense: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, income: record<average_actual_amount: float, average_forecast_amount: float, currency_code: string, end_date: string, periods: list, start_date: string, total_actual_amount: float, total_forecast_amount: float, total_over_by: float, total_under_by: float>, is_transfer: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-developer-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

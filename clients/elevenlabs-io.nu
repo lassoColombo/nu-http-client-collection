@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -137,9 +161,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-generated-items-v1-history-get" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-generated-items-v1-history-get" "delete-history-items-v1-history-delete-post" "download-history-items-v1-history-download-post" "delete-history-item-v1-history-history-item-id-delete" "get-audio-from-history-item-v1-history-history-item-id-audio-get" "text-to-speech-v1-text-to-speech-voice-id-post" "text-to-speech-v1-text-to-speech-voice-id-stream-post" "get-user-info-v1-user-get" "get-user-subscription-info-v1-user-subscription-get" "get-voices-v1-voices-get" "add-voice-v1-voices-add-post" "get-default-voice-settings-v1-voices-settings-default-get" "delete-voice-v1-voices-voice-id-delete" "get-voice-v1-voices-voice-id-get" "edit-voice-v1-voices-voice-id-edit-post" "delete-sample-v1-voices-voice-id-samples-sample-id-delete" "get-audio-from-sample-v1-voices-voice-id-samples-sample-id-audio-get" "get-voice-settings-v1-voices-voice-id-settings-get" "edit-voice-settings-v1-voices-voice-id-settings-edit-post" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -172,7 +196,7 @@ export def "get-generated-items-v1-history-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programatically. You can view your xi-api-key using the 'Profile' tab on the website.
-]: nothing -> record<history: table<character_count_change_from: int, character_count_change_to: int, content_type: string, date_unix: int, feedback: record, history_item_id: string, request_id: string, settings: record, state: string, text: string, voice_id: string, voice_name: string>> {
+]: nothing -> oneof<record<history: table<character_count_change_from: int, character_count_change_to: int, content_type: string, date_unix: int, feedback: record, history_item_id: string, request_id: string, settings: record, state: string, text: string, voice_id: string, voice_name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/history" $auth.query)
@@ -360,7 +384,6 @@ export def "get-audio-from-history-item-v1-history-history-item-id-audio-get" [
 #
 # POST /v1/text-to-speech/{voice_id}
 # operationId: Text_to_speech_v1_text_to_speech__voice_id__post
-# --voice_settings shape: {similarity_boost: float, stability: float}
 export def "text-to-speech-v1-text-to-speech-voice-id-post" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -405,7 +428,6 @@ export def "text-to-speech-v1-text-to-speech-voice-id-post" [
 #
 # POST /v1/text-to-speech/{voice_id}/stream
 # operationId: Text_to_speech_v1_text_to_speech__voice_id__stream_post
-# --voice_settings shape: {similarity_boost: float, stability: float}
 export def "text-to-speech-v1-text-to-speech-voice-id-stream-post" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -461,7 +483,7 @@ export def "get-user-info-v1-user-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programatically. You can view your xi-api-key using the 'Profile' tab on the website.
-]: nothing -> record<is_new_user: bool, subscription: record<allowed_to_extend_character_limit: bool, available_models: list<record>, can_extend_character_limit: bool, can_extend_voice_limit: bool, can_use_delayed_payment_methods: bool, can_use_instant_voice_cloning: bool, can_use_professional_voice_cloning: bool, character_count: int, character_limit: int, currency: string, next_character_count_reset_unix: int, professional_voice_limit: int, status: string, tier: string, voice_limit: int>, xi_api_key: string> {
+]: nothing -> oneof<record<is_new_user: bool, subscription: record<allowed_to_extend_character_limit: bool, available_models: list<record>, can_extend_character_limit: bool, can_extend_voice_limit: bool, can_use_delayed_payment_methods: bool, can_use_instant_voice_cloning: bool, can_use_professional_voice_cloning: bool, character_count: int, character_limit: int, currency: string, next_character_count_reset_unix: int, professional_voice_limit: int, status: string, tier: string, voice_limit: int>, xi_api_key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/user" $auth.query)
@@ -498,7 +520,7 @@ export def "get-user-subscription-info-v1-user-subscription-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programatically. You can view your xi-api-key using the 'Profile' tab on the website.
-]: nothing -> record<allowed_to_extend_character_limit: bool, available_models: table<display_name: string, model_id: string, supported_language: list>, can_extend_character_limit: bool, can_extend_voice_limit: bool, can_use_delayed_payment_methods: bool, can_use_instant_voice_cloning: bool, can_use_professional_voice_cloning: bool, character_count: int, character_limit: int, currency: string, next_character_count_reset_unix: int, next_invoice: record<amount_due_cents: int, next_payment_attempt_unix: int>, professional_voice_limit: int, status: string, tier: string, voice_limit: int> {
+]: nothing -> oneof<record<allowed_to_extend_character_limit: bool, available_models: table<display_name: string, model_id: string, supported_language: list>, can_extend_character_limit: bool, can_extend_voice_limit: bool, can_use_delayed_payment_methods: bool, can_use_instant_voice_cloning: bool, can_use_professional_voice_cloning: bool, character_count: int, character_limit: int, currency: string, next_character_count_reset_unix: int, next_invoice: record<amount_due_cents: int, next_payment_attempt_unix: int>, professional_voice_limit: int, status: string, tier: string, voice_limit: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/user/subscription" $auth.query)
@@ -535,7 +557,7 @@ export def "get-voices-v1-voices-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programatically. You can view your xi-api-key using the 'Profile' tab on the website.
-]: nothing -> record<voices: table<available_for_tiers: list, category: string, description: string, fine_tuning: record, labels: record, name: string, preview_url: string, samples: list, settings: record, voice_id: string>> {
+]: nothing -> oneof<record<voices: table<available_for_tiers: list, category: string, description: string, fine_tuning: record, labels: record, name: string, preview_url: string, samples: list, settings: record, voice_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/voices" $auth.query)
@@ -576,7 +598,7 @@ export def "add-voice-v1-voices-add-post" [
   files: list<string> # One or more audio files to clone the voice from
   --labels: string # Serialized labels dictionary for the voice.
   name: string # The name that identifies this voice. This will be displayed in the dropdown of the website.
-]: any -> record<voice_id: string> {
+]: any -> oneof<record<voice_id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -617,7 +639,7 @@ export def "get-default-voice-settings-v1-voices-settings-default-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<similarity_boost: float, stability: float> {
+]: nothing -> oneof<record<similarity_boost: float, stability: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/voices/settings/default" $auth.query)
@@ -693,7 +715,7 @@ export def "get-voice-v1-voices-voice-id-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --with-settings: oneof<nothing, bool> # If set will return settings information corresponding to the voice, requires authorization. (default: false)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programatically. You can view your xi-api-key using the 'Profile' tab on the website.
-]: nothing -> record<available_for_tiers: list<string>, category: string, description: string, fine_tuning: record<fine_tuning_requested: bool, finetuning_state: string, is_allowed_to_fine_tune: bool, model_id: string, slice_ids: list<string>, verification_attempts: list<record>, verification_attempts_count: int, verification_failures: list<string>>, labels: record, name: string, preview_url: string, samples: table<file_name: string, hash: string, mime_type: string, sample_id: string, size_bytes: int>, settings: record<similarity_boost: float, stability: float>, voice_id: string> {
+]: nothing -> oneof<record<available_for_tiers: list<string>, category: string, description: string, fine_tuning: record<fine_tuning_requested: bool, finetuning_state: string, is_allowed_to_fine_tune: bool, model_id: string, slice_ids: list<string>, verification_attempts: list<record>, verification_attempts_count: int, verification_failures: list<string>>, labels: record, name: string, preview_url: string, samples: table<file_name: string, hash: string, mime_type: string, sample_id: string, size_bytes: int>, settings: record<similarity_boost: float, stability: float>, voice_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_id | is-empty) { error make --unspanned { msg: "path parameter 'voice_id' must be non-empty" } }
@@ -863,7 +885,7 @@ export def "get-voice-settings-v1-voices-voice-id-settings-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programatically. You can view your xi-api-key using the 'Profile' tab on the website.
-]: nothing -> record<similarity_boost: float, stability: float> {
+]: nothing -> oneof<record<similarity_boost: float, stability: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($voice_id | is-empty) { error make --unspanned { msg: "path parameter 'voice_id' must be non-empty" } }

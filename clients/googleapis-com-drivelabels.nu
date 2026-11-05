@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -123,9 +147,9 @@ def role-completer [] { ["APPLIER" "EDITOR" "LABEL_ROLE_UNSPECIFIED" "ORGANIZER"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "drivelabels-labels-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["drivelabels-labels-list" "drivelabels-labels-create" "drivelabels-limits-get-label" "drivelabels-labels-revisions-permissions-delete" "drivelabels-users-get-capabilities" "drivelabels-labels-delta" "drivelabels-labels-disable" "drivelabels-labels-enable" "drivelabels-labels-publish" "drivelabels-labels-update-label-copy-mode" "drivelabels-labels-revisions-locks-list" "drivelabels-labels-revisions-permissions-list" "drivelabels-labels-revisions-update-permissions" "drivelabels-labels-revisions-permissions-create" "drivelabels-labels-revisions-permissions-batch-delete" "drivelabels-labels-revisions-permissions-batch-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -176,7 +200,7 @@ export def "drivelabels-labels-list" [
   --published-only: oneof<nothing, bool> # Whether to include only published labels in the results. * When `true`, only the current published label revisions are returned. Disabled labels are included. Returned label resource names reference the published revision (`labels/{id}/{revision_id}`). * When `false`, the current label revisions are returned, which might not be published. Returned label resource names don't reference a specific revision (`labels/{id}`).
   --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. This will return all Labels within the customer.
   --view: string@view-completer # When specified, only certain fields belonging to the indicated view are returned.
-]: nothing -> record<labels: table<appliedCapabilities: record, appliedLabelPolicy: record, createTime: string, creator: record, customer: string, disableTime: string, disabler: record, displayHints: record, fields: list, id: string, labelType: string, learnMoreUri: string, lifecycle: record, lockStatus: record, name: string, properties: record, publishTime: string, publisher: record, revisionCreateTime: string, revisionCreator: record, revisionId: string, schemaCapabilities: record>, nextPageToken: string> {
+]: nothing -> oneof<record<labels: table<appliedCapabilities: record, appliedLabelPolicy: record, createTime: string, creator: record, customer: string, disableTime: string, disabler: record, displayHints: record, fields: list, id: string, labelType: string, learnMoreUri: string, lifecycle: record, lockStatus: record, name: string, properties: record, publishTime: string, publisher: record, revisionCreateTime: string, revisionCreator: record, revisionId: string, schemaCapabilities: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "customer" $customer "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "minimumRole" $minimum_role "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "publishedOnly" $published_only "scalar") (serialize-qp "useAdminAccess" $use_admin_access "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -201,17 +225,6 @@ export def "drivelabels-labels-list" [
 #
 # POST /v2beta/labels
 # operationId: drivelabels.labels.create
-# --appliedCapabilities shape: {canApply?: bool, canRead?: bool, canRemove?: bool}
-# --appliedLabelPolicy shape: {copyMode?: "COPY_MODE_UNSPECIFIED"|"DO_NOT_COPY"|"ALWAYS_COPY"|"COPY_APPLIABLE"}
-# --creator shape: {person?: string}
-# --disabler shape: {person?: string}
-# --displayHints shape: {disabled?: bool, hiddenInSearch?: bool, priority?: string, shownInApply?: bool}
-# --fields item shape: {appliedCapabilities?: record, creator?: record, dateOptions?: record, disabler?: record, displayHints?: record, integerOptions?: record, lifecycle?: record, lockStatus?: record, properties?: record, publisher?: record, schemaCapabilities?: record, selectionOptions?: record, textOptions?: record, updater?: record, userOptions?: record}
-# --lifecycle shape: {disabledPolicy?: record}
-# --properties shape: {description?: string, title?: string}
-# --publisher shape: {person?: string}
-# --revisionCreator shape: {person?: string}
-# --schemaCapabilities shape: {canDelete?: bool, canDisable?: bool, canEnable?: bool, canUpdate?: bool}
 export def "drivelabels-labels-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -249,7 +262,7 @@ export def "drivelabels-labels-create" [
   --publisher: record # Information about a user. — shape: {person?: string}
   --revision-creator: record # Information about a user. — shape: {person?: string}
   --schema-capabilities: record # The capabilities related to this label when editing the label. — shape: {canDelete?: bool, canDisable?: bool, canEnable?: bool, canUpdate?: bool}
-]: any -> record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: table<appliedCapabilities: record, createTime: string, creator: record, dateOptions: record, disableTime: string, disabler: record, displayHints: record, id: string, integerOptions: record, lifecycle: record, lockStatus: record, properties: record, publisher: record, queryKey: string, schemaCapabilities: record, selectionOptions: record, textOptions: record, updateTime: string, updater: record, userOptions: record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record<hideInSearch: bool, showInApply: bool>, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>> {
+]: any -> oneof<record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: table<appliedCapabilities: record, createTime: string, creator: record, dateOptions: record, disableTime: string, disabler: record, displayHints: record, id: string, integerOptions: record, lifecycle: record, lockStatus: record, properties: record, publisher: record, queryKey: string, schemaCapabilities: record, selectionOptions: record, textOptions: record, updateTime: string, updater: record, userOptions: record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record<hideInSearch: bool, showInApply: bool>, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -299,7 +312,7 @@ export def "drivelabels-limits-get-label" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --name: string # Required. Label revision resource name Must be: "limits/label"
-]: nothing -> record<fieldLimits: record<dateLimits: record<maxValue: record, minValue: record>, integerLimits: record<maxValue: string, minValue: string>, longTextLimits: record<maxLength: int, minLength: int>, maxDescriptionLength: int, maxDisplayNameLength: int, maxIdLength: int, selectionLimits: record<listLimits: record, maxChoices: int, maxDeletedChoices: int, maxDisplayNameLength: int, maxIdLength: int>, textLimits: record<maxLength: int, minLength: int>, userLimits: record<listLimits: record>>, maxDeletedFields: int, maxDescriptionLength: int, maxDraftRevisions: int, maxFields: int, maxTitleLength: int, name: string> {
+]: nothing -> oneof<record<fieldLimits: record<dateLimits: record<maxValue: record, minValue: record>, integerLimits: record<maxValue: string, minValue: string>, longTextLimits: record<maxLength: int, minLength: int>, maxDescriptionLength: int, maxDisplayNameLength: int, maxIdLength: int, selectionLimits: record<listLimits: record, maxChoices: int, maxDeletedChoices: int, maxDisplayNameLength: int, maxIdLength: int>, textLimits: record<maxLength: int, minLength: int>, userLimits: record<listLimits: record>>, maxDeletedFields: int, maxDescriptionLength: int, maxDraftRevisions: int, maxFields: int, maxTitleLength: int, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -348,7 +361,7 @@ export def "drivelabels-labels-revisions-permissions-delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
   --write-control-required-revision-id: string # The revision_id of the label that the write request will be applied to. If this is not the latest revision of the label, the request will not be processed and will return a 400 Bad Request error.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -399,7 +412,7 @@ export def "drivelabels-users-get-capabilities" [
   --customer: string # The customer to scope this request to. For example: "customers/abcd1234". If unset, will return settings within the current customer.
   --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server verifies that the user is an admin for the label before allowing access.
   --view: string@view-completer # When specified, only certain fields belonging to the indicated view are returned.
-]: nothing -> record<canAccessLabelManager: bool, canAdministrateLabels: bool, canCreateAdminLabels: bool, canCreateSharedLabels: bool, name: string> {
+]: nothing -> oneof<record<canAccessLabelManager: bool, canAdministrateLabels: bool, canCreateAdminLabels: bool, canCreateSharedLabels: bool, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -425,8 +438,6 @@ export def "drivelabels-users-get-capabilities" [
 #
 # POST /v2beta/{name}:delta
 # operationId: drivelabels.labels.delta
-# --requests item shape: {createField?: record, createSelectionChoice?: record, deleteField?: record, deleteSelectionChoice?: record, disableField?: record, disableSelectionChoice?: record, enableField?: record, enableSelectionChoice?: record, updateField?: record, updateFieldType?: record, updateLabel?: record, updateSelectionChoiceProperties?: record}
-# --writeControl shape: {requiredRevisionId?: string}
 export def "drivelabels-labels-delta" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -454,7 +465,7 @@ export def "drivelabels-labels-delta" [
   --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
   --view: string@view-completer # When specified, only certain fields belonging to the indicated view will be returned.
   --write-control: record # Provides control over how write requests are executed. When not specified, the last write wins. — shape: {requiredRevisionId?: string}
-]: any -> record<responses: table<createField: record, createSelectionChoice: record, deleteField: record, deleteSelectionChoice: record, disableField: record, disableSelectionChoice: record, enableField: record, enableSelectionChoice: record, updateField: record, updateFieldType: record, updateLabel: record, updateSelectionChoiceProperties: record>, updatedLabel: record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: list<record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>>> {
+]: any -> oneof<record<responses: table<createField: record, createSelectionChoice: record, deleteField: record, deleteSelectionChoice: record, disableField: record, disableSelectionChoice: record, enableField: record, enableSelectionChoice: record, updateField: record, updateFieldType: record, updateLabel: record, updateSelectionChoiceProperties: record>, updatedLabel: record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: list<record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -483,8 +494,6 @@ export def "drivelabels-labels-delta" [
 #
 # POST /v2beta/{name}:disable
 # operationId: drivelabels.labels.disable
-# --disabledPolicy shape: {hideInSearch?: bool, showInApply?: bool}
-# --writeControl shape: {requiredRevisionId?: string}
 export def "drivelabels-labels-disable" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -512,7 +521,7 @@ export def "drivelabels-labels-disable" [
   --update-mask: string # The fields that should be updated. At least one field must be specified. The root `disabled_policy` is implied and should not be specified. A single `*` can be used as short-hand for updating every field. (format: google-fieldmask)
   --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
   --write-control: record # Provides control over how write requests are executed. When not specified, the last write wins. — shape: {requiredRevisionId?: string}
-]: any -> record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: table<appliedCapabilities: record, createTime: string, creator: record, dateOptions: record, disableTime: string, disabler: record, displayHints: record, id: string, integerOptions: record, lifecycle: record, lockStatus: record, properties: record, publisher: record, queryKey: string, schemaCapabilities: record, selectionOptions: record, textOptions: record, updateTime: string, updater: record, userOptions: record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record<hideInSearch: bool, showInApply: bool>, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>> {
+]: any -> oneof<record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: table<appliedCapabilities: record, createTime: string, creator: record, dateOptions: record, disableTime: string, disabler: record, displayHints: record, id: string, integerOptions: record, lifecycle: record, lockStatus: record, properties: record, publisher: record, queryKey: string, schemaCapabilities: record, selectionOptions: record, textOptions: record, updateTime: string, updater: record, userOptions: record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record<hideInSearch: bool, showInApply: bool>, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -541,7 +550,6 @@ export def "drivelabels-labels-disable" [
 #
 # POST /v2beta/{name}:enable
 # operationId: drivelabels.labels.enable
-# --writeControl shape: {requiredRevisionId?: string}
 export def "drivelabels-labels-enable" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -567,7 +575,7 @@ export def "drivelabels-labels-enable" [
   --language-code: string # The BCP-47 language code to use for evaluating localized field labels. When not specified, values in the default configured language will be used.
   --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
   --write-control: record # Provides control over how write requests are executed. When not specified, the last write wins. — shape: {requiredRevisionId?: string}
-]: any -> record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: table<appliedCapabilities: record, createTime: string, creator: record, dateOptions: record, disableTime: string, disabler: record, displayHints: record, id: string, integerOptions: record, lifecycle: record, lockStatus: record, properties: record, publisher: record, queryKey: string, schemaCapabilities: record, selectionOptions: record, textOptions: record, updateTime: string, updater: record, userOptions: record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record<hideInSearch: bool, showInApply: bool>, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>> {
+]: any -> oneof<record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: table<appliedCapabilities: record, createTime: string, creator: record, dateOptions: record, disableTime: string, disabler: record, displayHints: record, id: string, integerOptions: record, lifecycle: record, lockStatus: record, properties: record, publisher: record, queryKey: string, schemaCapabilities: record, selectionOptions: record, textOptions: record, updateTime: string, updater: record, userOptions: record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record<hideInSearch: bool, showInApply: bool>, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -596,7 +604,6 @@ export def "drivelabels-labels-enable" [
 #
 # POST /v2beta/{name}:publish
 # operationId: drivelabels.labels.publish
-# --writeControl shape: {requiredRevisionId?: string}
 export def "drivelabels-labels-publish" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -622,7 +629,7 @@ export def "drivelabels-labels-publish" [
   --language-code: string # The BCP-47 language code to use for evaluating localized field labels. When not specified, values in the default configured language will be used.
   --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
   --write-control: record # Provides control over how write requests are executed. When not specified, the last write wins. — shape: {requiredRevisionId?: string}
-]: any -> record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: table<appliedCapabilities: record, createTime: string, creator: record, dateOptions: record, disableTime: string, disabler: record, displayHints: record, id: string, integerOptions: record, lifecycle: record, lockStatus: record, properties: record, publisher: record, queryKey: string, schemaCapabilities: record, selectionOptions: record, textOptions: record, updateTime: string, updater: record, userOptions: record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record<hideInSearch: bool, showInApply: bool>, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>> {
+]: any -> oneof<record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: table<appliedCapabilities: record, createTime: string, creator: record, dateOptions: record, disableTime: string, disabler: record, displayHints: record, id: string, integerOptions: record, lifecycle: record, lockStatus: record, properties: record, publisher: record, queryKey: string, schemaCapabilities: record, selectionOptions: record, textOptions: record, updateTime: string, updater: record, userOptions: record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record<hideInSearch: bool, showInApply: bool>, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -677,7 +684,7 @@ export def "drivelabels-labels-update-label-copy-mode" [
   --language-code: string # The BCP-47 language code to use for evaluating localized field labels. When not specified, values in the default configured language will be used.
   --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
   --view: string@view-completer # When specified, only certain fields belonging to the indicated view will be returned.
-]: any -> record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: table<appliedCapabilities: record, createTime: string, creator: record, dateOptions: record, disableTime: string, disabler: record, displayHints: record, id: string, integerOptions: record, lifecycle: record, lockStatus: record, properties: record, publisher: record, queryKey: string, schemaCapabilities: record, selectionOptions: record, textOptions: record, updateTime: string, updater: record, userOptions: record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record<hideInSearch: bool, showInApply: bool>, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>> {
+]: any -> oneof<record<appliedCapabilities: record<canApply: bool, canRead: bool, canRemove: bool>, appliedLabelPolicy: record<copyMode: string>, createTime: string, creator: record<person: string>, customer: string, disableTime: string, disabler: record<person: string>, displayHints: record<disabled: bool, hiddenInSearch: bool, priority: string, shownInApply: bool>, fields: table<appliedCapabilities: record, createTime: string, creator: record, dateOptions: record, disableTime: string, disabler: record, displayHints: record, id: string, integerOptions: record, lifecycle: record, lockStatus: record, properties: record, publisher: record, queryKey: string, schemaCapabilities: record, selectionOptions: record, textOptions: record, updateTime: string, updater: record, userOptions: record>, id: string, labelType: string, learnMoreUri: string, lifecycle: record<disabledPolicy: record<hideInSearch: bool, showInApply: bool>, hasUnpublishedChanges: bool, state: string>, lockStatus: record<locked: bool>, name: string, properties: record<description: string, title: string>, publishTime: string, publisher: record<person: string>, revisionCreateTime: string, revisionCreator: record<person: string>, revisionId: string, schemaCapabilities: record<canDelete: bool, canDisable: bool, canEnable: bool, canUpdate: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -730,7 +737,7 @@ export def "drivelabels-labels-revisions-locks-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of Locks to return per page. Default: 100. Max: 200.
   --page-token: string # The token of the page to return.
-]: nothing -> record<labelLocks: table<capabilities: record, choiceId: string, createTime: string, creator: record, deleteTime: string, fieldId: string, name: string, state: string>, nextPageToken: string> {
+]: nothing -> oneof<record<labelLocks: table<capabilities: record, choiceId: string, createTime: string, creator: record, deleteTime: string, fieldId: string, name: string, state: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -781,7 +788,7 @@ export def "drivelabels-labels-revisions-permissions-list" [
   --page-size: int # Maximum number of permissions to return per page. Default: 50. Max: 200.
   --page-token: string # The token of the page to return.
   --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access.
-]: nothing -> record<labelPermissions: table<audience: string, email: string, group: string, name: string, person: string, role: string>, nextPageToken: string> {
+]: nothing -> oneof<record<labelPermissions: table<audience: string, email: string, group: string, name: string, person: string, role: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -836,7 +843,7 @@ export def "drivelabels-labels-revisions-update-permissions" [
   --name: string # Resource name of this permission.
   --person: string # Person resource name.
   --role: string@role-completer # The role the principal should have.
-]: any -> record<audience: string, email: string, group: string, name: string, person: string, role: string> {
+]: any -> oneof<record<audience: string, email: string, group: string, name: string, person: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -894,7 +901,7 @@ export def "drivelabels-labels-revisions-permissions-create" [
   --name: string # Resource name of this permission.
   --person: string # Person resource name.
   --role: string@role-completer # The role the principal should have.
-]: any -> record<audience: string, email: string, group: string, name: string, person: string, role: string> {
+]: any -> oneof<record<audience: string, email: string, group: string, name: string, person: string, role: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -923,7 +930,6 @@ export def "drivelabels-labels-revisions-permissions-create" [
 #
 # POST /v2beta/{parent}/permissions:batchDelete
 # operationId: drivelabels.labels.revisions.permissions.batchDelete
-# --requests item shape: {name?: string, useAdminAccess?: bool}
 export def "drivelabels-labels-revisions-permissions-batch-delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -948,7 +954,7 @@ export def "drivelabels-labels-revisions-permissions-batch-delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --requests: list # Required. The request message specifying the resources to update. — item shape: {name?: string, useAdminAccess?: bool}
   --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access. If this is set, the use_admin_access field in the DeleteLabelPermissionRequest messages must either be empty or match this field.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -977,7 +983,6 @@ export def "drivelabels-labels-revisions-permissions-batch-delete" [
 #
 # POST /v2beta/{parent}/permissions:batchUpdate
 # operationId: drivelabels.labels.revisions.permissions.batchUpdate
-# --requests item shape: {labelPermission?: record, parent?: string, useAdminAccess?: bool}
 export def "drivelabels-labels-revisions-permissions-batch-update" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1002,7 +1007,7 @@ export def "drivelabels-labels-revisions-permissions-batch-update" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --requests: list # Required. The request message specifying the resources to update. — item shape: {labelPermission?: record, parent?: string, useAdminAccess?: bool}
   --use-admin-access: oneof<nothing, bool> # Set to `true` in order to use the user's admin credentials. The server will verify the user is an admin for the Label before allowing access. If this is set, the use_admin_access field in the UpdateLabelPermissionRequest messages must either be empty or match this field.
-]: any -> record<permissions: table<audience: string, email: string, group: string, name: string, person: string, role: string>> {
+]: any -> oneof<record<permissions: table<audience: string, email: string, group: string, name: string, person: string, role: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

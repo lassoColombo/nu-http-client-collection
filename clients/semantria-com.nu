@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -117,9 +141,9 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-blacklist-items" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["delete-blacklist-items" "get-blacklist" "add-blacklist" "update-blacklist" "delete-categories" "get-categories" "add-categories" "update-categories" "queue-collection" "retrieve-processed-collections" "cancel-collection" "receive-collection-analytic-data" "delete-configurations" "get-configurations" "add-configurations" "update-configurations" "queue-document" "queue-batch-of-documents" "retrieve-processed-documents" "cancel-document" "receive-document-analytic-data" "delete-entities" "get-entities" "add-entities" "update-entities" "get-features" "delete-phrases" "get-phrases" "add-phrases" "update-phrases" "delete-queries" "get-queries" "add-queries" "update-queries" "get-statistic" "get-status" "get-subscription" "delete-taxonomy" "get-taxonomy" "add-taxonomy" "update-taxonomy" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -197,7 +221,7 @@ export def "get-blacklist" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration blacklist linked to.
-]: nothing -> table<id: string, modified: string, name: string> {
+]: nothing -> oneof<table<id: string, modified: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
@@ -237,7 +261,7 @@ export def "add-blacklist" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration blacklist linked to.
   --body: record
-]: any -> table<id: string, modified: string, name: string> {
+]: any -> oneof<table<id: string, modified: string, name: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -280,7 +304,7 @@ export def "update-blacklist" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration blacklist linked to.
   --body: record
-]: any -> table<id: string, modified: string, name: string> {
+]: any -> oneof<table<id: string, modified: string, name: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -365,7 +389,7 @@ export def "get-categories" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration user categories linked to.
-]: nothing -> table<id: string, modified: string, name: string, samples: list<string>, weight: float> {
+]: nothing -> oneof<table<id: string, modified: string, name: string, samples: list<string>, weight: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
@@ -405,7 +429,7 @@ export def "add-categories" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration user categories linked to.
   --body: record
-]: any -> table<id: string, modified: string, name: string, samples: list<string>, weight: float> {
+]: any -> oneof<table<id: string, modified: string, name: string, samples: list<string>, weight: float>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -448,7 +472,7 @@ export def "update-categories" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration user categories linked to.
   --body: record
-]: any -> table<id: string, modified: string, name: string, samples: list<string>, weight: float> {
+]: any -> oneof<table<id: string, modified: string, name: string, samples: list<string>, weight: float>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -491,7 +515,7 @@ export def "queue-collection" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration used for analysis.
   --body: record
-]: any -> record<documents: list<string>, id: string, job_id: string, tag: string> {
+]: any -> oneof<record<documents: list<string>, id: string, job_id: string, tag: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -533,7 +557,7 @@ export def "retrieve-processed-collections" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration used for analysis.
-]: nothing -> record<config_id: string, entities: table<count: int, entity_type: string, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int, title: string, type: string>, facets: table<attributes: list, count: int, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int>, id: string, job_id: string, status: string, tag: string, taxonomy: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, themes: table<mentions: list, normalized: string, phrases_count: int, sentiment_polarity: string, sentiment_score: float, stemmed: string, themes_count: int, title: string>, topics: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>> {
+]: nothing -> oneof<record<config_id: string, entities: table<count: int, entity_type: string, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int, title: string, type: string>, facets: table<attributes: list, count: int, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int>, id: string, job_id: string, status: string, tag: string, taxonomy: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, themes: table<mentions: list, normalized: string, phrases_count: int, sentiment_polarity: string, sentiment_score: float, stemmed: string, themes_count: int, title: string>, topics: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
@@ -614,7 +638,7 @@ export def "receive-collection-analytic-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration used for analysis.
-]: nothing -> record<config_id: string, entities: table<count: int, entity_type: string, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int, title: string, type: string>, facets: table<attributes: list, count: int, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int>, id: string, job_id: string, status: string, tag: string, taxonomy: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, themes: table<mentions: list, normalized: string, phrases_count: int, sentiment_polarity: string, sentiment_score: float, stemmed: string, themes_count: int, title: string>, topics: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>> {
+]: nothing -> oneof<record<config_id: string, entities: table<count: int, entity_type: string, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int, title: string, type: string>, facets: table<attributes: list, count: int, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int>, id: string, job_id: string, status: string, tag: string, taxonomy: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, themes: table<mentions: list, normalized: string, phrases_count: int, sentiment_polarity: string, sentiment_score: float, stemmed: string, themes_count: int, title: string>, topics: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -694,7 +718,7 @@ export def "get-configurations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> table<auto_response: bool, callback: string, categories_threshold: float, chars_threshold: int, collection: record<attribute_mentions_limit: int, concept_topics_limit: int, facet_atts_limit: int, facet_mentions_limit: int, facets_limit: int, named_entities_limit: int, named_mentions_limit: int, query_topics_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int>, config_id: string, document: record<auto_categories_limit: int, concept_topics_limit: int, detect_language: bool, entity_themes_limit: int, intentions: bool, model_sentiment: bool, named_entities_limit: int, named_mentions_limit: int, named_opinions_limit: int, named_relations_limit: int, phrases_limit: int, pos_types: string, possible_phrases_limit: int, query_topics_limit: int, summary_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int, user_opinions_limit: int, user_relations_limit: int>, entities_threshold: int, from_template_config_id: string, is_primary: bool, language: string, modified: string, name: string, one_sentence: bool, process_html: bool, version: string> {
+]: nothing -> oneof<table<auto_response: bool, callback: string, categories_threshold: float, chars_threshold: int, collection: record<attribute_mentions_limit: int, concept_topics_limit: int, facet_atts_limit: int, facet_mentions_limit: int, facets_limit: int, named_entities_limit: int, named_mentions_limit: int, query_topics_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int>, config_id: string, document: record<auto_categories_limit: int, concept_topics_limit: int, detect_language: bool, entity_themes_limit: int, intentions: bool, model_sentiment: bool, named_entities_limit: int, named_mentions_limit: int, named_opinions_limit: int, named_relations_limit: int, phrases_limit: int, pos_types: string, possible_phrases_limit: int, query_topics_limit: int, summary_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int, user_opinions_limit: int, user_relations_limit: int>, entities_threshold: int, from_template_config_id: string, is_primary: bool, language: string, modified: string, name: string, one_sentence: bool, process_html: bool, version: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
@@ -732,7 +756,7 @@ export def "add-configurations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body: record
-]: any -> table<auto_response: bool, callback: string, categories_threshold: float, chars_threshold: int, collection: record<attribute_mentions_limit: int, concept_topics_limit: int, facet_atts_limit: int, facet_mentions_limit: int, facets_limit: int, named_entities_limit: int, named_mentions_limit: int, query_topics_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int>, config_id: string, document: record<auto_categories_limit: int, concept_topics_limit: int, detect_language: bool, entity_themes_limit: int, intentions: bool, model_sentiment: bool, named_entities_limit: int, named_mentions_limit: int, named_opinions_limit: int, named_relations_limit: int, phrases_limit: int, pos_types: string, possible_phrases_limit: int, query_topics_limit: int, summary_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int, user_opinions_limit: int, user_relations_limit: int>, entities_threshold: int, from_template_config_id: string, is_primary: bool, language: string, modified: string, name: string, one_sentence: bool, process_html: bool, version: string> {
+]: any -> oneof<table<auto_response: bool, callback: string, categories_threshold: float, chars_threshold: int, collection: record<attribute_mentions_limit: int, concept_topics_limit: int, facet_atts_limit: int, facet_mentions_limit: int, facets_limit: int, named_entities_limit: int, named_mentions_limit: int, query_topics_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int>, config_id: string, document: record<auto_categories_limit: int, concept_topics_limit: int, detect_language: bool, entity_themes_limit: int, intentions: bool, model_sentiment: bool, named_entities_limit: int, named_mentions_limit: int, named_opinions_limit: int, named_relations_limit: int, phrases_limit: int, pos_types: string, possible_phrases_limit: int, query_topics_limit: int, summary_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int, user_opinions_limit: int, user_relations_limit: int>, entities_threshold: int, from_template_config_id: string, is_primary: bool, language: string, modified: string, name: string, one_sentence: bool, process_html: bool, version: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -773,7 +797,7 @@ export def "update-configurations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --body: record
-]: any -> table<auto_response: bool, callback: string, categories_threshold: float, chars_threshold: int, collection: record<attribute_mentions_limit: int, concept_topics_limit: int, facet_atts_limit: int, facet_mentions_limit: int, facets_limit: int, named_entities_limit: int, named_mentions_limit: int, query_topics_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int>, config_id: string, document: record<auto_categories_limit: int, concept_topics_limit: int, detect_language: bool, entity_themes_limit: int, intentions: bool, model_sentiment: bool, named_entities_limit: int, named_mentions_limit: int, named_opinions_limit: int, named_relations_limit: int, phrases_limit: int, pos_types: string, possible_phrases_limit: int, query_topics_limit: int, summary_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int, user_opinions_limit: int, user_relations_limit: int>, entities_threshold: int, from_template_config_id: string, is_primary: bool, language: string, modified: string, name: string, one_sentence: bool, process_html: bool, version: string> {
+]: any -> oneof<table<auto_response: bool, callback: string, categories_threshold: float, chars_threshold: int, collection: record<attribute_mentions_limit: int, concept_topics_limit: int, facet_atts_limit: int, facet_mentions_limit: int, facets_limit: int, named_entities_limit: int, named_mentions_limit: int, query_topics_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int>, config_id: string, document: record<auto_categories_limit: int, concept_topics_limit: int, detect_language: bool, entity_themes_limit: int, intentions: bool, model_sentiment: bool, named_entities_limit: int, named_mentions_limit: int, named_opinions_limit: int, named_relations_limit: int, phrases_limit: int, pos_types: string, possible_phrases_limit: int, query_topics_limit: int, summary_limit: int, theme_mentions_limit: int, themes_limit: int, user_entities_limit: int, user_mentions_limit: int, user_opinions_limit: int, user_relations_limit: int>, entities_threshold: int, from_template_config_id: string, is_primary: bool, language: string, modified: string, name: string, one_sentence: bool, process_html: bool, version: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -815,7 +839,7 @@ export def "queue-document" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration used for analysis.
   --body: record
-]: any -> record<id: string, job_id: string, tag: string, text: string> {
+]: any -> oneof<record<id: string, job_id: string, tag: string, text: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -858,7 +882,7 @@ export def "queue-batch-of-documents" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration used for analysis.
   --body: record
-]: any -> record<id: string, job_id: string, tag: string, text: string> {
+]: any -> oneof<record<id: string, job_id: string, tag: string, text: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -900,7 +924,7 @@ export def "retrieve-processed-documents" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration used for analysis.
-]: nothing -> record<auto_categories: table<categories: list, sentiment_polarity: string, sentiment_score: float, strength_score: float, title: string, type: string>, config_id: string, details: table<is_imperative: bool, is_polar: bool, words: list>, entities: table<count: int, entity_type: string, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int, title: string, type: string>, id: string, intentions: table<evidence_phrase: string, type: string, what: string, who: string>, job_id: string, language: string, language_score: float, model_sentiment: record<mixed_score: float, model_name: string, negative_score: float, neutral_score: float, positive_score: float, sentiment_polarity: string>, opinions: table<quotation: string, sentiment_polarity: string, sentiment_score: float, speaker: float, topic: string, type: string>, phrases: table<intensifying_phrase: string, is_intensified: bool, is_negated: bool, negating_phrase: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, relations: table<confidence_score: float, entities: list, extra: string, relation_type: string, type: string>, sentiment_polarity: string, sentiment_score: float, source_text: string, status: string, summary: string, taxonomy: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, themes: table<mentions: list, normalized: string, phrases_count: int, sentiment_polarity: string, sentiment_score: float, stemmed: string, themes_count: int, title: string>, topics: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>> {
+]: nothing -> oneof<record<auto_categories: table<categories: list, sentiment_polarity: string, sentiment_score: float, strength_score: float, title: string, type: string>, config_id: string, details: table<is_imperative: bool, is_polar: bool, words: list>, entities: table<count: int, entity_type: string, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int, title: string, type: string>, id: string, intentions: table<evidence_phrase: string, type: string, what: string, who: string>, job_id: string, language: string, language_score: float, model_sentiment: record<mixed_score: float, model_name: string, negative_score: float, neutral_score: float, positive_score: float, sentiment_polarity: string>, opinions: table<quotation: string, sentiment_polarity: string, sentiment_score: float, speaker: float, topic: string, type: string>, phrases: table<intensifying_phrase: string, is_intensified: bool, is_negated: bool, negating_phrase: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, relations: table<confidence_score: float, entities: list, extra: string, relation_type: string, type: string>, sentiment_polarity: string, sentiment_score: float, source_text: string, status: string, summary: string, taxonomy: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, themes: table<mentions: list, normalized: string, phrases_count: int, sentiment_polarity: string, sentiment_score: float, stemmed: string, themes_count: int, title: string>, topics: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
@@ -981,7 +1005,7 @@ export def "receive-document-analytic-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration used for analysis.
-]: nothing -> record<auto_categories: table<categories: list, sentiment_polarity: string, sentiment_score: float, strength_score: float, title: string, type: string>, config_id: string, details: table<is_imperative: bool, is_polar: bool, words: list>, entities: table<count: int, entity_type: string, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int, title: string, type: string>, id: string, intentions: table<evidence_phrase: string, type: string, what: string, who: string>, job_id: string, language: string, language_score: float, model_sentiment: record<mixed_score: float, model_name: string, negative_score: float, neutral_score: float, positive_score: float, sentiment_polarity: string>, opinions: table<quotation: string, sentiment_polarity: string, sentiment_score: float, speaker: float, topic: string, type: string>, phrases: table<intensifying_phrase: string, is_intensified: bool, is_negated: bool, negating_phrase: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, relations: table<confidence_score: float, entities: list, extra: string, relation_type: string, type: string>, sentiment_polarity: string, sentiment_score: float, source_text: string, status: string, summary: string, taxonomy: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, themes: table<mentions: list, normalized: string, phrases_count: int, sentiment_polarity: string, sentiment_score: float, stemmed: string, themes_count: int, title: string>, topics: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>> {
+]: nothing -> oneof<record<auto_categories: table<categories: list, sentiment_polarity: string, sentiment_score: float, strength_score: float, title: string, type: string>, config_id: string, details: table<is_imperative: bool, is_polar: bool, words: list>, entities: table<count: int, entity_type: string, label: string, mentions: list, negative_count: int, neutral_count: int, positive_count: int, title: string, type: string>, id: string, intentions: table<evidence_phrase: string, type: string, what: string, who: string>, job_id: string, language: string, language_score: float, model_sentiment: record<mixed_score: float, model_name: string, negative_score: float, neutral_score: float, positive_score: float, sentiment_polarity: string>, opinions: table<quotation: string, sentiment_polarity: string, sentiment_score: float, speaker: float, topic: string, type: string>, phrases: table<intensifying_phrase: string, is_intensified: bool, is_negated: bool, negating_phrase: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, relations: table<confidence_score: float, entities: list, extra: string, relation_type: string, type: string>, sentiment_polarity: string, sentiment_score: float, source_text: string, status: string, summary: string, taxonomy: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>, themes: table<mentions: list, normalized: string, phrases_count: int, sentiment_polarity: string, sentiment_score: float, stemmed: string, themes_count: int, title: string>, topics: table<hitcount: int, id: string, sentiment_polarity: string, sentiment_score: float, title: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'document_id' must be non-empty" } }
@@ -1058,7 +1082,7 @@ export def "get-entities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration user entities linked to.
-]: nothing -> table<id: string, label: string, modified: string, name: string, normalized: string, type: string> {
+]: nothing -> oneof<table<id: string, label: string, modified: string, name: string, normalized: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
@@ -1098,7 +1122,7 @@ export def "add-entities" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration user entities linked to.
   --body: record
-]: any -> table<id: string, label: string, modified: string, name: string, normalized: string, type: string> {
+]: any -> oneof<table<id: string, label: string, modified: string, name: string, normalized: string, type: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1141,7 +1165,7 @@ export def "update-entities" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration user entities linked to.
   --body: record
-]: any -> table<id: string, label: string, modified: string, name: string, normalized: string, type: string> {
+]: any -> oneof<table<id: string, label: string, modified: string, name: string, normalized: string, type: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1183,7 +1207,7 @@ export def "get-features" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --language: string # Filter features by specified language
-]: nothing -> table<detailed_mode: record<auto_categories: bool, entity_mentions: bool, entity_opinions: bool, entity_relations: bool, entity_themes: bool, intentions: bool, language_detection: bool, model_sentiment: bool, named_entities: bool, pos_tagging: bool, queries: bool, sentiment: bool, sentiment_phrases: bool, summarization: bool, taxonomy: bool, theme_mentions: bool, themes: bool, user_categories: bool, user_entities: bool>, discovery_mode: record<entity_mentions: bool, facet_attributes: bool, facet_mentioins: bool, facets: bool, named_entities: bool, queries: bool, taxonomy: bool, theme_mentions: bool, themes: bool, user_categories: bool, user_entities: bool>, html_processing: bool, id: string, language: string, one_sentence_mode: bool, settings: record<blacklist: bool, queries: bool, sentiment_phrases: bool, taxonomy: bool, user_categories: bool, user_entities: bool>, templates: record<config_id: string, description: string, id: string, is_free: bool, language: string, name: string, type: string, version: string>> {
+]: nothing -> oneof<table<detailed_mode: record<auto_categories: bool, entity_mentions: bool, entity_opinions: bool, entity_relations: bool, entity_themes: bool, intentions: bool, language_detection: bool, model_sentiment: bool, named_entities: bool, pos_tagging: bool, queries: bool, sentiment: bool, sentiment_phrases: bool, summarization: bool, taxonomy: bool, theme_mentions: bool, themes: bool, user_categories: bool, user_entities: bool>, discovery_mode: record<entity_mentions: bool, facet_attributes: bool, facet_mentioins: bool, facets: bool, named_entities: bool, queries: bool, taxonomy: bool, theme_mentions: bool, themes: bool, user_categories: bool, user_entities: bool>, html_processing: bool, id: string, language: string, one_sentence_mode: bool, settings: record<blacklist: bool, queries: bool, sentiment_phrases: bool, taxonomy: bool, user_categories: bool, user_entities: bool>, templates: record<config_id: string, description: string, id: string, is_free: bool, language: string, name: string, type: string, version: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
@@ -1265,7 +1289,7 @@ export def "get-phrases" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration phrases linked to.
-]: nothing -> table<id: string, modified: string, name: string, weight: float> {
+]: nothing -> oneof<table<id: string, modified: string, name: string, weight: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
@@ -1305,7 +1329,7 @@ export def "add-phrases" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration phrases linked to.
   --body: record
-]: any -> table<id: string, modified: string, name: string, weight: float> {
+]: any -> oneof<table<id: string, modified: string, name: string, weight: float>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1348,7 +1372,7 @@ export def "update-phrases" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration phrases linked to.
   --body: record
-]: any -> table<id: string, modified: string, name: string, weight: float> {
+]: any -> oneof<table<id: string, modified: string, name: string, weight: float>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1433,7 +1457,7 @@ export def "get-queries" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration queries linked to.
-]: nothing -> table<id: string, modified: string, name: string, query: string> {
+]: nothing -> oneof<table<id: string, modified: string, name: string, query: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
@@ -1473,7 +1497,7 @@ export def "add-queries" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration queries linked to.
   --body: record
-]: any -> table<id: string, modified: string, name: string, query: string> {
+]: any -> oneof<table<id: string, modified: string, name: string, query: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1516,7 +1540,7 @@ export def "update-queries" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration queries linked to.
   --body: record
-]: any -> table<id: string, modified: string, name: string, query: string> {
+]: any -> oneof<table<id: string, modified: string, name: string, query: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1559,7 +1583,7 @@ export def "get-statistic" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Configuration identifier for usage statistics retrieving.
   --interval: string # Hour, Day, Week, Month, Year values are supported.
-]: nothing -> record<calls_data: int, calls_polling: int, calls_settings: int, colls_documents: int, colls_failed: int, colls_processed: int, colls_responded: int, configurations: table<calls_data: int, calls_polling: int, calls_settings: int, colls_failed: int, colls_processed: int, colls_responded: int, config_id: string, docs_failed: int, docs_processed: int, docs_responded: int, latest_used_app: string, name: string, overall_batches: int, overall_calls: int, overall_docs: int, overall_exceeded: int, overall_texts: int, overcall_colls: int, used_apps: string>, docs_failed: int, docs_processed: int, docs_responded: int, latest_used_app: string, name: string, overall_batches: int, overall_calls: int, overall_docs: int, overall_exceeded: int, overall_texts: int, overcall_colls: int, status: string, used_apps: string> {
+]: nothing -> oneof<record<calls_data: int, calls_polling: int, calls_settings: int, colls_documents: int, colls_failed: int, colls_processed: int, colls_responded: int, configurations: table<calls_data: int, calls_polling: int, calls_settings: int, colls_failed: int, colls_processed: int, colls_responded: int, config_id: string, docs_failed: int, docs_processed: int, docs_responded: int, latest_used_app: string, name: string, overall_batches: int, overall_calls: int, overall_docs: int, overall_exceeded: int, overall_texts: int, overcall_colls: int, used_apps: string>, docs_failed: int, docs_processed: int, docs_responded: int, latest_used_app: string, name: string, overall_batches: int, overall_calls: int, overall_docs: int, overall_exceeded: int, overall_texts: int, overcall_colls: int, status: string, used_apps: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
@@ -1597,7 +1621,7 @@ export def "get-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<api_version: string, service_status: string, service_version: string, supported_compression: string, supported_encoding: string, supported_languages: list<string>> {
+]: nothing -> oneof<record<api_version: string, service_status: string, service_version: string, supported_compression: string, supported_encoding: string, supported_languages: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
@@ -1634,7 +1658,7 @@ export def "get-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> record<basic_settings: record<auto_response_limit: int, batch_limit: int, blacklist_limit: int, callback_batch_limit: int, categories_limit: int, category_samples_limit: int, characters_limit: int, collection_limit: int, configurations_limit: int, entities_limit: int, output_data_limit: int, processed_batch_limit: int, queries_limit: int, return_source_text: bool, sentiment_limit: int>, billing_settings: record<app_seats_allocated: int, app_seats_permitted: int, data_calls_balance: int, data_calls_limit: int, data_calls_limit_interval: int, docs_balance: int, docs_limit: int, docs_limit_interval: int, docs_suggested: int, docs_suggested_interval: int, expiration_date: string, limit_type: string, polling_calls_balance: int, polling_calls_limit: int, polling_calls_limit_interval: int, priority: string, settings_calls_balance: int, settings_calls_limit: int, settings_calls_limit_interval: int>, feature_settings: record<collection: record<concept_topics: bool, facets: bool, mentions: bool, named_entities: bool, query_topics: bool, themes: bool, user_entities: bool>, document: record<auto_categories: bool, concept_topics: bool, entity_themes: bool, intentions: bool, language_detection: bool, mentions: bool, model_sentiment: bool, named_entities: bool, named_relations: bool, opinions: bool, phrases_detection: bool, pos_tagging: bool, query_topics: bool, sentiment_phrases: bool, summary: bool, themes: bool, user_entities: bool, user_relations: bool>, html_processing: bool, supported_languages: string, templates: record<config_id: string, description: string, id: string, is_free: bool, language: string, name: string, type: string, version: string>>, name: string, status: string> {
+]: nothing -> oneof<record<basic_settings: record<auto_response_limit: int, batch_limit: int, blacklist_limit: int, callback_batch_limit: int, categories_limit: int, category_samples_limit: int, characters_limit: int, collection_limit: int, configurations_limit: int, entities_limit: int, output_data_limit: int, processed_batch_limit: int, queries_limit: int, return_source_text: bool, sentiment_limit: int>, billing_settings: record<app_seats_allocated: int, app_seats_permitted: int, data_calls_balance: int, data_calls_limit: int, data_calls_limit_interval: int, docs_balance: int, docs_limit: int, docs_limit_interval: int, docs_suggested: int, docs_suggested_interval: int, expiration_date: string, limit_type: string, polling_calls_balance: int, polling_calls_limit: int, polling_calls_limit_interval: int, priority: string, settings_calls_balance: int, settings_calls_limit: int, settings_calls_limit_interval: int>, feature_settings: record<collection: record<concept_topics: bool, facets: bool, mentions: bool, named_entities: bool, query_topics: bool, themes: bool, user_entities: bool>, document: record<auto_categories: bool, concept_topics: bool, entity_themes: bool, intentions: bool, language_detection: bool, mentions: bool, model_sentiment: bool, named_entities: bool, named_relations: bool, opinions: bool, phrases_detection: bool, pos_tagging: bool, query_topics: bool, sentiment_phrases: bool, summary: bool, themes: bool, user_entities: bool, user_relations: bool>, html_processing: bool, supported_languages: string, templates: record<config_id: string, description: string, id: string, is_free: bool, language: string, name: string, type: string, version: string>>, name: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
@@ -1715,7 +1739,7 @@ export def "get-taxonomy" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration taxonomy linked to.
-]: nothing -> table<enforce_parent_matching: bool, id: string, modified: string, name: string, nodes: list<any>, topics: list<record>> {
+]: nothing -> oneof<table<enforce_parent_matching: bool, id: string, modified: string, name: string, nodes: list<any>, topics: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_type | is-empty) { error make --unspanned { msg: "path parameter 'content_type' must be non-empty" } }
@@ -1755,7 +1779,7 @@ export def "add-taxonomy" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration queries linked to.
   --body: record
-]: any -> table<enforce_parent_matching: bool, id: string, modified: string, name: string, nodes: list<any>, topics: list<record>> {
+]: any -> oneof<table<enforce_parent_matching: bool, id: string, modified: string, name: string, nodes: list<any>, topics: list<record>>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1798,7 +1822,7 @@ export def "update-taxonomy" [
   --accept: string@accept-completer # Response content type
   --config-id: string # Identifier of configuration queries linked to.
   --body: record
-]: any -> table<enforce_parent_matching: bool, id: string, modified: string, name: string, nodes: list<any>, topics: list<record>> {
+]: any -> oneof<table<enforce_parent_matching: bool, id: string, modified: string, name: string, nodes: list<any>, topics: list<record>>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

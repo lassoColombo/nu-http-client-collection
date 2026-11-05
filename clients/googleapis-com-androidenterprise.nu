@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -133,9 +157,9 @@ def display-mode-completer [] { ["displayModeUnspecified" "fullScreen" "minimalU
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "androidenterprise-enterprises-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["androidenterprise-enterprises-list" "androidenterprise-enterprises-acknowledge-notification-set" "androidenterprise-enterprises-complete-signup" "androidenterprise-enterprises-enroll" "androidenterprise-enterprises-pull-notification-set" "androidenterprise-enterprises-generate-signup-url" "androidenterprise-enterprises-get" "androidenterprise-enterprises-set-account" "androidenterprise-enterprises-create-enrollment-token" "androidenterprise-enterprises-create-web-token" "androidenterprise-grouplicenses-list" "androidenterprise-grouplicenses-get" "androidenterprise-grouplicenseusers-list" "androidenterprise-products-list" "androidenterprise-products-get" "androidenterprise-products-get-app-restrictions-schema" "androidenterprise-products-approve" "androidenterprise-products-generate-approval-url" "androidenterprise-managedconfigurationssettings-list" "androidenterprise-products-get-permissions" "androidenterprise-products-unapprove" "androidenterprise-enterprises-send-test-push-notification" "androidenterprise-enterprises-get-service-account" "androidenterprise-serviceaccountkeys-list" "androidenterprise-serviceaccountkeys-insert" "androidenterprise-serviceaccountkeys-delete" "androidenterprise-enterprises-get-store-layout" "androidenterprise-enterprises-set-store-layout" "androidenterprise-storelayoutpages-list" "androidenterprise-storelayoutpages-insert" "androidenterprise-storelayoutpages-delete" "androidenterprise-storelayoutpages-get" "androidenterprise-storelayoutpages-update" "androidenterprise-storelayoutclusters-list" "androidenterprise-storelayoutclusters-insert" "androidenterprise-storelayoutclusters-delete" "androidenterprise-storelayoutclusters-get" "androidenterprise-storelayoutclusters-update" "androidenterprise-enterprises-unenroll" "androidenterprise-users-list" "androidenterprise-users-insert" "androidenterprise-users-delete" "androidenterprise-users-get" "androidenterprise-users-update" "androidenterprise-users-generate-authentication-token" "androidenterprise-users-get-available-product-set" "androidenterprise-users-set-available-product-set" "androidenterprise-users-revoke-device-access" "androidenterprise-devices-list" "androidenterprise-devices-get" "androidenterprise-devices-update" "androidenterprise-devices-force-report-upload" "androidenterprise-installs-list" "androidenterprise-installs-delete" "androidenterprise-installs-get" "androidenterprise-installs-update" "androidenterprise-managedconfigurationsfordevice-list" "androidenterprise-managedconfigurationsfordevice-delete" "androidenterprise-managedconfigurationsfordevice-get" "androidenterprise-managedconfigurationsfordevice-update" "androidenterprise-devices-get-state" "androidenterprise-devices-set-state" "androidenterprise-entitlements-list" "androidenterprise-entitlements-delete" "androidenterprise-entitlements-get" "androidenterprise-entitlements-update" "androidenterprise-managedconfigurationsforuser-list" "androidenterprise-managedconfigurationsforuser-delete" "androidenterprise-managedconfigurationsforuser-get" "androidenterprise-managedconfigurationsforuser-update" "androidenterprise-webapps-list" "androidenterprise-webapps-insert" "androidenterprise-webapps-delete" "androidenterprise-webapps-get" "androidenterprise-webapps-update" "androidenterprise-permissions-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -179,7 +203,7 @@ export def "androidenterprise-enterprises-list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --domain: string # Required. The exact primary domain name of the enterprise to look up. (required)
-]: nothing -> record<enterprise: table<administrator: list, googleAuthenticationSettings: record, id: string, name: string, primaryDomain: string>> {
+]: nothing -> oneof<record<enterprise: table<administrator: list, googleAuthenticationSettings: record, id: string, name: string, primaryDomain: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'domain' missing: pass --domain" } }
@@ -275,7 +299,7 @@ export def "androidenterprise-enterprises-complete-signup" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --completion-token: string # The Completion token initially returned by GenerateSignupUrl.
   --enterprise-token: string # The Enterprise token appended to the Callback URL.
-]: nothing -> record<administrator: table<email: string>, googleAuthenticationSettings: record<dedicatedDevicesAllowed: string, googleAuthenticationRequired: string>, id: string, name: string, primaryDomain: string> {
+]: nothing -> oneof<record<administrator: table<email: string>, googleAuthenticationSettings: record<dedicatedDevicesAllowed: string, googleAuthenticationRequired: string>, id: string, name: string, primaryDomain: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "completionToken" $completion_token "scalar") (serialize-qp "enterpriseToken" $enterprise_token "scalar")] | flatten | str join "&"
@@ -300,8 +324,6 @@ export def "androidenterprise-enterprises-complete-signup" [
 #
 # POST /androidenterprise/v1/enterprises/enroll
 # operationId: androidenterprise.enterprises.enroll
-# --administrator item shape: {email?: string}
-# --googleAuthenticationSettings shape: {dedicatedDevicesAllowed?: "dedicatedDevicesAllowedUnspecified"|"disallowed"|"allowed", googleAuthenticationRequired?: "googleAuthenticationRequiredUnspecified"|"notRequired"|"required"}
 export def "androidenterprise-enterprises-enroll" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,7 +351,7 @@ export def "androidenterprise-enterprises-enroll" [
   --id: string # The unique ID for the enterprise.
   --name: string # The name of the enterprise, for example, "Example, Inc".
   --primary-domain: string # The enterprise's primary domain, such as "example.com".
-]: any -> record<administrator: table<email: string>, googleAuthenticationSettings: record<dedicatedDevicesAllowed: string, googleAuthenticationRequired: string>, id: string, name: string, primaryDomain: string> {
+]: any -> oneof<record<administrator: table<email: string>, googleAuthenticationSettings: record<dedicatedDevicesAllowed: string, googleAuthenticationRequired: string>, id: string, name: string, primaryDomain: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -380,7 +402,7 @@ export def "androidenterprise-enterprises-pull-notification-set" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --request-mode: string@request-mode-completer # The request mode for pulling notifications. Specifying waitForNotifications will cause the request to block and wait until one or more notifications are present, or return an empty notification list if no notifications are present after some time. Specifying returnImmediately will cause the request to immediately return the pending notifications, or an empty list if no notifications are present. If omitted, defaults to waitForNotifications.
-]: nothing -> record<notification: table<appRestrictionsSchemaChangeEvent: record, appUpdateEvent: record, deviceReportUpdateEvent: record, enterpriseId: string, installFailureEvent: record, newDeviceEvent: record, newPermissionsEvent: record, notificationType: string, productApprovalEvent: record, productAvailabilityChangeEvent: record, timestampMillis: string>, notificationSetId: string> {
+]: nothing -> oneof<record<notification: table<appRestrictionsSchemaChangeEvent: record, appUpdateEvent: record, deviceReportUpdateEvent: record, enterpriseId: string, installFailureEvent: record, newDeviceEvent: record, newPermissionsEvent: record, notificationType: string, productApprovalEvent: record, productAvailabilityChangeEvent: record, timestampMillis: string>, notificationSetId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestMode" $request_mode "scalar")] | flatten | str join "&"
@@ -427,7 +449,7 @@ export def "androidenterprise-enterprises-generate-signup-url" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --callback-url: string # The callback URL to which the Admin will be redirected after successfully creating an enterprise. Before redirecting there the system will add a single query parameter to this URL named "enterpriseToken" which will contain an opaque token to be used for the CompleteSignup request. Beware that this means that the URL will be parsed, the parameter added and then a new URL formatted, i.e. there may be some minor formatting changes and, more importantly, the URL must be well-formed so that it can be parsed.
-]: nothing -> record<completionToken: string, kind: string, url: string> {
+]: nothing -> oneof<record<completionToken: string, kind: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "callbackUrl" $callback_url "scalar")] | flatten | str join "&"
@@ -474,7 +496,7 @@ export def "androidenterprise-enterprises-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<administrator: table<email: string>, googleAuthenticationSettings: record<dedicatedDevicesAllowed: string, googleAuthenticationRequired: string>, id: string, name: string, primaryDomain: string> {
+]: nothing -> oneof<record<administrator: table<email: string>, googleAuthenticationSettings: record<dedicatedDevicesAllowed: string, googleAuthenticationRequired: string>, id: string, name: string, primaryDomain: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -523,7 +545,7 @@ export def "androidenterprise-enterprises-set-account" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-email: string # The email address of the service account.
-]: any -> record<accountEmail: string> {
+]: any -> oneof<record<accountEmail: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -575,7 +597,7 @@ export def "androidenterprise-enterprises-create-enrollment-token" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --device-type: string@device-type-completer # Whether it’s a dedicated device or a knowledge worker device.
-]: nothing -> record<enrollmentToken: string> {
+]: nothing -> oneof<record<enrollmentToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -601,12 +623,6 @@ export def "androidenterprise-enterprises-create-enrollment-token" [
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/createWebToken
 # operationId: androidenterprise.enterprises.createWebToken
-# --managedConfigurations shape: {enabled?: bool}
-# --playSearch shape: {approveApps?: bool, enabled?: bool}
-# --privateApps shape: {enabled?: bool}
-# --storeBuilder shape: {enabled?: bool}
-# --webApps shape: {enabled?: bool}
-# --zeroTouch shape: {enabled?: bool}
 export def "androidenterprise-enterprises-create-web-token" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -637,7 +653,7 @@ export def "androidenterprise-enterprises-create-web-token" [
   --store-builder: record # shape: {enabled?: bool}
   --web-apps: record # shape: {enabled?: bool}
   --zero-touch: record # shape: {enabled?: bool}
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -688,7 +704,7 @@ export def "androidenterprise-grouplicenses-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<groupLicense: table<acquisitionKind: string, approval: string, numProvisioned: int, numPurchased: int, permissions: string, productId: string>> {
+]: nothing -> oneof<record<groupLicense: table<acquisitionKind: string, approval: string, numProvisioned: int, numPurchased: int, permissions: string, productId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -737,7 +753,7 @@ export def "androidenterprise-grouplicenses-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<acquisitionKind: string, approval: string, numProvisioned: int, numPurchased: int, permissions: string, productId: string> {
+]: nothing -> oneof<record<acquisitionKind: string, approval: string, numProvisioned: int, numPurchased: int, permissions: string, productId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -787,7 +803,7 @@ export def "androidenterprise-grouplicenseusers-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<user: table<accountIdentifier: string, accountType: string, displayName: string, id: string, managementType: string, primaryEmail: string>> {
+]: nothing -> oneof<record<user: table<accountIdentifier: string, accountType: string, displayName: string, id: string, managementType: string, primaryEmail: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -841,7 +857,7 @@ export def "androidenterprise-products-list" [
   --max-results: int # Defines how many results the list operation should return. The default number depends on the resource collection.
   --query: string # The search query as typed in the Google Play store search box. If omitted, all approved apps will be returned (using the pagination parameters), including apps that are not available in the store (e.g. unpublished apps).
   --qp-token: string # Defines the token of the page to return, usually taken from TokenPagination. This can only be used if token paging is enabled.
-]: nothing -> record<pageInfo: record<resultPerPage: int, startIndex: int, totalResults: int>, product: table<appRestrictionsSchema: record, appTracks: list, appVersion: list, authorName: string, availableCountries: list, availableTracks: list, category: string, contentRating: string, description: string, detailsUrl: string, distributionChannel: string, features: list, iconUrl: string, lastUpdatedTimestampMillis: string, minAndroidSdkVersion: int, permissions: list, productId: string, productPricing: string, recentChanges: string, requiresContainerApp: bool, screenshotUrls: list, signingCertificate: record, smallIconUrl: string, title: string, workDetailsUrl: string>, tokenPagination: record<nextPageToken: string, previousPageToken: string>> {
+]: nothing -> oneof<record<pageInfo: record<resultPerPage: int, startIndex: int, totalResults: int>, product: table<appRestrictionsSchema: record, appTracks: list, appVersion: list, authorName: string, availableCountries: list, availableTracks: list, category: string, contentRating: string, description: string, detailsUrl: string, distributionChannel: string, features: list, iconUrl: string, lastUpdatedTimestampMillis: string, minAndroidSdkVersion: int, permissions: list, productId: string, productPricing: string, recentChanges: string, requiresContainerApp: bool, screenshotUrls: list, signingCertificate: record, smallIconUrl: string, title: string, workDetailsUrl: string>, tokenPagination: record<nextPageToken: string, previousPageToken: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -891,7 +907,7 @@ export def "androidenterprise-products-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --language: string # The BCP47 tag for the user's preferred language (e.g. "en-US", "de").
-]: nothing -> record<appRestrictionsSchema: record<kind: string, restrictions: list<record>>, appTracks: table<trackAlias: string, trackId: string>, appVersion: table<isProduction: bool, track: string, trackId: list, versionCode: int, versionString: string>, authorName: string, availableCountries: list<string>, availableTracks: list<string>, category: string, contentRating: string, description: string, detailsUrl: string, distributionChannel: string, features: list<string>, iconUrl: string, lastUpdatedTimestampMillis: string, minAndroidSdkVersion: int, permissions: table<permissionId: string, state: string>, productId: string, productPricing: string, recentChanges: string, requiresContainerApp: bool, screenshotUrls: list<string>, signingCertificate: record<certificateHashSha1: string, certificateHashSha256: string>, smallIconUrl: string, title: string, workDetailsUrl: string> {
+]: nothing -> oneof<record<appRestrictionsSchema: record<kind: string, restrictions: list<record>>, appTracks: table<trackAlias: string, trackId: string>, appVersion: table<isProduction: bool, track: string, trackId: list, versionCode: int, versionString: string>, authorName: string, availableCountries: list<string>, availableTracks: list<string>, category: string, contentRating: string, description: string, detailsUrl: string, distributionChannel: string, features: list<string>, iconUrl: string, lastUpdatedTimestampMillis: string, minAndroidSdkVersion: int, permissions: table<permissionId: string, state: string>, productId: string, productPricing: string, recentChanges: string, requiresContainerApp: bool, screenshotUrls: list<string>, signingCertificate: record<certificateHashSha1: string, certificateHashSha256: string>, smallIconUrl: string, title: string, workDetailsUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -942,7 +958,7 @@ export def "androidenterprise-products-get-app-restrictions-schema" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --language: string # The BCP47 tag for the user's preferred language (e.g. "en-US", "de").
-]: nothing -> record<kind: string, restrictions: table<defaultValue: record, description: string, entry: list, entryValue: list, key: string, nestedRestriction: list, restrictionType: string, title: string>> {
+]: nothing -> oneof<record<kind: string, restrictions: table<defaultValue: record, description: string, entry: list, entryValue: list, key: string, nestedRestriction: list, restrictionType: string, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -969,7 +985,6 @@ export def "androidenterprise-products-get-app-restrictions-schema" [
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/products/{productId}/approve
 # operationId: androidenterprise.products.approve
-# --approvalUrlInfo shape: {approvalUrl?: string}
 export def "androidenterprise-products-approve" [
   enterprise_id: string
   product_id: string
@@ -1049,7 +1064,7 @@ export def "androidenterprise-products-generate-approval-url" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --language-code: string # The BCP 47 language code used for permission names and descriptions in the returned iframe, for instance "en-US".
-]: nothing -> record<url: string> {
+]: nothing -> oneof<record<url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -1099,7 +1114,7 @@ export def "androidenterprise-managedconfigurationssettings-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<managedConfigurationsSettings: table<lastUpdatedTimestampMillis: string, mcmId: string, name: string>> {
+]: nothing -> oneof<record<managedConfigurationsSettings: table<lastUpdatedTimestampMillis: string, mcmId: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -1149,7 +1164,7 @@ export def "androidenterprise-products-get-permissions" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<permission: table<permissionId: string, state: string>, productId: string> {
+]: nothing -> oneof<record<permission: table<permissionId: string, state: string>, productId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -1248,7 +1263,7 @@ export def "androidenterprise-enterprises-send-test-push-notification" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<messageId: string, topicName: string> {
+]: nothing -> oneof<record<messageId: string, topicName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -1297,7 +1312,7 @@ export def "androidenterprise-enterprises-get-service-account" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --key-type: string@key-type-completer # The type of credential to return with the service account. Required.
-]: nothing -> record<key: record<data: string, id: string, publicData: string, type: string>, name: string> {
+]: nothing -> oneof<record<key: record<data: string, id: string, publicData: string, type: string>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -1345,7 +1360,7 @@ export def "androidenterprise-serviceaccountkeys-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<serviceAccountKey: table<data: string, id: string, publicData: string, type: string>> {
+]: nothing -> oneof<record<serviceAccountKey: table<data: string, id: string, publicData: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -1397,7 +1412,7 @@ export def "androidenterprise-serviceaccountkeys-insert" [
   --id: string # An opaque, unique identifier for this ServiceAccountKey. Assigned by the server.
   --public-data: string # Public key data for the credentials file. This is an X.509 cert. If you are using the googleCredentials key type, this is identical to the cert that can be retrieved by using the X.509 cert url inside of the credentials file.
   --type: string@type-completer # The file format of the generated key data.
-]: any -> record<data: string, id: string, publicData: string, type: string> {
+]: any -> oneof<record<data: string, id: string, publicData: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1498,7 +1513,7 @@ export def "androidenterprise-enterprises-get-store-layout" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<homepageId: string, storeLayoutType: string> {
+]: nothing -> oneof<record<homepageId: string, storeLayoutType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -1548,7 +1563,7 @@ export def "androidenterprise-enterprises-set-store-layout" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --homepage-id: string # The ID of the store page to be used as the homepage. The homepage is the first page shown in the managed Google Play Store. Not specifying a homepage is equivalent to setting the store layout type to "basic".
   --store-layout-type: string@store-layout-type-completer # The store layout type. By default, this value is set to "basic" if the homepageId field is not set, and to "custom" otherwise. If set to "basic", the layout will consist of all approved apps that have been whitelisted for the user.
-]: any -> record<homepageId: string, storeLayoutType: string> {
+]: any -> oneof<record<homepageId: string, storeLayoutType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1599,7 +1614,7 @@ export def "androidenterprise-storelayoutpages-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<page: table<id: string, link: list, name: list>> {
+]: nothing -> oneof<record<page: table<id: string, link: list, name: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -1625,7 +1640,6 @@ export def "androidenterprise-storelayoutpages-list" [
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages
 # operationId: androidenterprise.storelayoutpages.insert
-# --name item shape: {locale?: string, text?: string}
 export def "androidenterprise-storelayoutpages-insert" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1651,7 +1665,7 @@ export def "androidenterprise-storelayoutpages-insert" [
   --id: string # Unique ID of this page. Assigned by the server. Immutable once assigned.
   --link: list<string> # Ordered list of pages a user should be able to reach from this page. The list can't include this page. It is recommended that the basic pages are created first, before adding the links between pages. The API doesn't verify that the pages exist or the pages are reachable.
   --name: list # Ordered list of localized strings giving the name of this page. The text displayed is the one that best matches the user locale, or the first entry if there is no good match. There needs to be at least one entry. — item shape: {locale?: string, text?: string}
-]: any -> record<id: string, link: list<string>, name: table<locale: string, text: string>> {
+]: any -> oneof<record<id: string, link: list<string>, name: table<locale: string, text: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1753,7 +1767,7 @@ export def "androidenterprise-storelayoutpages-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<id: string, link: list<string>, name: table<locale: string, text: string>> {
+]: nothing -> oneof<record<id: string, link: list<string>, name: table<locale: string, text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -1780,7 +1794,6 @@ export def "androidenterprise-storelayoutpages-get" [
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}
 # operationId: androidenterprise.storelayoutpages.update
-# --name item shape: {locale?: string, text?: string}
 export def "androidenterprise-storelayoutpages-update" [
   enterprise_id: string
   page_id: string
@@ -1807,7 +1820,7 @@ export def "androidenterprise-storelayoutpages-update" [
   --id: string # Unique ID of this page. Assigned by the server. Immutable once assigned.
   --link: list<string> # Ordered list of pages a user should be able to reach from this page. The list can't include this page. It is recommended that the basic pages are created first, before adding the links between pages. The API doesn't verify that the pages exist or the pages are reachable.
   --name: list # Ordered list of localized strings giving the name of this page. The text displayed is the one that best matches the user locale, or the first entry if there is no good match. There needs to be at least one entry. — item shape: {locale?: string, text?: string}
-]: any -> record<id: string, link: list<string>, name: table<locale: string, text: string>> {
+]: any -> oneof<record<id: string, link: list<string>, name: table<locale: string, text: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1860,7 +1873,7 @@ export def "androidenterprise-storelayoutclusters-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<cluster: table<id: string, name: list, orderInPage: string, productId: list>> {
+]: nothing -> oneof<record<cluster: table<id: string, name: list, orderInPage: string, productId: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -1887,7 +1900,6 @@ export def "androidenterprise-storelayoutclusters-list" [
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}/clusters
 # operationId: androidenterprise.storelayoutclusters.insert
-# --name item shape: {locale?: string, text?: string}
 export def "androidenterprise-storelayoutclusters-insert" [
   enterprise_id: string
   page_id: string
@@ -1915,7 +1927,7 @@ export def "androidenterprise-storelayoutclusters-insert" [
   --name: list # Ordered list of localized strings giving the name of this page. The text displayed is the one that best matches the user locale, or the first entry if there is no good match. There needs to be at least one entry. — item shape: {locale?: string, text?: string}
   --order-in-page: string # String (US-ASCII only) used to determine order of this cluster within the parent page's elements. Page elements are sorted in lexicographic order of this field. Duplicated values are allowed, but ordering between elements with duplicate order is undefined. The value of this field is never visible to a user, it is used solely for the purpose of defining an ordering. Maximum length is 256 characters.
   --product-id: list<string> # List of products in the order they are displayed in the cluster. There should not be duplicates within a cluster.
-]: any -> record<id: string, name: table<locale: string, text: string>, orderInPage: string, productId: list<string>> {
+]: any -> oneof<record<id: string, name: table<locale: string, text: string>, orderInPage: string, productId: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2021,7 +2033,7 @@ export def "androidenterprise-storelayoutclusters-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<id: string, name: table<locale: string, text: string>, orderInPage: string, productId: list<string>> {
+]: nothing -> oneof<record<id: string, name: table<locale: string, text: string>, orderInPage: string, productId: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -2049,7 +2061,6 @@ export def "androidenterprise-storelayoutclusters-get" [
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/storeLayout/pages/{pageId}/clusters/{clusterId}
 # operationId: androidenterprise.storelayoutclusters.update
-# --name item shape: {locale?: string, text?: string}
 export def "androidenterprise-storelayoutclusters-update" [
   enterprise_id: string
   page_id: string
@@ -2078,7 +2089,7 @@ export def "androidenterprise-storelayoutclusters-update" [
   --name: list # Ordered list of localized strings giving the name of this page. The text displayed is the one that best matches the user locale, or the first entry if there is no good match. There needs to be at least one entry. — item shape: {locale?: string, text?: string}
   --order-in-page: string # String (US-ASCII only) used to determine order of this cluster within the parent page's elements. Page elements are sorted in lexicographic order of this field. Duplicated values are allowed, but ordering between elements with duplicate order is undefined. The value of this field is never visible to a user, it is used solely for the purpose of defining an ordering. Maximum length is 256 characters.
   --product-id: list<string> # List of products in the order they are displayed in the cluster. There should not be duplicates within a cluster.
-]: any -> record<id: string, name: table<locale: string, text: string>, orderInPage: string, productId: list<string>> {
+]: any -> oneof<record<id: string, name: table<locale: string, text: string>, orderInPage: string, productId: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2180,7 +2191,7 @@ export def "androidenterprise-users-list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --email: string # Required. The exact primary email address of the user to look up. (required)
-]: nothing -> record<user: table<accountIdentifier: string, accountType: string, displayName: string, id: string, managementType: string, primaryEmail: string>> {
+]: nothing -> oneof<record<user: table<accountIdentifier: string, accountType: string, displayName: string, id: string, managementType: string, primaryEmail: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -2235,7 +2246,7 @@ export def "androidenterprise-users-insert" [
   --id: string # The unique ID for the user.
   --management-type: string@management-type-completer # The entity that manages the user. With googleManaged users, the source of truth is Google so EMMs have to make sure a Google Account exists for the user. With emmManaged users, the EMM is in charge.
   --primary-email: string # The user's primary email address, for example, "jsmith@example.com". Will always be set for Google managed users and not set for EMM managed users.
-]: any -> record<accountIdentifier: string, accountType: string, displayName: string, id: string, managementType: string, primaryEmail: string> {
+]: any -> oneof<record<accountIdentifier: string, accountType: string, displayName: string, id: string, managementType: string, primaryEmail: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2337,7 +2348,7 @@ export def "androidenterprise-users-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<accountIdentifier: string, accountType: string, displayName: string, id: string, managementType: string, primaryEmail: string> {
+]: nothing -> oneof<record<accountIdentifier: string, accountType: string, displayName: string, id: string, managementType: string, primaryEmail: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -2393,7 +2404,7 @@ export def "androidenterprise-users-update" [
   --id: string # The unique ID for the user.
   --management-type: string@management-type-completer # The entity that manages the user. With googleManaged users, the source of truth is Google so EMMs have to make sure a Google Account exists for the user. With emmManaged users, the EMM is in charge.
   --primary-email: string # The user's primary email address, for example, "jsmith@example.com". Will always be set for Google managed users and not set for EMM managed users.
-]: any -> record<accountIdentifier: string, accountType: string, displayName: string, id: string, managementType: string, primaryEmail: string> {
+]: any -> oneof<record<accountIdentifier: string, accountType: string, displayName: string, id: string, managementType: string, primaryEmail: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2446,7 +2457,7 @@ export def "androidenterprise-users-generate-authentication-token" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<token: string> {
+]: nothing -> oneof<record<token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -2496,7 +2507,7 @@ export def "androidenterprise-users-get-available-product-set" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<productId: list<string>, productSetBehavior: string, productVisibility: table<productId: string, trackIds: list, tracks: list>> {
+]: nothing -> oneof<record<productId: list<string>, productSetBehavior: string, productVisibility: table<productId: string, trackIds: list, tracks: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -2523,7 +2534,6 @@ export def "androidenterprise-users-get-available-product-set" [
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/availableProductSet
 # operationId: androidenterprise.users.setAvailableProductSet
-# --productVisibility item shape: {productId?: string, trackIds?: list<string>, tracks?: list<string>}
 export def "androidenterprise-users-set-available-product-set" [
   enterprise_id: string
   user_id: string
@@ -2550,7 +2560,7 @@ export def "androidenterprise-users-set-available-product-set" [
   --product-id: list<string> # The list of product IDs making up the set of products.
   --product-set-behavior: string@product-set-behavior-completer # The interpretation of this product set. "unknown" should never be sent and is ignored if received. "whitelist" means that the user is entitled to access the product set. "includeAll" means that all products are accessible, including products that are approved, products with revoked approval, and products that have never been approved. "allApproved" means that the user is entitled to access all products that are approved for the enterprise. If the value is "allApproved" or "includeAll", the productId field is ignored. If no value is provided, it is interpreted as "whitelist" for backwards compatibility. Further "allApproved" or "includeAll" does not enable automatic visibility of "alpha" or "beta" tracks for Android app. Use ProductVisibility to enable "alpha" or "beta" tracks per user.
   --product-visibility: list # Additional list of product IDs making up the product set. Unlike the productID array, in this list It's possible to specify which tracks (alpha, beta, production) of a product are visible to the user. See ProductVisibility and its fields for more information. Specifying the same product ID both here and in the productId array is not allowed and it will result in an error. — item shape: {productId?: string, trackIds?: list<string>, tracks?: list<string>}
-]: any -> record<productId: list<string>, productSetBehavior: string, productVisibility: table<productId: string, trackIds: list, tracks: list>> {
+]: any -> oneof<record<productId: list<string>, productSetBehavior: string, productVisibility: table<productId: string, trackIds: list, tracks: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2653,7 +2663,7 @@ export def "androidenterprise-devices-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<device: table<androidId: string, device: string, latestBuildFingerprint: string, maker: string, managementType: string, model: string, policy: record, product: string, report: record, retailBrand: string, sdkVersion: int>> {
+]: nothing -> oneof<record<device: table<androidId: string, device: string, latestBuildFingerprint: string, maker: string, managementType: string, model: string, policy: record, product: string, report: record, retailBrand: string, sdkVersion: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -2704,7 +2714,7 @@ export def "androidenterprise-devices-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<androidId: string, device: string, latestBuildFingerprint: string, maker: string, managementType: string, model: string, policy: record<autoUpdatePolicy: string, deviceReportPolicy: string, maintenanceWindow: record<durationMs: string, startTimeAfterMidnightMs: string>, productAvailabilityPolicy: string, productPolicy: list<record>>, product: string, report: record<appState: list<record>, lastUpdatedTimestampMillis: string>, retailBrand: string, sdkVersion: int> {
+]: nothing -> oneof<record<androidId: string, device: string, latestBuildFingerprint: string, maker: string, managementType: string, model: string, policy: record<autoUpdatePolicy: string, deviceReportPolicy: string, maintenanceWindow: record<durationMs: string, startTimeAfterMidnightMs: string>, productAvailabilityPolicy: string, productPolicy: list<record>>, product: string, report: record<appState: list<record>, lastUpdatedTimestampMillis: string>, retailBrand: string, sdkVersion: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -2732,8 +2742,6 @@ export def "androidenterprise-devices-get" [
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}
 # operationId: androidenterprise.devices.update
-# --policy shape: {autoUpdatePolicy?: "autoUpdatePolicyUnspecified"|"choiceToTheUser"|"never"|"wifiOnly"|"always", deviceReportPolicy?: "deviceReportPolicyUnspecified"|"deviceReportDisabled"|"deviceReportEnabled", maintenanceWindow?: record, productAvailabilityPolicy?: "productAvailabilityPolicyUnspecified"|"whitelist"|"all", productPolicy?: list}
-# --report shape: {appState?: list, lastUpdatedTimestampMillis?: string}
 export def "androidenterprise-devices-update" [
   enterprise_id: string
   user_id: string
@@ -2770,7 +2778,7 @@ export def "androidenterprise-devices-update" [
   --report: record # Device report updated with the latest app states for managed apps on the device. — shape: {appState?: list, lastUpdatedTimestampMillis?: string}
   --retail-brand: string # Retail brand for the device, if set. See https://developer.android.com/reference/android/os/Build.html#BRAND
   --sdk-version: int # API compatibility version. (format: int32)
-]: any -> record<androidId: string, device: string, latestBuildFingerprint: string, maker: string, managementType: string, model: string, policy: record<autoUpdatePolicy: string, deviceReportPolicy: string, maintenanceWindow: record<durationMs: string, startTimeAfterMidnightMs: string>, productAvailabilityPolicy: string, productPolicy: list<record>>, product: string, report: record<appState: list<record>, lastUpdatedTimestampMillis: string>, retailBrand: string, sdkVersion: int> {
+]: any -> oneof<record<androidId: string, device: string, latestBuildFingerprint: string, maker: string, managementType: string, model: string, policy: record<autoUpdatePolicy: string, deviceReportPolicy: string, maintenanceWindow: record<durationMs: string, startTimeAfterMidnightMs: string>, productAvailabilityPolicy: string, productPolicy: list<record>>, product: string, report: record<appState: list<record>, lastUpdatedTimestampMillis: string>, retailBrand: string, sdkVersion: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2877,7 +2885,7 @@ export def "androidenterprise-installs-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<install: table<installState: string, productId: string, versionCode: int>> {
+]: nothing -> oneof<record<install: table<installState: string, productId: string, versionCode: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -2984,7 +2992,7 @@ export def "androidenterprise-installs-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<installState: string, productId: string, versionCode: int> {
+]: nothing -> oneof<record<installState: string, productId: string, versionCode: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -3041,7 +3049,7 @@ export def "androidenterprise-installs-update" [
   --install-state: string@install-state-completer # Install state. The state "installPending" means that an install request has recently been made and download to the device is in progress. The state "installed" means that the app has been installed. This field is read-only.
   --product-id: string # The ID of the product that the install is for. For example, "app:com.google.android.gm".
   --version-code: int # The version of the installed product. Guaranteed to be set only if the install state is "installed". (format: int32)
-]: any -> record<installState: string, productId: string, versionCode: int> {
+]: any -> oneof<record<installState: string, productId: string, versionCode: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3097,7 +3105,7 @@ export def "androidenterprise-managedconfigurationsfordevice-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<managedConfigurationForDevice: table<configurationVariables: record, kind: string, managedProperty: list, productId: string>> {
+]: nothing -> oneof<record<managedConfigurationForDevice: table<configurationVariables: record, kind: string, managedProperty: list, productId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -3204,7 +3212,7 @@ export def "androidenterprise-managedconfigurationsfordevice-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<configurationVariables: record<mcmId: string, variableSet: list<record>>, kind: string, managedProperty: table<key: string, valueBool: bool, valueBundle: record, valueBundleArray: list, valueInteger: int, valueString: string, valueStringArray: list>, productId: string> {
+]: nothing -> oneof<record<configurationVariables: record<mcmId: string, variableSet: list<record>>, kind: string, managedProperty: table<key: string, valueBool: bool, valueBundle: record, valueBundleArray: list, valueInteger: int, valueString: string, valueStringArray: list>, productId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -3233,8 +3241,6 @@ export def "androidenterprise-managedconfigurationsfordevice-get" [
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/devices/{deviceId}/managedConfigurationsForDevice/{managedConfigurationForDeviceId}
 # operationId: androidenterprise.managedconfigurationsfordevice.update
-# --configurationVariables shape: {mcmId?: string, variableSet?: list}
-# --managedProperty item shape: {key?: string, valueBool?: bool, valueBundle?: record, valueBundleArray?: list, valueInteger?: int, valueString?: string, valueStringArray?: list<string>}
 export def "androidenterprise-managedconfigurationsfordevice-update" [
   enterprise_id: string
   user_id: string
@@ -3264,7 +3270,7 @@ export def "androidenterprise-managedconfigurationsfordevice-update" [
   --kind: string # Deprecated.
   --managed-property: list # The set of managed properties for this configuration. — item shape: {key?: string, valueBool?: bool, valueBundle?: record, valueBundleArray?: list, valueInteger?: int, valueString?: string, valueStringArray?: list<string>}
   --product-id: string # The ID of the product that the managed configuration is for, e.g. "app:com.google.android.gm".
-]: any -> record<configurationVariables: record<mcmId: string, variableSet: list<record>>, kind: string, managedProperty: table<key: string, valueBool: bool, valueBundle: record, valueBundleArray: list, valueInteger: int, valueString: string, valueStringArray: list>, productId: string> {
+]: any -> oneof<record<configurationVariables: record<mcmId: string, variableSet: list<record>>, kind: string, managedProperty: table<key: string, valueBool: bool, valueBundle: record, valueBundleArray: list, valueInteger: int, valueString: string, valueStringArray: list>, productId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3320,7 +3326,7 @@ export def "androidenterprise-devices-get-state" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<accountState: string> {
+]: nothing -> oneof<record<accountState: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -3373,7 +3379,7 @@ export def "androidenterprise-devices-set-state" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --account-state: string@account-state-completer # The state of the Google account on the device. "enabled" indicates that the Google account on the device can be used to access Google services (including Google Play), while "disabled" means that it cannot. A new device is initially in the "disabled" state.
-]: any -> record<accountState: string> {
+]: any -> oneof<record<accountState: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3427,7 +3433,7 @@ export def "androidenterprise-entitlements-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<entitlement: table<productId: string, reason: string>> {
+]: nothing -> oneof<record<entitlement: table<productId: string, reason: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -3530,7 +3536,7 @@ export def "androidenterprise-entitlements-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<productId: string, reason: string> {
+]: nothing -> oneof<record<productId: string, reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -3585,7 +3591,7 @@ export def "androidenterprise-entitlements-update" [
   --install: oneof<nothing, bool> # Set to true to also install the product on all the user's devices where possible. Failure to install on one or more devices will not prevent this operation from returning successfully, as long as the entitlement was successfully assigned to the user.
   --product-id: string # The ID of the product that the entitlement is for. For example, "app:com.google.android.gm".
   --reason: string@reason-completer # The reason for the entitlement. For example, "free" for free apps. This property is temporary: it will be replaced by the acquisition kind field of group licenses.
-]: any -> record<productId: string, reason: string> {
+]: any -> oneof<record<productId: string, reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3639,7 +3645,7 @@ export def "androidenterprise-managedconfigurationsforuser-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<managedConfigurationForUser: table<configurationVariables: record, kind: string, managedProperty: list, productId: string>> {
+]: nothing -> oneof<record<managedConfigurationForUser: table<configurationVariables: record, kind: string, managedProperty: list, productId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -3742,7 +3748,7 @@ export def "androidenterprise-managedconfigurationsforuser-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<configurationVariables: record<mcmId: string, variableSet: list<record>>, kind: string, managedProperty: table<key: string, valueBool: bool, valueBundle: record, valueBundleArray: list, valueInteger: int, valueString: string, valueStringArray: list>, productId: string> {
+]: nothing -> oneof<record<configurationVariables: record<mcmId: string, variableSet: list<record>>, kind: string, managedProperty: table<key: string, valueBool: bool, valueBundle: record, valueBundleArray: list, valueInteger: int, valueString: string, valueStringArray: list>, productId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -3770,8 +3776,6 @@ export def "androidenterprise-managedconfigurationsforuser-get" [
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/users/{userId}/managedConfigurationsForUser/{managedConfigurationForUserId}
 # operationId: androidenterprise.managedconfigurationsforuser.update
-# --configurationVariables shape: {mcmId?: string, variableSet?: list}
-# --managedProperty item shape: {key?: string, valueBool?: bool, valueBundle?: record, valueBundleArray?: list, valueInteger?: int, valueString?: string, valueStringArray?: list<string>}
 export def "androidenterprise-managedconfigurationsforuser-update" [
   enterprise_id: string
   user_id: string
@@ -3800,7 +3804,7 @@ export def "androidenterprise-managedconfigurationsforuser-update" [
   --kind: string # Deprecated.
   --managed-property: list # The set of managed properties for this configuration. — item shape: {key?: string, valueBool?: bool, valueBundle?: record, valueBundleArray?: list, valueInteger?: int, valueString?: string, valueStringArray?: list<string>}
   --product-id: string # The ID of the product that the managed configuration is for, e.g. "app:com.google.android.gm".
-]: any -> record<configurationVariables: record<mcmId: string, variableSet: list<record>>, kind: string, managedProperty: table<key: string, valueBool: bool, valueBundle: record, valueBundleArray: list, valueInteger: int, valueString: string, valueStringArray: list>, productId: string> {
+]: any -> oneof<record<configurationVariables: record<mcmId: string, variableSet: list<record>>, kind: string, managedProperty: table<key: string, valueBool: bool, valueBundle: record, valueBundleArray: list, valueInteger: int, valueString: string, valueStringArray: list>, productId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3853,7 +3857,7 @@ export def "androidenterprise-webapps-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<webApp: table<displayMode: string, icons: list, isPublished: bool, startUrl: string, title: string, versionCode: string, webAppId: string>> {
+]: nothing -> oneof<record<webApp: table<displayMode: string, icons: list, isPublished: bool, startUrl: string, title: string, versionCode: string, webAppId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -3879,7 +3883,6 @@ export def "androidenterprise-webapps-list" [
 #
 # POST /androidenterprise/v1/enterprises/{enterpriseId}/webApps
 # operationId: androidenterprise.webapps.insert
-# --icons item shape: {imageData?: string}
 export def "androidenterprise-webapps-insert" [
   enterprise_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3909,7 +3912,7 @@ export def "androidenterprise-webapps-insert" [
   --title: string # The title of the web app as displayed to the user (e.g., amongst a list of other applications, or as a label for an icon).
   --version-code: string # The current version of the app. Note that the version can automatically increase during the lifetime of the web app, while Google does internal housekeeping to keep the web app up-to-date. (format: int64)
   --web-app-id: string # The ID of the application. A string of the form "app:" where the package name always starts with the prefix "com.google.enterprise.webapp." followed by a random id.
-]: any -> record<displayMode: string, icons: table<imageData: string>, isPublished: bool, startUrl: string, title: string, versionCode: string, webAppId: string> {
+]: any -> oneof<record<displayMode: string, icons: table<imageData: string>, isPublished: bool, startUrl: string, title: string, versionCode: string, webAppId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4011,7 +4014,7 @@ export def "androidenterprise-webapps-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<displayMode: string, icons: table<imageData: string>, isPublished: bool, startUrl: string, title: string, versionCode: string, webAppId: string> {
+]: nothing -> oneof<record<displayMode: string, icons: table<imageData: string>, isPublished: bool, startUrl: string, title: string, versionCode: string, webAppId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterpriseId' must be non-empty" } }
@@ -4038,7 +4041,6 @@ export def "androidenterprise-webapps-get" [
 #
 # PUT /androidenterprise/v1/enterprises/{enterpriseId}/webApps/{webAppId}
 # operationId: androidenterprise.webapps.update
-# --icons item shape: {imageData?: string}
 export def "androidenterprise-webapps-update" [
   enterprise_id: string
   web_app_id: string
@@ -4069,7 +4071,7 @@ export def "androidenterprise-webapps-update" [
   --title: string # The title of the web app as displayed to the user (e.g., amongst a list of other applications, or as a label for an icon).
   --version-code: string # The current version of the app. Note that the version can automatically increase during the lifetime of the web app, while Google does internal housekeeping to keep the web app up-to-date. (format: int64)
   --body-web-app-id: string # The ID of the application. A string of the form "app:" where the package name always starts with the prefix "com.google.enterprise.webapp." followed by a random id.
-]: any -> record<displayMode: string, icons: table<imageData: string>, isPublished: bool, startUrl: string, title: string, versionCode: string, webAppId: string> {
+]: any -> oneof<record<displayMode: string, icons: table<imageData: string>, isPublished: bool, startUrl: string, title: string, versionCode: string, webAppId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4122,7 +4124,7 @@ export def "androidenterprise-permissions-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --language: string # The BCP47 tag for the user's preferred language (e.g. "en-US", "de")
-]: nothing -> record<description: string, name: string, permissionId: string> {
+]: nothing -> oneof<record<description: string, name: string, permissionId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($permission_id | is-empty) { error make --unspanned { msg: "path parameter 'permissionId' must be non-empty" } }

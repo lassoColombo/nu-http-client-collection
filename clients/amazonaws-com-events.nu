@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -157,9 +180,9 @@ def x-amz-target-completer-50 [] { ["AWSEvents.UpdateConnection"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activate-event-source" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["activate-event-source" "cancel-replay" "create-api-destination" "create-archive" "create-connection" "create-event-bus" "create-partner-event-source" "deactivate-event-source" "deauthorize-connection" "delete-api-destination" "delete-archive" "delete-connection" "delete-event-bus" "delete-partner-event-source" "delete-rule" "describe-api-destination" "describe-archive" "describe-connection" "describe-event-bus" "describe-event-source" "describe-partner-event-source" "describe-replay" "describe-rule" "disable-rule" "enable-rule" "list-api-destinations" "list-archives" "list-connections" "list-event-buses" "list-event-sources" "list-partner-event-source-accounts" "list-partner-event-sources" "list-replays" "list-rule-names-by-target" "list-rules" "list-tags-for-resource" "list-targets-by-rule" "put-events" "put-partner-events" "put-permission" "put-rule" "put-targets" "remove-permission" "remove-targets" "start-replay" "tag-resource" "test-event-pattern" "untag-resource" "update-api-destination" "update-archive" "update-connection" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -249,7 +272,7 @@ export def "cancel-replay" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-1 # required
   replay_name: string # The name of the replay to cancel.
-]: any -> record<ReplayArn: string, State: string, StateReason: string> {
+]: any -> oneof<record<ReplayArn: string, State: string, StateReason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -303,7 +326,7 @@ export def "create-api-destination" [
   invocation_endpoint: string # The URL to the HTTP invocation endpoint for the API destination.
   http_method: string@http-method-completer # The method to use for the request to the HTTP invocation endpoint.
   --invocation-rate-limit-per-second: int # The maximum number of requests per second to send to the HTTP invocation endpoint.
-]: any -> record<ApiDestinationArn: string, ApiDestinationState: string, CreationTime: string, LastModifiedTime: string> {
+]: any -> oneof<record<ApiDestinationArn: string, ApiDestinationState: string, CreationTime: string, LastModifiedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -356,7 +379,7 @@ export def "create-archive" [
   --description: string # A description for the archive.
   --event-pattern: string # An event pattern to use to filter events sent to the archive.
   --retention-days: int # The number of days to retain events for. Default value is 0. If set to 0, events are retained indefinitely
-]: any -> record<ArchiveArn: string, State: string, StateReason: string, CreationTime: string> {
+]: any -> oneof<record<ArchiveArn: string, State: string, StateReason: string, CreationTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -386,7 +409,6 @@ export def "create-archive" [
 #
 # POST /
 # operationId: CreateConnection
-# --AuthParameters shape: {BasicAuthParameters?: record, OAuthParameters?: record, ApiKeyAuthParameters?: record, InvocationHttpParameters?: record}
 export def "create-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,7 +431,7 @@ export def "create-connection" [
   --description: string # A description for the connection to create.
   authorization_type: string@authorization-type-completer # The type of authorization to use for the connection.
   auth_parameters: record # Contains the authorization parameters for the connection. — shape: {BasicAuthParameters?: record, OAuthParameters?: record, ApiKeyAuthParameters?: record, InvocationHttpParameters?: record}
-]: any -> record<ConnectionArn: string, ConnectionState: string, CreationTime: string, LastModifiedTime: string> {
+]: any -> oneof<record<ConnectionArn: string, ConnectionState: string, CreationTime: string, LastModifiedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -439,7 +461,6 @@ export def "create-connection" [
 #
 # POST /
 # operationId: CreateEventBus
-# --Tags item shape: {Key: string, Value: string}
 export def "create-event-bus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -461,7 +482,7 @@ export def "create-event-bus" [
   name: string # The name of the new event bus. Event bus names cannot contain the / character. You can't use the name default for a custom event bus, as this name is already used for your account's default event bus. If this is a partner event bus, the name must exactly match the name of the partner event source that this event bus is matched to.
   --event-source-name: string # If you are creating a partner event bus, this specifies the partner event source that the new event bus will be matched with.
   --tags: list # Tags to associate with the event bus. — item shape: {Key: string, Value: string}
-]: any -> record<EventBusArn: string> {
+]: any -> oneof<record<EventBusArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -511,7 +532,7 @@ export def "create-partner-event-source" [
   --x-amz-target: string@x-amz-target-completer-6 # required
   name: string # The name of the partner event source. This name must be unique and must be in the format partner_name/event_namespace/event_name . The Amazon Web Services account that wants to use this partner event source must create a partner event bus with a name that matches the name of the partner event source.
   account: string # The Amazon Web Services account ID that is permitted to create a matching partner event bus for this partner event source.
-]: any -> record<EventSourceArn: string> {
+]: any -> oneof<record<EventSourceArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -609,7 +630,7 @@ export def "deauthorize-connection" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   name: string # The name of the connection to remove authorization from.
-]: any -> record<ConnectionArn: string, ConnectionState: string, CreationTime: string, LastModifiedTime: string, LastAuthorizedTime: string> {
+]: any -> oneof<record<ConnectionArn: string, ConnectionState: string, CreationTime: string, LastModifiedTime: string, LastAuthorizedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -658,7 +679,7 @@ export def "delete-api-destination" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   name: string # The name of the destination to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -707,7 +728,7 @@ export def "delete-archive" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   archive_name: string # The name of the archive to delete.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -756,7 +777,7 @@ export def "delete-connection" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   name: string # The name of the connection to delete.
-]: any -> record<ConnectionArn: string, ConnectionState: string, CreationTime: string, LastModifiedTime: string, LastAuthorizedTime: string> {
+]: any -> oneof<record<ConnectionArn: string, ConnectionState: string, CreationTime: string, LastModifiedTime: string, LastAuthorizedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -955,7 +976,7 @@ export def "describe-api-destination" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   name: string # The name of the API destination to retrieve.
-]: any -> record<ApiDestinationArn: string, Name: string, Description: string, ApiDestinationState: string, ConnectionArn: string, InvocationEndpoint: string, HttpMethod: string, InvocationRateLimitPerSecond: int, CreationTime: string, LastModifiedTime: string> {
+]: any -> oneof<record<ApiDestinationArn: string, Name: string, Description: string, ApiDestinationState: string, ConnectionArn: string, InvocationEndpoint: string, HttpMethod: string, InvocationRateLimitPerSecond: int, CreationTime: string, LastModifiedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1004,7 +1025,7 @@ export def "describe-archive" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   archive_name: string # The name of the archive to retrieve.
-]: any -> record<ArchiveArn: string, ArchiveName: string, EventSourceArn: string, Description: string, EventPattern: string, State: string, StateReason: string, RetentionDays: int, SizeBytes: int, EventCount: int, CreationTime: string> {
+]: any -> oneof<record<ArchiveArn: string, ArchiveName: string, EventSourceArn: string, Description: string, EventPattern: string, State: string, StateReason: string, RetentionDays: int, SizeBytes: int, EventCount: int, CreationTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1053,7 +1074,7 @@ export def "describe-connection" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-17 # required
   name: string # The name of the connection to retrieve.
-]: any -> record<ConnectionArn: string, Name: string, Description: string, ConnectionState: string, StateReason: string, AuthorizationType: string, SecretArn: string, AuthParameters: record<BasicAuthParameters: record<Username: string>, OAuthParameters: record<ClientParameters: record, AuthorizationEndpoint: string, HttpMethod: string, OAuthHttpParameters: record>, ApiKeyAuthParameters: record<ApiKeyName: string>, InvocationHttpParameters: record<HeaderParameters: list, QueryStringParameters: list, BodyParameters: list>>, CreationTime: string, LastModifiedTime: string, LastAuthorizedTime: string> {
+]: any -> oneof<record<ConnectionArn: string, Name: string, Description: string, ConnectionState: string, StateReason: string, AuthorizationType: string, SecretArn: string, AuthParameters: record<BasicAuthParameters: record<Username: string>, OAuthParameters: record<ClientParameters: record, AuthorizationEndpoint: string, HttpMethod: string, OAuthHttpParameters: record>, ApiKeyAuthParameters: record<ApiKeyName: string>, InvocationHttpParameters: record<HeaderParameters: list, QueryStringParameters: list, BodyParameters: list>>, CreationTime: string, LastModifiedTime: string, LastAuthorizedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1102,7 +1123,7 @@ export def "describe-event-bus" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   --name: string # The name or ARN of the event bus to show details for. If you omit this, the default event bus is displayed.
-]: any -> record<Name: string, Arn: string, Policy: string> {
+]: any -> oneof<record<Name: string, Arn: string, Policy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1151,7 +1172,7 @@ export def "describe-event-source" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   name: string # The name of the partner event source to display the details of.
-]: any -> record<Arn: string, CreatedBy: string, CreationTime: string, ExpirationTime: string, Name: string, State: string> {
+]: any -> oneof<record<Arn: string, CreatedBy: string, CreationTime: string, ExpirationTime: string, Name: string, State: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1200,7 +1221,7 @@ export def "describe-partner-event-source" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   name: string # The name of the event source to display.
-]: any -> record<Arn: string, Name: string> {
+]: any -> oneof<record<Arn: string, Name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1249,7 +1270,7 @@ export def "describe-replay" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-21 # required
   replay_name: string # The name of the replay to retrieve.
-]: any -> record<ReplayName: string, ReplayArn: string, Description: string, State: string, StateReason: string, EventSourceArn: string, Destination: record<Arn: string, FilterArns: list<string>>, EventStartTime: string, EventEndTime: string, EventLastReplayedTime: string, ReplayStartTime: string, ReplayEndTime: string> {
+]: any -> oneof<record<ReplayName: string, ReplayArn: string, Description: string, State: string, StateReason: string, EventSourceArn: string, Destination: record<Arn: string, FilterArns: list<string>>, EventStartTime: string, EventEndTime: string, EventLastReplayedTime: string, ReplayStartTime: string, ReplayEndTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1299,7 +1320,7 @@ export def "describe-rule" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   name: string # The name of the rule.
   --event-bus-name: string # The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.
-]: any -> record<Name: string, Arn: string, EventPattern: string, ScheduleExpression: string, State: string, Description: string, RoleArn: string, ManagedBy: string, EventBusName: string, CreatedBy: string> {
+]: any -> oneof<record<Name: string, Arn: string, EventPattern: string, ScheduleExpression: string, State: string, Description: string, RoleArn: string, ManagedBy: string, EventBusName: string, CreatedBy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1451,7 +1472,7 @@ export def "list-api-destinations" [
   --connection-arn: string # The ARN of the connection specified for the API destination.
   --next-token: string # The token returned by a previous call to retrieve the next set of results.
   --limit: int # The maximum number of API destinations to include in the response.
-]: any -> record<ApiDestinations: table<ApiDestinationArn: string, Name: string, ApiDestinationState: string, ConnectionArn: string, InvocationEndpoint: string, HttpMethod: string, InvocationRateLimitPerSecond: int, CreationTime: string, LastModifiedTime: string>, NextToken: string> {
+]: any -> oneof<record<ApiDestinations: table<ApiDestinationArn: string, Name: string, ApiDestinationState: string, ConnectionArn: string, InvocationEndpoint: string, HttpMethod: string, InvocationRateLimitPerSecond: int, CreationTime: string, LastModifiedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1504,7 +1525,7 @@ export def "list-archives" [
   --state: string@state-completer # The state of the archive.
   --next-token: string # The token returned by a previous call to retrieve the next set of results.
   --limit: int # The maximum number of results to return.
-]: any -> record<Archives: table<ArchiveName: string, EventSourceArn: string, State: string, StateReason: string, RetentionDays: int, SizeBytes: int, EventCount: int, CreationTime: string>, NextToken: string> {
+]: any -> oneof<record<Archives: table<ArchiveName: string, EventSourceArn: string, State: string, StateReason: string, RetentionDays: int, SizeBytes: int, EventCount: int, CreationTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1556,7 +1577,7 @@ export def "list-connections" [
   --connection-state: string@connection-state-completer # The state of the connection.
   --next-token: string # The token returned by a previous call to retrieve the next set of results.
   --limit: int # The maximum number of connections to return.
-]: any -> record<Connections: table<ConnectionArn: string, Name: string, ConnectionState: string, StateReason: string, AuthorizationType: string, CreationTime: string, LastModifiedTime: string, LastAuthorizedTime: string>, NextToken: string> {
+]: any -> oneof<record<Connections: table<ConnectionArn: string, Name: string, ConnectionState: string, StateReason: string, AuthorizationType: string, CreationTime: string, LastModifiedTime: string, LastAuthorizedTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1607,7 +1628,7 @@ export def "list-event-buses" [
   --name-prefix: string # Specifying this limits the results to only those event buses with names that start with the specified prefix.
   --next-token: string # The token returned by a previous call to retrieve the next set of results.
   --limit: int # Specifying this limits the number of results returned by this operation. The operation also returns a NextToken which you can use in a subsequent operation to retrieve the next set of results.
-]: any -> record<EventBuses: table<Name: string, Arn: string, Policy: string>, NextToken: string> {
+]: any -> oneof<record<EventBuses: table<Name: string, Arn: string, Policy: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1658,7 +1679,7 @@ export def "list-event-sources" [
   --name-prefix: string # Specifying this limits the results to only those partner event sources with names that start with the specified prefix.
   --next-token: string # The token returned by a previous call to retrieve the next set of results.
   --limit: int # Specifying this limits the number of results returned by this operation. The operation also returns a NextToken which you can use in a subsequent operation to retrieve the next set of results.
-]: any -> record<EventSources: table<Arn: string, CreatedBy: string, CreationTime: string, ExpirationTime: string, Name: string, State: string>, NextToken: string> {
+]: any -> oneof<record<EventSources: table<Arn: string, CreatedBy: string, CreationTime: string, ExpirationTime: string, Name: string, State: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1709,7 +1730,7 @@ export def "list-partner-event-source-accounts" [
   event_source_name: string # The name of the partner event source to display account information about.
   --next-token: string # The token returned by a previous call to this operation. Specifying this retrieves the next set of results.
   --limit: int # Specifying this limits the number of results returned by this operation. The operation also returns a NextToken which you can use in a subsequent operation to retrieve the next set of results.
-]: any -> record<PartnerEventSourceAccounts: table<Account: string, CreationTime: string, ExpirationTime: string, State: string>, NextToken: string> {
+]: any -> oneof<record<PartnerEventSourceAccounts: table<Account: string, CreationTime: string, ExpirationTime: string, State: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1760,7 +1781,7 @@ export def "list-partner-event-sources" [
   name_prefix: string # If you specify this, the results are limited to only those partner event sources that start with the string you specify.
   --next-token: string # The token returned by a previous call to this operation. Specifying this retrieves the next set of results.
   --limit: int # pecifying this limits the number of results returned by this operation. The operation also returns a NextToken which you can use in a subsequent operation to retrieve the next set of results.
-]: any -> record<PartnerEventSources: table<Arn: string, Name: string>, NextToken: string> {
+]: any -> oneof<record<PartnerEventSources: table<Arn: string, Name: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1813,7 +1834,7 @@ export def "list-replays" [
   --event-source-arn: string # The ARN of the archive from which the events are replayed.
   --next-token: string # The token returned by a previous call to retrieve the next set of results.
   --limit: int # The maximum number of replays to retrieve.
-]: any -> record<Replays: table<ReplayName: string, EventSourceArn: string, State: string, StateReason: string, EventStartTime: string, EventEndTime: string, EventLastReplayedTime: string, ReplayStartTime: string, ReplayEndTime: string>, NextToken: string> {
+]: any -> oneof<record<Replays: table<ReplayName: string, EventSourceArn: string, State: string, StateReason: string, EventStartTime: string, EventEndTime: string, EventLastReplayedTime: string, ReplayStartTime: string, ReplayEndTime: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1865,7 +1886,7 @@ export def "list-rule-names-by-target" [
   --event-bus-name: string # The name or ARN of the event bus to list rules for. If you omit this, the default event bus is used.
   --next-token: string # The token returned by a previous call to retrieve the next set of results.
   --limit: int # The maximum number of results to return.
-]: any -> record<RuleNames: list<string>, NextToken: string> {
+]: any -> oneof<record<RuleNames: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1917,7 +1938,7 @@ export def "list-rules" [
   --event-bus-name: string # The name or ARN of the event bus to list the rules for. If you omit this, the default event bus is used.
   --next-token: string # The token returned by a previous call to retrieve the next set of results.
   --limit: int # The maximum number of results to return.
-]: any -> record<Rules: table<Name: string, Arn: string, EventPattern: string, State: string, Description: string, ScheduleExpression: string, RoleArn: string, ManagedBy: string, EventBusName: string>, NextToken: string> {
+]: any -> oneof<record<Rules: table<Name: string, Arn: string, EventPattern: string, State: string, Description: string, ScheduleExpression: string, RoleArn: string, ManagedBy: string, EventBusName: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1966,7 +1987,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-35 # required
   resource_arn: string # The ARN of the EventBridge resource for which you want to view tags.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2018,7 +2039,7 @@ export def "list-targets-by-rule" [
   --event-bus-name: string # The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.
   --next-token: string # The token returned by a previous call to retrieve the next set of results.
   --limit: int # The maximum number of results to return.
-]: any -> record<Targets: table<Id: string, Arn: string, RoleArn: string, Input: string, InputPath: string, InputTransformer: record, KinesisParameters: record, RunCommandParameters: record, EcsParameters: record, BatchParameters: record, SqsParameters: record, HttpParameters: record, RedshiftDataParameters: record, SageMakerPipelineParameters: record, DeadLetterConfig: record, RetryPolicy: record>, NextToken: string> {
+]: any -> oneof<record<Targets: table<Id: string, Arn: string, RoleArn: string, Input: string, InputPath: string, InputTransformer: record, KinesisParameters: record, RunCommandParameters: record, EcsParameters: record, BatchParameters: record, SqsParameters: record, HttpParameters: record, RedshiftDataParameters: record, SageMakerPipelineParameters: record, DeadLetterConfig: record, RetryPolicy: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2048,7 +2069,6 @@ export def "list-targets-by-rule" [
 #
 # POST /
 # operationId: PutEvents
-# --Entries item shape: {Time?: string, Source?: string, Resources?: list<string>, DetailType?: string, Detail?: string, EventBusName?: string, TraceHeader?: string}
 export def "put-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2068,7 +2088,7 @@ export def "put-events" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-37 # required
   entries: list # The entry that defines an event in your system. You can specify several parameters for the entry such as the source and type of the event, resources associated with the event, and so on. — item shape: {Time?: string, Source?: string, Resources?: list<string>, DetailType?: string, Detail?: string, EventBusName?: string, TraceHeader?: string}
-]: any -> record<FailedEntryCount: int, Entries: table<EventId: string, ErrorCode: string, ErrorMessage: string>> {
+]: any -> oneof<record<FailedEntryCount: int, Entries: table<EventId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2098,7 +2118,6 @@ export def "put-events" [
 #
 # POST /
 # operationId: PutPartnerEvents
-# --Entries item shape: {Time?: string, Source?: string, Resources?: list<string>, DetailType?: string, Detail?: string}
 export def "put-partner-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2118,7 +2137,7 @@ export def "put-partner-events" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-38 # required
   entries: list # The list of events to write to the event bus. — item shape: {Time?: string, Source?: string, Resources?: list<string>, DetailType?: string, Detail?: string}
-]: any -> record<FailedEntryCount: int, Entries: table<EventId: string, ErrorCode: string, ErrorMessage: string>> {
+]: any -> oneof<record<FailedEntryCount: int, Entries: table<EventId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2148,7 +2167,6 @@ export def "put-partner-events" [
 #
 # POST /
 # operationId: PutPermission
-# --Condition shape: {Type: string, Key: string, Value: string}
 export def "put-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2203,7 +2221,6 @@ export def "put-permission" [
 #
 # POST /
 # operationId: PutRule
-# --Tags item shape: {Key: string, Value: string}
 export def "put-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2230,7 +2247,7 @@ export def "put-rule" [
   --role-arn: string # The Amazon Resource Name (ARN) of the IAM role associated with the rule. If you're setting an event bus in another account as the target and that account granted permission to your account through an organization instead of directly by the account ID, you must specify a RoleArn with proper permissions in the Target structure, instead of here in this parameter.
   --tags: list # The list of key-value pairs to associate with the rule. — item shape: {Key: string, Value: string}
   --event-bus-name: string # The name or ARN of the event bus to associate with this rule. If you omit this, the default event bus is used.
-]: any -> record<RuleArn: string> {
+]: any -> oneof<record<RuleArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2260,7 +2277,6 @@ export def "put-rule" [
 #
 # POST /
 # operationId: PutTargets
-# --Targets item shape: {Id: string, Arn: string, RoleArn?: string, Input?: string, InputPath?: string, InputTransformer?: record, KinesisParameters?: record, RunCommandParameters?: record, EcsParameters?: record, BatchParameters?: record, SqsParameters?: record, HttpParameters?: record, RedshiftDataParameters?: record, SageMakerPipelineParameters?: record, DeadLetterConfig?: record, RetryPolicy?: record}
 export def "put-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2282,7 +2298,7 @@ export def "put-targets" [
   rule: string # The name of the rule.
   --event-bus-name: string # The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.
   targets: list # The targets to update or add to the rule. — item shape: {Id: string, Arn: string, RoleArn?: string, Input?: string, InputPath?: string, InputTransformer?: record, KinesisParameters?: record, RunCommandParameters?: record, EcsParameters?: record, BatchParameters?: record, SqsParameters?: record, HttpParameters?: record, RedshiftDataParameters?: record, SageMakerPipelineParameters?: record, DeadLetterConfig?: record, RetryPolicy?: record}
-]: any -> record<FailedEntryCount: int, FailedEntries: table<TargetId: string, ErrorCode: string, ErrorMessage: string>> {
+]: any -> oneof<record<FailedEntryCount: int, FailedEntries: table<TargetId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2385,7 +2401,7 @@ export def "remove-targets" [
   --event-bus-name: string # The name or ARN of the event bus associated with the rule. If you omit this, the default event bus is used.
   ids: list<string> # The IDs of the targets to remove from the rule.
   --force: oneof<nothing, bool> # If this is a managed rule, created by an Amazon Web Services service on your behalf, you must specify Force as True to remove targets. This parameter is ignored for rules that are not managed rules. You can check whether a rule is a managed rule by using DescribeRule or ListRules and checking the ManagedBy field of the response.
-]: any -> record<FailedEntryCount: int, FailedEntries: table<TargetId: string, ErrorCode: string, ErrorMessage: string>> {
+]: any -> oneof<record<FailedEntryCount: int, FailedEntries: table<TargetId: string, ErrorCode: string, ErrorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2415,7 +2431,6 @@ export def "remove-targets" [
 #
 # POST /
 # operationId: StartReplay
-# --Destination shape: {Arn: string, FilterArns?: list<string>}
 export def "start-replay" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2440,7 +2455,7 @@ export def "start-replay" [
   event_start_time: string # A time stamp for the time to start replaying events. Only events that occurred between the EventStartTime and EventEndTime are replayed. (format: date-time)
   event_end_time: string # A time stamp for the time to stop replaying events. Only events that occurred between the EventStartTime and EventEndTime are replayed. (format: date-time)
   destination: record # A ReplayDestination object that contains details about a replay. — shape: {Arn: string, FilterArns?: list<string>}
-]: any -> record<ReplayArn: string, State: string, StateReason: string, ReplayStartTime: string> {
+]: any -> oneof<record<ReplayArn: string, State: string, StateReason: string, ReplayStartTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2470,7 +2485,6 @@ export def "start-replay" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key: string, Value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2491,7 +2505,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-45 # required
   resource_arn: string # The ARN of the EventBridge resource that you're adding tags to.
   tags: list # The list of key-value pairs to associate with the resource. — item shape: {Key: string, Value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2541,7 +2555,7 @@ export def "test-event-pattern" [
   --x-amz-target: string@x-amz-target-completer-46 # required
   event_pattern: string # The event pattern. For more information, see Events and Event Patterns (https://docs.aws.amazon.com/eventbridge/latest/userguide/eventbridge-and-event-patterns.html) in the Amazon EventBridge User Guide.
   event: string # The event, in JSON format, to test against the event pattern. The JSON must follow the format specified in Amazon Web Services Events (https://docs.aws.amazon.com/eventbridge/latest/userguide/aws-events.html), and the following fields are mandatory: id account source time region resources detail-type
-]: any -> record<Result: bool> {
+]: any -> oneof<record<Result: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2591,7 +2605,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-47 # required
   resource_arn: string # The ARN of the EventBridge resource from which you are removing tags.
   tag_keys: list<string> # The list of tag keys to remove from the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2645,7 +2659,7 @@ export def "update-api-destination" [
   --invocation-endpoint: string # The URL to the endpoint to use for the API destination.
   --http-method: string@http-method-completer # The method to use for the API destination.
   --invocation-rate-limit-per-second: int # The maximum number of invocations per second to send to the API destination.
-]: any -> record<ApiDestinationArn: string, ApiDestinationState: string, CreationTime: string, LastModifiedTime: string> {
+]: any -> oneof<record<ApiDestinationArn: string, ApiDestinationState: string, CreationTime: string, LastModifiedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2697,7 +2711,7 @@ export def "update-archive" [
   --description: string # The description for the archive.
   --event-pattern: string # The event pattern to use to filter events sent to the archive.
   --retention-days: int # The number of days to retain events in the archive.
-]: any -> record<ArchiveArn: string, State: string, StateReason: string, CreationTime: string> {
+]: any -> oneof<record<ArchiveArn: string, State: string, StateReason: string, CreationTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2727,7 +2741,6 @@ export def "update-archive" [
 #
 # POST /
 # operationId: UpdateConnection
-# --AuthParameters shape: {BasicAuthParameters?: record, OAuthParameters?: record, ApiKeyAuthParameters?: record, InvocationHttpParameters?: record}
 export def "update-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2750,7 +2763,7 @@ export def "update-connection" [
   --description: string # A description for the connection.
   --authorization-type: string@authorization-type-completer # The type of authorization to use for the connection.
   --auth-parameters: record # Contains the additional parameters to use for the connection. — shape: {BasicAuthParameters?: record, OAuthParameters?: record, ApiKeyAuthParameters?: record, InvocationHttpParameters?: record}
-]: any -> record<ConnectionArn: string, ConnectionState: string, CreationTime: string, LastModifiedTime: string, LastAuthorizedTime: string> {
+]: any -> oneof<record<ConnectionArn: string, ConnectionState: string, CreationTime: string, LastModifiedTime: string, LastAuthorizedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

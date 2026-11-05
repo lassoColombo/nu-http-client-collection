@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def version-completer [] { ["RECAPTCHA_ENTERPRISE" "RECAPTCHA_VERSION_UNSPECIFIE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "identitytoolkit-accounts-mfa-enrollment-finalize" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["identitytoolkit-accounts-mfa-enrollment-finalize" "identitytoolkit-accounts-mfa-enrollment-start" "identitytoolkit-accounts-mfa-enrollment-withdraw" "identitytoolkit-accounts-mfa-sign-in-finalize" "identitytoolkit-accounts-mfa-sign-in-start" "identitytoolkit-accounts-passkey-enrollment-finalize" "identitytoolkit-accounts-passkey-enrollment-start" "identitytoolkit-accounts-passkey-sign-in-finalize" "identitytoolkit-accounts-passkey-sign-in-start" "identitytoolkit-accounts-revoke-token" "identitytoolkit-default-supported-idps-list" "identitytoolkit-get-recaptcha-config" "identitytoolkit-projects-tenants-oauth-idp-configs-delete" "identitytoolkit-projects-tenants-oauth-idp-configs-get" "identitytoolkit-projects-tenants-oauth-idp-configs-patch" "identitytoolkit-projects-tenants-default-supported-idp-configs-list" "identitytoolkit-projects-tenants-default-supported-idp-configs-create" "identitytoolkit-projects-tenants-inbound-saml-configs-list" "identitytoolkit-projects-tenants-inbound-saml-configs-create" "identitytoolkit-projects-tenants-oauth-idp-configs-list" "identitytoolkit-projects-tenants-oauth-idp-configs-create" "identitytoolkit-projects-tenants-list" "identitytoolkit-projects-tenants-create" "identitytoolkit-projects-identity-platform-initialize-auth" "identitytoolkit-projects-tenants-get-iam-policy" "identitytoolkit-projects-tenants-set-iam-policy" "identitytoolkit-projects-tenants-test-iam-permissions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -146,8 +170,6 @@ export def commands []: nothing -> table {
 #
 # POST /v2/accounts/mfaEnrollment:finalize
 # operationId: identitytoolkit.accounts.mfaEnrollment.finalize
-# --phoneVerificationInfo shape: {androidVerificationProof?: string, code?: string, phoneNumber?: string, sessionInfo?: string}
-# --totpVerificationInfo shape: {sessionInfo?: string, verificationCode?: string}
 export def "identitytoolkit-accounts-mfa-enrollment-finalize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,7 +196,7 @@ export def "identitytoolkit-accounts-mfa-enrollment-finalize" [
   --phone-verification-info: record # Phone Verification info for a FinalizeMfa request. — shape: {androidVerificationProof?: string, code?: string, phoneNumber?: string, sessionInfo?: string}
   --tenant-id: string # The ID of the Identity Platform tenant that the user enrolling MFA belongs to. If not set, the user belongs to the default Identity Platform project.
   --totp-verification-info: record # Mfa request info specific to TOTP auth for FinalizeMfa. — shape: {sessionInfo?: string, verificationCode?: string}
-]: any -> record<idToken: string, phoneAuthInfo: record<androidVerificationProof: string, androidVerificationProofExpireTime: string, phoneNumber: string>, refreshToken: string, totpAuthInfo: record> {
+]: any -> oneof<record<idToken: string, phoneAuthInfo: record<androidVerificationProof: string, androidVerificationProofExpireTime: string, phoneNumber: string>, refreshToken: string, totpAuthInfo: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -202,7 +224,6 @@ export def "identitytoolkit-accounts-mfa-enrollment-finalize" [
 #
 # POST /v2/accounts/mfaEnrollment:start
 # operationId: identitytoolkit.accounts.mfaEnrollment.start
-# --phoneEnrollmentInfo shape: {autoRetrievalInfo?: record, iosReceipt?: string, iosSecret?: string, phoneNumber?: string, playIntegrityToken?: string, recaptchaToken?: string, safetyNetToken?: string}
 export def "identitytoolkit-accounts-mfa-enrollment-start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +249,7 @@ export def "identitytoolkit-accounts-mfa-enrollment-start" [
   --phone-enrollment-info: record # App Verification info for a StartMfa request. — shape: {autoRetrievalInfo?: record, iosReceipt?: string, iosSecret?: string, phoneNumber?: string, playIntegrityToken?: string, recaptchaToken?: string, safetyNetToken?: string}
   --tenant-id: string # The ID of the Identity Platform tenant that the user enrolling MFA belongs to. If not set, the user belongs to the default Identity Platform project.
   --totp-enrollment-info: record # Mfa request info specific to TOTP auth for StartMfa.
-]: any -> record<phoneSessionInfo: record<sessionInfo: string>, totpSessionInfo: record<finalizeEnrollmentTime: string, hashingAlgorithm: string, periodSec: int, sessionInfo: string, sharedSecretKey: string, verificationCodeLength: int>> {
+]: any -> oneof<record<phoneSessionInfo: record<sessionInfo: string>, totpSessionInfo: record<finalizeEnrollmentTime: string, hashingAlgorithm: string, periodSec: int, sessionInfo: string, sharedSecretKey: string, verificationCodeLength: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -280,7 +301,7 @@ export def "identitytoolkit-accounts-mfa-enrollment-withdraw" [
   --id-token: string # Required. User's ID token.
   --mfa-enrollment-id: string # Required. MFA enrollment id from a current MFA enrollment.
   --tenant-id: string # The ID of the Identity Platform tenant that the user unenrolling MFA belongs to. If not set, the user belongs to the default Identity Platform project.
-]: any -> record<idToken: string, refreshToken: string> {
+]: any -> oneof<record<idToken: string, refreshToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -308,8 +329,6 @@ export def "identitytoolkit-accounts-mfa-enrollment-withdraw" [
 #
 # POST /v2/accounts/mfaSignIn:finalize
 # operationId: identitytoolkit.accounts.mfaSignIn.finalize
-# --phoneVerificationInfo shape: {androidVerificationProof?: string, code?: string, phoneNumber?: string, sessionInfo?: string}
-# --totpVerificationInfo shape: {verificationCode?: string}
 export def "identitytoolkit-accounts-mfa-sign-in-finalize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -336,7 +355,7 @@ export def "identitytoolkit-accounts-mfa-sign-in-finalize" [
   --phone-verification-info: record # Phone Verification info for a FinalizeMfa request. — shape: {androidVerificationProof?: string, code?: string, phoneNumber?: string, sessionInfo?: string}
   --tenant-id: string # The ID of the Identity Platform tenant the user is signing in to. If not set, the user will sign in to the default Identity Platform project.
   --totp-verification-info: record # TOTP verification info for FinalizeMfaSignInRequest. — shape: {verificationCode?: string}
-]: any -> record<idToken: string, phoneAuthInfo: record<androidVerificationProof: string, androidVerificationProofExpireTime: string, phoneNumber: string>, refreshToken: string> {
+]: any -> oneof<record<idToken: string, phoneAuthInfo: record<androidVerificationProof: string, androidVerificationProofExpireTime: string, phoneNumber: string>, refreshToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -364,7 +383,6 @@ export def "identitytoolkit-accounts-mfa-sign-in-finalize" [
 #
 # POST /v2/accounts/mfaSignIn:start
 # operationId: identitytoolkit.accounts.mfaSignIn.start
-# --phoneSignInInfo shape: {autoRetrievalInfo?: record, iosReceipt?: string, iosSecret?: string, phoneNumber?: string, playIntegrityToken?: string, recaptchaToken?: string, safetyNetToken?: string}
 export def "identitytoolkit-accounts-mfa-sign-in-start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -390,7 +408,7 @@ export def "identitytoolkit-accounts-mfa-sign-in-start" [
   --mfa-pending-credential: string # Required. Pending credential from first factor sign-in.
   --phone-sign-in-info: record # App Verification info for a StartMfa request. — shape: {autoRetrievalInfo?: record, iosReceipt?: string, iosSecret?: string, phoneNumber?: string, playIntegrityToken?: string, recaptchaToken?: string, safetyNetToken?: string}
   --tenant-id: string # The ID of the Identity Platform tenant the user is signing in to. If not set, the user will sign in to the default Identity Platform project.
-]: any -> record<phoneResponseInfo: record<sessionInfo: string>> {
+]: any -> oneof<record<phoneResponseInfo: record<sessionInfo: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -418,7 +436,6 @@ export def "identitytoolkit-accounts-mfa-sign-in-start" [
 #
 # POST /v2/accounts/passkeyEnrollment:finalize
 # operationId: identitytoolkit.accounts.passkeyEnrollment.finalize
-# --authenticatorRegistrationResponse shape: {authenticatorAttestationResponse?: record, credentialId?: string, credentialType?: string}
 export def "identitytoolkit-accounts-passkey-enrollment-finalize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,7 +460,7 @@ export def "identitytoolkit-accounts-passkey-enrollment-finalize" [
   --authenticator-registration-response: record # Authenticator response to register a new FIDO key. — shape: {authenticatorAttestationResponse?: record, credentialId?: string, credentialType?: string}
   --id-token: string # Required. The GCIP ID token of the signed-in user
   --tenant-id: string # Optional. The ID of the Identity Platform tenant the user is signing in to. If not set, the user will sign in to the default Identity Platform project.
-]: any -> record<idToken: string, refreshToken: string> {
+]: any -> oneof<record<idToken: string, refreshToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -494,7 +511,7 @@ export def "identitytoolkit-accounts-passkey-enrollment-start" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --id-token: string # Required. The GCIP ID token of the signed-in user
   --tenant-id: string # Optional. The ID of the Identity Platform tenant the user is signing in to. If not set, the user will sign in to the default Identity Platform project.
-]: any -> record<credentialCreationOptions: record<authenticatorSelection: record<authenticatorAttachment: string, requireResidentKey: bool, userVerification: string>, challenge: string, excludeCredentials: list<record>, pubKeyCredParams: list<record>, rp: record<id: string>, user: record<id: string>>> {
+]: any -> oneof<record<credentialCreationOptions: record<authenticatorSelection: record<authenticatorAttachment: string, requireResidentKey: bool, userVerification: string>, challenge: string, excludeCredentials: list<record>, pubKeyCredParams: list<record>, rp: record<id: string>, user: record<id: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -522,7 +539,6 @@ export def "identitytoolkit-accounts-passkey-enrollment-start" [
 #
 # POST /v2/accounts/passkeySignIn:finalize
 # operationId: identitytoolkit.accounts.passkeySignIn.finalize
-# --authenticatorAuthenticationResponse shape: {authenticatorAssertionResponse?: record, credentialId?: string, credentialType?: string}
 export def "identitytoolkit-accounts-passkey-sign-in-finalize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -547,7 +563,7 @@ export def "identitytoolkit-accounts-passkey-sign-in-finalize" [
   --authenticator-authentication-response: record # Authenticator response to authenticate the user with an existing FIDO key. — shape: {authenticatorAssertionResponse?: record, credentialId?: string, credentialType?: string}
   --session-id: string # Optional. The session ID that was passed into StartPasskeySignIn, if any. (format: byte)
   --tenant-id: string # Optional. The ID of the Identity Platform tenant the user is signing in to. If not set, the user will sign in to the default Identity Platform project.
-]: any -> record<idToken: string, refreshToken: string> {
+]: any -> oneof<record<idToken: string, refreshToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -598,7 +614,7 @@ export def "identitytoolkit-accounts-passkey-sign-in-start" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --session-id: string # Optional. The developer can bind their own concept of a user session to this flow. (format: byte)
   --tenant-id: string # Optional. The ID of the Identity Platform tenant the user is signing in to. If not set, the user will sign in to the default Identity Platform project.
-]: any -> record<credentialRequestOptions: record<challenge: string, rpId: string, userVerification: string>> {
+]: any -> oneof<record<credentialRequestOptions: record<challenge: string, rpId: string, userVerification: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -653,7 +669,7 @@ export def "identitytoolkit-accounts-revoke-token" [
   --tenant-id: string # The ID of the Identity Platform tenant the user is signing in to. If not set, the user will sign in to the default Identity Platform project.
   --body-token: string # Required. The token to be revoked. If an authorization_code is passed in, the API will first exchange the code for access token and then revoke the token exchanged.
   --token-type: string@token-type-completer # Required. The type of the token to be revoked.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -704,7 +720,7 @@ export def "identitytoolkit-default-supported-idps-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of items to return.
   --page-token: string # The next_page_token value returned from a previous List request, if any.
-]: nothing -> record<defaultSupportedIdps: table<description: string, idpId: string>, nextPageToken: string> {
+]: nothing -> oneof<record<defaultSupportedIdps: table<description: string, idpId: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -753,7 +769,7 @@ export def "identitytoolkit-get-recaptcha-config" [
   --client-type: string@client-type-completer # reCAPTCHA Enterprise uses separate site keys for different client types. Specify the client type to get the corresponding key.
   --tenant-id: string # The id of a tenant.
   --version: string@version-completer # The reCAPTCHA version.
-]: nothing -> record<recaptchaEnforcementState: table<enforcementState: string, provider: string>, recaptchaKey: string> {
+]: nothing -> oneof<record<recaptchaEnforcementState: table<enforcementState: string, provider: string>, recaptchaKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientType" $client_type "scalar") (serialize-qp "tenantId" $tenant_id "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
@@ -800,7 +816,7 @@ export def "identitytoolkit-projects-tenants-oauth-idp-configs-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -848,7 +864,7 @@ export def "identitytoolkit-projects-tenants-oauth-idp-configs-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<clientId: string, clientSecret: string, displayName: string, enabled: bool, issuer: string, name: string, responseType: record<code: bool, idToken: bool, token: bool>> {
+]: nothing -> oneof<record<clientId: string, clientSecret: string, displayName: string, enabled: bool, issuer: string, name: string, responseType: record<code: bool, idToken: bool, token: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -874,7 +890,6 @@ export def "identitytoolkit-projects-tenants-oauth-idp-configs-get" [
 #
 # PATCH /v2/{name}
 # operationId: identitytoolkit.projects.tenants.oauthIdpConfigs.patch
-# --responseType shape: {code?: bool, idToken?: bool, token?: bool}
 export def "identitytoolkit-projects-tenants-oauth-idp-configs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -905,7 +920,7 @@ export def "identitytoolkit-projects-tenants-oauth-idp-configs-patch" [
   --issuer: string # For OIDC Idps, the issuer identifier.
   --body-name: string # The name of the OAuthIdpConfig resource, for example: 'projects/my-awesome-project/oauthIdpConfigs/oauth-config-id'. Ignored during create requests.
   --response-type: record # The response type to request for in the OAuth authorization flow. You can set either `id_token` or `code` to true, but not both. Setting both types to be simultaneously true (`{code: true, id_token: true}`) is not yet supported. See https://openid.net/specs/openid-connect-core-1_0.html#Authentication for a mapping of response type to OAuth 2.0 flow. — shape: {code?: bool, idToken?: bool, token?: bool}
-]: any -> record<clientId: string, clientSecret: string, displayName: string, enabled: bool, issuer: string, name: string, responseType: record<code: bool, idToken: bool, token: bool>> {
+]: any -> oneof<record<clientId: string, clientSecret: string, displayName: string, enabled: bool, issuer: string, name: string, responseType: record<code: bool, idToken: bool, token: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -958,7 +973,7 @@ export def "identitytoolkit-projects-tenants-default-supported-idp-configs-list"
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of items to return.
   --page-token: string # The next_page_token value returned from a previous List request, if any.
-]: nothing -> record<defaultSupportedIdpConfigs: table<appleSignInConfig: record, clientId: string, clientSecret: string, enabled: bool, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<defaultSupportedIdpConfigs: table<appleSignInConfig: record, clientId: string, clientSecret: string, enabled: bool, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -984,7 +999,6 @@ export def "identitytoolkit-projects-tenants-default-supported-idp-configs-list"
 #
 # POST /v2/{parent}/defaultSupportedIdpConfigs
 # operationId: identitytoolkit.projects.tenants.defaultSupportedIdpConfigs.create
-# --appleSignInConfig shape: {bundleIds?: list<string>, codeFlowConfig?: record}
 export def "identitytoolkit-projects-tenants-default-supported-idp-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1013,7 +1027,7 @@ export def "identitytoolkit-projects-tenants-default-supported-idp-configs-creat
   --client-secret: string # OAuth client secret.
   --enabled: oneof<nothing, bool> # True if allows the user to sign in with the provider.
   --name: string # The name of the DefaultSupportedIdpConfig resource, for example: "projects/my-awesome-project/defaultSupportedIdpConfigs/google.com"
-]: any -> record<appleSignInConfig: record<bundleIds: list<string>, codeFlowConfig: record<keyId: string, privateKey: string, teamId: string>>, clientId: string, clientSecret: string, enabled: bool, name: string> {
+]: any -> oneof<record<appleSignInConfig: record<bundleIds: list<string>, codeFlowConfig: record<keyId: string, privateKey: string, teamId: string>>, clientId: string, clientSecret: string, enabled: bool, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1066,7 +1080,7 @@ export def "identitytoolkit-projects-tenants-inbound-saml-configs-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of items to return.
   --page-token: string # The next_page_token value returned from a previous List request, if any.
-]: nothing -> record<inboundSamlConfigs: table<displayName: string, enabled: bool, idpConfig: record, name: string, spConfig: record>, nextPageToken: string> {
+]: nothing -> oneof<record<inboundSamlConfigs: table<displayName: string, enabled: bool, idpConfig: record, name: string, spConfig: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1092,8 +1106,6 @@ export def "identitytoolkit-projects-tenants-inbound-saml-configs-list" [
 #
 # POST /v2/{parent}/inboundSamlConfigs
 # operationId: identitytoolkit.projects.tenants.inboundSamlConfigs.create
-# --idpConfig shape: {idpCertificates?: list, idpEntityId?: string, signRequest?: bool, ssoUrl?: string}
-# --spConfig shape: {callbackUri?: string, spEntityId?: string}
 export def "identitytoolkit-projects-tenants-inbound-saml-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1122,7 +1134,7 @@ export def "identitytoolkit-projects-tenants-inbound-saml-configs-create" [
   --idp-config: record # The SAML IdP (Identity Provider) configuration when the project acts as the relying party. — shape: {idpCertificates?: list, idpEntityId?: string, signRequest?: bool, ssoUrl?: string}
   --name: string # The name of the InboundSamlConfig resource, for example: 'projects/my-awesome-project/inboundSamlConfigs/my-config-id'. Ignored during create requests.
   --sp-config: record # The SAML SP (Service Provider) configuration when the project acts as the relying party to receive and accept an authentication assertion issued by a SAML identity provider. — shape: {callbackUri?: string, spEntityId?: string}
-]: any -> record<displayName: string, enabled: bool, idpConfig: record<idpCertificates: list<record>, idpEntityId: string, signRequest: bool, ssoUrl: string>, name: string, spConfig: record<callbackUri: string, spCertificates: list<record>, spEntityId: string>> {
+]: any -> oneof<record<displayName: string, enabled: bool, idpConfig: record<idpCertificates: list<record>, idpEntityId: string, signRequest: bool, ssoUrl: string>, name: string, spConfig: record<callbackUri: string, spCertificates: list<record>, spEntityId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1175,7 +1187,7 @@ export def "identitytoolkit-projects-tenants-oauth-idp-configs-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of items to return.
   --page-token: string # The next_page_token value returned from a previous List request, if any.
-]: nothing -> record<nextPageToken: string, oauthIdpConfigs: table<clientId: string, clientSecret: string, displayName: string, enabled: bool, issuer: string, name: string, responseType: record>> {
+]: nothing -> oneof<record<nextPageToken: string, oauthIdpConfigs: table<clientId: string, clientSecret: string, displayName: string, enabled: bool, issuer: string, name: string, responseType: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1201,7 +1213,6 @@ export def "identitytoolkit-projects-tenants-oauth-idp-configs-list" [
 #
 # POST /v2/{parent}/oauthIdpConfigs
 # operationId: identitytoolkit.projects.tenants.oauthIdpConfigs.create
-# --responseType shape: {code?: bool, idToken?: bool, token?: bool}
 export def "identitytoolkit-projects-tenants-oauth-idp-configs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1232,7 +1243,7 @@ export def "identitytoolkit-projects-tenants-oauth-idp-configs-create" [
   --issuer: string # For OIDC Idps, the issuer identifier.
   --name: string # The name of the OAuthIdpConfig resource, for example: 'projects/my-awesome-project/oauthIdpConfigs/oauth-config-id'. Ignored during create requests.
   --response-type: record # The response type to request for in the OAuth authorization flow. You can set either `id_token` or `code` to true, but not both. Setting both types to be simultaneously true (`{code: true, id_token: true}`) is not yet supported. See https://openid.net/specs/openid-connect-core-1_0.html#Authentication for a mapping of response type to OAuth 2.0 flow. — shape: {code?: bool, idToken?: bool, token?: bool}
-]: any -> record<clientId: string, clientSecret: string, displayName: string, enabled: bool, issuer: string, name: string, responseType: record<code: bool, idToken: bool, token: bool>> {
+]: any -> oneof<record<clientId: string, clientSecret: string, displayName: string, enabled: bool, issuer: string, name: string, responseType: record<code: bool, idToken: bool, token: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1285,7 +1296,7 @@ export def "identitytoolkit-projects-tenants-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of results to return, capped at 1000. If not specified, the default value is 20.
   --page-token: string # The pagination token from the response of a previous request.
-]: nothing -> record<nextPageToken: string, tenants: table<allowPasswordSignup: bool, autodeleteAnonymousUsers: bool, client: record, disableAuth: bool, displayName: string, emailPrivacyConfig: record, enableAnonymousUser: bool, enableEmailLinkSignin: bool, hashConfig: record, inheritance: record, mfaConfig: record, monitoring: record, name: string, recaptchaConfig: record, smsRegionConfig: record, testPhoneNumbers: record>> {
+]: nothing -> oneof<record<nextPageToken: string, tenants: table<allowPasswordSignup: bool, autodeleteAnonymousUsers: bool, client: record, disableAuth: bool, displayName: string, emailPrivacyConfig: record, enableAnonymousUser: bool, enableEmailLinkSignin: bool, hashConfig: record, inheritance: record, mfaConfig: record, monitoring: record, name: string, recaptchaConfig: record, smsRegionConfig: record, testPhoneNumbers: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1311,13 +1322,6 @@ export def "identitytoolkit-projects-tenants-list" [
 #
 # POST /v2/{parent}/tenants
 # operationId: identitytoolkit.projects.tenants.create
-# --client shape: {permissions?: record}
-# --emailPrivacyConfig shape: {enableImprovedEmailPrivacy?: bool}
-# --inheritance shape: {emailSendingConfig?: bool}
-# --mfaConfig shape: {enabledProviders?: list<string>, providerConfigs?: list, state?: "STATE_UNSPECIFIED"|"DISABLED"|"ENABLED"|"MANDATORY"}
-# --monitoring shape: {requestLogging?: record}
-# --recaptchaConfig shape: {emailPasswordEnforcementState?: "RECAPTCHA_PROVIDER_ENFORCEMENT_STATE_UNSPECIFIED"|"OFF"|"AUDIT"|"ENFORCE", managedRules?: list, useAccountDefender?: bool}
-# --smsRegionConfig shape: {allowByDefault?: record, allowlistOnly?: record}
 export def "identitytoolkit-projects-tenants-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1355,7 +1359,7 @@ export def "identitytoolkit-projects-tenants-create" [
   --recaptcha-config: record # The reCAPTCHA Enterprise integration config. — shape: {emailPasswordEnforcementState?: "RECAPTCHA_PROVIDER_ENFORCEMENT_STATE_UNSPECIFIED"|"OFF"|"AUDIT"|"ENFORCE", managedRules?: list, useAccountDefender?: bool}
   --sms-region-config: record # Configures the regions where users are allowed to send verification SMS for the project or tenant. This is based on the calling code of the destination phone number. — shape: {allowByDefault?: record, allowlistOnly?: record}
   --test-phone-numbers: record # A map of pairs that can be used for MFA. The phone number should be in E.164 format (https://www.itu.int/rec/T-REC-E.164/) and a maximum of 10 pairs can be added (error will be thrown once exceeded).
-]: any -> record<allowPasswordSignup: bool, autodeleteAnonymousUsers: bool, client: record<permissions: record<disabledUserDeletion: bool, disabledUserSignup: bool>>, disableAuth: bool, displayName: string, emailPrivacyConfig: record<enableImprovedEmailPrivacy: bool>, enableAnonymousUser: bool, enableEmailLinkSignin: bool, hashConfig: record<algorithm: string, memoryCost: int, rounds: int, saltSeparator: string, signerKey: string>, inheritance: record<emailSendingConfig: bool>, mfaConfig: record<enabledProviders: list<string>, providerConfigs: list<record>, state: string>, monitoring: record<requestLogging: record<enabled: bool>>, name: string, recaptchaConfig: record<emailPasswordEnforcementState: string, managedRules: list<record>, recaptchaKeys: list<record>, useAccountDefender: bool>, smsRegionConfig: record<allowByDefault: record<disallowedRegions: list>, allowlistOnly: record<allowedRegions: list>>, testPhoneNumbers: record> {
+]: any -> oneof<record<allowPasswordSignup: bool, autodeleteAnonymousUsers: bool, client: record<permissions: record<disabledUserDeletion: bool, disabledUserSignup: bool>>, disableAuth: bool, displayName: string, emailPrivacyConfig: record<enableImprovedEmailPrivacy: bool>, enableAnonymousUser: bool, enableEmailLinkSignin: bool, hashConfig: record<algorithm: string, memoryCost: int, rounds: int, saltSeparator: string, signerKey: string>, inheritance: record<emailSendingConfig: bool>, mfaConfig: record<enabledProviders: list<string>, providerConfigs: list<record>, state: string>, monitoring: record<requestLogging: record<enabled: bool>>, name: string, recaptchaConfig: record<emailPasswordEnforcementState: string, managedRules: list<record>, recaptchaKeys: list<record>, useAccountDefender: bool>, smsRegionConfig: record<allowByDefault: record<disallowedRegions: list>, allowlistOnly: record<allowedRegions: list>>, testPhoneNumbers: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1407,7 +1411,7 @@ export def "identitytoolkit-projects-identity-platform-initialize-auth" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1436,7 +1440,6 @@ export def "identitytoolkit-projects-identity-platform-initialize-auth" [
 #
 # POST /v2/{resource}:getIamPolicy
 # operationId: identitytoolkit.projects.tenants.getIamPolicy
-# --options shape: {requestedPolicyVersion?: int}
 export def "identitytoolkit-projects-tenants-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1460,7 +1463,7 @@ export def "identitytoolkit-projects-tenants-get-iam-policy" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options: record # Encapsulates settings provided to GetIamPolicy. — shape: {requestedPolicyVersion?: int}
-]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1489,7 +1492,6 @@ export def "identitytoolkit-projects-tenants-get-iam-policy" [
 #
 # POST /v2/{resource}:setIamPolicy
 # operationId: identitytoolkit.projects.tenants.setIamPolicy
-# --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
 export def "identitytoolkit-projects-tenants-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1514,7 +1516,7 @@ export def "identitytoolkit-projects-tenants-set-iam-policy" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
   --update-mask: string # OPTIONAL: A FieldMask specifying which fields of the policy to modify. Only the fields in the mask will be modified. If no mask is provided, the following default mask is used: `paths: "bindings, etag"` (format: google-fieldmask)
-]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1566,7 +1568,7 @@ export def "identitytoolkit-projects-tenants-test-iam-permissions" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

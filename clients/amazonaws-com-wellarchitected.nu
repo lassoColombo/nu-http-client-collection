@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -134,9 +158,9 @@ def share-invitation-action-completer [] { ["ACCEPT" "REJECT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-lenses" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-lenses" "create-lens-share" "list-lens-shares" "create-lens-version" "create-milestone" "create-workload" "create-workload-share" "list-workload-shares" "delete-lens" "delete-lens-share" "delete-workload" "delete-workload-share" "disassociate-lenses" "export-lens" "get-answer" "update-answer" "get-consolidated-report" "get-lens" "get-lens-review" "update-lens-review" "get-lens-review-report" "get-lens-version-difference" "get-milestone" "get-workload" "update-workload" "import-lens" "list-answers" "list-check-details" "list-check-summaries" "list-lens-review-improvements" "list-lens-reviews" "list-lenses" "list-milestones" "list-notifications" "list-share-invitations" "list-tags-for-resource" "tag-resource" "list-workloads" "untag-resource" "update-global-settings" "update-share-invitation" "update-workload-share" "upgrade-lens-review" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -227,7 +251,7 @@ export def "create-lens-share" [
   --x-amz-signed-headers: string
   shared_with: string # The Amazon Web Services account ID, IAM role, organization ID, or organizational unit (OU) ID with which the workload is shared.
   client_request_token: string # A unique case-sensitive string used to ensure that this request is idempotent (executes only once). You should not reuse the same token for other requests. If you retry a request with the same client request token and the same parameters after the original request has completed successfully, the result of the original request is returned. This token is listed as required, however, if you do not specify it, the Amazon Web Services SDKs automatically generate one for you. If you are not using the Amazon Web Services SDK or the CLI, you must provide this token or the request will fail.
-]: any -> record<ShareId: string> {
+]: any -> oneof<record<ShareId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -279,7 +303,7 @@ export def "list-lens-shares" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LensShareSummaries: table<ShareId: string, SharedWith: string, Status: string, StatusMessage: string>, NextToken: string> {
+]: nothing -> oneof<record<LensShareSummaries: table<ShareId: string, SharedWith: string, Status: string, StatusMessage: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
@@ -328,7 +352,7 @@ export def "create-lens-version" [
   lens_version: string # The version of the lens being created.
   --is-major-version: oneof<nothing, bool> # Set to true if this new major lens version.
   client_request_token: string # A unique case-sensitive string used to ensure that this request is idempotent (executes only once). You should not reuse the same token for other requests. If you retry a request with the same client request token and the same parameters after the original request has completed successfully, the result of the original request is returned. This token is listed as required, however, if you do not specify it, the Amazon Web Services SDKs automatically generate one for you. If you are not using the Amazon Web Services SDK or the CLI, you must provide this token or the request will fail.
-]: any -> record<LensArn: string, LensVersion: string> {
+]: any -> oneof<record<LensArn: string, LensVersion: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -378,7 +402,7 @@ export def "create-milestone" [
   --x-amz-signed-headers: string
   milestone_name: string # The name of the milestone in a workload. Milestone names must be unique within a workload.
   client_request_token: string # A unique case-sensitive string used to ensure that this request is idempotent (executes only once). You should not reuse the same token for other requests. If you retry a request with the same client request token and the same parameters after the original request has completed successfully, the result of the original request is returned. This token is listed as required, however, if you do not specify it, the Amazon Web Services SDKs automatically generate one for you. If you are not using the Amazon Web Services SDK or the CLI, you must provide this token or the request will fail.
-]: any -> record<WorkloadId: string, MilestoneNumber: int> {
+]: any -> oneof<record<WorkloadId: string, MilestoneNumber: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -408,7 +432,6 @@ export def "create-milestone" [
 #
 # POST /workloads
 # operationId: CreateWorkload
-# --DiscoveryConfig shape: {TrustedAdvisorIntegrationStatus?: "ENABLED"|"DISABLED"}
 export def "create-workload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,7 +466,7 @@ export def "create-workload" [
   --tags: record # The tags to be associated with the workload.
   --discovery-config: record # Discovery configuration associated to the workload. — shape: {TrustedAdvisorIntegrationStatus?: "ENABLED"|"DISABLED"}
   --applications: list<string> # List of AppRegistry application ARNs associated to the workload.
-]: any -> record<WorkloadId: string, WorkloadArn: string> {
+]: any -> oneof<record<WorkloadId: string, WorkloadArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -493,7 +516,7 @@ export def "create-workload-share" [
   shared_with: string # The Amazon Web Services account ID, IAM role, organization ID, or organizational unit (OU) ID with which the workload is shared.
   permission_type: string@permission-type-completer # Permission granted on a workload share.
   client_request_token: string # A unique case-sensitive string used to ensure that this request is idempotent (executes only once). You should not reuse the same token for other requests. If you retry a request with the same client request token and the same parameters after the original request has completed successfully, the result of the original request is returned. This token is listed as required, however, if you do not specify it, the Amazon Web Services SDKs automatically generate one for you. If you are not using the Amazon Web Services SDK or the CLI, you must provide this token or the request will fail.
-]: any -> record<WorkloadId: string, ShareId: string> {
+]: any -> oneof<record<WorkloadId: string, ShareId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -545,7 +568,7 @@ export def "list-workload-shares" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WorkloadId: string, WorkloadShareSummaries: table<ShareId: string, SharedWith: string, PermissionType: string, Status: string, StatusMessage: string>, NextToken: string> {
+]: nothing -> oneof<record<WorkloadId: string, WorkloadShareSummaries: table<ShareId: string, SharedWith: string, PermissionType: string, Status: string, StatusMessage: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
@@ -839,7 +862,7 @@ export def "export-lens" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LensJSON: string> {
+]: nothing -> oneof<record<LensJSON: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
@@ -888,7 +911,7 @@ export def "get-answer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WorkloadId: string, MilestoneNumber: int, LensAlias: string, LensArn: string, Answer: record<QuestionId: string, PillarId: string, QuestionTitle: string, QuestionDescription: string, ImprovementPlanUrl: string, HelpfulResourceUrl: string, HelpfulResourceDisplayText: string, Choices: list<record>, SelectedChoices: list<string>, ChoiceAnswers: list<record>, IsApplicable: bool, Risk: string, Notes: string, Reason: string>> {
+]: nothing -> oneof<record<WorkloadId: string, MilestoneNumber: int, LensAlias: string, LensArn: string, Answer: record<QuestionId: string, PillarId: string, QuestionTitle: string, QuestionDescription: string, ImprovementPlanUrl: string, HelpfulResourceUrl: string, HelpfulResourceDisplayText: string, Choices: list<record>, SelectedChoices: list<string>, ChoiceAnswers: list<record>, IsApplicable: bool, Risk: string, Notes: string, Reason: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
@@ -943,7 +966,7 @@ export def "update-answer" [
   --notes: string # The notes associated with the workload.
   --is-applicable: oneof<nothing, bool> # Defines whether this question is applicable to a lens review.
   --reason: string@reason-completer # The reason why a question is not applicable to your workload.
-]: any -> record<WorkloadId: string, LensAlias: string, LensArn: string, Answer: record<QuestionId: string, PillarId: string, QuestionTitle: string, QuestionDescription: string, ImprovementPlanUrl: string, HelpfulResourceUrl: string, HelpfulResourceDisplayText: string, Choices: list<record>, SelectedChoices: list<string>, ChoiceAnswers: list<record>, IsApplicable: bool, Risk: string, Notes: string, Reason: string>> {
+]: any -> oneof<record<WorkloadId: string, LensAlias: string, LensArn: string, Answer: record<QuestionId: string, PillarId: string, QuestionTitle: string, QuestionDescription: string, ImprovementPlanUrl: string, HelpfulResourceUrl: string, HelpfulResourceDisplayText: string, Choices: list<record>, SelectedChoices: list<string>, ChoiceAnswers: list<record>, IsApplicable: bool, Risk: string, Notes: string, Reason: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -996,7 +1019,7 @@ export def "get-consolidated-report" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Metrics: table<MetricType: string, RiskCounts: record, WorkloadId: string, WorkloadName: string, WorkloadArn: string, UpdatedAt: string, Lenses: list, LensesAppliedCount: int>, NextToken: string, Base64String: string> {
+]: nothing -> oneof<record<Metrics: table<MetricType: string, RiskCounts: record, WorkloadId: string, WorkloadName: string, WorkloadArn: string, UpdatedAt: string, Lenses: list, LensesAppliedCount: int>, NextToken: string, Base64String: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format == null) { error make --unspanned { msg: "required query parameter 'Format' missing: pass --format" } }
@@ -1043,7 +1066,7 @@ export def "get-lens" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Lens: record<LensArn: string, LensVersion: string, Name: string, Description: string, Owner: string, ShareInvitationId: string, Tags: record>> {
+]: nothing -> oneof<record<Lens: record<LensArn: string, LensVersion: string, Name: string, Description: string, Owner: string, ShareInvitationId: string, Tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
@@ -1091,7 +1114,7 @@ export def "get-lens-review" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WorkloadId: string, MilestoneNumber: int, LensReview: record<LensAlias: string, LensArn: string, LensVersion: string, LensName: string, LensStatus: string, PillarReviewSummaries: list<record>, UpdatedAt: string, Notes: string, RiskCounts: record, NextToken: string>> {
+]: nothing -> oneof<record<WorkloadId: string, MilestoneNumber: int, LensReview: record<LensAlias: string, LensArn: string, LensVersion: string, LensName: string, LensStatus: string, PillarReviewSummaries: list<record>, UpdatedAt: string, Notes: string, RiskCounts: record, NextToken: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
@@ -1141,7 +1164,7 @@ export def "update-lens-review" [
   --x-amz-signed-headers: string
   --lens-notes: string # The notes associated with the workload.
   --pillar-notes: record # List of pillar notes of a lens review in a workload.
-]: any -> record<WorkloadId: string, LensReview: record<LensAlias: string, LensArn: string, LensVersion: string, LensName: string, LensStatus: string, PillarReviewSummaries: list<record>, UpdatedAt: string, Notes: string, RiskCounts: record, NextToken: string>> {
+]: any -> oneof<record<WorkloadId: string, LensReview: record<LensAlias: string, LensArn: string, LensVersion: string, LensName: string, LensStatus: string, PillarReviewSummaries: list<record>, UpdatedAt: string, Notes: string, RiskCounts: record, NextToken: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1192,7 +1215,7 @@ export def "get-lens-review-report" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WorkloadId: string, MilestoneNumber: int, LensReviewReport: record<LensAlias: string, LensArn: string, Base64String: string>> {
+]: nothing -> oneof<record<WorkloadId: string, MilestoneNumber: int, LensReviewReport: record<LensAlias: string, LensArn: string, Base64String: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
@@ -1241,7 +1264,7 @@ export def "get-lens-version-difference" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LensAlias: string, LensArn: string, BaseLensVersion: string, TargetLensVersion: string, LatestLensVersion: string, VersionDifferences: record<PillarDifferences: list<record>>> {
+]: nothing -> oneof<record<LensAlias: string, LensArn: string, BaseLensVersion: string, TargetLensVersion: string, LatestLensVersion: string, VersionDifferences: record<PillarDifferences: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($lens_alias | is-empty) { error make --unspanned { msg: "path parameter 'LensAlias' must be non-empty" } }
@@ -1288,7 +1311,7 @@ export def "get-milestone" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WorkloadId: string, Milestone: record<MilestoneNumber: int, MilestoneName: string, RecordedAt: string, Workload: record<WorkloadId: string, WorkloadArn: string, WorkloadName: string, Description: string, Environment: string, UpdatedAt: string, AccountIds: list, AwsRegions: list, NonAwsRegions: list, ArchitecturalDesign: string, ReviewOwner: string, ReviewRestrictionDate: string, IsReviewOwnerUpdateAcknowledged: bool, IndustryType: string, Industry: string, Notes: string, ImprovementStatus: string, RiskCounts: record, PillarPriorities: list, Lenses: list, Owner: string, ShareInvitationId: string, Tags: record, DiscoveryConfig: record, Applications: list>>> {
+]: nothing -> oneof<record<WorkloadId: string, Milestone: record<MilestoneNumber: int, MilestoneName: string, RecordedAt: string, Workload: record<WorkloadId: string, WorkloadArn: string, WorkloadName: string, Description: string, Environment: string, UpdatedAt: string, AccountIds: list, AwsRegions: list, NonAwsRegions: list, ArchitecturalDesign: string, ReviewOwner: string, ReviewRestrictionDate: string, IsReviewOwnerUpdateAcknowledged: bool, IndustryType: string, Industry: string, Notes: string, ImprovementStatus: string, RiskCounts: record, PillarPriorities: list, Lenses: list, Owner: string, ShareInvitationId: string, Tags: record, DiscoveryConfig: record, Applications: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
@@ -1334,7 +1357,7 @@ export def "get-workload" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Workload: record<WorkloadId: string, WorkloadArn: string, WorkloadName: string, Description: string, Environment: string, UpdatedAt: string, AccountIds: list<string>, AwsRegions: list<string>, NonAwsRegions: list<string>, ArchitecturalDesign: string, ReviewOwner: string, ReviewRestrictionDate: string, IsReviewOwnerUpdateAcknowledged: bool, IndustryType: string, Industry: string, Notes: string, ImprovementStatus: string, RiskCounts: record, PillarPriorities: list<string>, Lenses: list<string>, Owner: string, ShareInvitationId: string, Tags: record, DiscoveryConfig: record<TrustedAdvisorIntegrationStatus: string>, Applications: list<string>>> {
+]: nothing -> oneof<record<Workload: record<WorkloadId: string, WorkloadArn: string, WorkloadName: string, Description: string, Environment: string, UpdatedAt: string, AccountIds: list<string>, AwsRegions: list<string>, NonAwsRegions: list<string>, ArchitecturalDesign: string, ReviewOwner: string, ReviewRestrictionDate: string, IsReviewOwnerUpdateAcknowledged: bool, IndustryType: string, Industry: string, Notes: string, ImprovementStatus: string, RiskCounts: record, PillarPriorities: list<string>, Lenses: list<string>, Owner: string, ShareInvitationId: string, Tags: record, DiscoveryConfig: record<TrustedAdvisorIntegrationStatus: string>, Applications: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
@@ -1361,7 +1384,6 @@ export def "get-workload" [
 #
 # PATCH /workloads/{WorkloadId}
 # operationId: UpdateWorkload
-# --DiscoveryConfig shape: {TrustedAdvisorIntegrationStatus?: "ENABLED"|"DISABLED"}
 export def "update-workload" [
   workload_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1396,7 +1418,7 @@ export def "update-workload" [
   --improvement-status: string@improvement-status-completer # The improvement status for a workload.
   --discovery-config: record # Discovery configuration associated to the workload. — shape: {TrustedAdvisorIntegrationStatus?: "ENABLED"|"DISABLED"}
   --applications: list<string> # List of AppRegistry application ARNs to associate to the workload.
-]: any -> record<Workload: record<WorkloadId: string, WorkloadArn: string, WorkloadName: string, Description: string, Environment: string, UpdatedAt: string, AccountIds: list<string>, AwsRegions: list<string>, NonAwsRegions: list<string>, ArchitecturalDesign: string, ReviewOwner: string, ReviewRestrictionDate: string, IsReviewOwnerUpdateAcknowledged: bool, IndustryType: string, Industry: string, Notes: string, ImprovementStatus: string, RiskCounts: record, PillarPriorities: list<string>, Lenses: list<string>, Owner: string, ShareInvitationId: string, Tags: record, DiscoveryConfig: record<TrustedAdvisorIntegrationStatus: string>, Applications: list<string>>> {
+]: any -> oneof<record<Workload: record<WorkloadId: string, WorkloadArn: string, WorkloadName: string, Description: string, Environment: string, UpdatedAt: string, AccountIds: list<string>, AwsRegions: list<string>, NonAwsRegions: list<string>, ArchitecturalDesign: string, ReviewOwner: string, ReviewRestrictionDate: string, IsReviewOwnerUpdateAcknowledged: bool, IndustryType: string, Industry: string, Notes: string, ImprovementStatus: string, RiskCounts: record, PillarPriorities: list<string>, Lenses: list<string>, Owner: string, ShareInvitationId: string, Tags: record, DiscoveryConfig: record<TrustedAdvisorIntegrationStatus: string>, Applications: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1447,7 +1469,7 @@ export def "import-lens" [
   json_string: string # The JSON representation of a lens.
   client_request_token: string # A unique case-sensitive string used to ensure that this request is idempotent (executes only once). You should not reuse the same token for other requests. If you retry a request with the same client request token and the same parameters after the original request has completed successfully, the result of the original request is returned. This token is listed as required, however, if you do not specify it, the Amazon Web Services SDKs automatically generate one for you. If you are not using the Amazon Web Services SDK or the CLI, you must provide this token or the request will fail.
   --tags: record # Tags to associate to a lens.
-]: any -> record<LensArn: string, Status: string> {
+]: any -> oneof<record<LensArn: string, Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1499,7 +1521,7 @@ export def "list-answers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WorkloadId: string, MilestoneNumber: int, LensAlias: string, LensArn: string, AnswerSummaries: table<QuestionId: string, PillarId: string, QuestionTitle: string, Choices: list, SelectedChoices: list, ChoiceAnswerSummaries: list, IsApplicable: bool, Risk: string, Reason: string>, NextToken: string> {
+]: nothing -> oneof<record<WorkloadId: string, MilestoneNumber: int, LensAlias: string, LensArn: string, AnswerSummaries: table<QuestionId: string, PillarId: string, QuestionTitle: string, Choices: list, SelectedChoices: list, ChoiceAnswerSummaries: list, IsApplicable: bool, Risk: string, Reason: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
@@ -1554,7 +1576,7 @@ export def "list-check-details" [
   pillar_id: string # The ID used to identify a pillar, for example, security. A pillar is identified by its PillarReviewSummary$PillarId.
   question_id: string # The ID of the question.
   choice_id: string # The ID of a choice.
-]: any -> record<CheckDetails: table<Id: string, Name: string, Description: string, Provider: string, LensArn: string, PillarId: string, QuestionId: string, ChoiceId: string, Status: string, AccountId: string, FlaggedResources: int, Reason: string, UpdatedAt: string>, NextToken: string> {
+]: any -> oneof<record<CheckDetails: table<Id: string, Name: string, Description: string, Provider: string, LensArn: string, PillarId: string, QuestionId: string, ChoiceId: string, Status: string, AccountId: string, FlaggedResources: int, Reason: string, UpdatedAt: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1611,7 +1633,7 @@ export def "list-check-summaries" [
   pillar_id: string # The ID used to identify a pillar, for example, security. A pillar is identified by its PillarReviewSummary$PillarId.
   question_id: string # The ID of the question.
   choice_id: string # The ID of a choice.
-]: any -> record<CheckSummaries: table<Id: string, Name: string, Provider: string, Description: string, UpdatedAt: string, LensArn: string, PillarId: string, QuestionId: string, ChoiceId: string, Status: string, AccountSummary: record>, NextToken: string> {
+]: any -> oneof<record<CheckSummaries: table<Id: string, Name: string, Provider: string, Description: string, UpdatedAt: string, LensArn: string, PillarId: string, QuestionId: string, ChoiceId: string, Status: string, AccountSummary: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1665,7 +1687,7 @@ export def "list-lens-review-improvements" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WorkloadId: string, MilestoneNumber: int, LensAlias: string, LensArn: string, ImprovementSummaries: table<QuestionId: string, PillarId: string, QuestionTitle: string, Risk: string, ImprovementPlanUrl: string, ImprovementPlans: list>, NextToken: string> {
+]: nothing -> oneof<record<WorkloadId: string, MilestoneNumber: int, LensAlias: string, LensArn: string, ImprovementSummaries: table<QuestionId: string, PillarId: string, QuestionTitle: string, Risk: string, ImprovementPlanUrl: string, ImprovementPlans: list>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
@@ -1715,7 +1737,7 @@ export def "list-lens-reviews" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<WorkloadId: string, MilestoneNumber: int, LensReviewSummaries: table<LensAlias: string, LensArn: string, LensVersion: string, LensName: string, LensStatus: string, UpdatedAt: string, RiskCounts: record>, NextToken: string> {
+]: nothing -> oneof<record<WorkloadId: string, MilestoneNumber: int, LensReviewSummaries: table<LensAlias: string, LensArn: string, LensVersion: string, LensName: string, LensStatus: string, UpdatedAt: string, RiskCounts: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workload_id | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadId' must be non-empty" } }
@@ -1765,7 +1787,7 @@ export def "list-lenses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<LensSummaries: table<LensArn: string, LensAlias: string, LensName: string, LensType: string, Description: string, CreatedAt: string, UpdatedAt: string, LensVersion: string, Owner: string, LensStatus: string>, NextToken: string> {
+]: nothing -> oneof<record<LensSummaries: table<LensArn: string, LensAlias: string, LensName: string, LensType: string, Description: string, CreatedAt: string, UpdatedAt: string, LensVersion: string, Owner: string, LensStatus: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "LensType" $lens_type "scalar") (serialize-qp "LensStatus" $lens_status "scalar") (serialize-qp "LensName" $lens_name "scalar")] | flatten | str join "&"
@@ -1814,7 +1836,7 @@ export def "list-milestones" [
   --x-amz-signed-headers: string
   --next-token-body: string # The token to use to retrieve the next set of results. (body field)
   --max-results-body: int # The maximum number of results to return for this request. (body field)
-]: any -> record<WorkloadId: string, MilestoneSummaries: table<MilestoneNumber: int, MilestoneName: string, RecordedAt: string, WorkloadSummary: record>, NextToken: string> {
+]: any -> oneof<record<WorkloadId: string, MilestoneSummaries: table<MilestoneNumber: int, MilestoneName: string, RecordedAt: string, WorkloadSummary: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1867,7 +1889,7 @@ export def "list-notifications" [
   --workload-id: string # The ID assigned to the workload. This ID is unique within an Amazon Web Services Region.
   --next-token-body: string # The token to use to retrieve the next set of results. (body field)
   --max-results-body: int # The maximum number of results to return for this request. (body field)
-]: any -> record<NotificationSummaries: table<Type: string, LensUpgradeSummary: record>, NextToken: string> {
+]: any -> oneof<record<NotificationSummaries: table<Type: string, LensUpgradeSummary: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1919,7 +1941,7 @@ export def "list-share-invitations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ShareInvitationSummaries: table<ShareInvitationId: string, SharedBy: string, SharedWith: string, PermissionType: string, ShareResourceType: string, WorkloadName: string, WorkloadId: string, LensName: string, LensArn: string>, NextToken: string> {
+]: nothing -> oneof<record<ShareInvitationSummaries: table<ShareInvitationId: string, SharedBy: string, SharedWith: string, PermissionType: string, ShareResourceType: string, WorkloadName: string, WorkloadId: string, LensName: string, LensArn: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "WorkloadNamePrefix" $workload_name_prefix "scalar") (serialize-qp "LensNamePrefix" $lens_name_prefix "scalar") (serialize-qp "ShareResourceType" $share_resource_type "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results "scalar")] | flatten | str join "&"
@@ -1964,7 +1986,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workload_arn | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadArn' must be non-empty" } }
@@ -2010,7 +2032,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # The tags for the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2062,7 +2084,7 @@ export def "list-workloads" [
   --workload-name-prefix: string # An optional string added to the beginning of each workload name returned in the results.
   --next-token-body: string # The token to use to retrieve the next set of results. (body field)
   --max-results-body: int # The maximum number of results to return for this request. (body field)
-]: any -> record<WorkloadSummaries: table<WorkloadId: string, WorkloadArn: string, WorkloadName: string, Owner: string, UpdatedAt: string, Lenses: list, RiskCounts: record, ImprovementStatus: string>, NextToken: string> {
+]: any -> oneof<record<WorkloadSummaries: table<WorkloadId: string, WorkloadArn: string, WorkloadName: string, Owner: string, UpdatedAt: string, Lenses: list, RiskCounts: record, ImprovementStatus: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2111,7 +2133,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workload_arn | is-empty) { error make --unspanned { msg: "path parameter 'WorkloadArn' must be non-empty" } }
@@ -2206,7 +2228,7 @@ export def "update-share-invitation" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   share_invitation_action: string@share-invitation-action-completer # Share invitation action taken by contributor.
-]: any -> record<ShareInvitation: record<ShareInvitationId: string, ShareResourceType: string, WorkloadId: string, LensAlias: string, LensArn: string>> {
+]: any -> oneof<record<ShareInvitation: record<ShareInvitationId: string, ShareResourceType: string, WorkloadId: string, LensAlias: string, LensArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2256,7 +2278,7 @@ export def "update-workload-share" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   permission_type: string@permission-type-completer # Permission granted on a workload share.
-]: any -> record<WorkloadId: string, WorkloadShare: record<ShareId: string, SharedBy: string, SharedWith: string, PermissionType: string, Status: string, WorkloadName: string, WorkloadId: string>> {
+]: any -> oneof<record<WorkloadId: string, WorkloadShare: record<ShareId: string, SharedBy: string, SharedWith: string, PermissionType: string, Status: string, WorkloadName: string, WorkloadId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

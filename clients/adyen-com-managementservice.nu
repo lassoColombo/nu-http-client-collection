@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "x-api-key" => { {scheme: $scheme, headers: {"X-API-Key": $token_val}, query: "", location: "header"} }
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -90,7 +113,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def status-completer [] { ["active" "closed" "inactive"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-companies" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-companies" "get-companies-company-id" "get-companies-company-id-android-apps" "get-companies-company-id-android-certificates" "get-companies-company-id-api-credentials" "post-companies-company-id-api-credentials" "get-companies-company-id-api-credentials-api-credential-id" "patch-companies-company-id-api-credentials-api-credential-id" "get-companies-company-id-api-credentials-api-credential-id-allowed-origins" "post-companies-company-id-api-credentials-api-credential-id-allowed-origins" "delete-companies-company-id-api-credentials-api-credential-id-allowed-origins-origin-id" "get-companies-company-id-api-credentials-api-credential-id-allowed-origins-origin-id" "post-companies-company-id-api-credentials-api-credential-id-generate-api-key" "post-companies-company-id-api-credentials-api-credential-id-generate-client-key" "get-companies-company-id-billing-entities" "get-companies-company-id-merchants" "get-companies-company-id-shipping-locations" "post-companies-company-id-shipping-locations" "get-companies-company-id-terminal-actions" "get-companies-company-id-terminal-actions-action-id" "get-companies-company-id-terminal-logos" "patch-companies-company-id-terminal-logos" "get-companies-company-id-terminal-models" "get-companies-company-id-terminal-orders" "post-companies-company-id-terminal-orders" "get-companies-company-id-terminal-orders-order-id" "patch-companies-company-id-terminal-orders-order-id" "post-companies-company-id-terminal-orders-order-id-cancel" "get-companies-company-id-terminal-products" "get-companies-company-id-terminal-settings" "patch-companies-company-id-terminal-settings" "get-companies-company-id-users" "post-companies-company-id-users" "get-companies-company-id-users-user-id" "patch-companies-company-id-users-user-id" "get-companies-company-id-webhooks" "post-companies-company-id-webhooks" "delete-companies-company-id-webhooks-webhook-id" "get-companies-company-id-webhooks-webhook-id" "patch-companies-company-id-webhooks-webhook-id" "post-companies-company-id-webhooks-webhook-id-generate-hmac" "post-companies-company-id-webhooks-webhook-id-test" "get-me" "get-me-allowed-origins" "post-me-allowed-origins" "delete-me-allowed-origins-origin-id" "get-me-allowed-origins-origin-id" "get-merchants" "post-merchants" "get-merchants-merchant-id" "post-merchants-merchant-id-activate" "get-merchants-merchant-id-api-credentials" "post-merchants-merchant-id-api-credentials" "get-merchants-merchant-id-api-credentials-api-credential-id" "patch-merchants-merchant-id-api-credentials-api-credential-id" "get-merchants-merchant-id-api-credentials-api-credential-id-allowed-origins" "post-merchants-merchant-id-api-credentials-api-credential-id-allowed-origins" "delete-merchants-merchant-id-api-credentials-api-credential-id-allowed-origins-origin-id" "get-merchants-merchant-id-api-credentials-api-credential-id-allowed-origins-origin-id" "post-merchants-merchant-id-api-credentials-api-credential-id-generate-api-key" "post-merchants-merchant-id-api-credentials-api-credential-id-generate-client-key" "get-merchants-merchant-id-billing-entities" "get-merchants-merchant-id-payment-method-settings" "post-merchants-merchant-id-payment-method-settings" "get-merchants-merchant-id-payment-method-settings-payment-method-id" "patch-merchants-merchant-id-payment-method-settings-payment-method-id" "post-merchants-merchant-id-payment-method-settings-payment-method-id-add-apple-pay-domains" "get-merchants-merchant-id-payment-method-settings-payment-method-id-get-apple-pay-domains" "get-merchants-merchant-id-payout-settings" "post-merchants-merchant-id-payout-settings" "delete-merchants-merchant-id-payout-settings-payout-settings-id" "get-merchants-merchant-id-payout-settings-payout-settings-id" "patch-merchants-merchant-id-payout-settings-payout-settings-id" "get-merchants-merchant-id-shipping-locations" "post-merchants-merchant-id-shipping-locations" "get-merchants-merchant-id-stores" "post-merchants-merchant-id-stores" "get-merchants-merchant-id-stores-reference-terminal-logos" "patch-merchants-merchant-id-stores-reference-terminal-logos" "get-merchants-merchant-id-stores-reference-terminal-settings" "patch-merchants-merchant-id-stores-reference-terminal-settings" "get-merchants-merchant-id-stores-store-id" "patch-merchants-merchant-id-stores-store-id" "get-merchants-merchant-id-terminal-logos" "patch-merchants-merchant-id-terminal-logos" "get-merchants-merchant-id-terminal-models" "get-merchants-merchant-id-terminal-orders" "post-merchants-merchant-id-terminal-orders" "get-merchants-merchant-id-terminal-orders-order-id" "patch-merchants-merchant-id-terminal-orders-order-id" "post-merchants-merchant-id-terminal-orders-order-id-cancel" "get-merchants-merchant-id-terminal-products" "get-merchants-merchant-id-terminal-settings" "patch-merchants-merchant-id-terminal-settings" "get-merchants-merchant-id-users" "post-merchants-merchant-id-users" "get-merchants-merchant-id-users-user-id" "patch-merchants-merchant-id-users-user-id" "get-merchants-merchant-id-webhooks" "post-merchants-merchant-id-webhooks" "delete-merchants-merchant-id-webhooks-webhook-id" "get-merchants-merchant-id-webhooks-webhook-id" "patch-merchants-merchant-id-webhooks-webhook-id" "post-merchants-merchant-id-webhooks-webhook-id-generate-hmac" "post-merchants-merchant-id-webhooks-webhook-id-test" "get-stores" "post-stores" "get-stores-store-id" "patch-stores-store-id" "get-stores-store-id-terminal-logos" "patch-stores-store-id-terminal-logos" "get-stores-store-id-terminal-settings" "patch-stores-store-id-terminal-settings" "get-terminals" "post-terminals-schedule-actions" "get-terminals-terminal-id-terminal-logos" "patch-terminals-terminal-id-terminal-logos" "get-terminals-terminal-id-terminal-settings" "patch-terminals-terminal-id-terminal-settings" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -162,7 +186,7 @@ export def "get-companies" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # The number of the page to fetch. (format: int32)
   --page-size: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
-]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, dataCenters: list, description: string, id: string, name: string, reference: string, status: string>, itemsTotal: int, pagesTotal: int> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, dataCenters: list, description: string, id: string, name: string, reference: string, status: string>, itemsTotal: int, pagesTotal: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -198,7 +222,7 @@ export def "get-companies-company-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<apiCredentials: record<href: string>, self: record<href: string>, users: record<href: string>, webhooks: record<href: string>>, dataCenters: table<livePrefix: string, name: string>, description: string, id: string, name: string, reference: string, status: string> {
+]: nothing -> oneof<record<_links: record<apiCredentials: record<href: string>, self: record<href: string>, users: record<href: string>, webhooks: record<href: string>>, dataCenters: table<livePrefix: string, name: string>, description: string, id: string, name: string, reference: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -236,7 +260,7 @@ export def "get-companies-company-id-android-apps" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # The number of the page to fetch. (format: int32)
   --page-size: int # The number of items to have on a page, maximum 100. The default is 20 items on a page. (format: int32)
-]: nothing -> record<data: table<description: string, id: string, label: string, packageName: string, status: string, versionCode: int, versionName: string>> {
+]: nothing -> oneof<record<data: table<description: string, id: string, label: string, packageName: string, status: string, versionCode: int, versionName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -275,7 +299,7 @@ export def "get-companies-company-id-android-certificates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # The number of the page to fetch. (format: int32)
   --page-size: int # The number of items to have on a page, maximum 100. The default is 20 items on a page. (format: int32)
-]: nothing -> record<data: table<description: string, extension: string, id: string, name: string, notAfter: string, notBefore: string, status: string>> {
+]: nothing -> oneof<record<data: table<description: string, extension: string, id: string, name: string, notAfter: string, notBefore: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -314,7 +338,7 @@ export def "get-companies-company-id-api-credentials" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # The number of the page to fetch. (format: int32)
   --page-size: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
-]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, active: bool, allowedIpAddresses: list, allowedOrigins: list, associatedMerchantAccounts: list, clientKey: string, description: string, id: string, roles: list, username: string>, itemsTotal: int, pagesTotal: int> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, active: bool, allowedIpAddresses: list, allowedOrigins: list, associatedMerchantAccounts: list, clientKey: string, description: string, id: string, roles: list, username: string>, itemsTotal: int, pagesTotal: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -355,7 +379,7 @@ export def "post-companies-company-id-api-credentials" [
   --associated-merchant-accounts: list<string> # List of merchant accounts that the API credential has access to.
   --description: string # Description of the API credential.
   --roles: list<string> # List of [roles](https://docs.adyen.com/development-resources/api-credentials#roles-1) of the API credential.
-]: any -> record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, apiKey: string, associatedMerchantAccounts: list<string>, clientKey: string, description: string, id: string, password: string, roles: list<string>, username: string> {
+]: any -> oneof<record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, apiKey: string, associatedMerchantAccounts: list<string>, clientKey: string, description: string, id: string, password: string, roles: list<string>, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -395,7 +419,7 @@ export def "get-companies-company-id-api-credentials-api-credential-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, associatedMerchantAccounts: list<string>, clientKey: string, description: string, id: string, roles: list<string>, username: string> {
+]: nothing -> oneof<record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, associatedMerchantAccounts: list<string>, clientKey: string, description: string, id: string, roles: list<string>, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -438,7 +462,7 @@ export def "patch-companies-company-id-api-credentials-api-credential-id" [
   --associated-merchant-accounts: list<string> # List of merchant accounts that the API credential has access to.
   --description: string # Description of the API credential.
   --roles: list<string> # List of [roles](https://docs.adyen.com/development-resources/api-credentials#roles-1) of the API credential.
-]: any -> record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, associatedMerchantAccounts: list<string>, clientKey: string, description: string, id: string, roles: list<string>, username: string> {
+]: any -> oneof<record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, associatedMerchantAccounts: list<string>, clientKey: string, description: string, id: string, roles: list<string>, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -479,7 +503,7 @@ export def "get-companies-company-id-api-credentials-api-credential-id-allowed-o
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<_links: record, domain: string, id: string>> {
+]: nothing -> oneof<record<data: table<_links: record, domain: string, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -505,7 +529,6 @@ export def "get-companies-company-id-api-credentials-api-credential-id-allowed-o
 #
 # POST /companies/{companyId}/apiCredentials/{apiCredentialId}/allowedOrigins
 # operationId: post-companies-companyId-apiCredentials-apiCredentialId-allowedOrigins
-# --_links shape: {self: record}
 export def "post-companies-company-id-api-credentials-api-credential-id-allowed-origins" [
   company_id: string
   api_credential_id: string
@@ -521,7 +544,7 @@ export def "post-companies-company-id-api-credentials-api-credential-id-allowed-
   --links: record # shape: {self: record}
   domain: string # Domain of the allowed origin.
   --id: string # Unique identifier of the allowed origin.
-]: any -> record<data: table<_links: record, domain: string, id: string>> {
+]: any -> oneof<record<data: table<_links: record, domain: string, id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -603,7 +626,7 @@ export def "get-companies-company-id-api-credentials-api-credential-id-allowed-o
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<self: record<href: string>>, domain: string, id: string> {
+]: nothing -> oneof<record<_links: record<self: record<href: string>>, domain: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -642,7 +665,7 @@ export def "post-companies-company-id-api-credentials-api-credential-id-generate
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<apiKey: string> {
+]: nothing -> oneof<record<apiKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -680,7 +703,7 @@ export def "post-companies-company-id-api-credentials-api-credential-id-generate
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<clientKey: string> {
+]: nothing -> oneof<record<clientKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -718,7 +741,7 @@ export def "get-companies-company-id-billing-entities" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the billing entity.
-]: nothing -> record<data: table<address: record, email: string, id: string, name: string, taxId: string>> {
+]: nothing -> oneof<record<data: table<address: record, email: string, id: string, name: string, taxId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -757,7 +780,7 @@ export def "get-companies-company-id-merchants" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # The number of the page to fetch. (format: int32)
   --page-size: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
-]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, captureDelay: string, companyId: string, dataCenters: list, defaultShopperInteraction: string, description: string, id: string, merchantCity: string, name: string, pricingPlan: string, primarySettlementCurrency: string, reference: string, shopWebAddress: string, status: string>, itemsTotal: int, pagesTotal: int> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, captureDelay: string, companyId: string, dataCenters: list, defaultShopperInteraction: string, description: string, id: string, merchantCity: string, name: string, pricingPlan: string, primarySettlementCurrency: string, reference: string, shopWebAddress: string, status: string>, itemsTotal: int, pagesTotal: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -797,7 +820,7 @@ export def "get-companies-company-id-shipping-locations" [
   --name: string # The name of the shipping location.
   --offset: int # The number of locations to skip. (format: int32)
   --limit: int # The number of locations to return. (format: int32)
-]: nothing -> record<data: table<address: record, contact: record, id: string, name: string>> {
+]: nothing -> oneof<record<data: table<address: record, contact: record, id: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -823,8 +846,6 @@ export def "get-companies-company-id-shipping-locations" [
 #
 # POST /companies/{companyId}/shippingLocations
 # operationId: post-companies-companyId-shippingLocations
-# --address shape: {city?: string, companyName?: string, country?: string, postalCode?: string, stateOrProvince?: string, streetAddress?: string, streetAddress2?: string}
-# --contact shape: {email?: string, firstName?: string, infix?: string, lastName?: string, phoneNumber?: string}
 export def "post-companies-company-id-shipping-locations" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -840,7 +861,7 @@ export def "post-companies-company-id-shipping-locations" [
   --contact: record # shape: {email?: string, firstName?: string, infix?: string, lastName?: string, phoneNumber?: string}
   --id: string # The unique identifier of the shipping location, for use as `shippingLocationId` when creating an order.
   --name: string # The unique name of the shipping location.
-]: any -> record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string> {
+]: any -> oneof<record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -883,7 +904,7 @@ export def "get-companies-company-id-terminal-actions" [
   --page-size: int # The number of items to have on a page, maximum 100. The default is 20 items on a page. (format: int32)
   --status: string # Returns terminal actions with the specified status. Allowed values: **pending**, **successful**, **failed**, **cancelled**, **tryLater**.
   --type: string # Returns terminal actions of the specified type. Allowed values: **InstallAndroidApp**, **UninstallAndroidApp**, **InstallAndroidCertificate**, **UninstallAndroidCertificate**.
-]: nothing -> record<data: table<actionType: string, config: string, confirmedAt: string, id: string, result: string, scheduledAt: string, status: string, terminalId: string>> {
+]: nothing -> oneof<record<data: table<actionType: string, config: string, confirmedAt: string, id: string, result: string, scheduledAt: string, status: string, terminalId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -921,7 +942,7 @@ export def "get-companies-company-id-terminal-actions-action-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<actionType: string, config: string, confirmedAt: string, id: string, result: string, scheduledAt: string, status: string, terminalId: string> {
+]: nothing -> oneof<record<actionType: string, config: string, confirmedAt: string, id: string, result: string, scheduledAt: string, status: string, terminalId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -959,7 +980,7 @@ export def "get-companies-company-id-terminal-logos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T. (required)
-]: nothing -> record<data: string> {
+]: nothing -> oneof<record<data: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -999,7 +1020,7 @@ export def "patch-companies-company-id-terminal-logos" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T. (required)
   --data: string # The image file, converted to a Base64-encoded string, of the logo to be shown on the terminal.
-]: any -> record<data: string> {
+]: any -> oneof<record<data: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1040,7 +1061,7 @@ export def "get-companies-company-id-terminal-models" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<id: string, name: string>> {
+]: nothing -> oneof<record<data: table<id: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1080,7 +1101,7 @@ export def "get-companies-company-id-terminal-orders" [
   --status: string # The order status. Possible values (not case-sensitive): Placed, Confirmed, Cancelled, Shipped, Delivered.
   --offset: int # The number of orders to skip. (format: int32)
   --limit: int # The number of orders to return. (format: int32)
-]: nothing -> record<data: table<billingEntity: record, customerOrderReference: string, id: string, items: list, orderDate: string, shippingLocation: record, status: string, trackingUrl: string>> {
+]: nothing -> oneof<record<data: table<billingEntity: record, customerOrderReference: string, id: string, items: list, orderDate: string, shippingLocation: record, status: string, trackingUrl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1106,7 +1127,6 @@ export def "get-companies-company-id-terminal-orders" [
 #
 # POST /companies/{companyId}/terminalOrders
 # operationId: post-companies-companyId-terminalOrders
-# --items item shape: {id?: string, installments?: int, name?: string, quantity?: int}
 export def "post-companies-company-id-terminal-orders" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1123,7 +1143,7 @@ export def "post-companies-company-id-terminal-orders" [
   --items: list # The products included in the order. — item shape: {id?: string, installments?: int, name?: string, quantity?: int}
   --shipping-location-id: string # The identification of the shipping location to use for the order.
   --tax-id: string # The tax number of the billing entity.
-]: any -> record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string> {
+]: any -> oneof<record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1163,7 +1183,7 @@ export def "get-companies-company-id-terminal-orders-order-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string> {
+]: nothing -> oneof<record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1189,7 +1209,6 @@ export def "get-companies-company-id-terminal-orders-order-id" [
 #
 # PATCH /companies/{companyId}/terminalOrders/{orderId}
 # operationId: patch-companies-companyId-terminalOrders-orderId
-# --items item shape: {id?: string, installments?: int, name?: string, quantity?: int}
 export def "patch-companies-company-id-terminal-orders-order-id" [
   company_id: string
   order_id: string
@@ -1207,7 +1226,7 @@ export def "patch-companies-company-id-terminal-orders-order-id" [
   --items: list # The products included in the order. — item shape: {id?: string, installments?: int, name?: string, quantity?: int}
   --shipping-location-id: string # The identification of the shipping location to use for the order.
   --tax-id: string # The tax number of the billing entity.
-]: any -> record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string> {
+]: any -> oneof<record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1248,7 +1267,7 @@ export def "post-companies-company-id-terminal-orders-order-id-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string> {
+]: nothing -> oneof<record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1289,7 +1308,7 @@ export def "get-companies-company-id-terminal-products" [
   --terminal-model-id: string # The terminal model to return products for. Use the ID returned in the [GET `/terminalModels`](https://docs.adyen.com/api-explorer/#/ManagementService/latest/get/companies/{companyId}/terminalModels) response. For example, **Verifone.M400**
   --offset: int # The number of products to skip. (format: int32)
   --limit: int # The number of products to return. (format: int32)
-]: nothing -> record<data: table<description: string, id: string, itemsIncluded: list, name: string, price: record>> {
+]: nothing -> oneof<record<data: table<description: string, id: string, itemsIncluded: list, name: string, price: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1327,7 +1346,7 @@ export def "get-companies-company-id-terminal-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>> {
+]: nothing -> oneof<record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1352,23 +1371,6 @@ export def "get-companies-company-id-terminal-settings" [
 #
 # PATCH /companies/{companyId}/terminalSettings
 # operationId: patch-companies-companyId-terminalSettings
-# --cardholderReceipt shape: {headerForAuthorizedReceipt?: string}
-# --connectivity shape: {simcardStatus?: "ACTIVATED"|"INVENTORY"}
-# --gratuities item shape: {allowCustomAmount?: bool, currency?: string, predefinedTipEntries?: list<string>, usePredefinedTipEntries?: bool}
-# --hardware shape: {displayMaximumBackLight?: int}
-# --nexo shape: {displayUrls?: record, encryptionKey?: record, eventUrls?: record, nexoEventUrls?: list<string>}
-# --offlineProcessing shape: {chipFloorLimit?: int, offlineSwipeLimits?: list}
-# --opi shape: {enablePayAtTable?: bool, payAtTableStoreNumber?: string, payAtTableURL?: string}
-# --passcodes shape: {adminMenuPin?: string, refundPin?: string, screenLockPin?: string, txMenuPin?: string}
-# --payAtTable shape: {authenticationMethod?: "MAGSWIPE"|"MKE", enablePayAtTable?: bool}
-# --payment shape: {hideMinorUnitsInCurrencies?: list<string>}
-# --receiptOptions shape: {logo?: string, qrCodeData?: string}
-# --receiptPrinting shape: {merchantApproved?: bool, merchantCancelled?: bool, merchantCaptureApproved?: bool, merchantCaptureRefused?: bool, merchantRefundApproved?: bool, merchantRefundRefused?: bool, merchantRefused?: bool, merchantVoid?: bool, shopperApproved?: bool, shopperCancelled?: bool, shopperCaptureApproved?: bool, shopperCaptureRefused?: bool, shopperRefundApproved?: bool, shopperRefundRefused?: bool, shopperRefused?: bool, shopperVoid?: bool}
-# --signature shape: {askSignatureOnScreen?: bool, deviceName?: string, deviceSlogan?: string, skipSignature?: bool}
-# --standalone shape: {currencyCode?: string, enableStandalone?: bool}
-# --surcharge shape: {askConfirmation?: bool, configurations?: list}
-# --timeouts shape: {fromActiveToSleep?: int}
-# --wifiProfiles shape: {profiles?: list, settings?: record}
 export def "patch-companies-company-id-terminal-settings" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1397,7 +1399,7 @@ export def "patch-companies-company-id-terminal-settings" [
   --surcharge: record # shape: {askConfirmation?: bool, configurations?: list}
   --timeouts: record # shape: {fromActiveToSleep?: int}
   --wifi-profiles: record # shape: {profiles?: list, settings?: record}
-]: any -> record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>> {
+]: any -> oneof<record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1439,7 +1441,7 @@ export def "get-companies-company-id-users" [
   --page-number: int # The number of the page to return. (format: int32)
   --page-size: int # The number of items to have on a page. Maximum value is **100**. The default is **10** items on a page. (format: int32)
   --username: string # The partial or complete username to select all users that match.
-]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, accountGroups: list, active: bool, associatedMerchantAccounts: list, authnApps: list, email: string, id: string, name: record, roles: list, timeZoneCode: string, username: string>, itemsTotal: int, pagesTotal: int> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, accountGroups: list, active: bool, associatedMerchantAccounts: list, authnApps: list, email: string, id: string, name: record, roles: list, timeZoneCode: string, username: string>, itemsTotal: int, pagesTotal: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1465,7 +1467,6 @@ export def "get-companies-company-id-users" [
 #
 # POST /companies/{companyId}/users
 # operationId: post-companies-companyId-users
-# --name shape: {firstName: string, lastName: string}
 export def "post-companies-company-id-users" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1485,7 +1486,7 @@ export def "post-companies-company-id-users" [
   --roles: list<string> # The list of [roles](https://docs.adyen.com/account/user-roles) for this user.
   --time-zone-code: string # The [tz database name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) of the time zone of the user. For example, **Europe/Amsterdam**.
   username: string # The username for this user. Allowed length: 255 alphanumeric characters.
-]: any -> record<_links: record<self: record<href: string>>, accountGroups: list<string>, active: bool, associatedMerchantAccounts: list<string>, authnApps: list<string>, email: string, id: string, name: record<firstName: string, lastName: string>, roles: list<string>, timeZoneCode: string, username: string> {
+]: any -> oneof<record<_links: record<self: record<href: string>>, accountGroups: list<string>, active: bool, associatedMerchantAccounts: list<string>, authnApps: list<string>, email: string, id: string, name: record<firstName: string, lastName: string>, roles: list<string>, timeZoneCode: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1525,7 +1526,7 @@ export def "get-companies-company-id-users-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<self: record<href: string>>, accountGroups: list<string>, active: bool, associatedMerchantAccounts: list<string>, authnApps: list<string>, email: string, id: string, name: record<firstName: string, lastName: string>, roles: list<string>, timeZoneCode: string, username: string> {
+]: nothing -> oneof<record<_links: record<self: record<href: string>>, accountGroups: list<string>, active: bool, associatedMerchantAccounts: list<string>, authnApps: list<string>, email: string, id: string, name: record<firstName: string, lastName: string>, roles: list<string>, timeZoneCode: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1551,7 +1552,6 @@ export def "get-companies-company-id-users-user-id" [
 #
 # PATCH /companies/{companyId}/users/{userId}
 # operationId: patch-companies-companyId-users-userId
-# --name shape: {firstName?: string, lastName?: string}
 export def "patch-companies-company-id-users-user-id" [
   company_id: string
   user_id: string
@@ -1573,7 +1573,7 @@ export def "patch-companies-company-id-users-user-id" [
   --name: record # shape: {firstName?: string, lastName?: string}
   --roles: list<string> # The list of [roles](https://docs.adyen.com/account/user-roles) for this user.
   --time-zone-code: string # The [tz database name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) of the time zone of the user. For example, **Europe/Amsterdam**.
-]: any -> record<_links: record<self: record<href: string>>, accountGroups: list<string>, active: bool, associatedMerchantAccounts: list<string>, authnApps: list<string>, email: string, id: string, name: record<firstName: string, lastName: string>, roles: list<string>, timeZoneCode: string, username: string> {
+]: any -> oneof<record<_links: record<self: record<href: string>>, accountGroups: list<string>, active: bool, associatedMerchantAccounts: list<string>, authnApps: list<string>, email: string, id: string, name: record<firstName: string, lastName: string>, roles: list<string>, timeZoneCode: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1615,7 +1615,7 @@ export def "get-companies-company-id-webhooks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # The number of the page to fetch. (format: int32)
   --page-size: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
-]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, accountReference: string, data: table<_links: record, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string>, itemsTotal: int, pagesTotal: int> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, accountReference: string, data: table<_links: record, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string>, itemsTotal: int, pagesTotal: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1641,7 +1641,6 @@ export def "get-companies-company-id-webhooks" [
 #
 # POST /companies/{companyId}/webhooks
 # operationId: post-companies-companyId-webhooks
-# --additionalSettings shape: {includeEventCodes?: list<string>, properties?: record}
 export def "post-companies-company-id-webhooks" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1669,7 +1668,7 @@ export def "post-companies-company-id-webhooks" [
   type: string # The type of webhook that is being created. Possible values are: - **standard** - **account-settings-notification** - **banktransfer-notification** - **boletobancario-notification** - **directdebit-notification** - **pending-notification** - **ideal-notification** - **ideal-pending-notification** - **report-notification** - **rreq-notification** Find out more about [standard notification webhooks](https://docs.adyen.com/development-resources/webhooks/understand-notifications#event-codes) and [other types of notifications](https://docs.adyen.com/development-resources/webhooks/understand-notifications#other-notifications).
   url: string # Public URL where webhooks will be sent, for example **https://www.domain.com/webhook-endpoint**.
   --username: string # Username to access the webhook URL.
-]: any -> record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string> {
+]: any -> oneof<record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1748,7 +1747,7 @@ export def "get-companies-company-id-webhooks-webhook-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string> {
+]: nothing -> oneof<record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1774,7 +1773,6 @@ export def "get-companies-company-id-webhooks-webhook-id" [
 #
 # PATCH /companies/{companyId}/webhooks/{webhookId}
 # operationId: patch-companies-companyId-webhooks-webhookId
-# --additionalSettings shape: {includeEventCodes?: list<string>, properties?: record}
 export def "patch-companies-company-id-webhooks-webhook-id" [
   company_id: string
   webhook_id: string
@@ -1802,7 +1800,7 @@ export def "patch-companies-company-id-webhooks-webhook-id" [
   --ssl-version: string@ssl-version-completer # SSL version to access the public webhook URL specified in the `url` field. Possible values: * **TLSv1.3** * **TLSv1.2** * **HTTP** - Only allowed on Test environment. If not specified, the webhook will use `sslVersion`: **TLSv1.2**.
   --url: string # Public URL where webhooks will be sent, for example **https://www.domain.com/webhook-endpoint**.
   --username: string # Username to access the webhook URL.
-]: any -> record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string> {
+]: any -> oneof<record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1843,7 +1841,7 @@ export def "post-companies-company-id-webhooks-webhook-id-generate-hmac" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<hmacKey: string> {
+]: nothing -> oneof<record<hmacKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -1869,7 +1867,6 @@ export def "post-companies-company-id-webhooks-webhook-id-generate-hmac" [
 #
 # POST /companies/{companyId}/webhooks/{webhookId}/test
 # operationId: post-companies-companyId-webhooks-webhookId-test
-# --notification shape: {amount?: record, eventCode?: string, eventDate?: string, merchantReference?: string, paymentMethod?: string, reason?: string, success?: bool}
 export def "post-companies-company-id-webhooks-webhook-id-test" [
   company_id: string
   webhook_id: string
@@ -1885,7 +1882,7 @@ export def "post-companies-company-id-webhooks-webhook-id-test" [
   --merchant-ids: list<string> # List of `merchantId` values for which test webhooks will be sent. The list can have a maximum of 20 `merchantId` values. If not specified, we send sample notifications to all the merchant accounts that the webhook is configured for. If this is more than 20 merchant accounts, use this list to specify a subset of the merchant accounts for which to send test notifications.
   --notification: record # shape: {amount?: record, eventCode?: string, eventDate?: string, merchantReference?: string, paymentMethod?: string, reason?: string, success?: bool}
   --types: list<string> # List of event codes for which to send test notifications. Only the webhook types below are supported. Possible values if webhook `type`: **standard**: * **AUTHORISATION** * **CHARGEBACK_REVERSED** * **ORDER_CLOSED** * **ORDER_OPENED** * **PAIDOUT_REVERSED** * **PAYOUT_THIRDPARTY** * **REFUNDED_REVERSED** * **REFUND_WITH_DATA** * **REPORT_AVAILABLE** * **CUSTOM** - set your custom notification fields in the [`notification`](https://docs.adyen.com/api-explorer/#/ManagementService/v1/post/companies/{companyId}/webhooks/{webhookId}/test__reqParam_notification) object. Possible values if webhook `type`: **banktransfer-notification**: * **PENDING** Possible values if webhook `type`: **report-notification**: * **REPORT_AVAILABLE** Possible values if webhook `type`: **ideal-notification**: * **AUTHORISATION** Possible values if webhook `type`: **pending-notification**: * **PENDING**
-]: any -> record<data: table<merchantId: string, output: string, requestSent: string, responseCode: string, responseTime: string, status: string>> {
+]: any -> oneof<record<data: table<merchantId: string, output: string, requestSent: string, responseCode: string, responseTime: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1924,7 +1921,7 @@ export def "get-me" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, associatedMerchantAccounts: list<string>, clientKey: string, companyName: string, description: string, id: string, roles: list<string>, username: string> {
+]: nothing -> oneof<record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, associatedMerchantAccounts: list<string>, clientKey: string, companyName: string, description: string, id: string, roles: list<string>, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me" $auth.query)
@@ -1958,7 +1955,7 @@ export def "get-me-allowed-origins" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<_links: record, domain: string, id: string>> {
+]: nothing -> oneof<record<data: table<_links: record, domain: string, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/allowedOrigins" $auth.query)
@@ -1982,7 +1979,6 @@ export def "get-me-allowed-origins" [
 #
 # POST /me/allowedOrigins
 # operationId: post-me-allowedOrigins
-# --_links shape: {self: record}
 export def "post-me-allowed-origins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1996,7 +1992,7 @@ export def "post-me-allowed-origins" [
   --links: record # shape: {self: record}
   domain: string # Domain of the allowed origin.
   --id: string # Unique identifier of the allowed origin.
-]: any -> record<_links: record<self: record<href: string>>, domain: string, id: string> {
+]: any -> oneof<record<_links: record<self: record<href: string>>, domain: string, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2070,7 +2066,7 @@ export def "get-me-allowed-origins-origin-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<self: record<href: string>>, domain: string, id: string> {
+]: nothing -> oneof<record<_links: record<self: record<href: string>>, domain: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($origin_id | is-empty) { error make --unspanned { msg: "path parameter 'originId' must be non-empty" } }
@@ -2107,7 +2103,7 @@ export def "get-merchants" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # The number of the page to fetch. (format: int32)
   --page-size: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
-]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, captureDelay: string, companyId: string, dataCenters: list, defaultShopperInteraction: string, description: string, id: string, merchantCity: string, name: string, pricingPlan: string, primarySettlementCurrency: string, reference: string, shopWebAddress: string, status: string>, itemsTotal: int, pagesTotal: int> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, captureDelay: string, companyId: string, dataCenters: list, defaultShopperInteraction: string, description: string, id: string, merchantCity: string, name: string, pricingPlan: string, primarySettlementCurrency: string, reference: string, shopWebAddress: string, status: string>, itemsTotal: int, pagesTotal: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -2149,7 +2145,7 @@ export def "post-merchants" [
   --pricing-plan: string # Sets the pricing plan for the merchant account. Required for an Adyen for Platforms Manage integration. Your Adyen contact will provide the values that you can use.
   --reference: string # Your reference for the merchant account. To make this reference the unique identifier of the merchant account, your Adyen contact can set up a template on your company account. The template can have 6 to 255 characters with upper- and lower-case letters, underscores, and numbers. When your company account has a template, then the `reference` is required and must be unique within the company account.
   --sales-channels: list<string> # List of sales channels that the merchant will process payments with
-]: any -> record<businessLineId: string, companyId: string, description: string, id: string, legalEntityId: string, pricingPlan: string, reference: string> {
+]: any -> oneof<record<businessLineId: string, companyId: string, description: string, id: string, legalEntityId: string, pricingPlan: string, reference: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2187,7 +2183,7 @@ export def "get-merchants-merchant-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<apiCredentials: record<href: string>, self: record<href: string>, users: record<href: string>, webhooks: record<href: string>>, captureDelay: string, companyId: string, dataCenters: table<livePrefix: string, name: string>, defaultShopperInteraction: string, description: string, id: string, merchantCity: string, name: string, pricingPlan: string, primarySettlementCurrency: string, reference: string, shopWebAddress: string, status: string> {
+]: nothing -> oneof<record<_links: record<apiCredentials: record<href: string>, self: record<href: string>, users: record<href: string>, webhooks: record<href: string>>, captureDelay: string, companyId: string, dataCenters: table<livePrefix: string, name: string>, defaultShopperInteraction: string, description: string, id: string, merchantCity: string, name: string, pricingPlan: string, primarySettlementCurrency: string, reference: string, shopWebAddress: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -2223,7 +2219,7 @@ export def "post-merchants-merchant-id-activate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<companyId: string, merchantId: string> {
+]: nothing -> oneof<record<companyId: string, merchantId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -2261,7 +2257,7 @@ export def "get-merchants-merchant-id-api-credentials" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # The number of the page to fetch. (format: int32)
   --page-size: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
-]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, active: bool, allowedIpAddresses: list, allowedOrigins: list, clientKey: string, description: string, id: string, roles: list, username: string>, itemsTotal: int, pagesTotal: int> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, active: bool, allowedIpAddresses: list, allowedOrigins: list, clientKey: string, description: string, id: string, roles: list, username: string>, itemsTotal: int, pagesTotal: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -2301,7 +2297,7 @@ export def "post-merchants-merchant-id-api-credentials" [
   --allowed-origins: list<string> # The list of [allowed origins](https://docs.adyen.com/development-resources/client-side-authentication#allowed-origins) for the new API credential.
   --description: string # Description of the API credential.
   --roles: list<string> # List of [roles](https://docs.adyen.com/development-resources/api-credentials#roles-1) for the API credential.
-]: any -> record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, apiKey: string, clientKey: string, description: string, id: string, password: string, roles: list<string>, username: string> {
+]: any -> oneof<record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, apiKey: string, clientKey: string, description: string, id: string, password: string, roles: list<string>, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2341,7 +2337,7 @@ export def "get-merchants-merchant-id-api-credentials-api-credential-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, clientKey: string, description: string, id: string, roles: list<string>, username: string> {
+]: nothing -> oneof<record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, clientKey: string, description: string, id: string, roles: list<string>, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -2383,7 +2379,7 @@ export def "patch-merchants-merchant-id-api-credentials-api-credential-id" [
   --allowed-origins: list<string> # The new list of [allowed origins](https://docs.adyen.com/development-resources/client-side-authentication#allowed-origins) for the API credential.
   --description: string # Description of the API credential.
   --roles: list<string> # List of [roles](https://docs.adyen.com/development-resources/api-credentials#roles-1) for the API credential.
-]: any -> record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, clientKey: string, description: string, id: string, roles: list<string>, username: string> {
+]: any -> oneof<record<_links: record<allowedOrigins: record<href: string>, company: record<href: string>, generateApiKey: record<href: string>, generateClientKey: record<href: string>, merchant: record<href: string>, self: record<href: string>>, active: bool, allowedIpAddresses: list<string>, allowedOrigins: table<_links: record, domain: string, id: string>, clientKey: string, description: string, id: string, roles: list<string>, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2424,7 +2420,7 @@ export def "get-merchants-merchant-id-api-credentials-api-credential-id-allowed-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<_links: record, domain: string, id: string>> {
+]: nothing -> oneof<record<data: table<_links: record, domain: string, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -2450,7 +2446,6 @@ export def "get-merchants-merchant-id-api-credentials-api-credential-id-allowed-
 #
 # POST /merchants/{merchantId}/apiCredentials/{apiCredentialId}/allowedOrigins
 # operationId: post-merchants-merchantId-apiCredentials-apiCredentialId-allowedOrigins
-# --_links shape: {self: record}
 export def "post-merchants-merchant-id-api-credentials-api-credential-id-allowed-origins" [
   merchant_id: string
   api_credential_id: string
@@ -2466,7 +2461,7 @@ export def "post-merchants-merchant-id-api-credentials-api-credential-id-allowed
   --links: record # shape: {self: record}
   domain: string # Domain of the allowed origin.
   --id: string # Unique identifier of the allowed origin.
-]: any -> record<data: table<_links: record, domain: string, id: string>> {
+]: any -> oneof<record<data: table<_links: record, domain: string, id: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2548,7 +2543,7 @@ export def "get-merchants-merchant-id-api-credentials-api-credential-id-allowed-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<self: record<href: string>>, domain: string, id: string> {
+]: nothing -> oneof<record<_links: record<self: record<href: string>>, domain: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -2587,7 +2582,7 @@ export def "post-merchants-merchant-id-api-credentials-api-credential-id-generat
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<apiKey: string> {
+]: nothing -> oneof<record<apiKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -2625,7 +2620,7 @@ export def "post-merchants-merchant-id-api-credentials-api-credential-id-generat
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<clientKey: string> {
+]: nothing -> oneof<record<clientKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -2663,7 +2658,7 @@ export def "get-merchants-merchant-id-billing-entities" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the billing entity.
-]: nothing -> record<data: table<address: record, email: string, id: string, name: string, taxId: string>> {
+]: nothing -> oneof<record<data: table<address: record, email: string, id: string, name: string, taxId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -2704,7 +2699,7 @@ export def "get-merchants-merchant-id-payment-method-settings" [
   --business-line-id: string # The unique identifier of the Business Line for which to return the payment methods.
   --page-size: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
   --page-number: int # The number of the page to fetch. (format: int32)
-]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<allowed: bool, applePay: record, bcmc: record, businessLineId: string, cartesBancaires: record, countries: list, currencies: list, customRoutingFlags: list, enabled: bool, giroPay: record, googlePay: record, id: string, klarna: record, mealVoucher_FR: record, paypal: record, reference: string, shopperInteraction: string, sofort: record, storeId: string, swish: record, type: string, verificationStatus: string, vipps: record>, itemsTotal: int, pagesTotal: int, typesWithErrors: list<string>> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<allowed: bool, applePay: record, bcmc: record, businessLineId: string, cartesBancaires: record, countries: list, currencies: list, customRoutingFlags: list, enabled: bool, giroPay: record, googlePay: record, id: string, klarna: record, mealVoucher_FR: record, paypal: record, reference: string, shopperInteraction: string, sofort: record, storeId: string, swish: record, type: string, verificationStatus: string, vipps: record>, itemsTotal: int, pagesTotal: int, typesWithErrors: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -2730,17 +2725,6 @@ export def "get-merchants-merchant-id-payment-method-settings" [
 #
 # POST /merchants/{merchantId}/paymentMethodSettings
 # operationId: post-merchants-merchantId-paymentMethodSettings
-# --applePay shape: {domains?: list<string>}
-# --bcmc shape: {enableBcmcMobile?: bool}
-# --cartesBancaires shape: {siret: string}
-# --giroPay shape: {supportEmail: string}
-# --googlePay shape: {merchantId: string, reuseMerchantId?: bool}
-# --klarna shape: {autoCapture?: bool, disputeEmail: string, region?: "NA"|"EU"|"CH"|"AU", supportEmail: string}
-# --mealVoucher_FR shape: {conecsId: string, siret: string, subTypes: list<string>}
-# --paypal shape: {directCapture?: bool, payerId: string, subject: string}
-# --sofort shape: {currencyCode: string, logo: string}
-# --swish shape: {swishNumber?: string}
-# --vipps shape: {logo: string, subscriptionCancelUrl?: string}
 export def "post-merchants-merchant-id-payment-method-settings" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2771,7 +2755,7 @@ export def "post-merchants-merchant-id-payment-method-settings" [
   --swish: record # shape: {swishNumber?: string}
   --type: string@type-completer # Payment method [variant](https://docs.adyen.com/development-resources/paymentmethodvariant#management-api).
   --vipps: record # shape: {logo: string, subscriptionCancelUrl?: string}
-]: any -> record<allowed: bool, applePay: record<domains: list<string>>, bcmc: record<enableBcmcMobile: bool>, businessLineId: string, cartesBancaires: record<siret: string>, countries: list<string>, currencies: list<string>, customRoutingFlags: list<string>, enabled: bool, giroPay: record<supportEmail: string>, googlePay: record<merchantId: string, reuseMerchantId: bool>, id: string, klarna: record<autoCapture: bool, disputeEmail: string, region: string, supportEmail: string>, mealVoucher_FR: record<conecsId: string, siret: string, subTypes: list<string>>, paypal: record<directCapture: bool, payerId: string, subject: string>, reference: string, shopperInteraction: string, sofort: record<currencyCode: string, logo: string>, storeId: string, swish: record<swishNumber: string>, type: string, verificationStatus: string, vipps: record<logo: string, subscriptionCancelUrl: string>> {
+]: any -> oneof<record<allowed: bool, applePay: record<domains: list<string>>, bcmc: record<enableBcmcMobile: bool>, businessLineId: string, cartesBancaires: record<siret: string>, countries: list<string>, currencies: list<string>, customRoutingFlags: list<string>, enabled: bool, giroPay: record<supportEmail: string>, googlePay: record<merchantId: string, reuseMerchantId: bool>, id: string, klarna: record<autoCapture: bool, disputeEmail: string, region: string, supportEmail: string>, mealVoucher_FR: record<conecsId: string, siret: string, subTypes: list<string>>, paypal: record<directCapture: bool, payerId: string, subject: string>, reference: string, shopperInteraction: string, sofort: record<currencyCode: string, logo: string>, storeId: string, swish: record<swishNumber: string>, type: string, verificationStatus: string, vipps: record<logo: string, subscriptionCancelUrl: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2811,7 +2795,7 @@ export def "get-merchants-merchant-id-payment-method-settings-payment-method-id"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<allowed: bool, applePay: record<domains: list<string>>, bcmc: record<enableBcmcMobile: bool>, businessLineId: string, cartesBancaires: record<siret: string>, countries: list<string>, currencies: list<string>, customRoutingFlags: list<string>, enabled: bool, giroPay: record<supportEmail: string>, googlePay: record<merchantId: string, reuseMerchantId: bool>, id: string, klarna: record<autoCapture: bool, disputeEmail: string, region: string, supportEmail: string>, mealVoucher_FR: record<conecsId: string, siret: string, subTypes: list<string>>, paypal: record<directCapture: bool, payerId: string, subject: string>, reference: string, shopperInteraction: string, sofort: record<currencyCode: string, logo: string>, storeId: string, swish: record<swishNumber: string>, type: string, verificationStatus: string, vipps: record<logo: string, subscriptionCancelUrl: string>> {
+]: nothing -> oneof<record<allowed: bool, applePay: record<domains: list<string>>, bcmc: record<enableBcmcMobile: bool>, businessLineId: string, cartesBancaires: record<siret: string>, countries: list<string>, currencies: list<string>, customRoutingFlags: list<string>, enabled: bool, giroPay: record<supportEmail: string>, googlePay: record<merchantId: string, reuseMerchantId: bool>, id: string, klarna: record<autoCapture: bool, disputeEmail: string, region: string, supportEmail: string>, mealVoucher_FR: record<conecsId: string, siret: string, subTypes: list<string>>, paypal: record<directCapture: bool, payerId: string, subject: string>, reference: string, shopperInteraction: string, sofort: record<currencyCode: string, logo: string>, storeId: string, swish: record<swishNumber: string>, type: string, verificationStatus: string, vipps: record<logo: string, subscriptionCancelUrl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -2837,7 +2821,6 @@ export def "get-merchants-merchant-id-payment-method-settings-payment-method-id"
 #
 # PATCH /merchants/{merchantId}/paymentMethodSettings/{paymentMethodId}
 # operationId: patch-merchants-merchantId-paymentMethodSettings-paymentMethodId
-# --shopperStatement shape: {doingBusinessAsName?: string, type?: "append"|"dynamic"|"fixed"}
 export def "patch-merchants-merchant-id-payment-method-settings-payment-method-id" [
   merchant_id: string
   payment_method_id: string
@@ -2856,7 +2839,7 @@ export def "patch-merchants-merchant-id-payment-method-settings-payment-method-i
   --enabled: oneof<nothing, bool> # Indicates whether the payment method is enabled (**true**) or disabled (**false**).
   --shopper-statement: record # shape: {doingBusinessAsName?: string, type?: "append"|"dynamic"|"fixed"}
   --store-ids: list<string> # The list of stores for this payment method
-]: any -> record<allowed: bool, applePay: record<domains: list<string>>, bcmc: record<enableBcmcMobile: bool>, businessLineId: string, cartesBancaires: record<siret: string>, countries: list<string>, currencies: list<string>, customRoutingFlags: list<string>, enabled: bool, giroPay: record<supportEmail: string>, googlePay: record<merchantId: string, reuseMerchantId: bool>, id: string, klarna: record<autoCapture: bool, disputeEmail: string, region: string, supportEmail: string>, mealVoucher_FR: record<conecsId: string, siret: string, subTypes: list<string>>, paypal: record<directCapture: bool, payerId: string, subject: string>, reference: string, shopperInteraction: string, sofort: record<currencyCode: string, logo: string>, storeId: string, swish: record<swishNumber: string>, type: string, verificationStatus: string, vipps: record<logo: string, subscriptionCancelUrl: string>> {
+]: any -> oneof<record<allowed: bool, applePay: record<domains: list<string>>, bcmc: record<enableBcmcMobile: bool>, businessLineId: string, cartesBancaires: record<siret: string>, countries: list<string>, currencies: list<string>, customRoutingFlags: list<string>, enabled: bool, giroPay: record<supportEmail: string>, googlePay: record<merchantId: string, reuseMerchantId: bool>, id: string, klarna: record<autoCapture: bool, disputeEmail: string, region: string, supportEmail: string>, mealVoucher_FR: record<conecsId: string, siret: string, subTypes: list<string>>, paypal: record<directCapture: bool, payerId: string, subject: string>, reference: string, shopperInteraction: string, sofort: record<currencyCode: string, logo: string>, storeId: string, swish: record<swishNumber: string>, type: string, verificationStatus: string, vipps: record<logo: string, subscriptionCancelUrl: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -2939,7 +2922,7 @@ export def "get-merchants-merchant-id-payment-method-settings-payment-method-id-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<domains: list<string>> {
+]: nothing -> oneof<record<domains: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -2976,7 +2959,7 @@ export def "get-merchants-merchant-id-payout-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<allowed: bool, enabled: bool, enabledFromDate: string, id: string, priority: string, transferInstrumentId: string, verificationStatus: string>> {
+]: nothing -> oneof<record<data: table<allowed: bool, enabled: bool, enabledFromDate: string, id: string, priority: string, transferInstrumentId: string, verificationStatus: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -3015,7 +2998,7 @@ export def "post-merchants-merchant-id-payout-settings" [
   --enabled: oneof<nothing, bool> # Indicates if payouts to this bank account are enabled. Default: **true**. To receive payouts into this bank account, both `enabled` and `allowed` must be **true**.
   --enabled-from-date: string # The date when Adyen starts paying out to this bank account. Format: [ISO 8601](https://www.w3.org/TR/NOTE-datetime), for example, **2019-11-23T12:25:28Z** or **2020-05-27T20:25:28+08:00**. If not specified, the `enabled` field indicates if payouts are enabled for this bank account. If a date is specified and: * `enabled`: **true**, payouts are enabled starting the specified date. * `enabled`: **false**, payouts are disabled until the specified date. On the specified date, `enabled` changes to **true** and this field is reset to **null**.
   transfer_instrument_id: string # The unique identifier of the [transfer instrument](https://docs.adyen.com/api-explorer/#/legalentity/latest/post/transferInstruments) that contains the details of the bank account.
-]: any -> record<allowed: bool, enabled: bool, enabledFromDate: string, id: string, priority: string, transferInstrumentId: string, verificationStatus: string> {
+]: any -> oneof<record<allowed: bool, enabled: bool, enabledFromDate: string, id: string, priority: string, transferInstrumentId: string, verificationStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3093,7 +3076,7 @@ export def "get-merchants-merchant-id-payout-settings-payout-settings-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<allowed: bool, enabled: bool, enabledFromDate: string, id: string, priority: string, transferInstrumentId: string, verificationStatus: string> {
+]: nothing -> oneof<record<allowed: bool, enabled: bool, enabledFromDate: string, id: string, priority: string, transferInstrumentId: string, verificationStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -3132,7 +3115,7 @@ export def "patch-merchants-merchant-id-payout-settings-payout-settings-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Indicates if payouts to this bank account are enabled. Default: **true**. To receive payouts into this bank account, both `enabled` and `allowed` must be **true**.
-]: any -> record<allowed: bool, enabled: bool, enabledFromDate: string, id: string, priority: string, transferInstrumentId: string, verificationStatus: string> {
+]: any -> oneof<record<allowed: bool, enabled: bool, enabledFromDate: string, id: string, priority: string, transferInstrumentId: string, verificationStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3175,7 +3158,7 @@ export def "get-merchants-merchant-id-shipping-locations" [
   --name: string # The name of the shipping location.
   --offset: int # The number of locations to skip. (format: int32)
   --limit: int # The number of locations to return. (format: int32)
-]: nothing -> record<data: table<address: record, contact: record, id: string, name: string>> {
+]: nothing -> oneof<record<data: table<address: record, contact: record, id: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -3201,8 +3184,6 @@ export def "get-merchants-merchant-id-shipping-locations" [
 #
 # POST /merchants/{merchantId}/shippingLocations
 # operationId: post-merchants-merchantId-shippingLocations
-# --address shape: {city?: string, companyName?: string, country?: string, postalCode?: string, stateOrProvince?: string, streetAddress?: string, streetAddress2?: string}
-# --contact shape: {email?: string, firstName?: string, infix?: string, lastName?: string, phoneNumber?: string}
 export def "post-merchants-merchant-id-shipping-locations" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3218,7 +3199,7 @@ export def "post-merchants-merchant-id-shipping-locations" [
   --contact: record # shape: {email?: string, firstName?: string, infix?: string, lastName?: string, phoneNumber?: string}
   --id: string # The unique identifier of the shipping location, for use as `shippingLocationId` when creating an order.
   --name: string # The unique name of the shipping location.
-]: any -> record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string> {
+]: any -> oneof<record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3260,7 +3241,7 @@ export def "get-merchants-merchant-id-stores" [
   --page-number: int # The number of the page to fetch. (format: int32)
   --page-size: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
   --reference: string # The reference of the store.
-]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, address: record, businessLineIds: list, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record, status: string>, itemsTotal: int, pagesTotal: int> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, address: record, businessLineIds: list, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record, status: string>, itemsTotal: int, pagesTotal: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -3286,8 +3267,6 @@ export def "get-merchants-merchant-id-stores" [
 #
 # POST /merchants/{merchantId}/stores
 # operationId: post-merchants-merchantId-stores
-# --address shape: {city?: string, country: string, line1?: string, line2?: string, line3?: string, postalCode?: string, stateOrProvince?: string}
-# --splitConfiguration shape: {balanceAccountId?: string, splitConfigurationId?: string}
 export def "post-merchants-merchant-id-stores" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3307,7 +3286,7 @@ export def "post-merchants-merchant-id-stores" [
   --reference: string # Your reference to recognize the store by. Also known as the store code. Allowed characters: Lowercase and uppercase letters without diacritics, numbers 0 through 9, hyphen (-), and underscore (_).
   shopper_statement: string # The store name to be shown on the shopper's bank or credit card statement and on the shopper receipt. Maximum length: 22 characters; can't be all numbers.
   --split-configuration: record # shape: {balanceAccountId?: string, splitConfigurationId?: string}
-]: any -> record<_links: record<self: record<href: string>>, address: record<city: string, country: string, line1: string, line2: string, line3: string, postalCode: string, stateOrProvince: string>, businessLineIds: list<string>, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record<balanceAccountId: string, splitConfigurationId: string>, status: string> {
+]: any -> oneof<record<_links: record<self: record<href: string>>, address: record<city: string, country: string, line1: string, line2: string, line3: string, postalCode: string, stateOrProvince: string>, businessLineIds: list<string>, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record<balanceAccountId: string, splitConfigurationId: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3348,7 +3327,7 @@ export def "get-merchants-merchant-id-stores-reference-terminal-logos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T. (required)
-]: nothing -> record<data: string> {
+]: nothing -> oneof<record<data: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -3390,7 +3369,7 @@ export def "patch-merchants-merchant-id-stores-reference-terminal-logos" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T (required)
   --data: string # The image file, converted to a Base64-encoded string, of the logo to be shown on the terminal.
-]: any -> record<data: string> {
+]: any -> oneof<record<data: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3433,7 +3412,7 @@ export def "get-merchants-merchant-id-stores-reference-terminal-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>> {
+]: nothing -> oneof<record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -3459,23 +3438,6 @@ export def "get-merchants-merchant-id-stores-reference-terminal-settings" [
 #
 # PATCH /merchants/{merchantId}/stores/{reference}/terminalSettings
 # operationId: patch-merchants-merchantId-stores-reference-terminalSettings
-# --cardholderReceipt shape: {headerForAuthorizedReceipt?: string}
-# --connectivity shape: {simcardStatus?: "ACTIVATED"|"INVENTORY"}
-# --gratuities item shape: {allowCustomAmount?: bool, currency?: string, predefinedTipEntries?: list<string>, usePredefinedTipEntries?: bool}
-# --hardware shape: {displayMaximumBackLight?: int}
-# --nexo shape: {displayUrls?: record, encryptionKey?: record, eventUrls?: record, nexoEventUrls?: list<string>}
-# --offlineProcessing shape: {chipFloorLimit?: int, offlineSwipeLimits?: list}
-# --opi shape: {enablePayAtTable?: bool, payAtTableStoreNumber?: string, payAtTableURL?: string}
-# --passcodes shape: {adminMenuPin?: string, refundPin?: string, screenLockPin?: string, txMenuPin?: string}
-# --payAtTable shape: {authenticationMethod?: "MAGSWIPE"|"MKE", enablePayAtTable?: bool}
-# --payment shape: {hideMinorUnitsInCurrencies?: list<string>}
-# --receiptOptions shape: {logo?: string, qrCodeData?: string}
-# --receiptPrinting shape: {merchantApproved?: bool, merchantCancelled?: bool, merchantCaptureApproved?: bool, merchantCaptureRefused?: bool, merchantRefundApproved?: bool, merchantRefundRefused?: bool, merchantRefused?: bool, merchantVoid?: bool, shopperApproved?: bool, shopperCancelled?: bool, shopperCaptureApproved?: bool, shopperCaptureRefused?: bool, shopperRefundApproved?: bool, shopperRefundRefused?: bool, shopperRefused?: bool, shopperVoid?: bool}
-# --signature shape: {askSignatureOnScreen?: bool, deviceName?: string, deviceSlogan?: string, skipSignature?: bool}
-# --standalone shape: {currencyCode?: string, enableStandalone?: bool}
-# --surcharge shape: {askConfirmation?: bool, configurations?: list}
-# --timeouts shape: {fromActiveToSleep?: int}
-# --wifiProfiles shape: {profiles?: list, settings?: record}
 export def "patch-merchants-merchant-id-stores-reference-terminal-settings" [
   merchant_id: string
   reference: string
@@ -3505,7 +3467,7 @@ export def "patch-merchants-merchant-id-stores-reference-terminal-settings" [
   --surcharge: record # shape: {askConfirmation?: bool, configurations?: list}
   --timeouts: record # shape: {fromActiveToSleep?: int}
   --wifi-profiles: record # shape: {profiles?: list, settings?: record}
-]: any -> record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>> {
+]: any -> oneof<record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3546,7 +3508,7 @@ export def "get-merchants-merchant-id-stores-store-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<self: record<href: string>>, address: record<city: string, country: string, line1: string, line2: string, line3: string, postalCode: string, stateOrProvince: string>, businessLineIds: list<string>, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record<balanceAccountId: string, splitConfigurationId: string>, status: string> {
+]: nothing -> oneof<record<_links: record<self: record<href: string>>, address: record<city: string, country: string, line1: string, line2: string, line3: string, postalCode: string, stateOrProvince: string>, businessLineIds: list<string>, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record<balanceAccountId: string, splitConfigurationId: string>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -3572,8 +3534,6 @@ export def "get-merchants-merchant-id-stores-store-id" [
 #
 # PATCH /merchants/{merchantId}/stores/{storeId}
 # operationId: patch-merchants-merchantId-stores-storeId
-# --address shape: {city?: string, line1?: string, line2?: string, line3?: string, postalCode?: string, stateOrProvince?: string}
-# --splitConfiguration shape: {balanceAccountId?: string, splitConfigurationId?: string}
 export def "patch-merchants-merchant-id-stores-store-id" [
   merchant_id: string
   store_id: string
@@ -3592,7 +3552,7 @@ export def "patch-merchants-merchant-id-stores-store-id" [
   --external-reference-id: string # When using the Zip payment method: The location ID that Zip has assigned to your store.
   --split-configuration: record # shape: {balanceAccountId?: string, splitConfigurationId?: string}
   --status: string@status-completer # The status of the store. Possible values are: - **active**: This value is assigned automatically when a store is created. - **inactive**: The maximum [transaction limits and number of Store-and-Forward transactions](https://docs.adyen.com/point-of-sale/determine-account-structure/configure-features#payment-features) for the store are set to 0. This blocks new transactions, but captures are still possible. - **closed**: The terminals of the store are reassigned to the merchant inventory, so they can't process payments. You can change the status from **active** to **inactive**, and from **inactive** to **active** or **closed**. Once **closed**, a store can't be reopened.
-]: any -> record<_links: record<self: record<href: string>>, address: record<city: string, country: string, line1: string, line2: string, line3: string, postalCode: string, stateOrProvince: string>, businessLineIds: list<string>, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record<balanceAccountId: string, splitConfigurationId: string>, status: string> {
+]: any -> oneof<record<_links: record<self: record<href: string>>, address: record<city: string, country: string, line1: string, line2: string, line3: string, postalCode: string, stateOrProvince: string>, businessLineIds: list<string>, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record<balanceAccountId: string, splitConfigurationId: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3633,7 +3593,7 @@ export def "get-merchants-merchant-id-terminal-logos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T. (required)
-]: nothing -> record<data: string> {
+]: nothing -> oneof<record<data: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -3673,7 +3633,7 @@ export def "patch-merchants-merchant-id-terminal-logos" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Allowed values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T. (required)
   --data: string # The image file, converted to a Base64-encoded string, of the logo to be shown on the terminal.
-]: any -> record<data: string> {
+]: any -> oneof<record<data: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3714,7 +3674,7 @@ export def "get-merchants-merchant-id-terminal-models" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<id: string, name: string>> {
+]: nothing -> oneof<record<data: table<id: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -3754,7 +3714,7 @@ export def "get-merchants-merchant-id-terminal-orders" [
   --status: string # The order status. Possible values (not case-sensitive): Placed, Confirmed, Cancelled, Shipped, Delivered.
   --offset: int # The number of orders to skip. (format: int32)
   --limit: int # The number of orders to return. (format: int32)
-]: nothing -> record<data: table<billingEntity: record, customerOrderReference: string, id: string, items: list, orderDate: string, shippingLocation: record, status: string, trackingUrl: string>> {
+]: nothing -> oneof<record<data: table<billingEntity: record, customerOrderReference: string, id: string, items: list, orderDate: string, shippingLocation: record, status: string, trackingUrl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -3780,7 +3740,6 @@ export def "get-merchants-merchant-id-terminal-orders" [
 #
 # POST /merchants/{merchantId}/terminalOrders
 # operationId: post-merchants-merchantId-terminalOrders
-# --items item shape: {id?: string, installments?: int, name?: string, quantity?: int}
 export def "post-merchants-merchant-id-terminal-orders" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3797,7 +3756,7 @@ export def "post-merchants-merchant-id-terminal-orders" [
   --items: list # The products included in the order. — item shape: {id?: string, installments?: int, name?: string, quantity?: int}
   --shipping-location-id: string # The identification of the shipping location to use for the order.
   --tax-id: string # The tax number of the billing entity.
-]: any -> record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string> {
+]: any -> oneof<record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3837,7 +3796,7 @@ export def "get-merchants-merchant-id-terminal-orders-order-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string> {
+]: nothing -> oneof<record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -3863,7 +3822,6 @@ export def "get-merchants-merchant-id-terminal-orders-order-id" [
 #
 # PATCH /merchants/{merchantId}/terminalOrders/{orderId}
 # operationId: patch-merchants-merchantId-terminalOrders-orderId
-# --items item shape: {id?: string, installments?: int, name?: string, quantity?: int}
 export def "patch-merchants-merchant-id-terminal-orders-order-id" [
   merchant_id: string
   order_id: string
@@ -3881,7 +3839,7 @@ export def "patch-merchants-merchant-id-terminal-orders-order-id" [
   --items: list # The products included in the order. — item shape: {id?: string, installments?: int, name?: string, quantity?: int}
   --shipping-location-id: string # The identification of the shipping location to use for the order.
   --tax-id: string # The tax number of the billing entity.
-]: any -> record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string> {
+]: any -> oneof<record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -3922,7 +3880,7 @@ export def "post-merchants-merchant-id-terminal-orders-order-id-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string> {
+]: nothing -> oneof<record<billingEntity: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, email: string, id: string, name: string, taxId: string>, customerOrderReference: string, id: string, items: table<id: string, installments: int, name: string, quantity: int>, orderDate: string, shippingLocation: record<address: record<city: string, companyName: string, country: string, postalCode: string, stateOrProvince: string, streetAddress: string, streetAddress2: string>, contact: record<email: string, firstName: string, infix: string, lastName: string, phoneNumber: string>, id: string, name: string>, status: string, trackingUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -3963,7 +3921,7 @@ export def "get-merchants-merchant-id-terminal-products" [
   --terminal-model-id: string # The terminal model to return products for. Use the ID returned in the [GET `/terminalModels`](https://docs.adyen.com/api-explorer/#/ManagementService/latest/get/merchants/{merchantId}/terminalModels) response. For example, **Verifone.M400**
   --offset: int # The number of products to skip. (format: int32)
   --limit: int # The number of products to return. (format: int32)
-]: nothing -> record<data: table<description: string, id: string, itemsIncluded: list, name: string, price: record>> {
+]: nothing -> oneof<record<data: table<description: string, id: string, itemsIncluded: list, name: string, price: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -4001,7 +3959,7 @@ export def "get-merchants-merchant-id-terminal-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>> {
+]: nothing -> oneof<record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -4026,23 +3984,6 @@ export def "get-merchants-merchant-id-terminal-settings" [
 #
 # PATCH /merchants/{merchantId}/terminalSettings
 # operationId: patch-merchants-merchantId-terminalSettings
-# --cardholderReceipt shape: {headerForAuthorizedReceipt?: string}
-# --connectivity shape: {simcardStatus?: "ACTIVATED"|"INVENTORY"}
-# --gratuities item shape: {allowCustomAmount?: bool, currency?: string, predefinedTipEntries?: list<string>, usePredefinedTipEntries?: bool}
-# --hardware shape: {displayMaximumBackLight?: int}
-# --nexo shape: {displayUrls?: record, encryptionKey?: record, eventUrls?: record, nexoEventUrls?: list<string>}
-# --offlineProcessing shape: {chipFloorLimit?: int, offlineSwipeLimits?: list}
-# --opi shape: {enablePayAtTable?: bool, payAtTableStoreNumber?: string, payAtTableURL?: string}
-# --passcodes shape: {adminMenuPin?: string, refundPin?: string, screenLockPin?: string, txMenuPin?: string}
-# --payAtTable shape: {authenticationMethod?: "MAGSWIPE"|"MKE", enablePayAtTable?: bool}
-# --payment shape: {hideMinorUnitsInCurrencies?: list<string>}
-# --receiptOptions shape: {logo?: string, qrCodeData?: string}
-# --receiptPrinting shape: {merchantApproved?: bool, merchantCancelled?: bool, merchantCaptureApproved?: bool, merchantCaptureRefused?: bool, merchantRefundApproved?: bool, merchantRefundRefused?: bool, merchantRefused?: bool, merchantVoid?: bool, shopperApproved?: bool, shopperCancelled?: bool, shopperCaptureApproved?: bool, shopperCaptureRefused?: bool, shopperRefundApproved?: bool, shopperRefundRefused?: bool, shopperRefused?: bool, shopperVoid?: bool}
-# --signature shape: {askSignatureOnScreen?: bool, deviceName?: string, deviceSlogan?: string, skipSignature?: bool}
-# --standalone shape: {currencyCode?: string, enableStandalone?: bool}
-# --surcharge shape: {askConfirmation?: bool, configurations?: list}
-# --timeouts shape: {fromActiveToSleep?: int}
-# --wifiProfiles shape: {profiles?: list, settings?: record}
 export def "patch-merchants-merchant-id-terminal-settings" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4071,7 +4012,7 @@ export def "patch-merchants-merchant-id-terminal-settings" [
   --surcharge: record # shape: {askConfirmation?: bool, configurations?: list}
   --timeouts: record # shape: {fromActiveToSleep?: int}
   --wifi-profiles: record # shape: {profiles?: list, settings?: record}
-]: any -> record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>> {
+]: any -> oneof<record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4113,7 +4054,7 @@ export def "get-merchants-merchant-id-users" [
   --page-number: int # The number of the page to fetch. (format: int32)
   --page-size: int # The number of items to have on a page. Maximum value is **100**. The default is **10** items on a page. (format: int32)
   --username: string # The partial or complete username to select all users that match.
-]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, accountGroups: list, active: bool, authnApps: list, email: string, id: string, name: record, roles: list, timeZoneCode: string, username: string>, itemsTotal: int, pagesTotal: int> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, accountGroups: list, active: bool, authnApps: list, email: string, id: string, name: record, roles: list, timeZoneCode: string, username: string>, itemsTotal: int, pagesTotal: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -4139,7 +4080,6 @@ export def "get-merchants-merchant-id-users" [
 #
 # POST /merchants/{merchantId}/users
 # operationId: post-merchants-merchantId-users
-# --name shape: {firstName: string, lastName: string}
 export def "post-merchants-merchant-id-users" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4158,7 +4098,7 @@ export def "post-merchants-merchant-id-users" [
   --roles: list<string> # The list of [roles](https://docs.adyen.com/account/user-roles) for this user.
   --time-zone-code: string # The [tz database name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) of the time zone of the user. For example, **Europe/Amsterdam**.
   username: string # The username for this user. Allowed length: 255 alphanumeric characters.
-]: any -> record<_links: record<self: record<href: string>>, accountGroups: list<string>, active: bool, authnApps: list<string>, email: string, id: string, name: record<firstName: string, lastName: string>, roles: list<string>, timeZoneCode: string, username: string> {
+]: any -> oneof<record<_links: record<self: record<href: string>>, accountGroups: list<string>, active: bool, authnApps: list<string>, email: string, id: string, name: record<firstName: string, lastName: string>, roles: list<string>, timeZoneCode: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4198,7 +4138,7 @@ export def "get-merchants-merchant-id-users-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<self: record<href: string>>, accountGroups: list<string>, active: bool, authnApps: list<string>, email: string, id: string, name: record<firstName: string, lastName: string>, roles: list<string>, timeZoneCode: string, username: string> {
+]: nothing -> oneof<record<_links: record<self: record<href: string>>, accountGroups: list<string>, active: bool, authnApps: list<string>, email: string, id: string, name: record<firstName: string, lastName: string>, roles: list<string>, timeZoneCode: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -4224,7 +4164,6 @@ export def "get-merchants-merchant-id-users-user-id" [
 #
 # PATCH /merchants/{merchantId}/users/{userId}
 # operationId: patch-merchants-merchantId-users-userId
-# --name shape: {firstName?: string, lastName?: string}
 export def "patch-merchants-merchant-id-users-user-id" [
   merchant_id: string
   user_id: string
@@ -4245,7 +4184,7 @@ export def "patch-merchants-merchant-id-users-user-id" [
   --name: record # shape: {firstName?: string, lastName?: string}
   --roles: list<string> # The list of [roles](https://docs.adyen.com/account/user-roles) for this user.
   --time-zone-code: string # The [tz database name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) of the time zone of the user. For example, **Europe/Amsterdam**.
-]: any -> record<_links: record<self: record<href: string>>, accountGroups: list<string>, active: bool, authnApps: list<string>, email: string, id: string, name: record<firstName: string, lastName: string>, roles: list<string>, timeZoneCode: string, username: string> {
+]: any -> oneof<record<_links: record<self: record<href: string>>, accountGroups: list<string>, active: bool, authnApps: list<string>, email: string, id: string, name: record<firstName: string, lastName: string>, roles: list<string>, timeZoneCode: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4287,7 +4226,7 @@ export def "get-merchants-merchant-id-webhooks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # The number of the page to fetch. (format: int32)
   --page-size: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
-]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, accountReference: string, data: table<_links: record, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string>, itemsTotal: int, pagesTotal: int> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, accountReference: string, data: table<_links: record, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string>, itemsTotal: int, pagesTotal: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -4313,7 +4252,6 @@ export def "get-merchants-merchant-id-webhooks" [
 #
 # POST /merchants/{merchantId}/webhooks
 # operationId: post-merchants-merchantId-webhooks
-# --additionalSettings shape: {includeEventCodes?: list<string>, properties?: record}
 export def "post-merchants-merchant-id-webhooks" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4339,7 +4277,7 @@ export def "post-merchants-merchant-id-webhooks" [
   type: string # The type of webhook that is being created. Possible values are: - **standard** - **account-settings-notification** - **banktransfer-notification** - **boletobancario-notification** - **directdebit-notification** - **pending-notification** - **ideal-notification** - **ideal-pending-notification** - **report-notification** - **rreq-notification** Find out more about [standard notification webhooks](https://docs.adyen.com/development-resources/webhooks/understand-notifications#event-codes) and [other types of notifications](https://docs.adyen.com/development-resources/webhooks/understand-notifications#other-notifications).
   url: string # Public URL where webhooks will be sent, for example **https://www.domain.com/webhook-endpoint**.
   --username: string # Username to access the webhook URL.
-]: any -> record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string> {
+]: any -> oneof<record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4418,7 +4356,7 @@ export def "get-merchants-merchant-id-webhooks-webhook-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string> {
+]: nothing -> oneof<record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -4444,7 +4382,6 @@ export def "get-merchants-merchant-id-webhooks-webhook-id" [
 #
 # PATCH /merchants/{merchantId}/webhooks/{webhookId}
 # operationId: patch-merchants-merchantId-webhooks-webhookId
-# --additionalSettings shape: {includeEventCodes?: list<string>, properties?: record}
 export def "patch-merchants-merchant-id-webhooks-webhook-id" [
   merchant_id: string
   webhook_id: string
@@ -4470,7 +4407,7 @@ export def "patch-merchants-merchant-id-webhooks-webhook-id" [
   --ssl-version: string@ssl-version-completer # SSL version to access the public webhook URL specified in the `url` field. Possible values: * **TLSv1.3** * **TLSv1.2** * **HTTP** - Only allowed on Test environment. If not specified, the webhook will use `sslVersion`: **TLSv1.2**.
   --url: string # Public URL where webhooks will be sent, for example **https://www.domain.com/webhook-endpoint**.
   --username: string # Username to access the webhook URL.
-]: any -> record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string> {
+]: any -> oneof<record<_links: record<company: record<href: string>, generateHmac: record<href: string>, merchant: record<href: string>, self: record<href: string>, testWebhook: record<href: string>>, acceptsExpiredCertificate: bool, acceptsSelfSignedCertificate: bool, acceptsUntrustedRootCertificate: bool, accountReference: string, active: bool, additionalSettings: record<excludeEventCodes: list<string>, includeEventCodes: list<string>, properties: record>, certificateAlias: string, communicationFormat: string, description: string, filterMerchantAccountType: string, filterMerchantAccounts: list<string>, hasError: bool, hasPassword: bool, hmacKeyCheckValue: string, id: string, networkType: string, populateSoapActionHeader: bool, sslVersion: string, type: string, url: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4511,7 +4448,7 @@ export def "post-merchants-merchant-id-webhooks-webhook-id-generate-hmac" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<hmacKey: string> {
+]: nothing -> oneof<record<hmacKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($merchant_id | is-empty) { error make --unspanned { msg: "path parameter 'merchantId' must be non-empty" } }
@@ -4537,7 +4474,6 @@ export def "post-merchants-merchant-id-webhooks-webhook-id-generate-hmac" [
 #
 # POST /merchants/{merchantId}/webhooks/{webhookId}/test
 # operationId: post-merchants-merchantId-webhooks-webhookId-test
-# --notification shape: {amount?: record, eventCode?: string, eventDate?: string, merchantReference?: string, paymentMethod?: string, reason?: string, success?: bool}
 export def "post-merchants-merchant-id-webhooks-webhook-id-test" [
   merchant_id: string
   webhook_id: string
@@ -4552,7 +4488,7 @@ export def "post-merchants-merchant-id-webhooks-webhook-id-test" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --notification: record # shape: {amount?: record, eventCode?: string, eventDate?: string, merchantReference?: string, paymentMethod?: string, reason?: string, success?: bool}
   --types: list<string> # List of event codes for which to send test notifications. Only the webhook types below are supported. Possible values if webhook `type`: **standard**: * **AUTHORISATION** * **CHARGEBACK_REVERSED** * **ORDER_CLOSED** * **ORDER_OPENED** * **PAIDOUT_REVERSED** * **PAYOUT_THIRDPARTY** * **REFUNDED_REVERSED** * **REFUND_WITH_DATA** * **REPORT_AVAILABLE** * **CUSTOM** - set your custom notification fields in the [`notification`](https://docs.adyen.com/api-explorer/#/ManagementService/v1/post/companies/{companyId}/webhooks/{webhookId}/test__reqParam_notification) object. Possible values if webhook `type`: **banktransfer-notification**: * **PENDING** Possible values if webhook `type`: **report-notification**: * **REPORT_AVAILABLE** Possible values if webhook `type`: **ideal-notification**: * **AUTHORISATION** Possible values if webhook `type`: **pending-notification**: * **PENDING**
-]: any -> record<data: table<merchantId: string, output: string, requestSent: string, responseCode: string, responseTime: string, status: string>> {
+]: any -> oneof<record<data: table<merchantId: string, output: string, requestSent: string, responseCode: string, responseTime: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4595,7 +4531,7 @@ export def "get-stores" [
   --page-size: int # The number of items to have on a page, maximum 100. The default is 10 items on a page. (format: int32)
   --reference: string # The reference of the store.
   --merchant-id: string # The unique identifier of the merchant account.
-]: nothing -> record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, address: record, businessLineIds: list, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record, status: string>, itemsTotal: int, pagesTotal: int> {
+]: nothing -> oneof<record<_links: record<first: record<href: string>, last: record<href: string>, next: record<href: string>, prev: record<href: string>, self: record<href: string>>, data: table<_links: record, address: record, businessLineIds: list, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record, status: string>, itemsTotal: int, pagesTotal: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "reference" $reference "scalar") (serialize-qp "merchantId" $merchant_id "scalar")] | flatten | str join "&"
@@ -4620,8 +4556,6 @@ export def "get-stores" [
 #
 # POST /stores
 # operationId: post-stores
-# --address shape: {city?: string, country: string, line1?: string, line2?: string, line3?: string, postalCode?: string, stateOrProvince?: string}
-# --splitConfiguration shape: {balanceAccountId?: string, splitConfigurationId?: string}
 export def "post-stores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4641,7 +4575,7 @@ export def "post-stores" [
   --reference: string # Your reference to recognize the store by. Also known as the store code. Allowed characters: Lowercase and uppercase letters without diacritics, numbers 0 through 9, hyphen (-), and underscore (_).
   shopper_statement: string # The store name to be shown on the shopper's bank or credit card statement and on the shopper receipt. Maximum length: 22 characters; can't be all numbers.
   --split-configuration: record # shape: {balanceAccountId?: string, splitConfigurationId?: string}
-]: any -> record<_links: record<self: record<href: string>>, address: record<city: string, country: string, line1: string, line2: string, line3: string, postalCode: string, stateOrProvince: string>, businessLineIds: list<string>, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record<balanceAccountId: string, splitConfigurationId: string>, status: string> {
+]: any -> oneof<record<_links: record<self: record<href: string>>, address: record<city: string, country: string, line1: string, line2: string, line3: string, postalCode: string, stateOrProvince: string>, businessLineIds: list<string>, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record<balanceAccountId: string, splitConfigurationId: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4679,7 +4613,7 @@ export def "get-stores-store-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_links: record<self: record<href: string>>, address: record<city: string, country: string, line1: string, line2: string, line3: string, postalCode: string, stateOrProvince: string>, businessLineIds: list<string>, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record<balanceAccountId: string, splitConfigurationId: string>, status: string> {
+]: nothing -> oneof<record<_links: record<self: record<href: string>>, address: record<city: string, country: string, line1: string, line2: string, line3: string, postalCode: string, stateOrProvince: string>, businessLineIds: list<string>, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record<balanceAccountId: string, splitConfigurationId: string>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
@@ -4704,8 +4638,6 @@ export def "get-stores-store-id" [
 #
 # PATCH /stores/{storeId}
 # operationId: patch-stores-storeId
-# --address shape: {city?: string, line1?: string, line2?: string, line3?: string, postalCode?: string, stateOrProvince?: string}
-# --splitConfiguration shape: {balanceAccountId?: string, splitConfigurationId?: string}
 export def "patch-stores-store-id" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4723,7 +4655,7 @@ export def "patch-stores-store-id" [
   --external-reference-id: string # When using the Zip payment method: The location ID that Zip has assigned to your store.
   --split-configuration: record # shape: {balanceAccountId?: string, splitConfigurationId?: string}
   --status: string@status-completer # The status of the store. Possible values are: - **active**: This value is assigned automatically when a store is created. - **inactive**: The maximum [transaction limits and number of Store-and-Forward transactions](https://docs.adyen.com/point-of-sale/determine-account-structure/configure-features#payment-features) for the store are set to 0. This blocks new transactions, but captures are still possible. - **closed**: The terminals of the store are reassigned to the merchant inventory, so they can't process payments. You can change the status from **active** to **inactive**, and from **inactive** to **active** or **closed**. Once **closed**, a store can't be reopened.
-]: any -> record<_links: record<self: record<href: string>>, address: record<city: string, country: string, line1: string, line2: string, line3: string, postalCode: string, stateOrProvince: string>, businessLineIds: list<string>, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record<balanceAccountId: string, splitConfigurationId: string>, status: string> {
+]: any -> oneof<record<_links: record<self: record<href: string>>, address: record<city: string, country: string, line1: string, line2: string, line3: string, postalCode: string, stateOrProvince: string>, businessLineIds: list<string>, description: string, externalReferenceId: string, id: string, merchantId: string, phoneNumber: string, reference: string, shopperStatement: string, splitConfiguration: record<balanceAccountId: string, splitConfigurationId: string>, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4763,7 +4695,7 @@ export def "get-stores-store-id-terminal-logos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T. (required)
-]: nothing -> record<data: string> {
+]: nothing -> oneof<record<data: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
@@ -4803,7 +4735,7 @@ export def "patch-stores-store-id-terminal-logos" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # The terminal model. Possible values: E355, VX675WIFIBT, VX680, VX690, VX700, VX820, M400, MX925, P400Plus, UX300, UX410, V200cPlus, V240mPlus, V400cPlus, V400m, e280, e285, e285p, S1E, S1EL, S1F2, S1L, S1U, S7T. (required)
   --data: string # The image file, converted to a Base64-encoded string, of the logo to be shown on the terminal.
-]: any -> record<data: string> {
+]: any -> oneof<record<data: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4844,7 +4776,7 @@ export def "get-stores-store-id-terminal-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>> {
+]: nothing -> oneof<record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
@@ -4869,23 +4801,6 @@ export def "get-stores-store-id-terminal-settings" [
 #
 # PATCH /stores/{storeId}/terminalSettings
 # operationId: patch-stores-storeId-terminalSettings
-# --cardholderReceipt shape: {headerForAuthorizedReceipt?: string}
-# --connectivity shape: {simcardStatus?: "ACTIVATED"|"INVENTORY"}
-# --gratuities item shape: {allowCustomAmount?: bool, currency?: string, predefinedTipEntries?: list<string>, usePredefinedTipEntries?: bool}
-# --hardware shape: {displayMaximumBackLight?: int}
-# --nexo shape: {displayUrls?: record, encryptionKey?: record, eventUrls?: record, nexoEventUrls?: list<string>}
-# --offlineProcessing shape: {chipFloorLimit?: int, offlineSwipeLimits?: list}
-# --opi shape: {enablePayAtTable?: bool, payAtTableStoreNumber?: string, payAtTableURL?: string}
-# --passcodes shape: {adminMenuPin?: string, refundPin?: string, screenLockPin?: string, txMenuPin?: string}
-# --payAtTable shape: {authenticationMethod?: "MAGSWIPE"|"MKE", enablePayAtTable?: bool}
-# --payment shape: {hideMinorUnitsInCurrencies?: list<string>}
-# --receiptOptions shape: {logo?: string, qrCodeData?: string}
-# --receiptPrinting shape: {merchantApproved?: bool, merchantCancelled?: bool, merchantCaptureApproved?: bool, merchantCaptureRefused?: bool, merchantRefundApproved?: bool, merchantRefundRefused?: bool, merchantRefused?: bool, merchantVoid?: bool, shopperApproved?: bool, shopperCancelled?: bool, shopperCaptureApproved?: bool, shopperCaptureRefused?: bool, shopperRefundApproved?: bool, shopperRefundRefused?: bool, shopperRefused?: bool, shopperVoid?: bool}
-# --signature shape: {askSignatureOnScreen?: bool, deviceName?: string, deviceSlogan?: string, skipSignature?: bool}
-# --standalone shape: {currencyCode?: string, enableStandalone?: bool}
-# --surcharge shape: {askConfirmation?: bool, configurations?: list}
-# --timeouts shape: {fromActiveToSleep?: int}
-# --wifiProfiles shape: {profiles?: list, settings?: record}
 export def "patch-stores-store-id-terminal-settings" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4914,7 +4829,7 @@ export def "patch-stores-store-id-terminal-settings" [
   --surcharge: record # shape: {askConfirmation?: bool, configurations?: list}
   --timeouts: record # shape: {fromActiveToSleep?: int}
   --wifi-profiles: record # shape: {profiles?: list, settings?: record}
-]: any -> record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>> {
+]: any -> oneof<record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4959,7 +4874,7 @@ export def "get-terminals" [
   --brand-models: string # Returns terminals of the [models](https://docs.adyen.com/api-explorer/#/ManagementService/latest/get/companies/{companyId}/terminalModels) specified in the format *brand.model*.
   --page-number: int # The number of the page to fetch. (format: int32)
   --page-size: int # The number of items to have on a page, maximum 100. The default is 20 items on a page. (format: int32)
-]: nothing -> record<data: table<assigned: bool, bluetoothIp: string, bluetoothMac: string, city: string, companyAccount: string, countryCode: string, deviceModel: string, ethernetIp: string, ethernetMac: string, firmwareVersion: string, iccid: string, id: string, lastActivityDateTime: string, lastTransactionDateTime: string, linkNegotiation: string, serialNumber: string, simStatus: string, status: string, storeStatus: string, wifiIp: string, wifiMac: string, wifiSsid: string>> {
+]: nothing -> oneof<record<data: table<assigned: bool, bluetoothIp: string, bluetoothMac: string, city: string, companyAccount: string, countryCode: string, deviceModel: string, ethernetIp: string, ethernetMac: string, firmwareVersion: string, iccid: string, id: string, lastActivityDateTime: string, lastTransactionDateTime: string, linkNegotiation: string, serialNumber: string, simStatus: string, status: string, storeStatus: string, wifiIp: string, wifiMac: string, wifiSsid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "searchQuery" $search_query "scalar") (serialize-qp "countries" $countries "scalar") (serialize-qp "merchantIds" $merchant_ids "scalar") (serialize-qp "storeIds" $store_ids "scalar") (serialize-qp "brandModels" $brand_models "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -4998,7 +4913,7 @@ export def "post-terminals-schedule-actions" [
   --scheduled-at: string # The date and time when the action should happen. Format: [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339), but without the **Z** before the time offset. For example, **2021-11-15T12:16:21+01:00** The action is sent with the first [maintenance call](https://docs.adyen.com/point-of-sale/automating-terminal-management/terminal-actions-api#when-actions-take-effect) after the specified date and time in the time zone of the terminal. An empty value causes the action to be sent as soon as possible: at the next maintenance call.
   --store-id: string # The unique ID of the [store](https://docs.adyen.com/api-explorer/#/ManagementService/latest/get/stores). If present, all terminals in the `terminalIds` list must be assigned to this store.
   --terminal-ids: list<string> # A list of unique IDs of the terminals to apply the action to. You can extract the IDs from the [GET `/terminals`](https://docs.adyen.com/api-explorer/#/ManagementService/latest/get/terminals) response. Maximum length: 100 IDs.
-]: any -> record<actionDetails: any, items: table<id: string, terminalId: string>, scheduledAt: string, storeId: string, terminalIds: list<string>, terminalsWithErrors: record, totalErrors: int, totalScheduled: int> {
+]: any -> oneof<record<actionDetails: any, items: table<id: string, terminalId: string>, scheduledAt: string, storeId: string, terminalIds: list<string>, terminalsWithErrors: record, totalErrors: int, totalScheduled: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5036,7 +4951,7 @@ export def "get-terminals-terminal-id-terminal-logos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: string> {
+]: nothing -> oneof<record<data: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($terminal_id | is-empty) { error make --unspanned { msg: "path parameter 'terminalId' must be non-empty" } }
@@ -5073,7 +4988,7 @@ export def "patch-terminals-terminal-id-terminal-logos" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: string # The image file, converted to a Base64-encoded string, of the logo to be shown on the terminal.
-]: any -> record<data: string> {
+]: any -> oneof<record<data: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5112,7 +5027,7 @@ export def "get-terminals-terminal-id-terminal-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>> {
+]: nothing -> oneof<record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($terminal_id | is-empty) { error make --unspanned { msg: "path parameter 'terminalId' must be non-empty" } }
@@ -5137,23 +5052,6 @@ export def "get-terminals-terminal-id-terminal-settings" [
 #
 # PATCH /terminals/{terminalId}/terminalSettings
 # operationId: patch-terminals-terminalId-terminalSettings
-# --cardholderReceipt shape: {headerForAuthorizedReceipt?: string}
-# --connectivity shape: {simcardStatus?: "ACTIVATED"|"INVENTORY"}
-# --gratuities item shape: {allowCustomAmount?: bool, currency?: string, predefinedTipEntries?: list<string>, usePredefinedTipEntries?: bool}
-# --hardware shape: {displayMaximumBackLight?: int}
-# --nexo shape: {displayUrls?: record, encryptionKey?: record, eventUrls?: record, nexoEventUrls?: list<string>}
-# --offlineProcessing shape: {chipFloorLimit?: int, offlineSwipeLimits?: list}
-# --opi shape: {enablePayAtTable?: bool, payAtTableStoreNumber?: string, payAtTableURL?: string}
-# --passcodes shape: {adminMenuPin?: string, refundPin?: string, screenLockPin?: string, txMenuPin?: string}
-# --payAtTable shape: {authenticationMethod?: "MAGSWIPE"|"MKE", enablePayAtTable?: bool}
-# --payment shape: {hideMinorUnitsInCurrencies?: list<string>}
-# --receiptOptions shape: {logo?: string, qrCodeData?: string}
-# --receiptPrinting shape: {merchantApproved?: bool, merchantCancelled?: bool, merchantCaptureApproved?: bool, merchantCaptureRefused?: bool, merchantRefundApproved?: bool, merchantRefundRefused?: bool, merchantRefused?: bool, merchantVoid?: bool, shopperApproved?: bool, shopperCancelled?: bool, shopperCaptureApproved?: bool, shopperCaptureRefused?: bool, shopperRefundApproved?: bool, shopperRefundRefused?: bool, shopperRefused?: bool, shopperVoid?: bool}
-# --signature shape: {askSignatureOnScreen?: bool, deviceName?: string, deviceSlogan?: string, skipSignature?: bool}
-# --standalone shape: {currencyCode?: string, enableStandalone?: bool}
-# --surcharge shape: {askConfirmation?: bool, configurations?: list}
-# --timeouts shape: {fromActiveToSleep?: int}
-# --wifiProfiles shape: {profiles?: list, settings?: record}
 export def "patch-terminals-terminal-id-terminal-settings" [
   terminal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5182,7 +5080,7 @@ export def "patch-terminals-terminal-id-terminal-settings" [
   --surcharge: record # shape: {askConfirmation?: bool, configurations?: list}
   --timeouts: record # shape: {fromActiveToSleep?: int}
   --wifi-profiles: record # shape: {profiles?: list, settings?: record}
-]: any -> record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>> {
+]: any -> oneof<record<cardholderReceipt: record<headerForAuthorizedReceipt: string>, connectivity: record<simcardStatus: string>, gratuities: table<allowCustomAmount: bool, currency: string, predefinedTipEntries: list, usePredefinedTipEntries: bool>, hardware: record<displayMaximumBackLight: int>, nexo: record<displayUrls: record<localUrls: list, publicUrls: list>, encryptionKey: record<identifier: string, passphrase: string, version: int>, eventUrls: record<eventLocalUrls: list, eventPublicUrls: list>, nexoEventUrls: list<string>>, offlineProcessing: record<chipFloorLimit: int, offlineSwipeLimits: list<record>>, opi: record<enablePayAtTable: bool, payAtTableStoreNumber: string, payAtTableURL: string>, passcodes: record<adminMenuPin: string, refundPin: string, screenLockPin: string, txMenuPin: string>, payAtTable: record<authenticationMethod: string, enablePayAtTable: bool>, payment: record<hideMinorUnitsInCurrencies: list<string>>, receiptOptions: record<logo: string, qrCodeData: string>, receiptPrinting: record<merchantApproved: bool, merchantCancelled: bool, merchantCaptureApproved: bool, merchantCaptureRefused: bool, merchantRefundApproved: bool, merchantRefundRefused: bool, merchantRefused: bool, merchantVoid: bool, shopperApproved: bool, shopperCancelled: bool, shopperCaptureApproved: bool, shopperCaptureRefused: bool, shopperRefundApproved: bool, shopperRefundRefused: bool, shopperRefused: bool, shopperVoid: bool>, signature: record<askSignatureOnScreen: bool, deviceName: string, deviceSlogan: string, skipSignature: bool>, standalone: record<currencyCode: string, enableStandalone: bool>, surcharge: record<askConfirmation: bool, configurations: list<record>>, timeouts: record<fromActiveToSleep: int>, wifiProfiles: record<profiles: list<record>, settings: record<band: string, roaming: bool, timeout: int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

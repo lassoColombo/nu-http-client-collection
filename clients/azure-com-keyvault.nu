@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -127,9 +151,9 @@ def sas-type-completer [] { ["account" "service"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-certificates" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-certificates" "delete-certificate-contacts" "get-certificate-contacts" "set-certificate-contacts" "get-certificate-issuers" "delete-certificate-issuer" "get-certificate-issuer" "update-certificate-issuer" "set-certificate-issuer" "restore-certificate" "delete-certificate" "backup-certificate" "create-certificate" "import-certificate" "delete-certificate-operation" "get-certificate-operation" "update-certificate-operation" "merge-certificate" "get-certificate-policy" "update-certificate-policy" "get-certificate-versions" "get-certificate" "update-certificate" "get-deleted-certificates" "purge-deleted-certificate" "get-deleted-certificate" "recover-deleted-certificate" "get-deleted-keys" "purge-deleted-key" "get-deleted-key" "recover-deleted-key" "get-deleted-secrets" "purge-deleted-secret" "get-deleted-secret" "recover-deleted-secret" "get-deleted-storage-accounts" "purge-deleted-storage-account" "get-deleted-storage-account" "recover-deleted-storage-account" "get-deleted-sas-definitions" "get-deleted-sas-definition" "recover-deleted-sas-definition" "get-keys" "restore-key" "delete-key" "import-key" "backup-key" "create-key" "get-key-versions" "get-key" "update-key" "decrypt" "encrypt" "sign" "unwrap-key" "verify" "wrap-key" "get-secrets" "restore-secret" "delete-secret" "set-secret" "backup-secret" "get-secret-versions" "get-secret" "update-secret" "get-storage-accounts" "restore-storage-account" "delete-storage-account" "get-storage-account" "update-storage-account" "set-storage-account" "backup-storage-account" "regenerate-storage-account-key" "get-sas-definitions" "delete-sas-definition" "get-sas-definition" "update-sas-definition" "set-sas-definition" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -164,7 +188,7 @@ export def "get-certificates" [
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
   --include-pending: oneof<nothing, bool> # Specifies whether to include certificates which are not completely provisioned.
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<attributes: record, id: string, tags: record, x5t: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<attributes: record, id: string, tags: record, x5t: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -201,7 +225,7 @@ export def "delete-certificate-contacts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<contacts: table<email: string, name: string, phone: string>, id: string> {
+]: nothing -> oneof<record<contacts: table<email: string, name: string, phone: string>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -238,7 +262,7 @@ export def "get-certificate-contacts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<contacts: table<email: string, name: string, phone: string>, id: string> {
+]: nothing -> oneof<record<contacts: table<email: string, name: string, phone: string>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -264,7 +288,6 @@ export def "get-certificate-contacts" [
 #
 # PUT /certificates/contacts
 # operationId: SetCertificateContacts
-# --contacts item shape: {email?: string, name?: string, phone?: string}
 export def "set-certificate-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,7 +300,7 @@ export def "set-certificate-contacts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --contacts: list # The contact list for the vault certificates. — item shape: {email?: string, name?: string, phone?: string}
-]: any -> record<contacts: table<email: string, name: string, phone: string>, id: string> {
+]: any -> oneof<record<contacts: table<email: string, name: string, phone: string>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -318,7 +341,7 @@ export def "get-certificate-issuers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<id: string, provider: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<id: string, provider: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -356,7 +379,7 @@ export def "delete-certificate-issuer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<attributes: record<created: int, enabled: bool, updated: int>, credentials: record<account_id: string, pwd: string>, id: string, org_details: record<admin_details: list<record>, id: string>, provider: string> {
+]: nothing -> oneof<record<attributes: record<created: int, enabled: bool, updated: int>, credentials: record<account_id: string, pwd: string>, id: string, org_details: record<admin_details: list<record>, id: string>, provider: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($issuer_name | is-empty) { error make --unspanned { msg: "path parameter 'issuer-name' must be non-empty" } }
@@ -395,7 +418,7 @@ export def "get-certificate-issuer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<attributes: record<created: int, enabled: bool, updated: int>, credentials: record<account_id: string, pwd: string>, id: string, org_details: record<admin_details: list<record>, id: string>, provider: string> {
+]: nothing -> oneof<record<attributes: record<created: int, enabled: bool, updated: int>, credentials: record<account_id: string, pwd: string>, id: string, org_details: record<admin_details: list<record>, id: string>, provider: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($issuer_name | is-empty) { error make --unspanned { msg: "path parameter 'issuer-name' must be non-empty" } }
@@ -422,9 +445,6 @@ export def "get-certificate-issuer" [
 #
 # PATCH /certificates/issuers/{issuer-name}
 # operationId: UpdateCertificateIssuer
-# --attributes shape: {enabled?: bool}
-# --credentials shape: {account_id?: string, pwd?: string}
-# --org_details shape: {admin_details?: list, id?: string}
 export def "update-certificate-issuer" [
   issuer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -441,7 +461,7 @@ export def "update-certificate-issuer" [
   --credentials: any # The credentials to be used for the certificate issuer. — shape: {account_id?: string, pwd?: string}
   --org-details: any # Details of the organization of the certificate issuer. — shape: {admin_details?: list, id?: string}
   --provider: string # The issuer provider.
-]: any -> record<attributes: record<created: int, enabled: bool, updated: int>, credentials: record<account_id: string, pwd: string>, id: string, org_details: record<admin_details: list<record>, id: string>, provider: string> {
+]: any -> oneof<record<attributes: record<created: int, enabled: bool, updated: int>, credentials: record<account_id: string, pwd: string>, id: string, org_details: record<admin_details: list<record>, id: string>, provider: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -471,9 +491,6 @@ export def "update-certificate-issuer" [
 #
 # PUT /certificates/issuers/{issuer-name}
 # operationId: SetCertificateIssuer
-# --attributes shape: {enabled?: bool}
-# --credentials shape: {account_id?: string, pwd?: string}
-# --org_details shape: {admin_details?: list, id?: string}
 export def "set-certificate-issuer" [
   issuer_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -490,7 +507,7 @@ export def "set-certificate-issuer" [
   --credentials: any # The credentials to be used for the certificate issuer. — shape: {account_id?: string, pwd?: string}
   --org-details: any # Details of the organization of the certificate issuer. — shape: {admin_details?: list, id?: string}
   provider: string # The issuer provider.
-]: any -> record<attributes: record<created: int, enabled: bool, updated: int>, credentials: record<account_id: string, pwd: string>, id: string, org_details: record<admin_details: list<record>, id: string>, provider: string> {
+]: any -> oneof<record<attributes: record<created: int, enabled: bool, updated: int>, credentials: record<account_id: string, pwd: string>, id: string, org_details: record<admin_details: list<record>, id: string>, provider: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -532,7 +549,7 @@ export def "restore-certificate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   value: string # The backup blob associated with a certificate bundle. (format: base64url)
-]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string> {
+]: any -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -573,7 +590,7 @@ export def "delete-certificate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string> {
+]: nothing -> oneof<record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
@@ -612,7 +629,7 @@ export def "backup-certificate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<value: string> {
+]: nothing -> oneof<record<value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
@@ -639,8 +656,6 @@ export def "backup-certificate" [
 #
 # POST /certificates/{certificate-name}/create
 # operationId: CreateCertificate
-# --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
-# --policy shape: {attributes?: any, issuer?: any, key_props?: any, lifetime_actions?: list, secret_props?: any, x509_props?: any}
 export def "create-certificate" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -656,7 +671,7 @@ export def "create-certificate" [
   --attributes: any # The certificate management attributes. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --policy: any # Management policy for a certificate. — shape: {attributes?: any, issuer?: any, key_props?: any, lifetime_actions?: list, secret_props?: any, x509_props?: any}
   --tags: record # Application specific metadata in the form of key-value pairs.
-]: any -> record<cancellation_requested: bool, csr: string, error: record<code: string, innererror: any, message: string>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, request_id: string, status: string, status_details: string, target: string> {
+]: any -> oneof<record<cancellation_requested: bool, csr: string, error: record<code: string, innererror: any, message: string>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, request_id: string, status: string, status_details: string, target: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -686,8 +701,6 @@ export def "create-certificate" [
 #
 # POST /certificates/{certificate-name}/import
 # operationId: ImportCertificate
-# --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
-# --policy shape: {attributes?: any, issuer?: any, key_props?: any, lifetime_actions?: list, secret_props?: any, x509_props?: any}
 export def "import-certificate" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -705,7 +718,7 @@ export def "import-certificate" [
   --pwd: string # If the private key in base64EncodedCertificate is encrypted, the password used for encryption.
   --tags: record # Application specific metadata in the form of key-value pairs.
   value: string # Base64 encoded representation of the certificate object to import. This certificate needs to contain the private key.
-]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string> {
+]: any -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -747,7 +760,7 @@ export def "delete-certificate-operation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<cancellation_requested: bool, csr: string, error: record<code: string, innererror: any, message: string>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, request_id: string, status: string, status_details: string, target: string> {
+]: nothing -> oneof<record<cancellation_requested: bool, csr: string, error: record<code: string, innererror: any, message: string>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, request_id: string, status: string, status_details: string, target: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
@@ -786,7 +799,7 @@ export def "get-certificate-operation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<cancellation_requested: bool, csr: string, error: record<code: string, innererror: any, message: string>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, request_id: string, status: string, status_details: string, target: string> {
+]: nothing -> oneof<record<cancellation_requested: bool, csr: string, error: record<code: string, innererror: any, message: string>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, request_id: string, status: string, status_details: string, target: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
@@ -826,7 +839,7 @@ export def "update-certificate-operation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --cancellation-requested: oneof<nothing, bool> # Indicates if cancellation was requested on the certificate operation.
-]: any -> record<cancellation_requested: bool, csr: string, error: record<code: string, innererror: any, message: string>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, request_id: string, status: string, status_details: string, target: string> {
+]: any -> oneof<record<cancellation_requested: bool, csr: string, error: record<code: string, innererror: any, message: string>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, request_id: string, status: string, status_details: string, target: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -857,7 +870,6 @@ export def "update-certificate-operation" [
 #
 # POST /certificates/{certificate-name}/pending/merge
 # operationId: MergeCertificate
-# --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
 export def "merge-certificate" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -873,7 +885,7 @@ export def "merge-certificate" [
   --attributes: any # The certificate management attributes. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --tags: record # Application specific metadata in the form of key-value pairs.
   x5c: list<string> # The certificate or the certificate chain to merge.
-]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string> {
+]: any -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -915,7 +927,7 @@ export def "get-certificate-policy" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: table<action: record, trigger: record>, secret_props: record<contentType: string>, x509_props: record<ekus: list<string>, key_usage: list<string>, sans: record<dns_names: list, emails: list, upns: list>, subject: string, validity_months: int>> {
+]: nothing -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: table<action: record, trigger: record>, secret_props: record<contentType: string>, x509_props: record<ekus: list<string>, key_usage: list<string>, sans: record<dns_names: list, emails: list, upns: list>, subject: string, validity_months: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
@@ -942,12 +954,6 @@ export def "get-certificate-policy" [
 #
 # PATCH /certificates/{certificate-name}/policy
 # operationId: UpdateCertificatePolicy
-# --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
-# --issuer shape: {cert_transparency?: bool, cty?: string, name?: string}
-# --key_props shape: {crv?: "P-256"|"P-384"|"P-521"|"P-256K", exportable?: bool, key_size?: int, kty?: "EC"|"EC-HSM"|"RSA"|"RSA-HSM"|"oct", reuse_key?: bool}
-# --lifetime_actions item shape: {action?: any, trigger?: any}
-# --secret_props shape: {contentType?: string}
-# --x509_props shape: {ekus?: list<string>, key_usage?: list<string>, sans?: any, subject?: string, validity_months?: int}
 export def "update-certificate-policy" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -966,7 +972,7 @@ export def "update-certificate-policy" [
   --lifetime-actions: list # Actions that will be performed by Key Vault over the lifetime of a certificate. — item shape: {action?: any, trigger?: any}
   --secret-props: any # Properties of the key backing a certificate. — shape: {contentType?: string}
   --x509-props: any # Properties of the X509 component of a certificate. — shape: {ekus?: list<string>, key_usage?: list<string>, sans?: any, subject?: string, validity_months?: int}
-]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: table<action: record, trigger: record>, secret_props: record<contentType: string>, x509_props: record<ekus: list<string>, key_usage: list<string>, sans: record<dns_names: list, emails: list, upns: list>, subject: string, validity_months: int>> {
+]: any -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: table<action: record, trigger: record>, secret_props: record<contentType: string>, x509_props: record<ekus: list<string>, key_usage: list<string>, sans: record<dns_names: list, emails: list, upns: list>, subject: string, validity_months: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1009,7 +1015,7 @@ export def "get-certificate-versions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<attributes: record, id: string, tags: record, x5t: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<attributes: record, id: string, tags: record, x5t: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
@@ -1049,7 +1055,7 @@ export def "get-certificate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string> {
+]: nothing -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
@@ -1077,8 +1083,6 @@ export def "get-certificate" [
 #
 # PATCH /certificates/{certificate-name}/{certificate-version}
 # operationId: UpdateCertificate
-# --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
-# --policy shape: {attributes?: any, issuer?: any, key_props?: any, lifetime_actions?: list, secret_props?: any, x509_props?: any}
 export def "update-certificate" [
   certificate_name: string
   certificate_version: string
@@ -1095,7 +1099,7 @@ export def "update-certificate" [
   --attributes: any # The certificate management attributes. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --policy: any # Management policy for a certificate. — shape: {attributes?: any, issuer?: any, key_props?: any, lifetime_actions?: list, secret_props?: any, x509_props?: any}
   --tags: record # Application specific metadata in the form of key-value pairs.
-]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string> {
+]: any -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1139,7 +1143,7 @@ export def "get-deleted-certificates" [
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
   --include-pending: oneof<nothing, bool> # Specifies whether to include certificates which are not completely provisioned.
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record, id: string, tags: record, x5t: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record, id: string, tags: record, x5t: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -1216,7 +1220,7 @@ export def "get-deleted-certificate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string> {
+]: nothing -> oneof<record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
@@ -1255,7 +1259,7 @@ export def "recover-deleted-certificate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string> {
+]: nothing -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, cer: string, contentType: string, id: string, kid: string, policy: record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, id: string, issuer: record<cert_transparency: bool, cty: string, name: string>, key_props: record<crv: string, exportable: bool, key_size: int, kty: string, reuse_key: bool>, lifetime_actions: list<record>, secret_props: record<contentType: string>, x509_props: record<ekus: list, key_usage: list, sans: record, subject: string, validity_months: int>>, sid: string, tags: record, x5t: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificate-name' must be non-empty" } }
@@ -1294,7 +1298,7 @@ export def "get-deleted-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record, kid: string, managed: bool, tags: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record, kid: string, managed: bool, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -1371,7 +1375,7 @@ export def "get-deleted-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record> {
+]: nothing -> oneof<record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
@@ -1410,7 +1414,7 @@ export def "recover-deleted-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record> {
+]: nothing -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
@@ -1449,7 +1453,7 @@ export def "get-deleted-secrets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record, contentType: string, id: string, managed: bool, tags: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record, contentType: string, id: string, managed: bool, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -1526,7 +1530,7 @@ export def "get-deleted-secret" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string> {
+]: nothing -> oneof<record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secret-name' must be non-empty" } }
@@ -1565,7 +1569,7 @@ export def "recover-deleted-secret" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string> {
+]: nothing -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secret-name' must be non-empty" } }
@@ -1604,7 +1608,7 @@ export def "get-deleted-storage-accounts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record, id: string, resourceId: string, tags: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record, id: string, resourceId: string, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -1681,7 +1685,7 @@ export def "get-deleted-storage-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record> {
+]: nothing -> oneof<record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
@@ -1720,7 +1724,7 @@ export def "recover-deleted-storage-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record> {
+]: nothing -> oneof<record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
@@ -1760,7 +1764,7 @@ export def "get-deleted-sas-definitions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record, id: string, sid: string, tags: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record, id: string, sid: string, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
@@ -1800,7 +1804,7 @@ export def "get-deleted-sas-definition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string> {
+]: nothing -> oneof<record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
@@ -1841,7 +1845,7 @@ export def "recover-deleted-sas-definition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string> {
+]: nothing -> oneof<record<attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
@@ -1881,7 +1885,7 @@ export def "get-keys" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<attributes: record, kid: string, managed: bool, tags: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<attributes: record, kid: string, managed: bool, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -1919,7 +1923,7 @@ export def "restore-key" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   value: string # The backup blob associated with a key bundle. (format: base64url)
-]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record> {
+]: any -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1960,7 +1964,7 @@ export def "delete-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record> {
+]: nothing -> oneof<record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
@@ -1987,8 +1991,6 @@ export def "delete-key" [
 #
 # PUT /keys/{key-name}
 # operationId: ImportKey
-# --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
-# --key shape: {crv?: "P-256"|"P-384"|"P-521"|"P-256K", d?: string, dp?: string, dq?: string, e?: string, k?: string, key_hsm?: string, key_ops?: list<string>, kid?: string, kty?: "EC"|"EC-HSM"|"RSA"|"RSA-HSM"|"oct", n?: string, p?: string, q?: string, qi?: string, x?: string, y?: string}
 export def "import-key" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2005,7 +2007,7 @@ export def "import-key" [
   --attributes: any # The attributes of a key managed by the key vault service. — shape: {enabled?: bool, exp?: int, nbf?: int}
   key: any # As of http://tools.ietf.org/html/draft-ietf-jose-json-web-key-18 — shape: {crv?: "P-256"|"P-384"|"P-521"|"P-256K", d?: string, dp?: string, dq?: string, e?: string, k?: string, key_hsm?: string, key_ops?: list<string>, kid?: string, kty?: "EC"|"EC-HSM"|"RSA"|"RSA-HSM"|"oct", n?: string, p?: string, q?: string, qi?: string, x?: string, y?: string}
   --tags: record # Application specific metadata in the form of key-value pairs.
-]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record> {
+]: any -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2047,7 +2049,7 @@ export def "backup-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<value: string> {
+]: nothing -> oneof<record<value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
@@ -2074,7 +2076,6 @@ export def "backup-key" [
 #
 # POST /keys/{key-name}/create
 # operationId: CreateKey
-# --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
 export def "create-key" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2093,7 +2094,7 @@ export def "create-key" [
   --key-size: int # The key size in bits. For example: 2048, 3072, or 4096 for RSA. (format: int32)
   kty: string@kty-completer # The type of key to create. For valid values, see JsonWebKeyType.
   --tags: record # Application specific metadata in the form of key-value pairs.
-]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record> {
+]: any -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2136,7 +2137,7 @@ export def "get-key-versions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<attributes: record, kid: string, managed: bool, tags: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<attributes: record, kid: string, managed: bool, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
@@ -2176,7 +2177,7 @@ export def "get-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record> {
+]: nothing -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_name | is-empty) { error make --unspanned { msg: "path parameter 'key-name' must be non-empty" } }
@@ -2204,7 +2205,6 @@ export def "get-key" [
 #
 # PATCH /keys/{key-name}/{key-version}
 # operationId: UpdateKey
-# --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
 export def "update-key" [
   key_name: string
   key_version: string
@@ -2221,7 +2221,7 @@ export def "update-key" [
   --attributes: any # The attributes of a key managed by the key vault service. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --key-ops: list<string> # Json web key operations. For more information on possible key operations, see JsonWebKeyOperation.
   --tags: record # Application specific metadata in the form of key-value pairs.
-]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record> {
+]: any -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, key: record<crv: string, d: string, dp: string, dq: string, e: string, k: string, key_hsm: string, key_ops: list<string>, kid: string, kty: string, n: string, p: string, q: string, qi: string, x: string, y: string>, managed: bool, tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2267,7 +2267,7 @@ export def "decrypt" [
   --api-version: string # Client API version. (required)
   alg: string@alg-completer # algorithm identifier
   value: string # format: base64url
-]: any -> record<kid: string, value: string> {
+]: any -> oneof<record<kid: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2313,7 +2313,7 @@ export def "encrypt" [
   --api-version: string # Client API version. (required)
   alg: string@alg-completer # algorithm identifier
   value: string # format: base64url
-]: any -> record<kid: string, value: string> {
+]: any -> oneof<record<kid: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2359,7 +2359,7 @@ export def "sign" [
   --api-version: string # Client API version. (required)
   alg: string@alg-completer-1 # The signing/verification algorithm identifier. For more information on possible algorithm types, see JsonWebKeySignatureAlgorithm.
   value: string # format: base64url
-]: any -> record<kid: string, value: string> {
+]: any -> oneof<record<kid: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2405,7 +2405,7 @@ export def "unwrap-key" [
   --api-version: string # Client API version. (required)
   alg: string@alg-completer # algorithm identifier
   value: string # format: base64url
-]: any -> record<kid: string, value: string> {
+]: any -> oneof<record<kid: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2452,7 +2452,7 @@ export def "verify" [
   alg: string@alg-completer-1 # The signing/verification algorithm. For more information on possible algorithm types, see JsonWebKeySignatureAlgorithm.
   digest: string # The digest used for signing. (format: base64url)
   value: string # The signature to be verified. (format: base64url)
-]: any -> record<value: bool> {
+]: any -> oneof<record<value: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2498,7 +2498,7 @@ export def "wrap-key" [
   --api-version: string # Client API version. (required)
   alg: string@alg-completer # algorithm identifier
   value: string # format: base64url
-]: any -> record<kid: string, value: string> {
+]: any -> oneof<record<kid: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2541,7 +2541,7 @@ export def "get-secrets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified, the service will return up to 25 results. (format: int32)
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<attributes: record, contentType: string, id: string, managed: bool, tags: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<attributes: record, contentType: string, id: string, managed: bool, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -2579,7 +2579,7 @@ export def "restore-secret" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   value: string # The backup blob associated with a secret bundle. (format: base64url)
-]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string> {
+]: any -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2620,7 +2620,7 @@ export def "delete-secret" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string> {
+]: nothing -> oneof<record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secret-name' must be non-empty" } }
@@ -2647,7 +2647,6 @@ export def "delete-secret" [
 #
 # PUT /secrets/{secret-name}
 # operationId: SetSecret
-# --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
 export def "set-secret" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2664,7 +2663,7 @@ export def "set-secret" [
   --content-type: string # Type of the secret value such as a password.
   --tags: record # Application specific metadata in the form of key-value pairs.
   value: string # The value of the secret.
-]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string> {
+]: any -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2706,7 +2705,7 @@ export def "backup-secret" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<value: string> {
+]: nothing -> oneof<record<value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secret-name' must be non-empty" } }
@@ -2746,7 +2745,7 @@ export def "get-secret-versions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified, the service will return up to 25 results. (format: int32)
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<attributes: record, contentType: string, id: string, managed: bool, tags: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<attributes: record, contentType: string, id: string, managed: bool, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secret-name' must be non-empty" } }
@@ -2786,7 +2785,7 @@ export def "get-secret" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string> {
+]: nothing -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_name | is-empty) { error make --unspanned { msg: "path parameter 'secret-name' must be non-empty" } }
@@ -2814,7 +2813,6 @@ export def "get-secret" [
 #
 # PATCH /secrets/{secret-name}/{secret-version}
 # operationId: UpdateSecret
-# --attributes shape: {enabled?: bool, exp?: int, nbf?: int}
 export def "update-secret" [
   secret_name: string
   secret_version: string
@@ -2831,7 +2829,7 @@ export def "update-secret" [
   --attributes: any # The secret management attributes. — shape: {enabled?: bool, exp?: int, nbf?: int}
   --content-type: string # Type of the secret value such as a password.
   --tags: record # Application specific metadata in the form of key-value pairs.
-]: any -> record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string> {
+]: any -> oneof<record<attributes: record<recoveryLevel: string, created: int, enabled: bool, exp: int, nbf: int, updated: int>, contentType: string, id: string, kid: string, managed: bool, tags: record, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2874,7 +2872,7 @@ export def "get-storage-accounts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<attributes: record, id: string, resourceId: string, tags: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<attributes: record, id: string, resourceId: string, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -2912,7 +2910,7 @@ export def "restore-storage-account" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   value: string # The backup blob associated with a storage account. (format: base64url)
-]: any -> record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record> {
+]: any -> oneof<record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2953,7 +2951,7 @@ export def "delete-storage-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record> {
+]: nothing -> oneof<record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
@@ -2992,7 +2990,7 @@ export def "get-storage-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record> {
+]: nothing -> oneof<record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
@@ -3019,7 +3017,6 @@ export def "get-storage-account" [
 #
 # PATCH /storage/{storage-account-name}
 # operationId: UpdateStorageAccount
-# --attributes shape: {enabled?: bool}
 export def "update-storage-account" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3037,7 +3034,7 @@ export def "update-storage-account" [
   --auto-regenerate-key: oneof<nothing, bool> # whether keyvault should manage the storage account for the user.
   --regeneration-period: string # The key regeneration time duration specified in ISO-8601 format.
   --tags: record # Application specific metadata in the form of key-value pairs.
-]: any -> record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record> {
+]: any -> oneof<record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3067,7 +3064,6 @@ export def "update-storage-account" [
 #
 # PUT /storage/{storage-account-name}
 # operationId: SetStorageAccount
-# --attributes shape: {enabled?: bool}
 export def "set-storage-account" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3086,7 +3082,7 @@ export def "set-storage-account" [
   --regeneration-period: string # The key regeneration time duration specified in ISO-8601 format.
   resource_id: string # Storage account resource id.
   --tags: record # Application specific metadata in the form of key-value pairs.
-]: any -> record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record> {
+]: any -> oneof<record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3129,7 +3125,7 @@ export def "backup-storage-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<value: string> {
+]: nothing -> oneof<record<value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
@@ -3169,7 +3165,7 @@ export def "regenerate-storage-account-key" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   key_name: string # The storage account key name.
-]: any -> record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record> {
+]: any -> oneof<record<activeKeyName: string, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, autoRegenerateKey: bool, id: string, regenerationPeriod: string, resourceId: string, tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3212,7 +3208,7 @@ export def "get-sas-definitions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --maxresults: int # Maximum number of results to return in a page. If not specified the service will return up to 25 results. (format: int32)
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<attributes: record, id: string, sid: string, tags: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<attributes: record, id: string, sid: string, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
@@ -3252,7 +3248,7 @@ export def "delete-sas-definition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string> {
+]: nothing -> oneof<record<deletedDate: int, recoveryId: string, scheduledPurgeDate: int, attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
@@ -3293,7 +3289,7 @@ export def "get-sas-definition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string> {
+]: nothing -> oneof<record<attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_account_name | is-empty) { error make --unspanned { msg: "path parameter 'storage-account-name' must be non-empty" } }
@@ -3321,7 +3317,6 @@ export def "get-sas-definition" [
 #
 # PATCH /storage/{storage-account-name}/sas/{sas-definition-name}
 # operationId: UpdateSasDefinition
-# --attributes shape: {enabled?: bool}
 export def "update-sas-definition" [
   storage_account_name: string
   sas_definition_name: string
@@ -3340,7 +3335,7 @@ export def "update-sas-definition" [
   --tags: record # Application specific metadata in the form of key-value pairs.
   --template-uri: string # The SAS definition token template signed with an arbitrary key. Tokens created according to the SAS definition will have the same properties as the template.
   --validity-period: string # The validity period of SAS tokens created according to the SAS definition.
-]: any -> record<attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string> {
+]: any -> oneof<record<attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3371,7 +3366,6 @@ export def "update-sas-definition" [
 #
 # PUT /storage/{storage-account-name}/sas/{sas-definition-name}
 # operationId: SetSasDefinition
-# --attributes shape: {enabled?: bool}
 export def "set-sas-definition" [
   storage_account_name: string
   sas_definition_name: string
@@ -3390,7 +3384,7 @@ export def "set-sas-definition" [
   --tags: record # Application specific metadata in the form of key-value pairs.
   template_uri: string # The SAS definition token template signed with an arbitrary key. Tokens created according to the SAS definition will have the same properties as the template.
   validity_period: string # The validity period of SAS tokens created according to the SAS definition.
-]: any -> record<attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string> {
+]: any -> oneof<record<attributes: record<created: int, enabled: bool, recoveryLevel: string, updated: int>, id: string, sasType: string, sid: string, tags: record, templateUri: string, validityPeriod: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

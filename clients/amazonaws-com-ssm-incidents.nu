@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -114,9 +138,9 @@ def status-completer [] { ["OPEN" "RESOLVED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-replication-set" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["create-replication-set" "create-response-plan" "create-timeline-event" "delete-incident-record" "delete-replication-set" "delete-resource-policy" "delete-response-plan" "delete-timeline-event" "get-incident-record" "get-replication-set" "get-resource-policies" "get-response-plan" "get-timeline-event" "list-incident-records" "list-related-items" "list-replication-sets" "list-response-plans" "list-tags-for-resource" "tag-resource" "list-timeline-events" "put-resource-policy" "start-incident" "untag-resource" "update-deletion-protection" "update-incident-record" "update-related-items" "update-replication-set" "update-response-plan" "update-timeline-event" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -158,7 +182,7 @@ export def "create-replication-set" [
   --client-token: string # A token that ensures that the operation is called only once with the specified details.
   regions: record # The Regions that Incident Manager replicates your data to. You can have up to three Regions in your replication set.
   --tags: record # A list of tags to add to the replication set.
-]: any -> record<arn: string> {
+]: any -> oneof<record<arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -187,10 +211,6 @@ export def "create-replication-set" [
 #
 # POST /createResponsePlan
 # operationId: CreateResponsePlan
-# --actions item shape: {ssmAutomation?: record}
-# --chatChannel shape: {chatbotSns?: list<string>, empty?: record}
-# --incidentTemplate shape: {dedupeString?: string, impact?: int, incidentTags?: record, notificationTargets?: list, summary?: string, title?: string}
-# --integrations item shape: {pagerDutyConfiguration?: record}
 export def "create-response-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,7 +237,7 @@ export def "create-response-plan" [
   --integrations: list # Information about third-party services integrated into the response plan. — item shape: {pagerDutyConfiguration?: record}
   name: string # The short format name of the response plan. Can't include spaces.
   --tags: record # A list of tags that you are adding to the response plan.
-]: any -> record<arn: string> {
+]: any -> oneof<record<arn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -246,7 +266,6 @@ export def "create-response-plan" [
 #
 # POST /createTimelineEvent
 # operationId: CreateTimelineEvent
-# --eventReferences item shape: {relatedItemId?: string, resource?: string}
 export def "create-timeline-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -270,7 +289,7 @@ export def "create-timeline-event" [
   event_time: string # The time that the event occurred. (format: date-time)
   event_type: string # The type of event. You can create timeline events of type Custom Event.
   incident_record_arn: string # The Amazon Resource Name (ARN) of the incident record that the action adds the incident to.
-]: any -> record<eventId: string, incidentRecordArn: string> {
+]: any -> oneof<record<eventId: string, incidentRecordArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -317,7 +336,7 @@ export def "delete-incident-record" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arn: string # The Amazon Resource Name (ARN) of the incident record you are deleting.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -364,7 +383,7 @@ export def "delete-replication-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn == null) { error make --unspanned { msg: "required query parameter 'arn' missing: pass --arn" } }
@@ -411,7 +430,7 @@ export def "delete-resource-policy" [
   --x-amz-signed-headers: string
   policy_id: string # The ID of the resource policy you're deleting.
   resource_arn: string # The Amazon Resource Name (ARN) of the resource you're deleting the policy from.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -458,7 +477,7 @@ export def "delete-response-plan" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   arn: string # The Amazon Resource Name (ARN) of the response plan.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -506,7 +525,7 @@ export def "delete-timeline-event" [
   --x-amz-signed-headers: string
   event_id: string # The ID of the event to update. You can use ListTimelineEvents to find an event's ID.
   incident_record_arn: string # The Amazon Resource Name (ARN) of the incident that includes the timeline event.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -553,7 +572,7 @@ export def "get-incident-record" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<incidentRecord: record<arn: string, automationExecutions: list<record>, chatChannel: record<chatbotSns: list, empty: record>, creationTime: string, dedupeString: string, impact: int, incidentRecordSource: record<createdBy: string, invokedBy: string, resourceArn: string, source: string>, lastModifiedBy: string, lastModifiedTime: string, notificationTargets: list<record>, resolvedTime: string, status: string, summary: string, title: string>> {
+]: nothing -> oneof<record<incidentRecord: record<arn: string, automationExecutions: list<record>, chatChannel: record<chatbotSns: list, empty: record>, creationTime: string, dedupeString: string, impact: int, incidentRecordSource: record<createdBy: string, invokedBy: string, resourceArn: string, source: string>, lastModifiedBy: string, lastModifiedTime: string, notificationTargets: list<record>, resolvedTime: string, status: string, summary: string, title: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn == null) { error make --unspanned { msg: "required query parameter 'arn' missing: pass --arn" } }
@@ -599,7 +618,7 @@ export def "get-replication-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<replicationSet: record<arn: string, createdBy: string, createdTime: string, deletionProtected: bool, lastModifiedBy: string, lastModifiedTime: string, regionMap: record, status: string>> {
+]: nothing -> oneof<record<replicationSet: record<arn: string, createdBy: string, createdTime: string, deletionProtected: bool, lastModifiedBy: string, lastModifiedTime: string, regionMap: record, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn == null) { error make --unspanned { msg: "required query parameter 'arn' missing: pass --arn" } }
@@ -649,7 +668,7 @@ export def "get-resource-policies" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of resource policies to display for each page of results. (body field)
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
-]: any -> record<nextToken: string, resourcePolicies: table<policyDocument: string, policyId: string, ramResourceShareRegion: string>> {
+]: any -> oneof<record<nextToken: string, resourcePolicies: table<policyDocument: string, policyId: string, ramResourceShareRegion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -698,7 +717,7 @@ export def "get-response-plan" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<actions: table<ssmAutomation: record>, arn: string, chatChannel: record<chatbotSns: list<string>, empty: record>, displayName: string, engagements: list<string>, incidentTemplate: record<dedupeString: string, impact: int, incidentTags: record, notificationTargets: list<record>, summary: string, title: string>, integrations: table<pagerDutyConfiguration: record>, name: string> {
+]: nothing -> oneof<record<actions: table<ssmAutomation: record>, arn: string, chatChannel: record<chatbotSns: list<string>, empty: record>, displayName: string, engagements: list<string>, incidentTemplate: record<dedupeString: string, impact: int, incidentTags: record, notificationTargets: list<record>, summary: string, title: string>, integrations: table<pagerDutyConfiguration: record>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($arn == null) { error make --unspanned { msg: "required query parameter 'arn' missing: pass --arn" } }
@@ -745,7 +764,7 @@ export def "get-timeline-event" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<event: record<eventData: string, eventId: string, eventReferences: list<record>, eventTime: string, eventType: string, eventUpdatedTime: string, incidentRecordArn: string>> {
+]: nothing -> oneof<record<event: record<eventData: string, eventId: string, eventReferences: list<record>, eventTime: string, eventType: string, eventUpdatedTime: string, incidentRecordArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id == null) { error make --unspanned { msg: "required query parameter 'eventId' missing: pass --event-id" } }
@@ -774,7 +793,6 @@ export def "get-timeline-event" [
 #
 # POST /listIncidentRecords
 # operationId: ListIncidentRecords
-# --filters item shape: {condition: record, key: string}
 export def "list-incident-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -797,7 +815,7 @@ export def "list-incident-records" [
   --filters: list # Filters the list of incident records you want to search through. You can filter on the following keys: creationTime impact status createdBy Note the following when when you use Filters: If you don't specify a Filter, the response includes all incident records. If you specify more than one filter in a single request, the response returns incident records that match all filters. If you specify a filter with more than one value, the response returns incident records that match any of the values provided. — item shape: {condition: record, key: string}
   --max-results-body: int # The maximum number of results per page. (body field)
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
-]: any -> record<incidentRecordSummaries: table<arn: string, creationTime: string, impact: int, incidentRecordSource: record, resolvedTime: string, status: string, title: string>, nextToken: string> {
+]: any -> oneof<record<incidentRecordSummaries: table<arn: string, creationTime: string, impact: int, incidentRecordSource: record, resolvedTime: string, status: string, title: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -849,7 +867,7 @@ export def "list-related-items" [
   incident_record_arn: string # The Amazon Resource Name (ARN) of the incident record containing the listed related items.
   --max-results-body: int # The maximum number of related items per page. (body field)
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
-]: any -> record<nextToken: string, relatedItems: table<generatedId: string, identifier: record, title: string>> {
+]: any -> oneof<record<nextToken: string, relatedItems: table<generatedId: string, identifier: record, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -900,7 +918,7 @@ export def "list-replication-sets" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of results per page. (body field)
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
-]: any -> record<nextToken: string, replicationSetArns: list<string>> {
+]: any -> oneof<record<nextToken: string, replicationSetArns: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -951,7 +969,7 @@ export def "list-response-plans" [
   --x-amz-signed-headers: string
   --max-results-body: int # The maximum number of response plans per page. (body field)
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
-]: any -> record<nextToken: string, responsePlanSummaries: table<arn: string, displayName: string, name: string>> {
+]: any -> oneof<record<nextToken: string, responsePlanSummaries: table<arn: string, displayName: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -999,7 +1017,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> oneof<record<tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1045,7 +1063,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   tags: record # A list of tags to add to the response plan.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1075,7 +1093,6 @@ export def "tag-resource" [
 #
 # POST /listTimelineEvents
 # operationId: ListTimelineEvents
-# --filters item shape: {condition: record, key: string}
 export def "list-timeline-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1101,7 +1118,7 @@ export def "list-timeline-events" [
   --next-token-body: string # The pagination token to continue to the next page of results. (body field)
   --sort-by: string@sort-by-completer # Sort timeline events by the specified key value pair.
   --sort-order: string@sort-order-completer # Sorts the order of timeline events by the value specified in the sortBy field.
-]: any -> record<eventSummaries: table<eventId: string, eventReferences: list, eventTime: string, eventType: string, eventUpdatedTime: string, incidentRecordArn: string>, nextToken: string> {
+]: any -> oneof<record<eventSummaries: table<eventId: string, eventReferences: list, eventTime: string, eventType: string, eventUpdatedTime: string, incidentRecordArn: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1150,7 +1167,7 @@ export def "put-resource-policy" [
   --x-amz-signed-headers: string
   policy: string # Details of the resource policy.
   resource_arn: string # The Amazon Resource Name (ARN) of the response plan to add the resource policy to.
-]: any -> record<policyId: string> {
+]: any -> oneof<record<policyId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1179,8 +1196,6 @@ export def "put-resource-policy" [
 #
 # POST /startIncident
 # operationId: StartIncident
-# --relatedItems item shape: {generatedId?: string, identifier: record, title?: string}
-# --triggerDetails shape: {rawData?: string, source?: string, timestamp?: string, triggerArn?: string}
 export def "start-incident" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1204,7 +1219,7 @@ export def "start-incident" [
   response_plan_arn: string # The Amazon Resource Name (ARN) of the response plan that pre-defines summary, chat channels, Amazon SNS topics, runbooks, title, and impact of the incident.
   --title: string # Provide a title for the incident. Providing a title overwrites the title provided by the response plan.
   --trigger-details: record # Details about what caused the incident to be created in Incident Manager. — shape: {rawData?: string, source?: string, timestamp?: string, triggerArn?: string}
-]: any -> record<incidentRecordArn: string> {
+]: any -> oneof<record<incidentRecordArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1252,7 +1267,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -1301,7 +1316,7 @@ export def "update-deletion-protection" [
   arn: string # The Amazon Resource Name (ARN) of the replication set to update.
   --client-token: string # A token that ensures that the operation is called only once with the specified details.
   --deletion-protected: oneof<nothing, bool> # Specifies if deletion protection is turned on or off in your account.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1331,8 +1346,6 @@ export def "update-deletion-protection" [
 #
 # POST /updateIncidentRecord
 # operationId: UpdateIncidentRecord
-# --chatChannel shape: {chatbotSns?: list<string>, empty?: record}
-# --notificationTargets item shape: {snsTopicArn?: string}
 export def "update-incident-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1358,7 +1371,7 @@ export def "update-incident-record" [
   --status: string@status-completer # The status of the incident. Possible statuses are Open or Resolved.
   --summary: string # A longer description of what occurred during the incident.
   --title: string # A brief description of the incident.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1387,7 +1400,6 @@ export def "update-incident-record" [
 #
 # POST /updateRelatedItems
 # operationId: UpdateRelatedItems
-# --relatedItemsUpdate shape: {itemToAdd?: record, itemToRemove?: record}
 export def "update-related-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1408,7 +1420,7 @@ export def "update-related-items" [
   --client-token: string # A token that ensures that a client calls the operation only once with the specified details.
   incident_record_arn: string # The Amazon Resource Name (ARN) of the incident record that contains the related items that you update.
   related_items_update: record # Details about the related item you're adding. — shape: {itemToAdd?: record, itemToRemove?: record}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1437,7 +1449,6 @@ export def "update-related-items" [
 #
 # POST /updateReplicationSet
 # operationId: UpdateReplicationSet
-# --actions item shape: {addRegionAction?: record, deleteRegionAction?: record}
 export def "update-replication-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1458,7 +1469,7 @@ export def "update-replication-set" [
   actions: list # An action to add or delete a Region. — item shape: {addRegionAction?: record, deleteRegionAction?: record}
   arn: string # The Amazon Resource Name (ARN) of the replication set you're updating.
   --client-token: string # A token that ensures that the operation is called only once with the specified details.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1487,10 +1498,6 @@ export def "update-replication-set" [
 #
 # POST /updateResponsePlan
 # operationId: UpdateResponsePlan
-# --actions item shape: {ssmAutomation?: record}
-# --chatChannel shape: {chatbotSns?: list<string>, empty?: record}
-# --incidentTemplateNotificationTargets item shape: {snsTopicArn?: string}
-# --integrations item shape: {pagerDutyConfiguration?: record}
 export def "update-response-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1521,7 +1528,7 @@ export def "update-response-plan" [
   --incident-template-tags: record # Tags to assign to the template. When the StartIncident API action is called, Incident Manager assigns the tags specified in the template to the incident. To call this action, you must also have permission to call the TagResource API action for the incident record resource.
   --incident-template-title: string # The short format name of the incident. The title can't contain spaces.
   --integrations: list # Information about third-party services integrated into the response plan. — item shape: {pagerDutyConfiguration?: record}
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1550,7 +1557,6 @@ export def "update-response-plan" [
 #
 # POST /updateTimelineEvent
 # operationId: UpdateTimelineEvent
-# --eventReferences item shape: {relatedItemId?: string, resource?: string}
 export def "update-timeline-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1575,7 +1581,7 @@ export def "update-timeline-event" [
   --event-time: string # The time that the event occurred. (format: date-time)
   --event-type: string # The type of event. You can update events of type Custom Event.
   incident_record_arn: string # The Amazon Resource Name (ARN) of the incident that includes the timeline event.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

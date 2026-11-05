@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -121,9 +145,9 @@ def theme-completer [] { ["DARK" "LIGHT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "certificate-create" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["certificate-create" "certificate-validate" "certificate-get" "certificate-action-retrieve" "certificate-callback-delete" "certificate-callback-get" "certificate-callback-replace" "certificate-cancel" "certificate-download" "certificate-email-history" "certificate-alternate-email-address" "certificate-resend-email" "certificate-resend-email-address" "certificate-reissue" "certificate-renew" "certificate-revoke" "certificate-siteseal-get" "certificate-verifydomaincontrol" "certificate-get-entitlement" "certificate-download-entitlement" "get-customer-certificates-by-customer-id" "get-acme-external-account-binding" "get-certificate-detail-by-cert-identifier" "get-domain-information-by-certificate-id" "get-domain-details-by-domain" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -145,8 +169,6 @@ export def commands []: nothing -> table {
 #
 # POST /v1/certificates
 # operationId: certificate_create
-# --contact shape: {email: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, phone: string, suffix?: string}
-# --organization shape: {address?: any, assumedName?: string, name: string, phone: string, registrationAgent?: string, registrationNumber?: string}
 export def "certificate-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -169,7 +191,7 @@ export def "certificate-create" [
   --root-type: string@root-type-completer # Root Type. Depending on certificate expiration date, SHA_1 not be allowed. Will default to SHA_2 if expiration date exceeds sha1 allowed date (default: STARFIELD_SHA_2)
   --slot-size: string@slot-size-completer # Number of subject alternative names(SAN) to be included in certificate
   --subject-alternative-names: list<string> # Subject Alternative names. Collection of subjectAlternativeNames to be included in certificate.
-]: any -> record<certificateId: string> {
+]: any -> oneof<record<certificateId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -198,8 +220,6 @@ export def "certificate-create" [
 #
 # POST /v1/certificates/validate
 # operationId: certificate_validate
-# --contact shape: {email: string, jobTitle?: string, nameFirst: string, nameLast: string, nameMiddle?: string, phone: string, suffix?: string}
-# --organization shape: {address?: any, assumedName?: string, name: string, phone: string, registrationAgent?: string, registrationNumber?: string}
 export def "certificate-validate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +282,7 @@ export def "certificate-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<certificateId: string, commonName: string, contact: record<email: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, phone: string, suffix: string>, createdAt: string, deniedReason: string, organization: record<address: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, assumedName: string, jurisdictionOfIncorporation: record<city: string, country: string, county: string, state: string>, name: string, phone: string, registrationAgent: string, registrationNumber: string>, period: int, productType: string, progress: int, revokedAt: string, rootType: string, serialNumber: string, serialNumberHex: string, slotSize: string, status: string, subjectAlternativeNames: table<status: string, subjectAlternativeName: string>, validEnd: string, validStart: string> {
+]: nothing -> oneof<record<certificateId: string, commonName: string, contact: record<email: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, phone: string, suffix: string>, createdAt: string, deniedReason: string, organization: record<address: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, assumedName: string, jurisdictionOfIncorporation: record<city: string, country: string, county: string, state: string>, name: string, phone: string, registrationAgent: string, registrationNumber: string>, period: int, productType: string, progress: int, revokedAt: string, rootType: string, serialNumber: string, serialNumberHex: string, slotSize: string, status: string, subjectAlternativeNames: table<status: string, subjectAlternativeName: string>, validEnd: string, validStart: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_id | is-empty) { error make --unspanned { msg: "path parameter 'certificateId' must be non-empty" } }
@@ -298,7 +318,7 @@ export def "certificate-action-retrieve" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<createdAt: string, type: string> {
+]: nothing -> oneof<table<createdAt: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_id | is-empty) { error make --unspanned { msg: "path parameter 'certificateId' must be non-empty" } }
@@ -370,7 +390,7 @@ export def "certificate-callback-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<callbackUrl: string> {
+]: nothing -> oneof<record<callbackUrl: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_id | is-empty) { error make --unspanned { msg: "path parameter 'certificateId' must be non-empty" } }
@@ -481,7 +501,7 @@ export def "certificate-download" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<pems: record<certificate: string, cross: string, intermediate: string, root: string>, serialNumber: string> {
+]: nothing -> oneof<record<pems: record<certificate: string, cross: string, intermediate: string, root: string>, serialNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_id | is-empty) { error make --unspanned { msg: "path parameter 'certificateId' must be non-empty" } }
@@ -517,7 +537,7 @@ export def "certificate-email-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accountId: int, body: string, dateEntered: string, fromType: string, id: int, recipients: string, subject: string, templateType: string> {
+]: nothing -> oneof<record<accountId: int, body: string, dateEntered: string, fromType: string, id: int, recipients: string, subject: string, templateType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_id | is-empty) { error make --unspanned { msg: "path parameter 'certificateId' must be non-empty" } }
@@ -554,7 +574,7 @@ export def "certificate-alternate-email-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accountId: int, body: string, dateEntered: string, fromType: string, id: int, recipients: string, subject: string, templateType: string> {
+]: nothing -> oneof<record<accountId: int, body: string, dateEntered: string, fromType: string, id: int, recipients: string, subject: string, templateType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_id | is-empty) { error make --unspanned { msg: "path parameter 'certificateId' must be non-empty" } }
@@ -802,7 +822,7 @@ export def "certificate-siteseal-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --theme: string@theme-completer # This value represents the visual theme of the seal. If seal doesn't exist, default values are used if params not present. If seal does exist, default values will not be used to update unless params present. (default: LIGHT)
   --locale: string # Determine locale for text displayed in seal image and verification page. If seal doesn't exist, default values are used if params not present. If seal does exist, default values will not be used to update unless params present. (default: en)
-]: nothing -> record<html: string> {
+]: nothing -> oneof<record<html: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($certificate_id | is-empty) { error make --unspanned { msg: "path parameter 'certificateId' must be non-empty" } }
@@ -876,7 +896,7 @@ export def "certificate-get-entitlement" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --entitlement-id: string # Entitlement id to lookup (required)
   --latest: oneof<nothing, bool> # Fetch only the most recent certificate (default: true)
-]: nothing -> table<certificateId: string, commonName: string, contact: record<email: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, phone: string, suffix: string>, createdAt: string, deniedReason: string, organization: record<address: record, assumedName: string, jurisdictionOfIncorporation: record, name: string, phone: string, registrationAgent: string, registrationNumber: string>, period: int, productType: string, progress: int, revokedAt: string, rootType: string, serialNumber: string, serialNumberHex: string, slotSize: string, status: string, subjectAlternativeNames: list<record>, validEnd: string, validStart: string> {
+]: nothing -> oneof<table<certificateId: string, commonName: string, contact: record<email: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, phone: string, suffix: string>, createdAt: string, deniedReason: string, organization: record<address: record, assumedName: string, jurisdictionOfIncorporation: record, name: string, phone: string, registrationAgent: string, registrationNumber: string>, period: int, productType: string, progress: int, revokedAt: string, rootType: string, serialNumber: string, serialNumberHex: string, slotSize: string, status: string, subjectAlternativeNames: list<record>, validEnd: string, validStart: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($entitlement_id == null) { error make --unspanned { msg: "required query parameter 'entitlementId' missing: pass --entitlement-id" } }
@@ -913,7 +933,7 @@ export def "certificate-download-entitlement" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --entitlement-id: string # Entitlement id to download (required)
-]: nothing -> record<pems: record<certificate: string, cross: string, intermediate: string, root: string>, serialNumber: string> {
+]: nothing -> oneof<record<pems: record<certificate: string, cross: string, intermediate: string, root: string>, serialNumber: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($entitlement_id == null) { error make --unspanned { msg: "required query parameter 'entitlementId' missing: pass --entitlement-id" } }
@@ -952,7 +972,7 @@ export def "get-customer-certificates-by-customer-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # Number of results to skip for pagination (format: integer-positive)
   --limit: int # Maximum number of items to return (format: integer-positive)
-]: nothing -> record<certificates: table<certificateId: string, commonName: string, completedAt: string, createdAt: string, period: int, renewalAvailable: bool, revokedAt: string, serialNumber: string, slotSize: string, status: string, subjectAlternativeNames: list, type: string, validEndAt: string, validStartAt: string>, pagination: record<first: string, last: string, next: string, previous: string, total: int>> {
+]: nothing -> oneof<record<certificates: table<certificateId: string, commonName: string, completedAt: string, createdAt: string, period: int, renewalAvailable: bool, revokedAt: string, serialNumber: string, slotSize: string, status: string, subjectAlternativeNames: list, type: string, validEndAt: string, validStartAt: string>, pagination: record<first: string, last: string, next: string, previous: string, total: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -989,7 +1009,7 @@ export def "get-acme-external-account-binding" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<directoryUrl: string, hmacKey: string, keyId: string> {
+]: nothing -> oneof<record<directoryUrl: string, hmacKey: string, keyId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -1026,7 +1046,7 @@ export def "get-certificate-detail-by-cert-identifier" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<certificateId: string, commonName: string, completedAt: string, contact: record<email: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, phone: string, suffix: string>, createdAt: string, csr: string, deniedReason: string, organization: record<address: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, assumedName: string, jurisdictionOfIncorporation: record<city: string, country: string, county: string, state: string>, name: string, phone: string, registrationAgent: string, registrationNumber: string>, period: int, progress: int, renewalAvailable: bool, revokedAt: string, rootType: string, serialNumber: string, serialNumberHex: string, slotSize: string, status: string, subjectAlternativeNames: list<string>, type: string, validEndAt: string, validStartAt: string> {
+]: nothing -> oneof<record<certificateId: string, commonName: string, completedAt: string, contact: record<email: string, jobTitle: string, nameFirst: string, nameLast: string, nameMiddle: string, phone: string, suffix: string>, createdAt: string, csr: string, deniedReason: string, organization: record<address: record<address1: string, address2: string, city: string, country: string, postalCode: string, state: string>, assumedName: string, jurisdictionOfIncorporation: record<city: string, country: string, county: string, state: string>, name: string, phone: string, registrationAgent: string, registrationNumber: string>, period: int, progress: int, renewalAvailable: bool, revokedAt: string, rootType: string, serialNumber: string, serialNumberHex: string, slotSize: string, status: string, subjectAlternativeNames: list<string>, type: string, validEndAt: string, validStartAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -1064,7 +1084,7 @@ export def "get-domain-information-by-certificate-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<createdAt: string, dceToken: string, domain: string, domainEntityId: int, modifiedAt: string, status: string, type: string, usage: string> {
+]: nothing -> oneof<table<createdAt: string, dceToken: string, domain: string, domainEntityId: int, modifiedAt: string, status: string, type: string, usage: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -1103,7 +1123,7 @@ export def "get-domain-details-by-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdAt: string, dceToken: string, domain: string, domainEntityId: int, modifiedAt: string, status: string, type: string, usage: string, certificateAuthorityAuthorization: record<completedAt: string, queryPaths: list<string>, recommendations: list<string>, status: string>> {
+]: nothing -> oneof<record<createdAt: string, dceToken: string, domain: string, domainEntityId: int, modifiedAt: string, status: string, type: string, usage: string, certificateAuthorityAuthorization: record<completedAt: string, queryPaths: list<string>, recommendations: list<string>, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -128,9 +152,9 @@ def volume-retention-mode-completer [] { ["DELETE" "RETAIN"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-eulas" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["accept-eulas" "list-eula-acceptances" "create-launch-profile" "list-launch-profiles" "create-streaming-image" "list-streaming-images" "create-streaming-session" "list-streaming-sessions" "create-streaming-session-stream" "create-studio" "list-studios" "create-studio-component" "list-studio-components" "delete-launch-profile" "get-launch-profile" "update-launch-profile" "delete-launch-profile-member" "get-launch-profile-member" "update-launch-profile-member" "delete-streaming-image" "get-streaming-image" "update-streaming-image" "delete-streaming-session" "get-streaming-session" "delete-studio" "get-studio" "update-studio" "delete-studio-component" "get-studio-component" "update-studio-component" "delete-studio-member" "get-studio-member" "get-eula" "get-launch-profile-details" "get-launch-profile-initialization" "get-streaming-session-backup" "get-streaming-session-stream" "list-eulas" "list-launch-profile-members" "put-launch-profile-members" "list-streaming-session-backups" "list-studio-members" "put-studio-members" "list-tags-for-resource" "tag-resource" "start-streaming-session" "start-studio-sso-configuration-repair" "stop-streaming-session" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -172,7 +196,7 @@ export def "accept-eulas" [
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
   --eula-ids: list<string> # The EULA ID.
-]: any -> record<eulaAcceptances: table<acceptedAt: string, acceptedBy: string, accepteeId: string, eulaAcceptanceId: string, eulaId: string>> {
+]: any -> oneof<record<eulaAcceptances: table<acceptedAt: string, acceptedBy: string, accepteeId: string, eulaAcceptanceId: string, eulaId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -222,7 +246,7 @@ export def "list-eula-acceptances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<eulaAcceptances: table<acceptedAt: string, acceptedBy: string, accepteeId: string, eulaAcceptanceId: string, eulaId: string>, nextToken: string> {
+]: nothing -> oneof<record<eulaAcceptances: table<acceptedAt: string, acceptedBy: string, accepteeId: string, eulaAcceptanceId: string, eulaId: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -250,7 +274,6 @@ export def "list-eula-acceptances" [
 #
 # POST /2020-08-01/studios/{studioId}/launch-profiles
 # operationId: CreateLaunchProfile
-# --streamConfiguration shape: {automaticTerminationMode?: "DEACTIVATED"|"ACTIVATED", clipboardMode?: "ENABLED"|"DISABLED", ec2InstanceTypes?: list<string>, maxSessionLengthInMinutes?: int, maxStoppedSessionLengthInMinutes?: int, sessionBackup?: record, sessionPersistenceMode?: "DEACTIVATED"|"ACTIVATED", sessionStorage?: record, streamingImageIds?: list<string>, volumeConfiguration?: record}
 export def "create-launch-profile" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -277,7 +300,7 @@ export def "create-launch-profile" [
   stream_configuration: record # Configuration for streaming workstations created using this launch profile. — shape: {automaticTerminationMode?: "DEACTIVATED"|"ACTIVATED", clipboardMode?: "ENABLED"|"DISABLED", ec2InstanceTypes?: list<string>, maxSessionLengthInMinutes?: int, maxStoppedSessionLengthInMinutes?: int, sessionBackup?: record, sessionPersistenceMode?: "DEACTIVATED"|"ACTIVATED", sessionStorage?: record, streamingImageIds?: list<string>, volumeConfiguration?: record}
   studio_component_ids: list<string> # Unique identifiers for a collection of studio components that can be used with this launch profile.
   --tags: record # A collection of labels, in the form of key-value pairs, that apply to this resource.
-]: any -> record<launchProfile: record<arn: string, createdAt: string, createdBy: string, description: string, ec2SubnetIds: list<string>, launchProfileId: string, launchProfileProtocolVersions: list<string>, name: string, state: string, statusCode: string, statusMessage: string, streamConfiguration: record<automaticTerminationMode: string, clipboardMode: string, ec2InstanceTypes: list, maxSessionLengthInMinutes: int, maxStoppedSessionLengthInMinutes: int, sessionBackup: record, sessionPersistenceMode: string, sessionStorage: record, streamingImageIds: list, volumeConfiguration: record>, studioComponentIds: list<string>, tags: record, updatedAt: string, updatedBy: string, validationResults: list<record>>> {
+]: any -> oneof<record<launchProfile: record<arn: string, createdAt: string, createdBy: string, description: string, ec2SubnetIds: list<string>, launchProfileId: string, launchProfileProtocolVersions: list<string>, name: string, state: string, statusCode: string, statusMessage: string, streamConfiguration: record<automaticTerminationMode: string, clipboardMode: string, ec2InstanceTypes: list, maxSessionLengthInMinutes: int, maxStoppedSessionLengthInMinutes: int, sessionBackup: record, sessionPersistenceMode: string, sessionStorage: record, streamingImageIds: list, volumeConfiguration: record>, studioComponentIds: list<string>, tags: record, updatedAt: string, updatedBy: string, validationResults: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -329,7 +352,7 @@ export def "list-launch-profiles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<launchProfiles: table<arn: string, createdAt: string, createdBy: string, description: string, ec2SubnetIds: list, launchProfileId: string, launchProfileProtocolVersions: list, name: string, state: string, statusCode: string, statusMessage: string, streamConfiguration: record, studioComponentIds: list, tags: record, updatedAt: string, updatedBy: string, validationResults: list>, nextToken: string> {
+]: nothing -> oneof<record<launchProfiles: table<arn: string, createdAt: string, createdBy: string, description: string, ec2SubnetIds: list, launchProfileId: string, launchProfileProtocolVersions: list, name: string, state: string, statusCode: string, statusMessage: string, streamConfiguration: record, studioComponentIds: list, tags: record, updatedAt: string, updatedBy: string, validationResults: list>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -380,7 +403,7 @@ export def "create-streaming-image" [
   ec2_image_id: string # The ID of an EC2 machine image with which to create this streaming image.
   name: string # A friendly name for a streaming image resource. (format: password)
   --tags: record # A collection of labels, in the form of key-value pairs, that apply to this resource.
-]: any -> record<streamingImage: record<arn: string, description: string, ec2ImageId: string, encryptionConfiguration: record<keyArn: string, keyType: string>, eulaIds: list<string>, name: string, owner: string, platform: string, state: string, statusCode: string, statusMessage: string, streamingImageId: string, tags: record>> {
+]: any -> oneof<record<streamingImage: record<arn: string, description: string, ec2ImageId: string, encryptionConfiguration: record<keyArn: string, keyType: string>, eulaIds: list<string>, name: string, owner: string, platform: string, state: string, statusCode: string, statusMessage: string, streamingImageId: string, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -430,7 +453,7 @@ export def "list-streaming-images" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: string, streamingImages: table<arn: string, description: string, ec2ImageId: string, encryptionConfiguration: record, eulaIds: list, name: string, owner: string, platform: string, state: string, statusCode: string, statusMessage: string, streamingImageId: string, tags: record>> {
+]: nothing -> oneof<record<nextToken: string, streamingImages: table<arn: string, description: string, ec2ImageId: string, encryptionConfiguration: record, eulaIds: list, name: string, owner: string, platform: string, state: string, statusCode: string, statusMessage: string, streamingImageId: string, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -482,7 +505,7 @@ export def "create-streaming-session" [
   --owned-by: string # The user ID of the user that owns the streaming session. The user that owns the session will be logging into the session and interacting with the virtual workstation.
   --streaming-image-id: string # The ID of the streaming image.
   --tags: record # A collection of labels, in the form of key-value pairs, that apply to this resource.
-]: any -> record<session: record<arn: string, automaticTerminationMode: string, backupMode: string, createdAt: string, createdBy: string, ec2InstanceType: string, launchProfileId: string, maxBackupsToRetain: int, ownedBy: string, sessionId: string, sessionPersistenceMode: string, startedAt: string, startedBy: string, startedFromBackupId: string, state: string, statusCode: string, statusMessage: string, stopAt: string, stoppedAt: string, stoppedBy: string, streamingImageId: string, tags: record, terminateAt: string, updatedAt: string, updatedBy: string, volumeConfiguration: record<iops: int, size: int, throughput: int>, volumeRetentionMode: string>> {
+]: any -> oneof<record<session: record<arn: string, automaticTerminationMode: string, backupMode: string, createdAt: string, createdBy: string, ec2InstanceType: string, launchProfileId: string, maxBackupsToRetain: int, ownedBy: string, sessionId: string, sessionPersistenceMode: string, startedAt: string, startedBy: string, startedFromBackupId: string, state: string, statusCode: string, statusMessage: string, stopAt: string, stoppedAt: string, stoppedBy: string, streamingImageId: string, tags: record, terminateAt: string, updatedAt: string, updatedBy: string, volumeConfiguration: record<iops: int, size: int, throughput: int>, volumeRetentionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -534,7 +557,7 @@ export def "list-streaming-sessions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: string, sessions: table<arn: string, automaticTerminationMode: string, backupMode: string, createdAt: string, createdBy: string, ec2InstanceType: string, launchProfileId: string, maxBackupsToRetain: int, ownedBy: string, sessionId: string, sessionPersistenceMode: string, startedAt: string, startedBy: string, startedFromBackupId: string, state: string, statusCode: string, statusMessage: string, stopAt: string, stoppedAt: string, stoppedBy: string, streamingImageId: string, tags: record, terminateAt: string, updatedAt: string, updatedBy: string, volumeConfiguration: record, volumeRetentionMode: string>> {
+]: nothing -> oneof<record<nextToken: string, sessions: table<arn: string, automaticTerminationMode: string, backupMode: string, createdAt: string, createdBy: string, ec2InstanceType: string, launchProfileId: string, maxBackupsToRetain: int, ownedBy: string, sessionId: string, sessionPersistenceMode: string, startedAt: string, startedBy: string, startedFromBackupId: string, state: string, statusCode: string, statusMessage: string, stopAt: string, stoppedAt: string, stoppedBy: string, streamingImageId: string, tags: record, terminateAt: string, updatedAt: string, updatedBy: string, volumeConfiguration: record, volumeRetentionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -583,7 +606,7 @@ export def "create-streaming-session-stream" [
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
   --expiration-in-seconds: int # The expiration time in seconds.
-]: any -> record<stream: record<createdAt: string, createdBy: string, expiresAt: string, ownedBy: string, state: string, statusCode: string, streamId: string, url: string>> {
+]: any -> oneof<record<stream: record<createdAt: string, createdBy: string, expiresAt: string, ownedBy: string, state: string, statusCode: string, streamId: string, url: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -614,7 +637,6 @@ export def "create-streaming-session-stream" [
 #
 # POST /2020-08-01/studios
 # operationId: CreateStudio
-# --studioEncryptionConfiguration shape: {keyArn?: string, keyType?: "AWS_OWNED_KEY"|"CUSTOMER_MANAGED_KEY"}
 export def "create-studio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -639,7 +661,7 @@ export def "create-studio" [
   studio_name: string # The studio name that is used in the URL of the Nimble Studio portal when accessed by Nimble Studio users.
   --tags: record # A collection of labels, in the form of key-value pairs, that apply to this resource.
   user_role_arn: string # The IAM role that studio users will assume when logging in to the Nimble Studio portal.
-]: any -> record<studio: record<adminRoleArn: string, arn: string, createdAt: string, displayName: string, homeRegion: string, ssoClientId: string, state: string, statusCode: string, statusMessage: string, studioEncryptionConfiguration: record<keyArn: string, keyType: string>, studioId: string, studioName: string, studioUrl: string, tags: record, updatedAt: string, userRoleArn: string>> {
+]: any -> oneof<record<studio: record<adminRoleArn: string, arn: string, createdAt: string, displayName: string, homeRegion: string, ssoClientId: string, state: string, statusCode: string, statusMessage: string, studioEncryptionConfiguration: record<keyArn: string, keyType: string>, studioId: string, studioName: string, studioUrl: string, tags: record, updatedAt: string, userRoleArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -686,7 +708,7 @@ export def "list-studios" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: string, studios: table<adminRoleArn: string, arn: string, createdAt: string, displayName: string, homeRegion: string, ssoClientId: string, state: string, statusCode: string, statusMessage: string, studioEncryptionConfiguration: record, studioId: string, studioName: string, studioUrl: string, tags: record, updatedAt: string, userRoleArn: string>> {
+]: nothing -> oneof<record<nextToken: string, studios: table<adminRoleArn: string, arn: string, createdAt: string, displayName: string, homeRegion: string, ssoClientId: string, state: string, statusCode: string, statusMessage: string, studioEncryptionConfiguration: record, studioId: string, studioName: string, studioUrl: string, tags: record, updatedAt: string, userRoleArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -713,9 +735,6 @@ export def "list-studios" [
 #
 # POST /2020-08-01/studios/{studioId}/studio-components
 # operationId: CreateStudioComponent
-# --configuration shape: {activeDirectoryConfiguration?: record, computeFarmConfiguration?: record, licenseServiceConfiguration?: record, sharedFileSystemConfiguration?: record}
-# --initializationScripts item shape: {launchProfileProtocolVersion?: string, platform?: "LINUX"|"WINDOWS", runContext?: "SYSTEM_INITIALIZATION"|"USER_INITIALIZATION", script?: string}
-# --scriptParameters item shape: {key?: string, value?: string}
 export def "create-studio-component" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -746,7 +765,7 @@ export def "create-studio-component" [
   --subtype: string@subtype-completer # The specific subtype of a studio component.
   --tags: record # A collection of labels, in the form of key-value pairs, that apply to this resource.
   type: string@type-completer # The type of the studio component.
-]: any -> record<studioComponent: record<arn: string, configuration: record<activeDirectoryConfiguration: record, computeFarmConfiguration: record, licenseServiceConfiguration: record, sharedFileSystemConfiguration: record>, createdAt: string, createdBy: string, description: string, ec2SecurityGroupIds: list<string>, initializationScripts: list<record>, name: string, runtimeRoleArn: string, scriptParameters: list<record>, secureInitializationRoleArn: string, state: string, statusCode: string, statusMessage: string, studioComponentId: string, subtype: string, tags: record, type: string, updatedAt: string, updatedBy: string>> {
+]: any -> oneof<record<studioComponent: record<arn: string, configuration: record<activeDirectoryConfiguration: record, computeFarmConfiguration: record, licenseServiceConfiguration: record, sharedFileSystemConfiguration: record>, createdAt: string, createdBy: string, description: string, ec2SecurityGroupIds: list<string>, initializationScripts: list<record>, name: string, runtimeRoleArn: string, scriptParameters: list<record>, secureInitializationRoleArn: string, state: string, statusCode: string, statusMessage: string, studioComponentId: string, subtype: string, tags: record, type: string, updatedAt: string, updatedBy: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -798,7 +817,7 @@ export def "list-studio-components" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: string, studioComponents: table<arn: string, configuration: record, createdAt: string, createdBy: string, description: string, ec2SecurityGroupIds: list, initializationScripts: list, name: string, runtimeRoleArn: string, scriptParameters: list, secureInitializationRoleArn: string, state: string, statusCode: string, statusMessage: string, studioComponentId: string, subtype: string, tags: record, type: string, updatedAt: string, updatedBy: string>> {
+]: nothing -> oneof<record<nextToken: string, studioComponents: table<arn: string, configuration: record, createdAt: string, createdBy: string, description: string, ec2SecurityGroupIds: list, initializationScripts: list, name: string, runtimeRoleArn: string, scriptParameters: list, secureInitializationRoleArn: string, state: string, statusCode: string, statusMessage: string, studioComponentId: string, subtype: string, tags: record, type: string, updatedAt: string, updatedBy: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -846,7 +865,7 @@ export def "delete-launch-profile" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
-]: nothing -> record<launchProfile: record<arn: string, createdAt: string, createdBy: string, description: string, ec2SubnetIds: list<string>, launchProfileId: string, launchProfileProtocolVersions: list<string>, name: string, state: string, statusCode: string, statusMessage: string, streamConfiguration: record<automaticTerminationMode: string, clipboardMode: string, ec2InstanceTypes: list, maxSessionLengthInMinutes: int, maxStoppedSessionLengthInMinutes: int, sessionBackup: record, sessionPersistenceMode: string, sessionStorage: record, streamingImageIds: list, volumeConfiguration: record>, studioComponentIds: list<string>, tags: record, updatedAt: string, updatedBy: string, validationResults: list<record>>> {
+]: nothing -> oneof<record<launchProfile: record<arn: string, createdAt: string, createdBy: string, description: string, ec2SubnetIds: list<string>, launchProfileId: string, launchProfileProtocolVersions: list<string>, name: string, state: string, statusCode: string, statusMessage: string, streamConfiguration: record<automaticTerminationMode: string, clipboardMode: string, ec2InstanceTypes: list, maxSessionLengthInMinutes: int, maxStoppedSessionLengthInMinutes: int, sessionBackup: record, sessionPersistenceMode: string, sessionStorage: record, streamingImageIds: list, volumeConfiguration: record>, studioComponentIds: list<string>, tags: record, updatedAt: string, updatedBy: string, validationResults: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -893,7 +912,7 @@ export def "get-launch-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<launchProfile: record<arn: string, createdAt: string, createdBy: string, description: string, ec2SubnetIds: list<string>, launchProfileId: string, launchProfileProtocolVersions: list<string>, name: string, state: string, statusCode: string, statusMessage: string, streamConfiguration: record<automaticTerminationMode: string, clipboardMode: string, ec2InstanceTypes: list, maxSessionLengthInMinutes: int, maxStoppedSessionLengthInMinutes: int, sessionBackup: record, sessionPersistenceMode: string, sessionStorage: record, streamingImageIds: list, volumeConfiguration: record>, studioComponentIds: list<string>, tags: record, updatedAt: string, updatedBy: string, validationResults: list<record>>> {
+]: nothing -> oneof<record<launchProfile: record<arn: string, createdAt: string, createdBy: string, description: string, ec2SubnetIds: list<string>, launchProfileId: string, launchProfileProtocolVersions: list<string>, name: string, state: string, statusCode: string, statusMessage: string, streamConfiguration: record<automaticTerminationMode: string, clipboardMode: string, ec2InstanceTypes: list, maxSessionLengthInMinutes: int, maxStoppedSessionLengthInMinutes: int, sessionBackup: record, sessionPersistenceMode: string, sessionStorage: record, streamingImageIds: list, volumeConfiguration: record>, studioComponentIds: list<string>, tags: record, updatedAt: string, updatedBy: string, validationResults: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -921,7 +940,6 @@ export def "get-launch-profile" [
 #
 # PATCH /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}
 # operationId: UpdateLaunchProfile
-# --streamConfiguration shape: {automaticTerminationMode?: "DEACTIVATED"|"ACTIVATED", clipboardMode?: "ENABLED"|"DISABLED", ec2InstanceTypes?: list<string>, maxSessionLengthInMinutes?: int, maxStoppedSessionLengthInMinutes?: int, sessionBackup?: record, sessionPersistenceMode?: "DEACTIVATED"|"ACTIVATED", sessionStorage?: record, streamingImageIds?: list<string>, volumeConfiguration?: record}
 export def "update-launch-profile" [
   studio_id: string
   launch_profile_id: string
@@ -947,7 +965,7 @@ export def "update-launch-profile" [
   --name: string # The name for the launch profile. (format: password)
   --stream-configuration: record # Configuration for streaming workstations created using this launch profile. — shape: {automaticTerminationMode?: "DEACTIVATED"|"ACTIVATED", clipboardMode?: "ENABLED"|"DISABLED", ec2InstanceTypes?: list<string>, maxSessionLengthInMinutes?: int, maxStoppedSessionLengthInMinutes?: int, sessionBackup?: record, sessionPersistenceMode?: "DEACTIVATED"|"ACTIVATED", sessionStorage?: record, streamingImageIds?: list<string>, volumeConfiguration?: record}
   --studio-component-ids: list<string> # Unique identifiers for a collection of studio components that can be used with this launch profile.
-]: any -> record<launchProfile: record<arn: string, createdAt: string, createdBy: string, description: string, ec2SubnetIds: list<string>, launchProfileId: string, launchProfileProtocolVersions: list<string>, name: string, state: string, statusCode: string, statusMessage: string, streamConfiguration: record<automaticTerminationMode: string, clipboardMode: string, ec2InstanceTypes: list, maxSessionLengthInMinutes: int, maxStoppedSessionLengthInMinutes: int, sessionBackup: record, sessionPersistenceMode: string, sessionStorage: record, streamingImageIds: list, volumeConfiguration: record>, studioComponentIds: list<string>, tags: record, updatedAt: string, updatedBy: string, validationResults: list<record>>> {
+]: any -> oneof<record<launchProfile: record<arn: string, createdAt: string, createdBy: string, description: string, ec2SubnetIds: list<string>, launchProfileId: string, launchProfileProtocolVersions: list<string>, name: string, state: string, statusCode: string, statusMessage: string, streamConfiguration: record<automaticTerminationMode: string, clipboardMode: string, ec2InstanceTypes: list, maxSessionLengthInMinutes: int, maxStoppedSessionLengthInMinutes: int, sessionBackup: record, sessionPersistenceMode: string, sessionStorage: record, streamingImageIds: list, volumeConfiguration: record>, studioComponentIds: list<string>, tags: record, updatedAt: string, updatedBy: string, validationResults: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -999,7 +1017,7 @@ export def "delete-launch-profile-member" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -1048,7 +1066,7 @@ export def "get-launch-profile-member" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<member: record<identityStoreId: string, persona: string, principalId: string, sid: string>> {
+]: nothing -> oneof<record<member: record<identityStoreId: string, persona: string, principalId: string, sid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -1099,7 +1117,7 @@ export def "update-launch-profile-member" [
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
   persona: string@persona-completer # The persona.
-]: any -> record<member: record<identityStoreId: string, persona: string, principalId: string, sid: string>> {
+]: any -> oneof<record<member: record<identityStoreId: string, persona: string, principalId: string, sid: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1151,7 +1169,7 @@ export def "delete-streaming-image" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
-]: nothing -> record<streamingImage: record<arn: string, description: string, ec2ImageId: string, encryptionConfiguration: record<keyArn: string, keyType: string>, eulaIds: list<string>, name: string, owner: string, platform: string, state: string, statusCode: string, statusMessage: string, streamingImageId: string, tags: record>> {
+]: nothing -> oneof<record<streamingImage: record<arn: string, description: string, ec2ImageId: string, encryptionConfiguration: record<keyArn: string, keyType: string>, eulaIds: list<string>, name: string, owner: string, platform: string, state: string, statusCode: string, statusMessage: string, streamingImageId: string, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -1198,7 +1216,7 @@ export def "get-streaming-image" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<streamingImage: record<arn: string, description: string, ec2ImageId: string, encryptionConfiguration: record<keyArn: string, keyType: string>, eulaIds: list<string>, name: string, owner: string, platform: string, state: string, statusCode: string, statusMessage: string, streamingImageId: string, tags: record>> {
+]: nothing -> oneof<record<streamingImage: record<arn: string, description: string, ec2ImageId: string, encryptionConfiguration: record<keyArn: string, keyType: string>, eulaIds: list<string>, name: string, owner: string, platform: string, state: string, statusCode: string, statusMessage: string, streamingImageId: string, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -1248,7 +1266,7 @@ export def "update-streaming-image" [
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
   --description: string # The description. (format: password)
   --name: string # A friendly name for a streaming image resource. (format: password)
-]: any -> record<streamingImage: record<arn: string, description: string, ec2ImageId: string, encryptionConfiguration: record<keyArn: string, keyType: string>, eulaIds: list<string>, name: string, owner: string, platform: string, state: string, statusCode: string, statusMessage: string, streamingImageId: string, tags: record>> {
+]: any -> oneof<record<streamingImage: record<arn: string, description: string, ec2ImageId: string, encryptionConfiguration: record<keyArn: string, keyType: string>, eulaIds: list<string>, name: string, owner: string, platform: string, state: string, statusCode: string, statusMessage: string, streamingImageId: string, tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1299,7 +1317,7 @@ export def "delete-streaming-session" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
-]: nothing -> record<session: record<arn: string, automaticTerminationMode: string, backupMode: string, createdAt: string, createdBy: string, ec2InstanceType: string, launchProfileId: string, maxBackupsToRetain: int, ownedBy: string, sessionId: string, sessionPersistenceMode: string, startedAt: string, startedBy: string, startedFromBackupId: string, state: string, statusCode: string, statusMessage: string, stopAt: string, stoppedAt: string, stoppedBy: string, streamingImageId: string, tags: record, terminateAt: string, updatedAt: string, updatedBy: string, volumeConfiguration: record<iops: int, size: int, throughput: int>, volumeRetentionMode: string>> {
+]: nothing -> oneof<record<session: record<arn: string, automaticTerminationMode: string, backupMode: string, createdAt: string, createdBy: string, ec2InstanceType: string, launchProfileId: string, maxBackupsToRetain: int, ownedBy: string, sessionId: string, sessionPersistenceMode: string, startedAt: string, startedBy: string, startedFromBackupId: string, state: string, statusCode: string, statusMessage: string, stopAt: string, stoppedAt: string, stoppedBy: string, streamingImageId: string, tags: record, terminateAt: string, updatedAt: string, updatedBy: string, volumeConfiguration: record<iops: int, size: int, throughput: int>, volumeRetentionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -1346,7 +1364,7 @@ export def "get-streaming-session" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<session: record<arn: string, automaticTerminationMode: string, backupMode: string, createdAt: string, createdBy: string, ec2InstanceType: string, launchProfileId: string, maxBackupsToRetain: int, ownedBy: string, sessionId: string, sessionPersistenceMode: string, startedAt: string, startedBy: string, startedFromBackupId: string, state: string, statusCode: string, statusMessage: string, stopAt: string, stoppedAt: string, stoppedBy: string, streamingImageId: string, tags: record, terminateAt: string, updatedAt: string, updatedBy: string, volumeConfiguration: record<iops: int, size: int, throughput: int>, volumeRetentionMode: string>> {
+]: nothing -> oneof<record<session: record<arn: string, automaticTerminationMode: string, backupMode: string, createdAt: string, createdBy: string, ec2InstanceType: string, launchProfileId: string, maxBackupsToRetain: int, ownedBy: string, sessionId: string, sessionPersistenceMode: string, startedAt: string, startedBy: string, startedFromBackupId: string, state: string, statusCode: string, statusMessage: string, stopAt: string, stoppedAt: string, stoppedBy: string, streamingImageId: string, tags: record, terminateAt: string, updatedAt: string, updatedBy: string, volumeConfiguration: record<iops: int, size: int, throughput: int>, volumeRetentionMode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -1393,7 +1411,7 @@ export def "delete-studio" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
-]: nothing -> record<studio: record<adminRoleArn: string, arn: string, createdAt: string, displayName: string, homeRegion: string, ssoClientId: string, state: string, statusCode: string, statusMessage: string, studioEncryptionConfiguration: record<keyArn: string, keyType: string>, studioId: string, studioName: string, studioUrl: string, tags: record, updatedAt: string, userRoleArn: string>> {
+]: nothing -> oneof<record<studio: record<adminRoleArn: string, arn: string, createdAt: string, displayName: string, homeRegion: string, ssoClientId: string, state: string, statusCode: string, statusMessage: string, studioEncryptionConfiguration: record<keyArn: string, keyType: string>, studioId: string, studioName: string, studioUrl: string, tags: record, updatedAt: string, userRoleArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -1438,7 +1456,7 @@ export def "get-studio" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<studio: record<adminRoleArn: string, arn: string, createdAt: string, displayName: string, homeRegion: string, ssoClientId: string, state: string, statusCode: string, statusMessage: string, studioEncryptionConfiguration: record<keyArn: string, keyType: string>, studioId: string, studioName: string, studioUrl: string, tags: record, updatedAt: string, userRoleArn: string>> {
+]: nothing -> oneof<record<studio: record<adminRoleArn: string, arn: string, createdAt: string, displayName: string, homeRegion: string, ssoClientId: string, state: string, statusCode: string, statusMessage: string, studioEncryptionConfiguration: record<keyArn: string, keyType: string>, studioId: string, studioName: string, studioUrl: string, tags: record, updatedAt: string, userRoleArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -1487,7 +1505,7 @@ export def "update-studio" [
   --admin-role-arn: string # The IAM role that Studio Admins will assume when logging in to the Nimble Studio portal.
   --display-name: string # A friendly name for the studio. (format: password)
   --user-role-arn: string # The IAM role that Studio Users will assume when logging in to the Nimble Studio portal.
-]: any -> record<studio: record<adminRoleArn: string, arn: string, createdAt: string, displayName: string, homeRegion: string, ssoClientId: string, state: string, statusCode: string, statusMessage: string, studioEncryptionConfiguration: record<keyArn: string, keyType: string>, studioId: string, studioName: string, studioUrl: string, tags: record, updatedAt: string, userRoleArn: string>> {
+]: any -> oneof<record<studio: record<adminRoleArn: string, arn: string, createdAt: string, displayName: string, homeRegion: string, ssoClientId: string, state: string, statusCode: string, statusMessage: string, studioEncryptionConfiguration: record<keyArn: string, keyType: string>, studioId: string, studioName: string, studioUrl: string, tags: record, updatedAt: string, userRoleArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1537,7 +1555,7 @@ export def "delete-studio-component" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
-]: nothing -> record<studioComponent: record<arn: string, configuration: record<activeDirectoryConfiguration: record, computeFarmConfiguration: record, licenseServiceConfiguration: record, sharedFileSystemConfiguration: record>, createdAt: string, createdBy: string, description: string, ec2SecurityGroupIds: list<string>, initializationScripts: list<record>, name: string, runtimeRoleArn: string, scriptParameters: list<record>, secureInitializationRoleArn: string, state: string, statusCode: string, statusMessage: string, studioComponentId: string, subtype: string, tags: record, type: string, updatedAt: string, updatedBy: string>> {
+]: nothing -> oneof<record<studioComponent: record<arn: string, configuration: record<activeDirectoryConfiguration: record, computeFarmConfiguration: record, licenseServiceConfiguration: record, sharedFileSystemConfiguration: record>, createdAt: string, createdBy: string, description: string, ec2SecurityGroupIds: list<string>, initializationScripts: list<record>, name: string, runtimeRoleArn: string, scriptParameters: list<record>, secureInitializationRoleArn: string, state: string, statusCode: string, statusMessage: string, studioComponentId: string, subtype: string, tags: record, type: string, updatedAt: string, updatedBy: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -1584,7 +1602,7 @@ export def "get-studio-component" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<studioComponent: record<arn: string, configuration: record<activeDirectoryConfiguration: record, computeFarmConfiguration: record, licenseServiceConfiguration: record, sharedFileSystemConfiguration: record>, createdAt: string, createdBy: string, description: string, ec2SecurityGroupIds: list<string>, initializationScripts: list<record>, name: string, runtimeRoleArn: string, scriptParameters: list<record>, secureInitializationRoleArn: string, state: string, statusCode: string, statusMessage: string, studioComponentId: string, subtype: string, tags: record, type: string, updatedAt: string, updatedBy: string>> {
+]: nothing -> oneof<record<studioComponent: record<arn: string, configuration: record<activeDirectoryConfiguration: record, computeFarmConfiguration: record, licenseServiceConfiguration: record, sharedFileSystemConfiguration: record>, createdAt: string, createdBy: string, description: string, ec2SecurityGroupIds: list<string>, initializationScripts: list<record>, name: string, runtimeRoleArn: string, scriptParameters: list<record>, secureInitializationRoleArn: string, state: string, statusCode: string, statusMessage: string, studioComponentId: string, subtype: string, tags: record, type: string, updatedAt: string, updatedBy: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -1612,9 +1630,6 @@ export def "get-studio-component" [
 #
 # PATCH /2020-08-01/studios/{studioId}/studio-components/{studioComponentId}
 # operationId: UpdateStudioComponent
-# --configuration shape: {activeDirectoryConfiguration?: record, computeFarmConfiguration?: record, licenseServiceConfiguration?: record, sharedFileSystemConfiguration?: record}
-# --initializationScripts item shape: {launchProfileProtocolVersion?: string, platform?: "LINUX"|"WINDOWS", runContext?: "SYSTEM_INITIALIZATION"|"USER_INITIALIZATION", script?: string}
-# --scriptParameters item shape: {key?: string, value?: string}
 export def "update-studio-component" [
   studio_id: string
   studio_component_id: string
@@ -1645,7 +1660,7 @@ export def "update-studio-component" [
   --secure-initialization-role-arn: string # An IAM role attached to Studio Component when the system initialization script runs which give the studio component access to Amazon Web Services resources when the system initialization script runs.
   --subtype: string@subtype-completer # The specific subtype of a studio component.
   --type: string@type-completer # The type of the studio component.
-]: any -> record<studioComponent: record<arn: string, configuration: record<activeDirectoryConfiguration: record, computeFarmConfiguration: record, licenseServiceConfiguration: record, sharedFileSystemConfiguration: record>, createdAt: string, createdBy: string, description: string, ec2SecurityGroupIds: list<string>, initializationScripts: list<record>, name: string, runtimeRoleArn: string, scriptParameters: list<record>, secureInitializationRoleArn: string, state: string, statusCode: string, statusMessage: string, studioComponentId: string, subtype: string, tags: record, type: string, updatedAt: string, updatedBy: string>> {
+]: any -> oneof<record<studioComponent: record<arn: string, configuration: record<activeDirectoryConfiguration: record, computeFarmConfiguration: record, licenseServiceConfiguration: record, sharedFileSystemConfiguration: record>, createdAt: string, createdBy: string, description: string, ec2SecurityGroupIds: list<string>, initializationScripts: list<record>, name: string, runtimeRoleArn: string, scriptParameters: list<record>, secureInitializationRoleArn: string, state: string, statusCode: string, statusMessage: string, studioComponentId: string, subtype: string, tags: record, type: string, updatedAt: string, updatedBy: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1696,7 +1711,7 @@ export def "delete-studio-member" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -1743,7 +1758,7 @@ export def "get-studio-member" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<member: record<identityStoreId: string, persona: string, principalId: string, sid: string>> {
+]: nothing -> oneof<record<member: record<identityStoreId: string, persona: string, principalId: string, sid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -1789,7 +1804,7 @@ export def "get-eula" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<eula: record<content: string, createdAt: string, eulaId: string, name: string, updatedAt: string>> {
+]: nothing -> oneof<record<eula: record<content: string, createdAt: string, eulaId: string, name: string, updatedAt: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($eula_id | is-empty) { error make --unspanned { msg: "path parameter 'eulaId' must be non-empty" } }
@@ -1835,7 +1850,7 @@ export def "get-launch-profile-details" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<launchProfile: record<arn: string, createdAt: string, createdBy: string, description: string, ec2SubnetIds: list<string>, launchProfileId: string, launchProfileProtocolVersions: list<string>, name: string, state: string, statusCode: string, statusMessage: string, streamConfiguration: record<automaticTerminationMode: string, clipboardMode: string, ec2InstanceTypes: list, maxSessionLengthInMinutes: int, maxStoppedSessionLengthInMinutes: int, sessionBackup: record, sessionPersistenceMode: string, sessionStorage: record, streamingImageIds: list, volumeConfiguration: record>, studioComponentIds: list<string>, tags: record, updatedAt: string, updatedBy: string, validationResults: list<record>>, streamingImages: table<arn: string, description: string, ec2ImageId: string, encryptionConfiguration: record, eulaIds: list, name: string, owner: string, platform: string, state: string, statusCode: string, statusMessage: string, streamingImageId: string, tags: record>, studioComponentSummaries: table<createdAt: string, createdBy: string, description: string, name: string, studioComponentId: string, subtype: string, type: string, updatedAt: string, updatedBy: string>> {
+]: nothing -> oneof<record<launchProfile: record<arn: string, createdAt: string, createdBy: string, description: string, ec2SubnetIds: list<string>, launchProfileId: string, launchProfileProtocolVersions: list<string>, name: string, state: string, statusCode: string, statusMessage: string, streamConfiguration: record<automaticTerminationMode: string, clipboardMode: string, ec2InstanceTypes: list, maxSessionLengthInMinutes: int, maxStoppedSessionLengthInMinutes: int, sessionBackup: record, sessionPersistenceMode: string, sessionStorage: record, streamingImageIds: list, volumeConfiguration: record>, studioComponentIds: list<string>, tags: record, updatedAt: string, updatedBy: string, validationResults: list<record>>, streamingImages: table<arn: string, description: string, ec2ImageId: string, encryptionConfiguration: record, eulaIds: list, name: string, owner: string, platform: string, state: string, statusCode: string, statusMessage: string, streamingImageId: string, tags: record>, studioComponentSummaries: table<createdAt: string, createdBy: string, description: string, name: string, studioComponentId: string, subtype: string, type: string, updatedAt: string, updatedBy: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -1885,7 +1900,7 @@ export def "get-launch-profile-initialization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<launchProfileInitialization: record<activeDirectory: record<computerAttributes: list, directoryId: string, directoryName: string, dnsIpAddresses: list, organizationalUnitDistinguishedName: string, studioComponentId: string, studioComponentName: string>, ec2SecurityGroupIds: list<string>, launchProfileId: string, launchProfileProtocolVersion: string, launchPurpose: string, name: string, platform: string, systemInitializationScripts: list<record>, userInitializationScripts: list<record>>> {
+]: nothing -> oneof<record<launchProfileInitialization: record<activeDirectory: record<computerAttributes: list, directoryId: string, directoryName: string, dnsIpAddresses: list, organizationalUnitDistinguishedName: string, studioComponentId: string, studioComponentName: string>, ec2SecurityGroupIds: list<string>, launchProfileId: string, launchProfileProtocolVersion: string, launchPurpose: string, name: string, platform: string, systemInitializationScripts: list<record>, userInitializationScripts: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -1936,7 +1951,7 @@ export def "get-streaming-session-backup" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<streamingSessionBackup: record<arn: string, backupId: string, createdAt: string, launchProfileId: string, ownedBy: string, sessionId: string, state: string, statusCode: string, statusMessage: string, tags: record>> {
+]: nothing -> oneof<record<streamingSessionBackup: record<arn: string, backupId: string, createdAt: string, launchProfileId: string, ownedBy: string, sessionId: string, state: string, statusCode: string, statusMessage: string, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -1984,7 +1999,7 @@ export def "get-streaming-session-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<stream: record<createdAt: string, createdBy: string, expiresAt: string, ownedBy: string, state: string, statusCode: string, streamId: string, url: string>> {
+]: nothing -> oneof<record<stream: record<createdAt: string, createdBy: string, expiresAt: string, ownedBy: string, state: string, statusCode: string, streamId: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -2032,7 +2047,7 @@ export def "list-eulas" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<eulas: table<content: string, createdAt: string, eulaId: string, name: string, updatedAt: string>, nextToken: string> {
+]: nothing -> oneof<record<eulas: table<content: string, createdAt: string, eulaId: string, name: string, updatedAt: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "eulaIds" $eula_ids "multi") (serialize-qp "nextToken" $next_token "scalar")] | flatten | str join "&"
@@ -2080,7 +2095,7 @@ export def "list-launch-profile-members" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<members: table<identityStoreId: string, persona: string, principalId: string, sid: string>, nextToken: string> {
+]: nothing -> oneof<record<members: table<identityStoreId: string, persona: string, principalId: string, sid: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -2109,7 +2124,6 @@ export def "list-launch-profile-members" [
 #
 # POST /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}/membership
 # operationId: PutLaunchProfileMembers
-# --members item shape: {persona: "USER", principalId: string}
 export def "put-launch-profile-members" [
   studio_id: string
   launch_profile_id: string
@@ -2132,7 +2146,7 @@ export def "put-launch-profile-members" [
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
   identity_store_id: string # The ID of the identity store.
   members: list # A list of members. — item shape: {persona: "USER", principalId: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2183,7 +2197,7 @@ export def "list-streaming-session-backups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<nextToken: string, streamingSessionBackups: table<arn: string, backupId: string, createdAt: string, launchProfileId: string, ownedBy: string, sessionId: string, state: string, statusCode: string, statusMessage: string, tags: record>> {
+]: nothing -> oneof<record<nextToken: string, streamingSessionBackups: table<arn: string, backupId: string, createdAt: string, launchProfileId: string, ownedBy: string, sessionId: string, state: string, statusCode: string, statusMessage: string, tags: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -2231,7 +2245,7 @@ export def "list-studio-members" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<members: table<identityStoreId: string, persona: string, principalId: string, sid: string>, nextToken: string> {
+]: nothing -> oneof<record<members: table<identityStoreId: string, persona: string, principalId: string, sid: string>, nextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -2259,7 +2273,6 @@ export def "list-studio-members" [
 #
 # POST /2020-08-01/studios/{studioId}/membership
 # operationId: PutStudioMembers
-# --members item shape: {persona: "ADMINISTRATOR", principalId: string}
 export def "put-studio-members" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2281,7 +2294,7 @@ export def "put-studio-members" [
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
   identity_store_id: string # The ID of the identity store.
   members: list # A list of members. — item shape: {persona: "ADMINISTRATOR", principalId: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2329,7 +2342,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<tags: record> {
+]: nothing -> oneof<record<tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }
@@ -2375,7 +2388,7 @@ export def "tag-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --tags: record # A collection of labels, in the form of key-value pairs, that apply to this resource.
-]: any -> any {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2426,7 +2439,7 @@ export def "start-streaming-session" [
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
   --backup-id: string # The ID of the backup.
-]: any -> record<session: record<arn: string, automaticTerminationMode: string, backupMode: string, createdAt: string, createdBy: string, ec2InstanceType: string, launchProfileId: string, maxBackupsToRetain: int, ownedBy: string, sessionId: string, sessionPersistenceMode: string, startedAt: string, startedBy: string, startedFromBackupId: string, state: string, statusCode: string, statusMessage: string, stopAt: string, stoppedAt: string, stoppedBy: string, streamingImageId: string, tags: record, terminateAt: string, updatedAt: string, updatedBy: string, volumeConfiguration: record<iops: int, size: int, throughput: int>, volumeRetentionMode: string>> {
+]: any -> oneof<record<session: record<arn: string, automaticTerminationMode: string, backupMode: string, createdAt: string, createdBy: string, ec2InstanceType: string, launchProfileId: string, maxBackupsToRetain: int, ownedBy: string, sessionId: string, sessionPersistenceMode: string, startedAt: string, startedBy: string, startedFromBackupId: string, state: string, statusCode: string, statusMessage: string, stopAt: string, stoppedAt: string, stoppedBy: string, streamingImageId: string, tags: record, terminateAt: string, updatedAt: string, updatedBy: string, volumeConfiguration: record<iops: int, size: int, throughput: int>, volumeRetentionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2476,7 +2489,7 @@ export def "start-studio-sso-configuration-repair" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
-]: nothing -> record<studio: record<adminRoleArn: string, arn: string, createdAt: string, displayName: string, homeRegion: string, ssoClientId: string, state: string, statusCode: string, statusMessage: string, studioEncryptionConfiguration: record<keyArn: string, keyType: string>, studioId: string, studioName: string, studioUrl: string, tags: record, updatedAt: string, userRoleArn: string>> {
+]: nothing -> oneof<record<studio: record<adminRoleArn: string, arn: string, createdAt: string, displayName: string, homeRegion: string, ssoClientId: string, state: string, statusCode: string, statusMessage: string, studioEncryptionConfiguration: record<keyArn: string, keyType: string>, studioId: string, studioName: string, studioUrl: string, tags: record, updatedAt: string, userRoleArn: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($studio_id | is-empty) { error make --unspanned { msg: "path parameter 'studioId' must be non-empty" } }
@@ -2524,7 +2537,7 @@ export def "stop-streaming-session" [
   --x-amz-signed-headers: string
   --x-amz-client-token: string # Unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If you don’t specify a client token, the Amazon Web Services SDK automatically generates a client token and uses it for the request to ensure idempotency.
   --volume-retention-mode: string@volume-retention-mode-completer # Adds additional instructions to a streaming session stop action to either retain the EBS volumes or delete the EBS volumes.
-]: any -> record<session: record<arn: string, automaticTerminationMode: string, backupMode: string, createdAt: string, createdBy: string, ec2InstanceType: string, launchProfileId: string, maxBackupsToRetain: int, ownedBy: string, sessionId: string, sessionPersistenceMode: string, startedAt: string, startedBy: string, startedFromBackupId: string, state: string, statusCode: string, statusMessage: string, stopAt: string, stoppedAt: string, stoppedBy: string, streamingImageId: string, tags: record, terminateAt: string, updatedAt: string, updatedBy: string, volumeConfiguration: record<iops: int, size: int, throughput: int>, volumeRetentionMode: string>> {
+]: any -> oneof<record<session: record<arn: string, automaticTerminationMode: string, backupMode: string, createdAt: string, createdBy: string, ec2InstanceType: string, launchProfileId: string, maxBackupsToRetain: int, ownedBy: string, sessionId: string, sessionPersistenceMode: string, startedAt: string, startedBy: string, startedFromBackupId: string, state: string, statusCode: string, statusMessage: string, stopAt: string, stoppedAt: string, stoppedBy: string, streamingImageId: string, tags: record, terminateAt: string, updatedAt: string, updatedBy: string, volumeConfiguration: record<iops: int, size: int, throughput: int>, volumeRetentionMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2574,7 +2587,7 @@ export def "untag-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resourceArn' must be non-empty" } }

@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -128,9 +152,9 @@ def descending-completer [] { ["N" "Y"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-case-rest-services-get-case-info" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-case-rest-services-get-case-info" "post-case-rest-services-get-case-info" "get-case-rest-services-get-case-report" "post-case-rest-services-get-case-report" "get-case-rest-services-get-cases" "post-case-rest-services-get-cases" "get-case-rest-services-get-cases-from-facility" "post-case-rest-services-get-cases-from-facility" "get-case-rest-services-get-crcase-report" "post-case-rest-services-get-crcase-report" "get-case-rest-services-get-download" "post-case-rest-services-get-download" "get-case-rest-services-get-facilities-from-case" "post-case-rest-services-get-facilities-from-case" "get-case-rest-services-get-map" "post-case-rest-services-get-map" "get-case-rest-services-get-qid" "post-case-rest-services-get-qid" "get-case-rest-services-metadata" "post-case-rest-services-metadata" "get-rest-lookups-icis-law-sections" "post-rest-lookups-icis-law-sections" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -238,7 +262,7 @@ export def "get-case-rest-services-get-case-info" [
   --p-ocmap-fy: string # Fiscal Year to select cases that are displayed in the Office of Complicance Fiscal Year Map Services
   --p-qs: string # Quick Search. Allows entry for city, state, and/or zip code.
   --p-has-map: string
-]: nothing -> record<Results: record<AFRRows: string, CERCLARows: string, CWARows: string, Cases: list<record>, ClusterOutput: record<ClusterData: list>, ClusterRecords: string, CriminalRows: string, EPCRARows: string, FIFRARows: string, FedPenRows: string, FederalRows: string, JDCRows: string, MapLocations: string, Message: string, QueryParameters: list<record>, QueryRows: string, RCRARows: string, SDWARows: string, SEPRows: string, TSCARows: string>> {
+]: nothing -> oneof<record<Results: record<AFRRows: string, CERCLARows: string, CWARows: string, Cases: list<record>, ClusterOutput: record<ClusterData: list>, ClusterRecords: string, CriminalRows: string, EPCRARows: string, FIFRARows: string, FedPenRows: string, FederalRows: string, JDCRows: string, MapLocations: string, Message: string, QueryParameters: list<record>, QueryRows: string, RCRARows: string, SDWARows: string, SEPRows: string, TSCARows: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_case_category" $p_case_category "scalar") (serialize-qp "p_case_status" $p_case_status "scalar") (serialize-qp "p_milestone" $p_milestone "scalar") (serialize-qp "p_from_date" $p_from_date "scalar") (serialize-qp "p_to_date" $p_to_date "scalar") (serialize-qp "p_milestone_fy" $p_milestone_fy "scalar") (serialize-qp "p_name" $p_name "scalar") (serialize-qp "p_name_type" $p_name_type "scalar") (serialize-qp "p_case_number" $p_case_number "scalar") (serialize-qp "p_docket_number" $p_docket_number "scalar") (serialize-qp "p_court_docket_number" $p_court_docket_number "scalar") (serialize-qp "p_activity_number" $p_activity_number "scalar") (serialize-qp "p_case_lead" $p_case_lead "scalar") (serialize-qp "p_case_sens_flg" $p_case_sens_flg "scalar") (serialize-qp "p_region" $p_region "scalar") (serialize-qp "p_state" $p_state "scalar") (serialize-qp "p_district" $p_district "scalar") (serialize-qp "p_sic" $p_sic "scalar") (serialize-qp "p_sic_ao_naics" $p_sic_ao_naics "scalar") (serialize-qp "p_sic_primary_flg" $p_sic_primary_flg "scalar") (serialize-qp "p_sic_frs_flg" $p_sic_frs_flg "scalar") (serialize-qp "p_naics" $p_naics "scalar") (serialize-qp "p_naics_primary_flg" $p_naics_primary_flg "scalar") (serialize-qp "p_naics_frs_flg" $p_naics_frs_flg "scalar") (serialize-qp "p_enf_type" $p_enf_type "scalar") (serialize-qp "p_law" $p_law "scalar") (serialize-qp "p_section" $p_section "scalar") (serialize-qp "p_cp_citation" $p_cp_citation "scalar") (serialize-qp "p_rank_order" $p_rank_order "scalar") (serialize-qp "p_enf_program" $p_enf_program "scalar") (serialize-qp "p_violation" $p_violation "scalar") (serialize-qp "p_priority_area" $p_priority_area "scalar") (serialize-qp "p_priority_area_desc" $p_priority_area_desc "scalar") (serialize-qp "p_tribal" $p_tribal "scalar") (serialize-qp "p_oeca_core" $p_oeca_core "scalar") (serialize-qp "p_multimedia" $p_multimedia "scalar") (serialize-qp "p_fed_case" $p_fed_case "scalar") (serialize-qp "p_activity_contact" $p_activity_contact "scalar") (serialize-qp "p_role" $p_role "scalar") (serialize-qp "p_fed_penalty" $p_fed_penalty "scalar") (serialize-qp "p_total_fed_penalty" $p_total_fed_penalty "scalar") (serialize-qp "p_cost_recovery" $p_cost_recovery "scalar") (serialize-qp "p_total_cost_recovery" $p_total_cost_recovery "scalar") (serialize-qp "p_complying_actions" $p_complying_actions "scalar") (serialize-qp "p_comp_act_val" $p_comp_act_val "scalar") (serialize-qp "p_total_comp_act_val" $p_total_comp_act_val "scalar") (serialize-qp "p_sep_cats" $p_sep_cats "scalar") (serialize-qp "p_sep_val" $p_sep_val "scalar") (serialize-qp "p_total_sep_val" $p_total_sep_val "scalar") (serialize-qp "p_lodged_date" $p_lodged_date "scalar") (serialize-qp "p_entered_date" $p_entered_date "scalar") (serialize-qp "p_facility_id" $p_facility_id "scalar") (serialize-qp "p_fac_city" $p_fac_city "scalar") (serialize-qp "p_fac_zip" $p_fac_zip "scalar") (serialize-qp "p_fac_county" $p_fac_county "scalar") (serialize-qp "p_case_summary" $p_case_summary "scalar") (serialize-qp "p_case_summary_type" $p_case_summary_type "scalar") (serialize-qp "p_usmex" $p_usmex "scalar") (serialize-qp "p_c1lat" $p_c1lat "scalar") (serialize-qp "p_c1lon" $p_c1lon "scalar") (serialize-qp "p_c2lat" $p_c2lat "scalar") (serialize-qp "p_c2lon" $p_c2lon "scalar") (serialize-qp "p_voluntary" $p_voluntary "scalar") (serialize-qp "p_fed_indicator" $p_fed_indicator "scalar") (serialize-qp "p_fntype" $p_fntype "scalar") (serialize-qp "p_civil_criminal_indicator" $p_civil_criminal_indicator "scalar") (serialize-qp "queryset" $queryset "scalar") (serialize-qp "responseset" $responseset "scalar") (serialize-qp "mapset" $mapset "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_pretty_print" $p_pretty_print "scalar") (serialize-qp "p_ocmap_fy" $p_ocmap_fy "scalar") (serialize-qp "p_qs" $p_qs "scalar") (serialize-qp "p_has_map" $p_has_map "scalar")] | flatten | str join "&"
@@ -349,7 +373,7 @@ export def "post-case-rest-services-get-case-info" [
   --p-ocmap-fy: string # Fiscal Year to select cases that are displayed in the Office of Complicance Fiscal Year Map Services
   --p-qs: string # Quick Search. Allows entry for city, state, and/or zip code.
   --p-has-map: string
-]: any -> record<Results: record<AFRRows: string, CERCLARows: string, CWARows: string, Cases: list<record>, ClusterOutput: record<ClusterData: list>, ClusterRecords: string, CriminalRows: string, EPCRARows: string, FIFRARows: string, FedPenRows: string, FederalRows: string, JDCRows: string, MapLocations: string, Message: string, QueryParameters: list<record>, QueryRows: string, RCRARows: string, SDWARows: string, SEPRows: string, TSCARows: string>> {
+]: any -> oneof<record<Results: record<AFRRows: string, CERCLARows: string, CWARows: string, Cases: list<record>, ClusterOutput: record<ClusterData: list>, ClusterRecords: string, CriminalRows: string, EPCRARows: string, FIFRARows: string, FedPenRows: string, FederalRows: string, JDCRows: string, MapLocations: string, Message: string, QueryParameters: list<record>, QueryRows: string, RCRARows: string, SDWARows: string, SEPRows: string, TSCARows: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -358,7 +382,7 @@ export def "post-case-rest-services-get-case-info" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -390,7 +414,7 @@ export def "get-case-rest-services-get-case-report" [
   --p-id: string # Case Number. Enter the case number identifier to retrieve the case report.
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<CAEDDocuments: list<record>, CaseInformation: record<Branch: string, CaseName: string, CaseNumber: string, CaseStatus: string, CaseStatusDate: string, CaseSummary: string, CaseType: string, DOJDocketNumber: string, EnforcementOutcome: string, EnforcementType: string, HeadquartersDivision: string, Lead: string, MultiMediaCase: string, RegionalDocketNumber: string, ReliefSought: string, ResultVolDisclosure: string, TotalComplianceActionCost: string, TotalCostRecovery: string, TotalFederalPenalty: string, TotalSEPCost: string, TotalStatePenalty: string, Violations: string>, CaseMilestones: list<record>, Citations: list<record>, Defendants: list<record>, EnforcementConclusions: list<record>, Facilities: list<record>, LawsAndSections: list<record>, Message: string, Pollutants: list<record>, ProgramLinks: list<record>, RelatedActivities: list<record>>> {
+]: nothing -> oneof<record<Results: record<CAEDDocuments: list<record>, CaseInformation: record<Branch: string, CaseName: string, CaseNumber: string, CaseStatus: string, CaseStatusDate: string, CaseSummary: string, CaseType: string, DOJDocketNumber: string, EnforcementOutcome: string, EnforcementType: string, HeadquartersDivision: string, Lead: string, MultiMediaCase: string, RegionalDocketNumber: string, ReliefSought: string, ResultVolDisclosure: string, TotalComplianceActionCost: string, TotalCostRecovery: string, TotalFederalPenalty: string, TotalSEPCost: string, TotalStatePenalty: string, Violations: string>, CaseMilestones: list<record>, Citations: list<record>, Defendants: list<record>, EnforcementConclusions: list<record>, Facilities: list<record>, LawsAndSections: list<record>, Message: string, Pollutants: list<record>, ProgramLinks: list<record>, RelatedActivities: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "p_id" $p_id "scalar") (serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
@@ -428,7 +452,7 @@ export def "post-case-rest-services-get-case-report" [
   --p-id: string # Case Number. Enter the case number identifier to retrieve the case report.
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<CAEDDocuments: list<record>, CaseInformation: record<Branch: string, CaseName: string, CaseNumber: string, CaseStatus: string, CaseStatusDate: string, CaseSummary: string, CaseType: string, DOJDocketNumber: string, EnforcementOutcome: string, EnforcementType: string, HeadquartersDivision: string, Lead: string, MultiMediaCase: string, RegionalDocketNumber: string, ReliefSought: string, ResultVolDisclosure: string, TotalComplianceActionCost: string, TotalCostRecovery: string, TotalFederalPenalty: string, TotalSEPCost: string, TotalStatePenalty: string, Violations: string>, CaseMilestones: list<record>, Citations: list<record>, Defendants: list<record>, EnforcementConclusions: list<record>, Facilities: list<record>, LawsAndSections: list<record>, Message: string, Pollutants: list<record>, ProgramLinks: list<record>, RelatedActivities: list<record>>> {
+]: any -> oneof<record<Results: record<CAEDDocuments: list<record>, CaseInformation: record<Branch: string, CaseName: string, CaseNumber: string, CaseStatus: string, CaseStatusDate: string, CaseSummary: string, CaseType: string, DOJDocketNumber: string, EnforcementOutcome: string, EnforcementType: string, HeadquartersDivision: string, Lead: string, MultiMediaCase: string, RegionalDocketNumber: string, ReliefSought: string, ResultVolDisclosure: string, TotalComplianceActionCost: string, TotalCostRecovery: string, TotalFederalPenalty: string, TotalSEPCost: string, TotalStatePenalty: string, Violations: string>, CaseMilestones: list<record>, Citations: list<record>, Defendants: list<record>, EnforcementConclusions: list<record>, Facilities: list<record>, LawsAndSections: list<record>, Message: string, Pollutants: list<record>, ProgramLinks: list<record>, RelatedActivities: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -437,7 +461,7 @@ export def "post-case-rest-services-get-case-report" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -542,7 +566,7 @@ export def "get-case-rest-services-get-cases" [
   --p-ocmap-fy: string # Fiscal Year to select cases that are displayed in the Office of Complicance Fiscal Year Map Services
   --p-qs: string # Quick Search. Allows entry for city, state, and/or zip code.
   --p-has-map: string
-]: nothing -> record<Results: record<AFRRows: string, CAARows: string, CERCLARows: string, CWARows: string, Cases: list<record>, CriminalRows: string, EPCRARows: string, FIFRARows: string, FedPenRows: string, FederalRows: string, JDCRows: string, MapOutput: record<IconBaseURL: string, MapData: list, PopUpBaseURL: string, QueryID: string>, Message: string, PageNo: string, QueryID: string, QueryRows: string, RCRARows: string, SDWARows: string, SEPRows: string, TSCARows: string>> {
+]: nothing -> oneof<record<Results: record<AFRRows: string, CAARows: string, CERCLARows: string, CWARows: string, Cases: list<record>, CriminalRows: string, EPCRARows: string, FIFRARows: string, FedPenRows: string, FederalRows: string, JDCRows: string, MapOutput: record<IconBaseURL: string, MapData: list, PopUpBaseURL: string, QueryID: string>, Message: string, PageNo: string, QueryID: string, QueryRows: string, RCRARows: string, SDWARows: string, SEPRows: string, TSCARows: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "p_case_category" $p_case_category "scalar") (serialize-qp "p_case_status" $p_case_status "scalar") (serialize-qp "p_violation" $p_violation "scalar") (serialize-qp "p_milestone" $p_milestone "scalar") (serialize-qp "p_from_date" $p_from_date "scalar") (serialize-qp "p_to_date" $p_to_date "scalar") (serialize-qp "p_milestone_fy" $p_milestone_fy "scalar") (serialize-qp "p_name" $p_name "scalar") (serialize-qp "p_name_type" $p_name_type "scalar") (serialize-qp "p_case_number" $p_case_number "scalar") (serialize-qp "p_docket_number" $p_docket_number "scalar") (serialize-qp "p_court_docket_number" $p_court_docket_number "scalar") (serialize-qp "p_activity_number" $p_activity_number "scalar") (serialize-qp "p_case_lead" $p_case_lead "scalar") (serialize-qp "p_case_sens_flg" $p_case_sens_flg "scalar") (serialize-qp "p_region" $p_region "scalar") (serialize-qp "p_state" $p_state "scalar") (serialize-qp "p_district" $p_district "scalar") (serialize-qp "p_sic" $p_sic "scalar") (serialize-qp "p_sic_ao_naics" $p_sic_ao_naics "scalar") (serialize-qp "p_sic_primary_flg" $p_sic_primary_flg "scalar") (serialize-qp "p_sic_frs_flg" $p_sic_frs_flg "scalar") (serialize-qp "p_naics" $p_naics "scalar") (serialize-qp "p_naics_primary_flg" $p_naics_primary_flg "scalar") (serialize-qp "p_naics_frs_flg" $p_naics_frs_flg "scalar") (serialize-qp "p_enf_type" $p_enf_type "scalar") (serialize-qp "p_law" $p_law "scalar") (serialize-qp "p_section" $p_section "scalar") (serialize-qp "p_cp_citation" $p_cp_citation "scalar") (serialize-qp "p_rank_order" $p_rank_order "scalar") (serialize-qp "p_enf_program" $p_enf_program "scalar") (serialize-qp "p_priority_area" $p_priority_area "scalar") (serialize-qp "p_priority_area_desc" $p_priority_area_desc "scalar") (serialize-qp "p_tribal" $p_tribal "scalar") (serialize-qp "p_oeca_core" $p_oeca_core "scalar") (serialize-qp "p_multimedia" $p_multimedia "scalar") (serialize-qp "p_fed_case" $p_fed_case "scalar") (serialize-qp "p_activity_contact" $p_activity_contact "scalar") (serialize-qp "p_role" $p_role "scalar") (serialize-qp "p_fed_penalty" $p_fed_penalty "scalar") (serialize-qp "p_total_fed_penalty" $p_total_fed_penalty "scalar") (serialize-qp "p_cost_recovery" $p_cost_recovery "scalar") (serialize-qp "p_total_cost_recovery" $p_total_cost_recovery "scalar") (serialize-qp "p_complying_actions" $p_complying_actions "scalar") (serialize-qp "p_comp_act_val" $p_comp_act_val "scalar") (serialize-qp "p_total_comp_act_val" $p_total_comp_act_val "scalar") (serialize-qp "p_sep_cats" $p_sep_cats "scalar") (serialize-qp "p_sep_val" $p_sep_val "scalar") (serialize-qp "p_total_sep_val" $p_total_sep_val "scalar") (serialize-qp "p_lodged_date" $p_lodged_date "scalar") (serialize-qp "p_entered_date" $p_entered_date "scalar") (serialize-qp "p_facility_id" $p_facility_id "scalar") (serialize-qp "p_fac_city" $p_fac_city "scalar") (serialize-qp "p_fac_zip" $p_fac_zip "scalar") (serialize-qp "p_fac_county" $p_fac_county "scalar") (serialize-qp "p_case_summary" $p_case_summary "scalar") (serialize-qp "p_case_summary_type" $p_case_summary_type "scalar") (serialize-qp "p_usmex" $p_usmex "scalar") (serialize-qp "p_c1lat" $p_c1lat "scalar") (serialize-qp "p_c1lon" $p_c1lon "scalar") (serialize-qp "p_c2lat" $p_c2lat "scalar") (serialize-qp "p_c2lon" $p_c2lon "scalar") (serialize-qp "p_voluntary" $p_voluntary "scalar") (serialize-qp "p_fed_indicator" $p_fed_indicator "scalar") (serialize-qp "p_fntype" $p_fntype "scalar") (serialize-qp "p_civil_criminal_indicator" $p_civil_criminal_indicator "scalar") (serialize-qp "queryset" $queryset "scalar") (serialize-qp "responseset" $responseset "scalar") (serialize-qp "maplist" $maplist "scalar") (serialize-qp "tablelist" $tablelist "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "qcolumns" $qcolumns "scalar") (serialize-qp "p_ocmap_fy" $p_ocmap_fy "scalar") (serialize-qp "p_qs" $p_qs "scalar") (serialize-qp "p_has_map" $p_has_map "scalar")] | flatten | str join "&"
@@ -653,7 +677,7 @@ export def "post-case-rest-services-get-cases" [
   --p-ocmap-fy: string # Fiscal Year to select cases that are displayed in the Office of Complicance Fiscal Year Map Services
   --p-qs: string # Quick Search. Allows entry for city, state, and/or zip code.
   --p-has-map: string
-]: any -> record<Results: record<AFRRows: string, CAARows: string, CERCLARows: string, CWARows: string, Cases: list<record>, CriminalRows: string, EPCRARows: string, FIFRARows: string, FedPenRows: string, FederalRows: string, JDCRows: string, MapOutput: record<IconBaseURL: string, MapData: list, PopUpBaseURL: string, QueryID: string>, Message: string, PageNo: string, QueryID: string, QueryRows: string, RCRARows: string, SDWARows: string, SEPRows: string, TSCARows: string>> {
+]: any -> oneof<record<Results: record<AFRRows: string, CAARows: string, CERCLARows: string, CWARows: string, Cases: list<record>, CriminalRows: string, EPCRARows: string, FIFRARows: string, FedPenRows: string, FederalRows: string, JDCRows: string, MapOutput: record<IconBaseURL: string, MapData: list, PopUpBaseURL: string, QueryID: string>, Message: string, PageNo: string, QueryID: string, QueryRows: string, RCRARows: string, SDWARows: string, SEPRows: string, TSCARows: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -662,7 +686,7 @@ export def "post-case-rest-services-get-cases" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -694,7 +718,7 @@ export def "get-case-rest-services-get-cases-from-facility" [
   --p-id: string # Identifier for the service. (required)
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Results: record<CaseNumbers: list>>> {
+]: nothing -> oneof<record<Results: record<Results: record<CaseNumbers: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -733,7 +757,7 @@ export def "post-case-rest-services-get-cases-from-facility" [
   --p-id: string # Identifier for the service. (required)
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Results: record<CaseNumbers: list>>> {
+]: nothing -> oneof<record<Results: record<Results: record<CaseNumbers: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -773,7 +797,7 @@ export def "get-case-rest-services-get-crcase-report" [
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
   --mapset: string # Identifies the maxium number of case facilities to return from the case_rest_services.get_case_info query. (default: 1400)
-]: nothing -> record<Results: record<CRCaseInformation: record<CaseIdentifier: string, CaseSummary: string, Citations: string, FiscalYear: string, Statutes: string>, CRDefendants: list<record>, CRDetails: list<record>, Locations: list<record>, Message: string>> {
+]: nothing -> oneof<record<Results: record<CRCaseInformation: record<CaseIdentifier: string, CaseSummary: string, Citations: string, FiscalYear: string, Statutes: string>, CRDefendants: list<record>, CRDetails: list<record>, Locations: list<record>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "p_id" $p_id "scalar") (serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "mapset" $mapset "scalar")] | flatten | str join "&"
@@ -811,7 +835,7 @@ export def "post-case-rest-services-get-crcase-report" [
   --p-id: string # Prosecution Summary Identifier. Enter the numeric prosecution summary identifier to retrieve the criminal case report.
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<CRCaseInformation: record<CaseIdentifier: string, CaseSummary: string, Citations: string, FiscalYear: string, Statutes: string>, CRDefendants: list<record>, CRDetails: list<record>, Locations: list<record>, Message: string>> {
+]: any -> oneof<record<Results: record<CRCaseInformation: record<CaseIdentifier: string, CaseSummary: string, Citations: string, FiscalYear: string, Statutes: string>, CRDefendants: list<record>, CRDetails: list<record>, Locations: list<record>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -820,7 +844,7 @@ export def "post-case-rest-services-get-crcase-report" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -900,7 +924,7 @@ export def "post-case-rest-services-get-download" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -932,7 +956,7 @@ export def "get-case-rest-services-get-facilities-from-case" [
   --p-id: string # Identifier for the service. (required)
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Results: record<RegistryIDs: list>>> {
+]: nothing -> oneof<record<Results: record<Results: record<RegistryIDs: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -971,7 +995,7 @@ export def "post-case-rest-services-get-facilities-from-case" [
   --p-id: string # Identifier for the service. (required)
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Results: record<RegistryIDs: list>>> {
+]: nothing -> oneof<record<Results: record<Results: record<RegistryIDs: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p_id == null) { error make --unspanned { msg: "required query parameter 'p_id' missing: pass --p-id" } }
@@ -1015,7 +1039,7 @@ export def "get-case-rest-services-get-map" [
   --c1-long: float # Longitude of 1st corner of box that bounds the resulting facilities. The latitude and longitude of both corners of the bounding box must be provided.
   --c2-lat: float # Latitude of 2nd corner of box that bounds the resulting facilities. The latitude and longitude of both corners of the bounding box must be provided.
   --c2-long: float # Longitude of 2nd corner of box that bounds the resulting facilities. The latitude and longitude of both corners of the bounding box must be provided.
-]: nothing -> record<MapOutput: record<IconBaseURL: string, MapData: list<record>, PopUpBaseURL: string, QueryID: string>> {
+]: nothing -> oneof<record<MapOutput: record<IconBaseURL: string, MapData: list<record>, PopUpBaseURL: string, QueryID: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($qid == null) { error make --unspanned { msg: "required query parameter 'qid' missing: pass --qid" } }
@@ -1060,7 +1084,7 @@ export def "post-case-rest-services-get-map" [
   --c2-lat: float # Latitude of 2nd corner of box that bounds the resulting facilities. The latitude and longitude of both corners of the bounding box must be provided.
   --c2-long: float # Longitude of 2nd corner of box that bounds the resulting facilities. The latitude and longitude of both corners of the bounding box must be provided.
   --mapset: string # Identifies the maxium number of case facilities to return from the case_rest_services.get_case_info query.
-]: any -> record<MapOutput: record<IconBaseURL: string, MapData: list<record>, PopUpBaseURL: string, QueryID: string>> {
+]: any -> oneof<record<MapOutput: record<IconBaseURL: string, MapData: list<record>, PopUpBaseURL: string, QueryID: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1069,7 +1093,7 @@ export def "post-case-rest-services-get-map" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1105,7 +1129,7 @@ export def "get-case-rest-services-get-qid" [
   --newsort: float # Output Sort Column. Enter the number of the column on which the data will be sorted. If unpopulated results will sort on the first column.
   --descending: string@descending-completer # Output Sort Column Descending Flag. Enter Y to column identified in the newsort parameter descending. Enter N to use ascending sort order. Used only when newsort parameter is populated.
   --qcolumns: string # Used to customize service output. A list of comma-separated column IDs of output objects that will be returned in the service query object or download. Use the metadata service endpoint for a complete list of Ids and definitions.
-]: nothing -> record<Results: record<Cases: list<record>, Message: string, PageNo: string, QueryID: string, QueryRows: string>> {
+]: nothing -> oneof<record<Results: record<Cases: list<record>, Message: string, PageNo: string, QueryID: string, QueryRows: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($qid == null) { error make --unspanned { msg: "required query parameter 'qid' missing: pass --qid" } }
@@ -1148,7 +1172,7 @@ export def "post-case-rest-services-get-qid" [
   --newsort: float # Output Sort Column. Enter the number of the column on which the data will be sorted. If unpopulated results will sort on the first column.
   --descending: string@descending-completer # Output Sort Column Descending Flag. Enter Y to column identified in the newsort parameter descending. Enter N to use ascending sort order. Used only when newsort parameter is populated.
   --qcolumns: string # Used to customize service output. A list of comma-separated column IDs of output objects that will be returned in the service query object or download. Use the metadata service endpoint for a complete list of Ids and definitions.
-]: any -> record<Results: record<Cases: list<record>, Message: string, PageNo: string, QueryID: string, QueryRows: string>> {
+]: any -> oneof<record<Results: record<Cases: list<record>, Message: string, PageNo: string, QueryID: string, QueryRows: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1157,7 +1181,7 @@ export def "post-case-rest-services-get-qid" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1188,7 +1212,7 @@ export def "get-case-rest-services-metadata" [
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: nothing -> record<Results: record<Message: string, ResultColumns: list<record>>> {
+]: nothing -> oneof<record<Results: record<Message: string, ResultColumns: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
@@ -1225,7 +1249,7 @@ export def "post-case-rest-services-metadata" [
   --accept: string@accept-completer # Response content type
   --output: string@output-completer # Output Format Flag. Enter one of the following keywords: - JSON = Data model formatted as Javascript Object Notation (default). - JSONP = Data model formatted as Javascript Object Notation with Padding. - XML = Data model formatted as Extensible Markup Language.
   --callback: string # JSONP Callback. For use with JSONP and GEOJSONP output only. Enter a name of the function in which to wrap the JSON response.
-]: any -> record<Results: record<Message: string, ResultColumns: list<record>>> {
+]: any -> oneof<record<Results: record<Message: string, ResultColumns: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1234,7 +1258,7 @@ export def "post-case-rest-services-metadata" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1270,7 +1294,7 @@ export def "get-rest-lookups-icis-law-sections" [
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
   --sort-order: float
-]: nothing -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: nothing -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "output" $output "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "statute_code" $statute_code "scalar") (serialize-qp "status_flag" $status_flag "scalar") (serialize-qp "search_term" $search_term "scalar") (serialize-qp "search_code" $search_code "scalar") (serialize-qp "sort_order" $sort_order "scalar")] | flatten | str join "&"
@@ -1312,7 +1336,7 @@ export def "post-rest-lookups-icis-law-sections" [
   --search-term: string # Enter a partial or complete search phrase or word.
   --search-code: string # Enter a partial or complete code value.
   --sort-order: float
-]: any -> record<Results: record<LuValues: list<record>, Message: string>> {
+]: any -> oneof<record<Results: record<LuValues: list<record>, Message: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1321,7 +1345,7 @@ export def "post-rest-lookups-icis-law-sections" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -115,9 +139,9 @@ def state-completer [] { ["complete" "inProgress" "pending" "unknownState"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "toolresults-projects-histories-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["toolresults-projects-histories-list" "toolresults-projects-histories-create" "toolresults-projects-histories-get" "toolresults-projects-histories-executions-list" "toolresults-projects-histories-executions-create" "toolresults-projects-histories-executions-get" "toolresults-projects-histories-executions-patch" "toolresults-projects-histories-executions-clusters-list" "toolresults-projects-histories-executions-clusters-get" "toolresults-projects-histories-executions-environments-list" "toolresults-projects-histories-executions-environments-get" "toolresults-projects-histories-executions-steps-list" "toolresults-projects-histories-executions-steps-create" "toolresults-projects-histories-executions-steps-get" "toolresults-projects-histories-executions-steps-patch" "toolresults-projects-histories-executions-steps-get-perf-metrics-summary" "toolresults-projects-histories-executions-steps-perf-metrics-summary-create" "toolresults-projects-histories-executions-steps-perf-sample-series-list" "toolresults-projects-histories-executions-steps-perf-sample-series-create" "toolresults-projects-histories-executions-steps-perf-sample-series-get" "toolresults-projects-histories-executions-steps-perf-sample-series-samples-list" "toolresults-projects-histories-executions-steps-perf-sample-series-samples-batch-create" "toolresults-projects-histories-executions-steps-test-cases-list" "toolresults-projects-histories-executions-steps-test-cases-get" "toolresults-projects-histories-executions-steps-thumbnails-list" "toolresults-projects-histories-executions-steps-publish-xunit-xml-files" "toolresults-projects-get-settings" "toolresults-projects-initialize-settings" "toolresults-projects-histories-executions-steps-accessibility-clusters" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -164,7 +188,7 @@ export def "toolresults-projects-histories-list" [
   --filter-by-name: string # If set, only return histories with the given name. Optional.
   --page-size: int # The maximum number of Histories to fetch. Default value: 20. The server will use this default if the field is not set or has a value of 0. Any value greater than 100 will be treated as 100. Optional.
   --page-token: string # A continuation token to resume the query at the next item. Optional.
-]: nothing -> record<histories: table<displayName: string, historyId: string, name: string, testPlatform: string>, nextPageToken: string> {
+]: nothing -> oneof<record<histories: table<displayName: string, historyId: string, name: string, testPlatform: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -217,7 +241,7 @@ export def "toolresults-projects-histories-create" [
   --history-id: string # A unique identifier within a project for this History. Returns INVALID_ARGUMENT if this field is set or overwritten by the caller. - In response always set - In create request: never set
   --name: string # A name to uniquely identify a history within a project. Maximum of 200 characters. - In response always set - In create request: always set
   --test-platform: string@test-platform-completer # The platform of the test history. - In response: always set. Returns the platform of the last execution if unknown.
-]: any -> record<displayName: string, historyId: string, name: string, testPlatform: string> {
+]: any -> oneof<record<displayName: string, historyId: string, name: string, testPlatform: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -269,7 +293,7 @@ export def "toolresults-projects-histories-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<displayName: string, historyId: string, name: string, testPlatform: string> {
+]: nothing -> oneof<record<displayName: string, historyId: string, name: string, testPlatform: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -321,7 +345,7 @@ export def "toolresults-projects-histories-executions-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of Executions to fetch. Default value: 25. The server will use this default if the field is not set or has a value of 0. Optional.
   --page-token: string # A continuation token to resume the query at the next item. Optional.
-]: nothing -> record<executions: table<completionTime: record, creationTime: record, dimensionDefinitions: list, executionId: string, outcome: record, specification: record, state: string, testExecutionMatrixId: string>, nextPageToken: string> {
+]: nothing -> oneof<record<executions: table<completionTime: record, creationTime: record, dimensionDefinitions: list, executionId: string, outcome: record, specification: record, state: string, testExecutionMatrixId: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -348,10 +372,6 @@ export def "toolresults-projects-histories-executions-list" [
 #
 # POST /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions
 # operationId: toolresults.projects.histories.executions.create
-# --completionTime shape: {nanos?: int, seconds?: string}
-# --creationTime shape: {nanos?: int, seconds?: string}
-# --outcome shape: {failureDetail?: record, inconclusiveDetail?: record, skippedDetail?: record, successDetail?: record, summary?: "unset"|"success"|"failure"|"inconclusive"|"skipped"|"flaky"}
-# --specification shape: {androidTest?: record, iosTest?: record}
 export def "toolresults-projects-histories-executions-create" [
   project_id: string
   history_id: string
@@ -384,7 +404,7 @@ export def "toolresults-projects-histories-executions-create" [
   --specification: record # The details about how to run the execution. — shape: {androidTest?: record, iosTest?: record}
   --state: string@state-completer # The initial state is IN_PROGRESS. The only legal state transitions is from IN_PROGRESS to COMPLETE. A PRECONDITION_FAILED will be returned if an invalid transition is requested. The state can only be set to COMPLETE once. A FAILED_PRECONDITION will be returned if the state is set to COMPLETE multiple times. If the state is set to COMPLETE, all the in-progress steps within the execution will be set as COMPLETE. If the outcome of the step is not set, the outcome will be set to INCONCLUSIVE. - In response always set - In create/update request: optional
   --test-execution-matrix-id: string # TestExecution Matrix ID that the TestExecutionService uses. - In response: present if set by create - In create: optional - In update: never set
-]: any -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, dimensionDefinitions: list<record>, executionId: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, specification: record<androidTest: record<androidAppInfo: record, androidInstrumentationTest: record, androidRoboTest: record, androidTestLoop: record, testTimeout: record>, iosTest: record<iosAppInfo: record, iosRoboTest: record, iosTestLoop: record, iosXcTest: record, testTimeout: record>>, state: string, testExecutionMatrixId: string> {
+]: any -> oneof<record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, dimensionDefinitions: list<record>, executionId: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, specification: record<androidTest: record<androidAppInfo: record, androidInstrumentationTest: record, androidRoboTest: record, androidTestLoop: record, testTimeout: record>, iosTest: record<iosAppInfo: record, iosRoboTest: record, iosTestLoop: record, iosXcTest: record, testTimeout: record>>, state: string, testExecutionMatrixId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -438,7 +458,7 @@ export def "toolresults-projects-histories-executions-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, dimensionDefinitions: list<record>, executionId: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, specification: record<androidTest: record<androidAppInfo: record, androidInstrumentationTest: record, androidRoboTest: record, androidTestLoop: record, testTimeout: record>, iosTest: record<iosAppInfo: record, iosRoboTest: record, iosTestLoop: record, iosXcTest: record, testTimeout: record>>, state: string, testExecutionMatrixId: string> {
+]: nothing -> oneof<record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, dimensionDefinitions: list<record>, executionId: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, specification: record<androidTest: record<androidAppInfo: record, androidInstrumentationTest: record, androidRoboTest: record, androidTestLoop: record, testTimeout: record>, iosTest: record<iosAppInfo: record, iosRoboTest: record, iosTestLoop: record, iosXcTest: record, testTimeout: record>>, state: string, testExecutionMatrixId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -466,10 +486,6 @@ export def "toolresults-projects-histories-executions-get" [
 #
 # PATCH /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}
 # operationId: toolresults.projects.histories.executions.patch
-# --completionTime shape: {nanos?: int, seconds?: string}
-# --creationTime shape: {nanos?: int, seconds?: string}
-# --outcome shape: {failureDetail?: record, inconclusiveDetail?: record, skippedDetail?: record, successDetail?: record, summary?: "unset"|"success"|"failure"|"inconclusive"|"skipped"|"flaky"}
-# --specification shape: {androidTest?: record, iosTest?: record}
 export def "toolresults-projects-histories-executions-patch" [
   project_id: string
   history_id: string
@@ -503,7 +519,7 @@ export def "toolresults-projects-histories-executions-patch" [
   --specification: record # The details about how to run the execution. — shape: {androidTest?: record, iosTest?: record}
   --state: string@state-completer # The initial state is IN_PROGRESS. The only legal state transitions is from IN_PROGRESS to COMPLETE. A PRECONDITION_FAILED will be returned if an invalid transition is requested. The state can only be set to COMPLETE once. A FAILED_PRECONDITION will be returned if the state is set to COMPLETE multiple times. If the state is set to COMPLETE, all the in-progress steps within the execution will be set as COMPLETE. If the outcome of the step is not set, the outcome will be set to INCONCLUSIVE. - In response always set - In create/update request: optional
   --test-execution-matrix-id: string # TestExecution Matrix ID that the TestExecutionService uses. - In response: present if set by create - In create: optional - In update: never set
-]: any -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, dimensionDefinitions: list<record>, executionId: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, specification: record<androidTest: record<androidAppInfo: record, androidInstrumentationTest: record, androidRoboTest: record, androidTestLoop: record, testTimeout: record>, iosTest: record<iosAppInfo: record, iosRoboTest: record, iosTestLoop: record, iosXcTest: record, testTimeout: record>>, state: string, testExecutionMatrixId: string> {
+]: any -> oneof<record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, dimensionDefinitions: list<record>, executionId: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, specification: record<androidTest: record<androidAppInfo: record, androidInstrumentationTest: record, androidRoboTest: record, androidTestLoop: record, testTimeout: record>, iosTest: record<iosAppInfo: record, iosRoboTest: record, iosTestLoop: record, iosXcTest: record, testTimeout: record>>, state: string, testExecutionMatrixId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -558,7 +574,7 @@ export def "toolresults-projects-histories-executions-clusters-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<clusters: table<activity: string, clusterId: string, keyScreen: record, screens: list>> {
+]: nothing -> oneof<record<clusters: table<activity: string, clusterId: string, keyScreen: record, screens: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -611,7 +627,7 @@ export def "toolresults-projects-histories-executions-clusters-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<activity: string, clusterId: string, keyScreen: record<fileReference: string, locale: string, model: string, version: string>, screens: table<fileReference: string, locale: string, model: string, version: string>> {
+]: nothing -> oneof<record<activity: string, clusterId: string, keyScreen: record<fileReference: string, locale: string, model: string, version: string>, screens: table<fileReference: string, locale: string, model: string, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -666,7 +682,7 @@ export def "toolresults-projects-histories-executions-environments-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of Environments to fetch. Default value: 25. The server will use this default if the field is not set or has a value of 0.
   --page-token: string # A continuation token to resume the query at the next item.
-]: nothing -> record<environments: table<completionTime: record, creationTime: record, dimensionValue: list, displayName: string, environmentId: string, environmentResult: record, executionId: string, historyId: string, projectId: string, resultsStorage: record, shardSummaries: list>, executionId: string, historyId: string, nextPageToken: string, projectId: string> {
+]: nothing -> oneof<record<environments: table<completionTime: record, creationTime: record, dimensionValue: list, displayName: string, environmentId: string, environmentResult: record, executionId: string, historyId: string, projectId: string, resultsStorage: record, shardSummaries: list>, executionId: string, historyId: string, nextPageToken: string, projectId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -719,7 +735,7 @@ export def "toolresults-projects-histories-executions-environments-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, displayName: string, environmentId: string, environmentResult: record<outcome: record<failureDetail: record, inconclusiveDetail: record, skippedDetail: record, successDetail: record, summary: string>, state: string, testSuiteOverviews: list<record>>, executionId: string, historyId: string, projectId: string, resultsStorage: record<resultsStoragePath: record<fileUri: string>, xunitXmlFile: record<fileUri: string>>, shardSummaries: table<runs: list, shardResult: record>> {
+]: nothing -> oneof<record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, displayName: string, environmentId: string, environmentResult: record<outcome: record<failureDetail: record, inconclusiveDetail: record, skippedDetail: record, successDetail: record, summary: string>, state: string, testSuiteOverviews: list<record>>, executionId: string, historyId: string, projectId: string, resultsStorage: record<resultsStoragePath: record<fileUri: string>, xunitXmlFile: record<fileUri: string>>, shardSummaries: table<runs: list, shardResult: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -774,7 +790,7 @@ export def "toolresults-projects-histories-executions-steps-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of Steps to fetch. Default value: 25. The server will use this default if the field is not set or has a value of 0. Optional.
   --page-token: string # A continuation token to resume the query at the next item. Optional.
-]: nothing -> record<nextPageToken: string, steps: table<completionTime: record, creationTime: record, description: string, deviceUsageDuration: record, dimensionValue: list, hasImages: bool, labels: list, multiStep: record, name: string, outcome: record, runDuration: record, state: string, stepId: string, testExecutionStep: record, toolExecutionStep: record>> {
+]: nothing -> oneof<record<nextPageToken: string, steps: table<completionTime: record, creationTime: record, description: string, deviceUsageDuration: record, dimensionValue: list, hasImages: bool, labels: list, multiStep: record, name: string, outcome: record, runDuration: record, state: string, stepId: string, testExecutionStep: record, toolExecutionStep: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -802,16 +818,6 @@ export def "toolresults-projects-histories-executions-steps-list" [
 #
 # POST /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps
 # operationId: toolresults.projects.histories.executions.steps.create
-# --completionTime shape: {nanos?: int, seconds?: string}
-# --creationTime shape: {nanos?: int, seconds?: string}
-# --deviceUsageDuration shape: {nanos?: int, seconds?: string}
-# --dimensionValue item shape: {key?: string, value?: string}
-# --labels item shape: {key?: string, value?: string}
-# --multiStep shape: {multistepNumber?: int, primaryStep?: record, primaryStepId?: string}
-# --outcome shape: {failureDetail?: record, inconclusiveDetail?: record, skippedDetail?: record, successDetail?: record, summary?: "unset"|"success"|"failure"|"inconclusive"|"skipped"|"flaky"}
-# --runDuration shape: {nanos?: int, seconds?: string}
-# --testExecutionStep shape: {testIssues?: list, testSuiteOverviews?: list, testTiming?: record, toolExecution?: record}
-# --toolExecutionStep shape: {toolExecution?: record}
 export def "toolresults-projects-histories-executions-steps-create" [
   project_id: string
   history_id: string
@@ -852,7 +858,7 @@ export def "toolresults-projects-histories-executions-steps-create" [
   --step-id: string # A unique identifier within a Execution for this Step. Returns INVALID_ARGUMENT if this field is set or overwritten by the caller. - In response: always set - In create/update request: never set
   --test-execution-step: record # A step that represents running tests. It accepts ant-junit xml files which will be parsed into structured test results by the service. Xml file paths are updated in order to append more files, however they can't be deleted. Users can also add test results manually by using the test_result field. — shape: {testIssues?: list, testSuiteOverviews?: list, testTiming?: record, toolExecution?: record}
   --tool-execution-step: record # Generic tool step to be used for binaries we do not explicitly support. For example: running cp to copy artifacts from one location to another. — shape: {toolExecution?: record}
-]: any -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, description: string, deviceUsageDuration: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, hasImages: bool, labels: table<key: string, value: string>, multiStep: record<multistepNumber: int, primaryStep: record<individualOutcome: list, rollUp: string>, primaryStepId: string>, name: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, runDuration: record<nanos: int, seconds: string>, state: string, stepId: string, testExecutionStep: record<testIssues: list<record>, testSuiteOverviews: list<record>, testTiming: record<testProcessDuration: record>, toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>, toolExecutionStep: record<toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>> {
+]: any -> oneof<record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, description: string, deviceUsageDuration: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, hasImages: bool, labels: table<key: string, value: string>, multiStep: record<multistepNumber: int, primaryStep: record<individualOutcome: list, rollUp: string>, primaryStepId: string>, name: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, runDuration: record<nanos: int, seconds: string>, state: string, stepId: string, testExecutionStep: record<testIssues: list<record>, testSuiteOverviews: list<record>, testTiming: record<testProcessDuration: record>, toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>, toolExecutionStep: record<toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -908,7 +914,7 @@ export def "toolresults-projects-histories-executions-steps-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, description: string, deviceUsageDuration: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, hasImages: bool, labels: table<key: string, value: string>, multiStep: record<multistepNumber: int, primaryStep: record<individualOutcome: list, rollUp: string>, primaryStepId: string>, name: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, runDuration: record<nanos: int, seconds: string>, state: string, stepId: string, testExecutionStep: record<testIssues: list<record>, testSuiteOverviews: list<record>, testTiming: record<testProcessDuration: record>, toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>, toolExecutionStep: record<toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>> {
+]: nothing -> oneof<record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, description: string, deviceUsageDuration: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, hasImages: bool, labels: table<key: string, value: string>, multiStep: record<multistepNumber: int, primaryStep: record<individualOutcome: list, rollUp: string>, primaryStepId: string>, name: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, runDuration: record<nanos: int, seconds: string>, state: string, stepId: string, testExecutionStep: record<testIssues: list<record>, testSuiteOverviews: list<record>, testTiming: record<testProcessDuration: record>, toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>, toolExecutionStep: record<toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -937,16 +943,6 @@ export def "toolresults-projects-histories-executions-steps-get" [
 #
 # PATCH /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}
 # operationId: toolresults.projects.histories.executions.steps.patch
-# --completionTime shape: {nanos?: int, seconds?: string}
-# --creationTime shape: {nanos?: int, seconds?: string}
-# --deviceUsageDuration shape: {nanos?: int, seconds?: string}
-# --dimensionValue item shape: {key?: string, value?: string}
-# --labels item shape: {key?: string, value?: string}
-# --multiStep shape: {multistepNumber?: int, primaryStep?: record, primaryStepId?: string}
-# --outcome shape: {failureDetail?: record, inconclusiveDetail?: record, skippedDetail?: record, successDetail?: record, summary?: "unset"|"success"|"failure"|"inconclusive"|"skipped"|"flaky"}
-# --runDuration shape: {nanos?: int, seconds?: string}
-# --testExecutionStep shape: {testIssues?: list, testSuiteOverviews?: list, testTiming?: record, toolExecution?: record}
-# --toolExecutionStep shape: {toolExecution?: record}
 export def "toolresults-projects-histories-executions-steps-patch" [
   project_id: string
   history_id: string
@@ -988,7 +984,7 @@ export def "toolresults-projects-histories-executions-steps-patch" [
   --body-step-id: string # A unique identifier within a Execution for this Step. Returns INVALID_ARGUMENT if this field is set or overwritten by the caller. - In response: always set - In create/update request: never set
   --test-execution-step: record # A step that represents running tests. It accepts ant-junit xml files which will be parsed into structured test results by the service. Xml file paths are updated in order to append more files, however they can't be deleted. Users can also add test results manually by using the test_result field. — shape: {testIssues?: list, testSuiteOverviews?: list, testTiming?: record, toolExecution?: record}
   --tool-execution-step: record # Generic tool step to be used for binaries we do not explicitly support. For example: running cp to copy artifacts from one location to another. — shape: {toolExecution?: record}
-]: any -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, description: string, deviceUsageDuration: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, hasImages: bool, labels: table<key: string, value: string>, multiStep: record<multistepNumber: int, primaryStep: record<individualOutcome: list, rollUp: string>, primaryStepId: string>, name: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, runDuration: record<nanos: int, seconds: string>, state: string, stepId: string, testExecutionStep: record<testIssues: list<record>, testSuiteOverviews: list<record>, testTiming: record<testProcessDuration: record>, toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>, toolExecutionStep: record<toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>> {
+]: any -> oneof<record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, description: string, deviceUsageDuration: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, hasImages: bool, labels: table<key: string, value: string>, multiStep: record<multistepNumber: int, primaryStep: record<individualOutcome: list, rollUp: string>, primaryStepId: string>, name: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, runDuration: record<nanos: int, seconds: string>, state: string, stepId: string, testExecutionStep: record<testIssues: list<record>, testSuiteOverviews: list<record>, testTiming: record<testProcessDuration: record>, toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>, toolExecutionStep: record<toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1045,7 +1041,7 @@ export def "toolresults-projects-histories-executions-steps-get-perf-metrics-sum
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<appStartTime: record<fullyDrawnTime: record<nanos: int, seconds: string>, initialDisplayTime: record<nanos: int, seconds: string>>, executionId: string, graphicsStats: record<buckets: list<record>, highInputLatencyCount: string, jankyFrames: string, missedVsyncCount: string, p50Millis: string, p90Millis: string, p95Millis: string, p99Millis: string, slowBitmapUploadCount: string, slowDrawCount: string, slowUiThreadCount: string, totalFrames: string>, historyId: string, perfEnvironment: record<cpuInfo: record<cpuProcessor: string, cpuSpeedInGhz: float, numberOfCores: int>, memoryInfo: record<memoryCapInKibibyte: string, memoryTotalInKibibyte: string>>, perfMetrics: list<string>, projectId: string, stepId: string> {
+]: nothing -> oneof<record<appStartTime: record<fullyDrawnTime: record<nanos: int, seconds: string>, initialDisplayTime: record<nanos: int, seconds: string>>, executionId: string, graphicsStats: record<buckets: list<record>, highInputLatencyCount: string, jankyFrames: string, missedVsyncCount: string, p50Millis: string, p90Millis: string, p95Millis: string, p99Millis: string, slowBitmapUploadCount: string, slowDrawCount: string, slowUiThreadCount: string, totalFrames: string>, historyId: string, perfEnvironment: record<cpuInfo: record<cpuProcessor: string, cpuSpeedInGhz: float, numberOfCores: int>, memoryInfo: record<memoryCapInKibibyte: string, memoryTotalInKibibyte: string>>, perfMetrics: list<string>, projectId: string, stepId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1074,9 +1070,6 @@ export def "toolresults-projects-histories-executions-steps-get-perf-metrics-sum
 #
 # POST /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}/perfMetricsSummary
 # operationId: toolresults.projects.histories.executions.steps.perfMetricsSummary.create
-# --appStartTime shape: {fullyDrawnTime?: record, initialDisplayTime?: record}
-# --graphicsStats shape: {buckets?: list, highInputLatencyCount?: string, jankyFrames?: string, missedVsyncCount?: string, p50Millis?: string, p90Millis?: string, p95Millis?: string, p99Millis?: string, slowBitmapUploadCount?: string, slowDrawCount?: string, slowUiThreadCount?: string, totalFrames?: string}
-# --perfEnvironment shape: {cpuInfo?: record, memoryInfo?: record}
 export def "toolresults-projects-histories-executions-steps-perf-metrics-summary-create" [
   project_id: string
   history_id: string
@@ -1110,7 +1103,7 @@ export def "toolresults-projects-histories-executions-steps-perf-metrics-summary
   --perf-metrics: list<string> # Set of resource collected
   --body-project-id: string # The cloud project @OutputOnly
   --body-step-id: string # A tool results step ID. @OutputOnly
-]: any -> record<appStartTime: record<fullyDrawnTime: record<nanos: int, seconds: string>, initialDisplayTime: record<nanos: int, seconds: string>>, executionId: string, graphicsStats: record<buckets: list<record>, highInputLatencyCount: string, jankyFrames: string, missedVsyncCount: string, p50Millis: string, p90Millis: string, p95Millis: string, p99Millis: string, slowBitmapUploadCount: string, slowDrawCount: string, slowUiThreadCount: string, totalFrames: string>, historyId: string, perfEnvironment: record<cpuInfo: record<cpuProcessor: string, cpuSpeedInGhz: float, numberOfCores: int>, memoryInfo: record<memoryCapInKibibyte: string, memoryTotalInKibibyte: string>>, perfMetrics: list<string>, projectId: string, stepId: string> {
+]: any -> oneof<record<appStartTime: record<fullyDrawnTime: record<nanos: int, seconds: string>, initialDisplayTime: record<nanos: int, seconds: string>>, executionId: string, graphicsStats: record<buckets: list<record>, highInputLatencyCount: string, jankyFrames: string, missedVsyncCount: string, p50Millis: string, p90Millis: string, p95Millis: string, p99Millis: string, slowBitmapUploadCount: string, slowDrawCount: string, slowUiThreadCount: string, totalFrames: string>, historyId: string, perfEnvironment: record<cpuInfo: record<cpuProcessor: string, cpuSpeedInGhz: float, numberOfCores: int>, memoryInfo: record<memoryCapInKibibyte: string, memoryTotalInKibibyte: string>>, perfMetrics: list<string>, projectId: string, stepId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1168,7 +1161,7 @@ export def "toolresults-projects-histories-executions-steps-perf-sample-series-l
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: list<string> # Specify one or more PerfMetricType values such as CPU to filter the result
-]: nothing -> record<perfSampleSeries: table<basicPerfSampleSeries: record, executionId: string, historyId: string, projectId: string, sampleSeriesId: string, stepId: string>> {
+]: nothing -> oneof<record<perfSampleSeries: table<basicPerfSampleSeries: record, executionId: string, historyId: string, projectId: string, sampleSeriesId: string, stepId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1197,7 +1190,6 @@ export def "toolresults-projects-histories-executions-steps-perf-sample-series-l
 #
 # POST /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}/perfSampleSeries
 # operationId: toolresults.projects.histories.executions.steps.perfSampleSeries.create
-# --basicPerfSampleSeries shape: {perfMetricType?: "perfMetricTypeUnspecified"|"memory"|"cpu"|"network"|"graphics", perfUnit?: "perfUnitUnspecified"|"kibibyte"|"percent"|"bytesPerSecond"|"framesPerSecond"|"byte", sampleSeriesLabel?: "sampleSeriesTypeUnspecified"|"memoryRssPrivate"|"memoryRssShared"|"memoryRssTotal"|"memoryTotal"|"cpuUser"|"cpuKernel"|"cpuTotal"|"ntBytesTransferred"|"ntBytesReceived"|"networkSent"|"networkReceived"|"graphicsFrameRate"}
 export def "toolresults-projects-histories-executions-steps-perf-sample-series-create" [
   project_id: string
   history_id: string
@@ -1229,7 +1221,7 @@ export def "toolresults-projects-histories-executions-steps-perf-sample-series-c
   --body-project-id: string # The cloud project @OutputOnly
   --sample-series-id: string # A sample series id @OutputOnly
   --body-step-id: string # A tool results step ID. @OutputOnly
-]: any -> record<basicPerfSampleSeries: record<perfMetricType: string, perfUnit: string, sampleSeriesLabel: string>, executionId: string, historyId: string, projectId: string, sampleSeriesId: string, stepId: string> {
+]: any -> oneof<record<basicPerfSampleSeries: record<perfMetricType: string, perfUnit: string, sampleSeriesLabel: string>, executionId: string, historyId: string, projectId: string, sampleSeriesId: string, stepId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1287,7 +1279,7 @@ export def "toolresults-projects-histories-executions-steps-perf-sample-series-g
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<basicPerfSampleSeries: record<perfMetricType: string, perfUnit: string, sampleSeriesLabel: string>, executionId: string, historyId: string, projectId: string, sampleSeriesId: string, stepId: string> {
+]: nothing -> oneof<record<basicPerfSampleSeries: record<perfMetricType: string, perfUnit: string, sampleSeriesLabel: string>, executionId: string, historyId: string, projectId: string, sampleSeriesId: string, stepId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1345,7 +1337,7 @@ export def "toolresults-projects-histories-executions-steps-perf-sample-series-s
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The default page size is 500 samples, and the maximum size is 5000. If the page_size is greater than 5000, the effective page size will be 5000
   --page-token: string # Optional, the next_page_token returned in the previous response
-]: nothing -> record<nextPageToken: string, perfSamples: table<sampleTime: record, value: float>> {
+]: nothing -> oneof<record<nextPageToken: string, perfSamples: table<sampleTime: record, value: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1375,7 +1367,6 @@ export def "toolresults-projects-histories-executions-steps-perf-sample-series-s
 #
 # POST /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}/perfSampleSeries/{sampleSeriesId}/samples:batchCreate
 # operationId: toolresults.projects.histories.executions.steps.perfSampleSeries.samples.batchCreate
-# --perfSamples item shape: {sampleTime?: record, value?: float}
 export def "toolresults-projects-histories-executions-steps-perf-sample-series-samples-batch-create" [
   project_id: string
   history_id: string
@@ -1403,7 +1394,7 @@ export def "toolresults-projects-histories-executions-steps-perf-sample-series-s
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --perf-samples: list # The set of PerfSamples to create should not include existing timestamps — item shape: {sampleTime?: record, value?: float}
-]: any -> record<perfSamples: table<sampleTime: record, value: float>> {
+]: any -> oneof<record<perfSamples: table<sampleTime: record, value: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1463,7 +1454,7 @@ export def "toolresults-projects-histories-executions-steps-test-cases-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of TestCases to fetch. Default value: 100. The server will use this default if the field is not set or has a value of 0. Optional.
   --page-token: string # A continuation token to resume the query at the next item. Optional.
-]: nothing -> record<nextPageToken: string, testCases: table<elapsedTime: record, endTime: record, skippedMessage: string, stackTraces: list, startTime: record, status: string, testCaseId: string, testCaseReference: record, toolOutputs: list>> {
+]: nothing -> oneof<record<nextPageToken: string, testCases: table<elapsedTime: record, endTime: record, skippedMessage: string, stackTraces: list, startTime: record, status: string, testCaseId: string, testCaseReference: record, toolOutputs: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1518,7 +1509,7 @@ export def "toolresults-projects-histories-executions-steps-test-cases-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<elapsedTime: record<nanos: int, seconds: string>, endTime: record<nanos: int, seconds: string>, skippedMessage: string, stackTraces: table<exception: string>, startTime: record<nanos: int, seconds: string>, status: string, testCaseId: string, testCaseReference: record<className: string, name: string, testSuiteName: string>, toolOutputs: table<creationTime: record, output: record, testCase: record>> {
+]: nothing -> oneof<record<elapsedTime: record<nanos: int, seconds: string>, endTime: record<nanos: int, seconds: string>, skippedMessage: string, stackTraces: table<exception: string>, startTime: record<nanos: int, seconds: string>, status: string, testCaseId: string, testCaseReference: record<className: string, name: string, testSuiteName: string>, toolOutputs: table<creationTime: record, output: record, testCase: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1575,7 +1566,7 @@ export def "toolresults-projects-histories-executions-steps-thumbnails-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of thumbnails to fetch. Default value: 50. The server will use this default if the field is not set or has a value of 0. Optional.
   --page-token: string # A continuation token to resume the query at the next item. Optional.
-]: nothing -> record<nextPageToken: string, thumbnails: table<error: record, sourceImage: record, stepId: string, thumbnail: record>> {
+]: nothing -> oneof<record<nextPageToken: string, thumbnails: table<error: record, sourceImage: record, stepId: string, thumbnail: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1604,7 +1595,6 @@ export def "toolresults-projects-histories-executions-steps-thumbnails-list" [
 #
 # POST /toolresults/v1beta3/projects/{projectId}/histories/{historyId}/executions/{executionId}/steps/{stepId}:publishXunitXmlFiles
 # operationId: toolresults.projects.histories.executions.steps.publishXunitXmlFiles
-# --xunitXmlFiles item shape: {fileUri?: string}
 export def "toolresults-projects-histories-executions-steps-publish-xunit-xml-files" [
   project_id: string
   history_id: string
@@ -1631,7 +1621,7 @@ export def "toolresults-projects-histories-executions-steps-publish-xunit-xml-fi
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --xunit-xml-files: list # URI of the Xunit XML files to publish. The maximum size of the file this reference is pointing to is 50MB. Required. — item shape: {fileUri?: string}
-]: any -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, description: string, deviceUsageDuration: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, hasImages: bool, labels: table<key: string, value: string>, multiStep: record<multistepNumber: int, primaryStep: record<individualOutcome: list, rollUp: string>, primaryStepId: string>, name: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, runDuration: record<nanos: int, seconds: string>, state: string, stepId: string, testExecutionStep: record<testIssues: list<record>, testSuiteOverviews: list<record>, testTiming: record<testProcessDuration: record>, toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>, toolExecutionStep: record<toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>> {
+]: any -> oneof<record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, description: string, deviceUsageDuration: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, hasImages: bool, labels: table<key: string, value: string>, multiStep: record<multistepNumber: int, primaryStep: record<individualOutcome: list, rollUp: string>, primaryStepId: string>, name: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, runDuration: record<nanos: int, seconds: string>, state: string, stepId: string, testExecutionStep: record<testIssues: list<record>, testSuiteOverviews: list<record>, testTiming: record<testProcessDuration: record>, toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>, toolExecutionStep: record<toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1685,7 +1675,7 @@ export def "toolresults-projects-get-settings" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<defaultBucket: string, name: string> {
+]: nothing -> oneof<record<defaultBucket: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1733,7 +1723,7 @@ export def "toolresults-projects-initialize-settings" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<defaultBucket: string, name: string> {
+]: nothing -> oneof<record<defaultBucket: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1782,7 +1772,7 @@ export def "toolresults-projects-histories-executions-steps-accessibility-cluste
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --locale: string # The accepted format is the canonical Unicode format with hyphen as a delimiter. Language must be lowercase, Language Script - Capitalized, Region - UPPERCASE. See http://www.unicode.org/reports/tr35/#Unicode_locale_identifier for details. Required.
-]: nothing -> record<clusters: table<category: string, suggestions: list>, name: string> {
+]: nothing -> oneof<record<clusters: table<category: string, suggestions: list>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }

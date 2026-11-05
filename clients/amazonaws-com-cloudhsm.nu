@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -122,9 +145,9 @@ def x-amz-target-completer-19 [] { ["CloudHsmFrontendService.RemoveTagsFromResou
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-tags-to-resource" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-tags-to-resource" "create-hapg" "create-hsm" "create-luna-client" "delete-hapg" "delete-hsm" "delete-luna-client" "describe-hapg" "describe-hsm" "describe-luna-client" "get-config" "list-available-zones" "list-hapgs" "list-hsms" "list-luna-clients" "list-tags-for-resource" "modify-hapg" "modify-hsm" "modify-luna-client" "remove-tags-from-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -146,7 +169,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddTagsToResource
-# --TagList item shape: {Key: string, Value: string}
 export def "add-tags-to-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -167,7 +189,7 @@ export def "add-tags-to-resource" [
   --x-amz-target: string@x-amz-target-completer # required
   resource_arn: string # The Amazon Resource Name (ARN) of the AWS CloudHSM resource to tag.
   tag_list: list # One or more tags. — item shape: {Key: string, Value: string}
-]: any -> record<Status: string> {
+]: any -> oneof<record<Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -216,7 +238,7 @@ export def "create-hapg" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-1 # required
   label: string # The label of the new high-availability partition group.
-]: any -> record<HapgArn: string> {
+]: any -> oneof<record<HapgArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -272,7 +294,7 @@ export def "create-hsm" [
   subscription_type: string@subscription-type-completer # Specifies the type of subscription for the HSM. PRODUCTION - The HSM is being used in a production environment. TRIAL - The HSM is being used in a product trial.
   --client-token: string # A user-defined token to ensure idempotence. Subsequent calls to this operation with the same token will be ignored.
   --syslog-ip: string # The IP address for the syslog monitoring server. The AWS CloudHSM service only supports one syslog monitoring server.
-]: any -> record<HsmArn: string> {
+]: any -> oneof<record<HsmArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -322,7 +344,7 @@ export def "create-luna-client" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   --label: string # The label for the client.
   certificate: string # The contents of a Base64-Encoded X.509 v3 certificate to be installed on the HSMs used by this client.
-]: any -> record<ClientArn: string> {
+]: any -> oneof<record<ClientArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -371,7 +393,7 @@ export def "delete-hapg" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   hapg_arn: string # The ARN of the high-availability partition group to delete.
-]: any -> record<Status: string> {
+]: any -> oneof<record<Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -420,7 +442,7 @@ export def "delete-hsm" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   hsm_arn: string # An ARN that identifies an HSM.
-]: any -> record<Status: string> {
+]: any -> oneof<record<Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -469,7 +491,7 @@ export def "delete-luna-client" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   client_arn: string # The ARN of the client to delete.
-]: any -> record<Status: string> {
+]: any -> oneof<record<Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -518,7 +540,7 @@ export def "describe-hapg" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-7 # required
   hapg_arn: string # The ARN of the high-availability partition group to describe.
-]: any -> record<HapgArn: string, HapgSerial: string, HsmsLastActionFailed: list<string>, HsmsPendingDeletion: list<string>, HsmsPendingRegistration: list<string>, Label: string, LastModifiedTimestamp: string, PartitionSerialList: list<string>, State: string> {
+]: any -> oneof<record<HapgArn: string, HapgSerial: string, HsmsLastActionFailed: list<string>, HsmsPendingDeletion: list<string>, HsmsPendingRegistration: list<string>, Label: string, LastModifiedTimestamp: string, PartitionSerialList: list<string>, State: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -568,7 +590,7 @@ export def "describe-hsm" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   --hsm-arn: string # An ARN that identifies an HSM.
   --hsm-serial-number: string # The serial number of the HSM. Either the HsmArn or the HsmSerialNumber parameter must be specified.
-]: any -> record<HsmArn: string, Status: string, StatusDetails: string, AvailabilityZone: string, EniId: string, EniIp: string, SubscriptionType: string, SubscriptionStartDate: string, SubscriptionEndDate: string, VpcId: string, SubnetId: string, IamRoleArn: string, SerialNumber: string, VendorName: string, HsmType: string, SoftwareVersion: string, SshPublicKey: string, SshKeyLastUpdated: string, ServerCertUri: string, ServerCertLastUpdated: string, Partitions: list<string>> {
+]: any -> oneof<record<HsmArn: string, Status: string, StatusDetails: string, AvailabilityZone: string, EniId: string, EniIp: string, SubscriptionType: string, SubscriptionStartDate: string, SubscriptionEndDate: string, VpcId: string, SubnetId: string, IamRoleArn: string, SerialNumber: string, VendorName: string, HsmType: string, SoftwareVersion: string, SshPublicKey: string, SshKeyLastUpdated: string, ServerCertUri: string, ServerCertLastUpdated: string, Partitions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -618,7 +640,7 @@ export def "describe-luna-client" [
   --x-amz-target: string@x-amz-target-completer-9 # required
   --client-arn: string # The ARN of the client.
   --certificate-fingerprint: string # The certificate fingerprint.
-]: any -> record<ClientArn: string, Certificate: string, CertificateFingerprint: string, LastModifiedTimestamp: string, Label: string> {
+]: any -> oneof<record<ClientArn: string, Certificate: string, CertificateFingerprint: string, LastModifiedTimestamp: string, Label: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -669,7 +691,7 @@ export def "get-config" [
   client_arn: string # The ARN of the client.
   client_version: string@client-version-completer # The client version.
   hapg_list: list<string> # A list of ARNs that identify the high-availability partition groups that are associated with the client.
-]: any -> record<ConfigType: string, ConfigFile: string, ConfigCred: string> {
+]: any -> oneof<record<ConfigType: string, ConfigFile: string, ConfigCred: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -718,7 +740,7 @@ export def "list-available-zones" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   --body: record
-]: any -> record<AZList: list<string>> {
+]: any -> oneof<record<AZList: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -767,7 +789,7 @@ export def "list-hapgs" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   --next-token: string # The NextToken value from a previous call to ListHapgs. Pass null if this is the first call.
-]: any -> record<HapgList: list<string>, NextToken: string> {
+]: any -> oneof<record<HapgList: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -816,7 +838,7 @@ export def "list-hsms" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   --next-token: string # The NextToken value from a previous call to ListHsms. Pass null if this is the first call.
-]: any -> record<HsmList: list<string>, NextToken: string> {
+]: any -> oneof<record<HsmList: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -865,7 +887,7 @@ export def "list-luna-clients" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-14 # required
   --next-token: string # The NextToken value from a previous call to ListLunaClients. Pass null if this is the first call.
-]: any -> record<ClientList: list<string>, NextToken: string> {
+]: any -> oneof<record<ClientList: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -914,7 +936,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the AWS CloudHSM resource.
-]: any -> record<TagList: table<Key: string, Value: string>> {
+]: any -> oneof<record<TagList: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -965,7 +987,7 @@ export def "modify-hapg" [
   hapg_arn: string # The ARN of the high-availability partition group to modify.
   --label: string # The new label for the high-availability partition group.
   --partition-serial-list: list<string> # The list of partition serial numbers to make members of the high-availability partition group.
-]: any -> record<HapgArn: string> {
+]: any -> oneof<record<HapgArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1019,7 +1041,7 @@ export def "modify-hsm" [
   --iam-role-arn: string # The new IAM role ARN.
   --external-id: string # The new external ID.
   --syslog-ip: string # The new IP address for the syslog monitoring server. The AWS CloudHSM service only supports one syslog monitoring server.
-]: any -> record<HsmArn: string> {
+]: any -> oneof<record<HsmArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1069,7 +1091,7 @@ export def "modify-luna-client" [
   --x-amz-target: string@x-amz-target-completer-18 # required
   client_arn: string # The ARN of the client.
   certificate: string # The new certificate for the client.
-]: any -> record<ClientArn: string> {
+]: any -> oneof<record<ClientArn: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1119,7 +1141,7 @@ export def "remove-tags-from-resource" [
   --x-amz-target: string@x-amz-target-completer-19 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the AWS CloudHSM resource.
   tag_key_list: list<string> # The tag key or keys to remove. Specify only the tag key to remove (not the value). To overwrite the value for an existing tag, use AddTagsToResource.
-]: any -> record<Status: string> {
+]: any -> oneof<record<Status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

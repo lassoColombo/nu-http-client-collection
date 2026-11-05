@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -196,9 +219,9 @@ def x-amz-target-completer-89 [] { ["StorageGateway_20130630.UpdateVTLDeviceType
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activate-gateway" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["activate-gateway" "add-cache" "add-tags-to-resource" "add-upload-buffer" "add-working-storage" "assign-tape-pool" "associate-file-system" "attach-volume" "cancel-archival" "cancel-retrieval" "create-cachedi-scsi-volume" "create-nfs-file-share" "create-smb-file-share" "create-snapshot" "create-snapshot-from-volume-recovery-point" "create-storedi-scsi-volume" "create-tape-pool" "create-tape-with-barcode" "create-tapes" "delete-automatic-tape-creation-policy" "delete-bandwidth-rate-limit" "delete-chap-credentials" "delete-file-share" "delete-gateway" "delete-snapshot-schedule" "delete-tape" "delete-tape-archive" "delete-tape-pool" "delete-volume" "describe-availability-monitor-test" "describe-bandwidth-rate-limit" "describe-bandwidth-rate-limit-schedule" "describe-cache" "describe-cachedi-scsi-volumes" "describe-chap-credentials" "describe-file-system-associations" "describe-gateway-information" "describe-maintenance-start-time" "describe-nfs-file-shares" "describe-smb-file-shares" "describe-smb-settings" "describe-snapshot-schedule" "describe-storedi-scsi-volumes" "describe-tape-archives" "describe-tape-recovery-points" "describe-tapes" "describe-upload-buffer" "describe-vtl-devices" "describe-working-storage" "detach-volume" "disable-gateway" "disassociate-file-system" "join-domain" "list-automatic-tape-creation-policies" "list-file-shares" "list-file-system-associations" "list-gateways" "list-local-disks" "list-tags-for-resource" "list-tape-pools" "list-tapes" "list-volume-initiators" "list-volume-recovery-points" "list-volumes" "notify-when-uploaded" "refresh-cache" "remove-tags-from-resource" "reset-cache" "retrieve-tape-archive" "retrieve-tape-recovery-point" "set-local-console-password" "set-smb-guest-password" "shutdown-gateway" "start-availability-monitor-test" "start-gateway" "update-automatic-tape-creation-policy" "update-bandwidth-rate-limit" "update-bandwidth-rate-limit-schedule" "update-chap-credentials" "update-file-system-association" "update-gateway-information" "update-gateway-software-now" "update-maintenance-start-time" "update-nfs-file-share" "update-smb-file-share" "update-smb-file-share-visibility" "update-smb-local-groups" "update-smb-security-strategy" "update-snapshot-schedule" "update-vtl-device-type" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -220,7 +243,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: ActivateGateway
-# --Tags item shape: {Key: string, Value: string}
 export def "activate-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -247,7 +269,7 @@ export def "activate-gateway" [
   --tape-drive-type: string # The value that indicates the type of tape drive to use for tape gateway. This field is optional. Valid Values: IBM-ULT3580-TD5
   --medium-changer-type: string # The value that indicates the type of medium changer to use for tape gateway. This field is optional. Valid Values: STK-L700 | AWS-Gateway-VTL | IBM-03584L32-0402
   --tags: list # A list of up to 50 tags that you can assign to the gateway. Each tag is a key-value pair. Valid characters for key and value are letters, spaces, and numbers that can be represented in UTF-8 format, and the following special characters: + - = . _ : / @. The maximum length of a tag's key is 128 characters, and the maximum length for a tag's value is 256 characters. — item shape: {Key: string, Value: string}
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -297,7 +319,7 @@ export def "add-cache" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   disk_ids: list<string> # An array of strings that identify disks that are to be configured as working storage. Each string has a minimum length of 1 and maximum length of 300. You can get the disk IDs from the ListLocalDisks API.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -327,7 +349,6 @@ export def "add-cache" [
 #
 # POST /
 # operationId: AddTagsToResource
-# --Tags item shape: {Key: string, Value: string}
 export def "add-tags-to-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -348,7 +369,7 @@ export def "add-tags-to-resource" [
   --x-amz-target: string@x-amz-target-completer-2 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource you want to add tags to.
   tags: list # The key-value pair that represents the tag you want to add to the resource. The value can be an empty string. Valid characters for key and value are letters, spaces, and numbers representable in UTF-8 format, and the following special characters: + - = . _ : / @. The maximum length of a tag's key is 128 characters, and the maximum length for a tag's value is 256. — item shape: {Key: string, Value: string}
-]: any -> record<ResourceARN: string> {
+]: any -> oneof<record<ResourceARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -398,7 +419,7 @@ export def "add-upload-buffer" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   disk_ids: list<string> # An array of strings that identify disks that are to be configured as working storage. Each string has a minimum length of 1 and maximum length of 300. You can get the disk IDs from the ListLocalDisks API.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -448,7 +469,7 @@ export def "add-working-storage" [
   --x-amz-target: string@x-amz-target-completer-4 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   disk_ids: list<string> # An array of strings that identify disks that are to be configured as working storage. Each string has a minimum length of 1 and maximum length of 300. You can get the disk IDs from the ListLocalDisks API.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -499,7 +520,7 @@ export def "assign-tape-pool" [
   tape_arn: string # The unique Amazon Resource Name (ARN) of the virtual tape that you want to add to the tape pool.
   pool_id: string # The ID of the pool that you want to add your tape to for archiving. The tape in this pool is archived in the S3 storage class that is associated with the pool. When you use your backup application to eject the tape, the tape is archived directly into the storage class (S3 Glacier or S3 Glacier Deep Archive) that corresponds to the pool.
   --bypass-governance-retention: oneof<nothing, bool> # Set permissions to bypass governance retention. If the lock type of the archived tape is Governance, the tape's archived age is not older than RetentionLockInDays, and the user does not already have BypassGovernanceRetention, setting this to TRUE enables the user to bypass the retention lock. This parameter is set to true by default for calls from the console. Valid values: TRUE | FALSE
-]: any -> record<TapeARN: string> {
+]: any -> oneof<record<TapeARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -529,9 +550,6 @@ export def "assign-tape-pool" [
 #
 # POST /
 # operationId: AssociateFileSystem
-# --Tags item shape: {Key: string, Value: string}
-# --CacheAttributes shape: {CacheStaleTimeoutInSeconds?: int}
-# --EndpointNetworkConfiguration shape: {IpAddresses?: list<string>}
 export def "associate-file-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +577,7 @@ export def "associate-file-system" [
   --audit-destination-arn: string # The Amazon Resource Name (ARN) of the storage used for the audit logs.
   --cache-attributes: record # The refresh cache information for the file share or FSx file systems. — shape: {CacheStaleTimeoutInSeconds?: int}
   --endpoint-network-configuration: record # Specifies network configuration information for the gateway associated with the Amazon FSx file system. — shape: {IpAddresses?: list<string>}
-]: any -> record<FileSystemAssociationARN: string> {
+]: any -> oneof<record<FileSystemAssociationARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -612,7 +630,7 @@ export def "attach-volume" [
   volume_arn: string # The Amazon Resource Name (ARN) of the volume to attach to the specified gateway.
   network_interface_id: string # The network interface of the gateway on which to expose the iSCSI target. Only IPv4 addresses are accepted. Use DescribeGatewayInformation to get a list of the network interfaces available on a gateway. Valid Values: A valid IP address.
   --disk-id: string # The unique device ID or other distinguishing data that identifies the local disk used to create the volume. This value is only required when you are attaching a stored volume.
-]: any -> record<VolumeARN: string, TargetARN: string> {
+]: any -> oneof<record<VolumeARN: string, TargetARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -662,7 +680,7 @@ export def "cancel-archival" [
   --x-amz-target: string@x-amz-target-completer-8 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   tape_arn: string # The Amazon Resource Name (ARN) of the virtual tape you want to cancel archiving for.
-]: any -> record<TapeARN: string> {
+]: any -> oneof<record<TapeARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -712,7 +730,7 @@ export def "cancel-retrieval" [
   --x-amz-target: string@x-amz-target-completer-9 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   tape_arn: string # The Amazon Resource Name (ARN) of the virtual tape you want to cancel retrieval for.
-]: any -> record<TapeARN: string> {
+]: any -> oneof<record<TapeARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -742,7 +760,6 @@ export def "cancel-retrieval" [
 #
 # POST /
 # operationId: CreateCachediSCSIVolume
-# --Tags item shape: {Key: string, Value: string}
 export def "create-cachedi-scsi-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -771,7 +788,7 @@ export def "create-cachedi-scsi-volume" [
   --kms-encrypted: oneof<nothing, bool> # Set to true to use Amazon S3 server-side encryption with your own KMS key, or false to use a key managed by Amazon S3. Optional. Valid Values: true | false
   --kms-key: string # The Amazon Resource Name (ARN) of a symmetric customer master key (CMK) used for Amazon S3 server-side encryption. Storage Gateway does not support asymmetric CMKs. This value can only be set when KMSEncrypted is true. Optional.
   --tags: list # A list of up to 50 tags that you can assign to a cached volume. Each tag is a key-value pair. Valid characters for key and value are letters, spaces, and numbers that you can represent in UTF-8 format, and the following special characters: + - = . _ : / @. The maximum length of a tag's key is 128 characters, and the maximum length for a tag's value is 256 characters. — item shape: {Key: string, Value: string}
-]: any -> record<VolumeARN: string, TargetARN: string> {
+]: any -> oneof<record<VolumeARN: string, TargetARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -801,9 +818,6 @@ export def "create-cachedi-scsi-volume" [
 #
 # POST /
 # operationId: CreateNFSFileShare
-# --NFSFileShareDefaults shape: {FileMode?: string, DirectoryMode?: string, GroupId?: int, OwnerId?: int}
-# --Tags item shape: {Key: string, Value: string}
-# --CacheAttributes shape: {CacheStaleTimeoutInSeconds?: int}
 export def "create-nfs-file-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -843,7 +857,7 @@ export def "create-nfs-file-share" [
   --vpc-endpoint-dns-name: string # Specifies the DNS name for the VPC endpoint that the NFS file share uses to connect to Amazon S3. This parameter is required for NFS file shares that connect to Amazon S3 through a VPC endpoint, a VPC access point, or an access point alias that points to a VPC access point.
   --bucket-region: string # Specifies the Region of the S3 bucket where the NFS file share stores files. This parameter is required for NFS file shares that connect to Amazon S3 through a VPC endpoint, a VPC access point, or an access point alias that points to a VPC access point.
   --audit-destination-arn: string # The Amazon Resource Name (ARN) of the storage used for audit logs.
-]: any -> record<FileShareARN: string> {
+]: any -> oneof<record<FileShareARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -873,8 +887,6 @@ export def "create-nfs-file-share" [
 #
 # POST /
 # operationId: CreateSMBFileShare
-# --Tags item shape: {Key: string, Value: string}
-# --CacheAttributes shape: {CacheStaleTimeoutInSeconds?: int}
 export def "create-smb-file-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,7 +931,7 @@ export def "create-smb-file-share" [
   --vpc-endpoint-dns-name: string # Specifies the DNS name for the VPC endpoint that the SMB file share uses to connect to Amazon S3. This parameter is required for SMB file shares that connect to Amazon S3 through a VPC endpoint, a VPC access point, or an access point alias that points to a VPC access point.
   --bucket-region: string # Specifies the Region of the S3 bucket where the SMB file share stores files. This parameter is required for SMB file shares that connect to Amazon S3 through a VPC endpoint, a VPC access point, or an access point alias that points to a VPC access point.
   --oplocks-enabled: oneof<nothing, bool> # Specifies whether opportunistic locking is enabled for the SMB file share. Enabling opportunistic locking on case-sensitive shares is not recommended for workloads that involve access to files with the same name in different case. Valid Values: true | false
-]: any -> record<FileShareARN: string> {
+]: any -> oneof<record<FileShareARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -949,7 +961,6 @@ export def "create-smb-file-share" [
 #
 # POST /
 # operationId: CreateSnapshot
-# --Tags item shape: {Key: string, Value: string}
 export def "create-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -971,7 +982,7 @@ export def "create-snapshot" [
   volume_arn: string # The Amazon Resource Name (ARN) of the volume. Use the ListVolumes operation to return a list of gateway volumes.
   snapshot_description: string # Textual description of the snapshot that appears in the Amazon EC2 console, Elastic Block Store snapshots panel in the Description field, and in the Storage Gateway snapshot Details pane, Description field.
   --tags: list # A list of up to 50 tags that can be assigned to a snapshot. Each tag is a key-value pair. Valid characters for key and value are letters, spaces, and numbers representable in UTF-8 format, and the following special characters: + - = . _ : / @. The maximum length of a tag's key is 128 characters, and the maximum length for a tag's value is 256. — item shape: {Key: string, Value: string}
-]: any -> record<VolumeARN: string, SnapshotId: string> {
+]: any -> oneof<record<VolumeARN: string, SnapshotId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1001,7 +1012,6 @@ export def "create-snapshot" [
 #
 # POST /
 # operationId: CreateSnapshotFromVolumeRecoveryPoint
-# --Tags item shape: {Key: string, Value: string}
 export def "create-snapshot-from-volume-recovery-point" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1023,7 +1033,7 @@ export def "create-snapshot-from-volume-recovery-point" [
   volume_arn: string # The Amazon Resource Name (ARN) of the iSCSI volume target. Use the DescribeStorediSCSIVolumes operation to return to retrieve the TargetARN for specified VolumeARN.
   snapshot_description: string # Textual description of the snapshot that appears in the Amazon EC2 console, Elastic Block Store snapshots panel in the Description field, and in the Storage Gateway snapshot Details pane, Description field.
   --tags: list # A list of up to 50 tags that can be assigned to a snapshot. Each tag is a key-value pair. Valid characters for key and value are letters, spaces, and numbers representable in UTF-8 format, and the following special characters: + - = . _ : / @. The maximum length of a tag's key is 128 characters, and the maximum length for a tag's value is 256. — item shape: {Key: string, Value: string}
-]: any -> record<SnapshotId: string, VolumeARN: string, VolumeRecoveryPointTime: string> {
+]: any -> oneof<record<SnapshotId: string, VolumeARN: string, VolumeRecoveryPointTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1053,7 +1063,6 @@ export def "create-snapshot-from-volume-recovery-point" [
 #
 # POST /
 # operationId: CreateStorediSCSIVolume
-# --Tags item shape: {Key: string, Value: string}
 export def "create-storedi-scsi-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1081,7 +1090,7 @@ export def "create-storedi-scsi-volume" [
   --kms-encrypted: oneof<nothing, bool> # Set to true to use Amazon S3 server-side encryption with your own KMS key, or false to use a key managed by Amazon S3. Optional. Valid Values: true | false
   --kms-key: string # The Amazon Resource Name (ARN) of a symmetric customer master key (CMK) used for Amazon S3 server-side encryption. Storage Gateway does not support asymmetric CMKs. This value can only be set when KMSEncrypted is true. Optional.
   --tags: list # A list of up to 50 tags that can be assigned to a stored volume. Each tag is a key-value pair. Valid characters for key and value are letters, spaces, and numbers representable in UTF-8 format, and the following special characters: + - = . _ : / @. The maximum length of a tag's key is 128 characters, and the maximum length for a tag's value is 256. — item shape: {Key: string, Value: string}
-]: any -> record<VolumeARN: string, VolumeSizeInBytes: int, TargetARN: string> {
+]: any -> oneof<record<VolumeARN: string, VolumeSizeInBytes: int, TargetARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1112,7 +1121,6 @@ export def "create-storedi-scsi-volume" [
 #
 # POST /
 # operationId: CreateTapePool
-# --Tags item shape: {Key: string, Value: string}
 export def "create-tape-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1136,7 +1144,7 @@ export def "create-tape-pool" [
   --retention-lock-type: string@retention-lock-type-completer # Tape retention lock can be configured in two modes. When configured in governance mode, Amazon Web Services accounts with specific IAM permissions are authorized to remove the tape retention lock from archived virtual tapes. When configured in compliance mode, the tape retention lock cannot be removed by any user, including the root Amazon Web Services account.
   --retention-lock-time-in-days: int # Tape retention lock time is set in days. Tape retention lock can be enabled for up to 100 years (36,500 days).
   --tags: list # A list of up to 50 tags that can be assigned to tape pool. Each tag is a key-value pair. Valid characters for key and value are letters, spaces, and numbers representable in UTF-8 format, and the following special characters: + - = . _ : / @. The maximum length of a tag's key is 128 characters, and the maximum length for a tag's value is 256. — item shape: {Key: string, Value: string}
-]: any -> record<PoolARN: string> {
+]: any -> oneof<record<PoolARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1166,7 +1174,6 @@ export def "create-tape-pool" [
 #
 # POST /
 # operationId: CreateTapeWithBarcode
-# --Tags item shape: {Key: string, Value: string}
 export def "create-tape-with-barcode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1193,7 +1200,7 @@ export def "create-tape-with-barcode" [
   --pool-id: string # The ID of the pool that you want to add your tape to for archiving. The tape in this pool is archived in the S3 storage class that is associated with the pool. When you use your backup application to eject the tape, the tape is archived directly into the storage class (S3 Glacier or S3 Deep Archive) that corresponds to the pool.
   --worm: oneof<nothing, bool> # Set to TRUE if the tape you are creating is to be configured as a write-once-read-many (WORM) tape.
   --tags: list # A list of up to 50 tags that can be assigned to a virtual tape that has a barcode. Each tag is a key-value pair. Valid characters for key and value are letters, spaces, and numbers representable in UTF-8 format, and the following special characters: + - = . _ : / @. The maximum length of a tag's key is 128 characters, and the maximum length for a tag's value is 256. — item shape: {Key: string, Value: string}
-]: any -> record<TapeARN: string> {
+]: any -> oneof<record<TapeARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1223,7 +1230,6 @@ export def "create-tape-with-barcode" [
 #
 # POST /
 # operationId: CreateTapes
-# --Tags item shape: {Key: string, Value: string}
 export def "create-tapes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1252,7 +1258,7 @@ export def "create-tapes" [
   --pool-id: string # The ID of the pool that you want to add your tape to for archiving. The tape in this pool is archived in the S3 storage class that is associated with the pool. When you use your backup application to eject the tape, the tape is archived directly into the storage class (S3 Glacier or S3 Glacier Deep Archive) that corresponds to the pool.
   --worm: oneof<nothing, bool> # Set to TRUE if the tape you are creating is to be configured as a write-once-read-many (WORM) tape.
   --tags: list # A list of up to 50 tags that can be assigned to a virtual tape. Each tag is a key-value pair. Valid characters for key and value are letters, spaces, and numbers representable in UTF-8 format, and the following special characters: + - = . _ : / @. The maximum length of a tag's key is 128 characters, and the maximum length for a tag's value is 256. — item shape: {Key: string, Value: string}
-]: any -> record<TapeARNs: list<string>> {
+]: any -> oneof<record<TapeARNs: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1301,7 +1307,7 @@ export def "delete-automatic-tape-creation-policy" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1351,7 +1357,7 @@ export def "delete-bandwidth-rate-limit" [
   --x-amz-target: string@x-amz-target-completer-20 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   bandwidth_type: string # One of the BandwidthType values that indicates the gateway bandwidth rate limit to delete. Valid Values: UPLOAD | DOWNLOAD | ALL
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1401,7 +1407,7 @@ export def "delete-chap-credentials" [
   --x-amz-target: string@x-amz-target-completer-21 # required
   target_arn: string # The Amazon Resource Name (ARN) of the iSCSI volume target. Use the DescribeStorediSCSIVolumes operation to return to retrieve the TargetARN for specified VolumeARN.
   initiator_name: string # The iSCSI initiator that connects to the target.
-]: any -> record<TargetARN: string, InitiatorName: string> {
+]: any -> oneof<record<TargetARN: string, InitiatorName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1451,7 +1457,7 @@ export def "delete-file-share" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   file_share_arn: string # The Amazon Resource Name (ARN) of the file share.
   --force-delete: oneof<nothing, bool> # If this value is set to true, the operation deletes a file share immediately and aborts all data uploads to Amazon Web Services. Otherwise, the file share is not deleted until all data is uploaded to Amazon Web Services. This process aborts the data upload process, and the file share enters the FORCE_DELETING status. Valid Values: true | false
-]: any -> record<FileShareARN: string> {
+]: any -> oneof<record<FileShareARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1500,7 +1506,7 @@ export def "delete-gateway" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1549,7 +1555,7 @@ export def "delete-snapshot-schedule" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-24 # required
   volume_arn: string # The volume which snapshot schedule to delete.
-]: any -> record<VolumeARN: string> {
+]: any -> oneof<record<VolumeARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1600,7 +1606,7 @@ export def "delete-tape" [
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   tape_arn: string # The Amazon Resource Name (ARN) of the virtual tape to delete.
   --bypass-governance-retention: oneof<nothing, bool> # Set to TRUE to delete an archived tape that belongs to a custom pool with tape retention lock. Only archived tapes with tape retention lock set to governance can be deleted. Archived tapes with tape retention lock set to compliance can't be deleted.
-]: any -> record<TapeARN: string> {
+]: any -> oneof<record<TapeARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1650,7 +1656,7 @@ export def "delete-tape-archive" [
   --x-amz-target: string@x-amz-target-completer-26 # required
   tape_arn: string # The Amazon Resource Name (ARN) of the virtual tape to delete from the virtual tape shelf (VTS).
   --bypass-governance-retention: oneof<nothing, bool> # Set to TRUE to delete an archived tape that belongs to a custom pool with tape retention lock. Only archived tapes with tape retention lock set to governance can be deleted. Archived tapes with tape retention lock set to compliance can't be deleted.
-]: any -> record<TapeARN: string> {
+]: any -> oneof<record<TapeARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1699,7 +1705,7 @@ export def "delete-tape-pool" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-27 # required
   pool_arn: string # The Amazon Resource Name (ARN) of the custom tape pool to delete.
-]: any -> record<PoolARN: string> {
+]: any -> oneof<record<PoolARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1748,7 +1754,7 @@ export def "delete-volume" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-28 # required
   volume_arn: string # The Amazon Resource Name (ARN) of the volume. Use the ListVolumes operation to return a list of gateway volumes.
-]: any -> record<VolumeARN: string> {
+]: any -> oneof<record<VolumeARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1797,7 +1803,7 @@ export def "describe-availability-monitor-test" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-29 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string, Status: string, StartTime: string> {
+]: any -> oneof<record<GatewayARN: string, Status: string, StartTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1846,7 +1852,7 @@ export def "describe-bandwidth-rate-limit" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-30 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string, AverageUploadRateLimitInBitsPerSec: int, AverageDownloadRateLimitInBitsPerSec: int> {
+]: any -> oneof<record<GatewayARN: string, AverageUploadRateLimitInBitsPerSec: int, AverageDownloadRateLimitInBitsPerSec: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1895,7 +1901,7 @@ export def "describe-bandwidth-rate-limit-schedule" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-31 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string, BandwidthRateLimitIntervals: table<StartHourOfDay: int, StartMinuteOfHour: int, EndHourOfDay: int, EndMinuteOfHour: int, DaysOfWeek: list, AverageUploadRateLimitInBitsPerSec: int, AverageDownloadRateLimitInBitsPerSec: int>> {
+]: any -> oneof<record<GatewayARN: string, BandwidthRateLimitIntervals: table<StartHourOfDay: int, StartMinuteOfHour: int, EndHourOfDay: int, EndMinuteOfHour: int, DaysOfWeek: list, AverageUploadRateLimitInBitsPerSec: int, AverageDownloadRateLimitInBitsPerSec: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1944,7 +1950,7 @@ export def "describe-cache" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-32 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string, DiskIds: list<string>, CacheAllocatedInBytes: int, CacheUsedPercentage: float, CacheDirtyPercentage: float, CacheHitPercentage: float, CacheMissPercentage: float> {
+]: any -> oneof<record<GatewayARN: string, DiskIds: list<string>, CacheAllocatedInBytes: int, CacheUsedPercentage: float, CacheDirtyPercentage: float, CacheHitPercentage: float, CacheMissPercentage: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1993,7 +1999,7 @@ export def "describe-cachedi-scsi-volumes" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-33 # required
   volume_ar_ns: list<string> # An array of strings where each string represents the Amazon Resource Name (ARN) of a cached volume. All of the specified cached volumes must be from the same gateway. Use ListVolumes to get volume ARNs for a gateway.
-]: any -> record<CachediSCSIVolumes: table<VolumeARN: string, VolumeId: string, VolumeType: string, VolumeStatus: string, VolumeAttachmentStatus: string, VolumeSizeInBytes: int, VolumeProgress: float, SourceSnapshotId: string, VolumeiSCSIAttributes: record, CreatedDate: string, VolumeUsedInBytes: int, KMSKey: string, TargetName: string>> {
+]: any -> oneof<record<CachediSCSIVolumes: table<VolumeARN: string, VolumeId: string, VolumeType: string, VolumeStatus: string, VolumeAttachmentStatus: string, VolumeSizeInBytes: int, VolumeProgress: float, SourceSnapshotId: string, VolumeiSCSIAttributes: record, CreatedDate: string, VolumeUsedInBytes: int, KMSKey: string, TargetName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2042,7 +2048,7 @@ export def "describe-chap-credentials" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-34 # required
   target_arn: string # The Amazon Resource Name (ARN) of the iSCSI volume target. Use the DescribeStorediSCSIVolumes operation to return to retrieve the TargetARN for specified VolumeARN.
-]: any -> record<ChapCredentials: table<TargetARN: string, SecretToAuthenticateInitiator: string, InitiatorName: string, SecretToAuthenticateTarget: string>> {
+]: any -> oneof<record<ChapCredentials: table<TargetARN: string, SecretToAuthenticateInitiator: string, InitiatorName: string, SecretToAuthenticateTarget: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2091,7 +2097,7 @@ export def "describe-file-system-associations" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-35 # required
   file_system_association_arn_list: list<string> # An array containing the Amazon Resource Name (ARN) of each file system association to be described.
-]: any -> record<FileSystemAssociationInfoList: table<FileSystemAssociationARN: string, LocationARN: string, FileSystemAssociationStatus: string, AuditDestinationARN: string, GatewayARN: string, Tags: list, CacheAttributes: record, EndpointNetworkConfiguration: record, FileSystemAssociationStatusDetails: list>> {
+]: any -> oneof<record<FileSystemAssociationInfoList: table<FileSystemAssociationARN: string, LocationARN: string, FileSystemAssociationStatus: string, AuditDestinationARN: string, GatewayARN: string, Tags: list, CacheAttributes: record, EndpointNetworkConfiguration: record, FileSystemAssociationStatusDetails: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2140,7 +2146,7 @@ export def "describe-gateway-information" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-36 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string, GatewayId: string, GatewayName: string, GatewayTimezone: string, GatewayState: string, GatewayNetworkInterfaces: table<Ipv4Address: string, MacAddress: string, Ipv6Address: string>, GatewayType: string, NextUpdateAvailabilityDate: string, LastSoftwareUpdate: string, Ec2InstanceId: string, Ec2InstanceRegion: string, Tags: table<Key: string, Value: string>, VPCEndpoint: string, CloudWatchLogGroupARN: string, HostEnvironment: string, EndpointType: string, SoftwareUpdatesEndDate: string, DeprecationDate: string, GatewayCapacity: string, SupportedGatewayCapacities: list<string>, HostEnvironmentId: string> {
+]: any -> oneof<record<GatewayARN: string, GatewayId: string, GatewayName: string, GatewayTimezone: string, GatewayState: string, GatewayNetworkInterfaces: table<Ipv4Address: string, MacAddress: string, Ipv6Address: string>, GatewayType: string, NextUpdateAvailabilityDate: string, LastSoftwareUpdate: string, Ec2InstanceId: string, Ec2InstanceRegion: string, Tags: table<Key: string, Value: string>, VPCEndpoint: string, CloudWatchLogGroupARN: string, HostEnvironment: string, EndpointType: string, SoftwareUpdatesEndDate: string, DeprecationDate: string, GatewayCapacity: string, SupportedGatewayCapacities: list<string>, HostEnvironmentId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2189,7 +2195,7 @@ export def "describe-maintenance-start-time" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-37 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string, HourOfDay: int, MinuteOfHour: int, DayOfWeek: int, DayOfMonth: int, Timezone: string> {
+]: any -> oneof<record<GatewayARN: string, HourOfDay: int, MinuteOfHour: int, DayOfWeek: int, DayOfMonth: int, Timezone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2238,7 +2244,7 @@ export def "describe-nfs-file-shares" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-38 # required
   file_share_arn_list: list<string> # An array containing the Amazon Resource Name (ARN) of each file share to be described.
-]: any -> record<NFSFileShareInfoList: table<NFSFileShareDefaults: record, FileShareARN: string, FileShareId: string, FileShareStatus: string, GatewayARN: string, KMSEncrypted: bool, KMSKey: string, Path: string, Role: string, LocationARN: string, DefaultStorageClass: string, ObjectACL: string, ClientList: list, Squash: string, ReadOnly: bool, GuessMIMETypeEnabled: bool, RequesterPays: bool, Tags: list, FileShareName: string, CacheAttributes: record, NotificationPolicy: string, VPCEndpointDNSName: string, BucketRegion: string, AuditDestinationARN: string>> {
+]: any -> oneof<record<NFSFileShareInfoList: table<NFSFileShareDefaults: record, FileShareARN: string, FileShareId: string, FileShareStatus: string, GatewayARN: string, KMSEncrypted: bool, KMSKey: string, Path: string, Role: string, LocationARN: string, DefaultStorageClass: string, ObjectACL: string, ClientList: list, Squash: string, ReadOnly: bool, GuessMIMETypeEnabled: bool, RequesterPays: bool, Tags: list, FileShareName: string, CacheAttributes: record, NotificationPolicy: string, VPCEndpointDNSName: string, BucketRegion: string, AuditDestinationARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2287,7 +2293,7 @@ export def "describe-smb-file-shares" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-39 # required
   file_share_arn_list: list<string> # An array containing the Amazon Resource Name (ARN) of each file share to be described.
-]: any -> record<SMBFileShareInfoList: table<FileShareARN: string, FileShareId: string, FileShareStatus: string, GatewayARN: string, KMSEncrypted: bool, KMSKey: string, Path: string, Role: string, LocationARN: string, DefaultStorageClass: string, ObjectACL: string, ReadOnly: bool, GuessMIMETypeEnabled: bool, RequesterPays: bool, SMBACLEnabled: bool, AccessBasedEnumeration: bool, AdminUserList: list, ValidUserList: list, InvalidUserList: list, AuditDestinationARN: string, Authentication: string, CaseSensitivity: string, Tags: list, FileShareName: string, CacheAttributes: record, NotificationPolicy: string, VPCEndpointDNSName: string, BucketRegion: string, OplocksEnabled: bool>> {
+]: any -> oneof<record<SMBFileShareInfoList: table<FileShareARN: string, FileShareId: string, FileShareStatus: string, GatewayARN: string, KMSEncrypted: bool, KMSKey: string, Path: string, Role: string, LocationARN: string, DefaultStorageClass: string, ObjectACL: string, ReadOnly: bool, GuessMIMETypeEnabled: bool, RequesterPays: bool, SMBACLEnabled: bool, AccessBasedEnumeration: bool, AdminUserList: list, ValidUserList: list, InvalidUserList: list, AuditDestinationARN: string, Authentication: string, CaseSensitivity: string, Tags: list, FileShareName: string, CacheAttributes: record, NotificationPolicy: string, VPCEndpointDNSName: string, BucketRegion: string, OplocksEnabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2336,7 +2342,7 @@ export def "describe-smb-settings" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-40 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string, DomainName: string, ActiveDirectoryStatus: string, SMBGuestPasswordSet: bool, SMBSecurityStrategy: string, FileSharesVisible: bool, SMBLocalGroups: record<GatewayAdmins: list<string>>> {
+]: any -> oneof<record<GatewayARN: string, DomainName: string, ActiveDirectoryStatus: string, SMBGuestPasswordSet: bool, SMBSecurityStrategy: string, FileSharesVisible: bool, SMBLocalGroups: record<GatewayAdmins: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2385,7 +2391,7 @@ export def "describe-snapshot-schedule" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-41 # required
   volume_arn: string # The Amazon Resource Name (ARN) of the volume. Use the ListVolumes operation to return a list of gateway volumes.
-]: any -> record<VolumeARN: string, StartAt: int, RecurrenceInHours: int, Description: string, Timezone: string, Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<VolumeARN: string, StartAt: int, RecurrenceInHours: int, Description: string, Timezone: string, Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2434,7 +2440,7 @@ export def "describe-storedi-scsi-volumes" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-42 # required
   volume_ar_ns: list<string> # An array of strings where each string represents the Amazon Resource Name (ARN) of a stored volume. All of the specified stored volumes must be from the same gateway. Use ListVolumes to get volume ARNs for a gateway.
-]: any -> record<StorediSCSIVolumes: table<VolumeARN: string, VolumeId: string, VolumeType: string, VolumeStatus: string, VolumeAttachmentStatus: string, VolumeSizeInBytes: int, VolumeProgress: float, VolumeDiskId: string, SourceSnapshotId: string, PreservedExistingData: bool, VolumeiSCSIAttributes: record, CreatedDate: string, VolumeUsedInBytes: int, KMSKey: string, TargetName: string>> {
+]: any -> oneof<record<StorediSCSIVolumes: table<VolumeARN: string, VolumeId: string, VolumeType: string, VolumeStatus: string, VolumeAttachmentStatus: string, VolumeSizeInBytes: int, VolumeProgress: float, VolumeDiskId: string, SourceSnapshotId: string, PreservedExistingData: bool, VolumeiSCSIAttributes: record, CreatedDate: string, VolumeUsedInBytes: int, KMSKey: string, TargetName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2487,7 +2493,7 @@ export def "describe-tape-archives" [
   --tape-ar-ns: list<string> # The Amazon Resource Name (ARN) of each of the tapes you want to list. If you don't specify a tape ARN, the response lists all tapes in both your VTL and VTS.
   --marker-body: string # An opaque string that indicates the position at which to begin describing virtual tapes. (body field)
   --limit-body: int # Specifies that the number of virtual tapes described be limited to the specified number. (body field)
-]: any -> record<TapeArchives: table<TapeARN: string, TapeBarcode: string, TapeCreatedDate: string, TapeSizeInBytes: int, CompletionTime: string, RetrievedTo: string, TapeStatus: string, TapeUsedInBytes: int, KMSKey: string, PoolId: string, Worm: bool, RetentionStartDate: string, PoolEntryDate: string>, Marker: string> {
+]: any -> oneof<record<TapeArchives: table<TapeARN: string, TapeBarcode: string, TapeCreatedDate: string, TapeSizeInBytes: int, CompletionTime: string, RetrievedTo: string, TapeStatus: string, TapeUsedInBytes: int, KMSKey: string, PoolId: string, Worm: bool, RetentionStartDate: string, PoolEntryDate: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2541,7 +2547,7 @@ export def "describe-tape-recovery-points" [
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   --marker-body: string # An opaque string that indicates the position at which to begin describing the virtual tape recovery points. (body field)
   --limit-body: int # Specifies that the number of virtual tape recovery points that are described be limited to the specified number. (body field)
-]: any -> record<GatewayARN: string, TapeRecoveryPointInfos: table<TapeARN: string, TapeRecoveryPointTime: string, TapeSizeInBytes: int, TapeStatus: string>, Marker: string> {
+]: any -> oneof<record<GatewayARN: string, TapeRecoveryPointInfos: table<TapeARN: string, TapeRecoveryPointTime: string, TapeSizeInBytes: int, TapeStatus: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2596,7 +2602,7 @@ export def "describe-tapes" [
   --tape-ar-ns: list<string> # The Amazon Resource Name (ARN) of each of the tapes you want to list. If you don't specify a tape ARN, the response lists all tapes in both your VTL and VTS.
   --marker-body: string # A marker value, obtained in a previous call to DescribeTapes. This marker indicates which page of results to retrieve. If not specified, the first page of results is retrieved. (body field)
   --limit-body: int # Specifies that the number of virtual tapes described be limited to the specified number. Amazon Web Services may impose its own limit, if this field is not set. (body field)
-]: any -> record<Tapes: table<TapeARN: string, TapeBarcode: string, TapeCreatedDate: string, TapeSizeInBytes: int, TapeStatus: string, VTLDevice: string, Progress: float, TapeUsedInBytes: int, KMSKey: string, PoolId: string, Worm: bool, RetentionStartDate: string, PoolEntryDate: string>, Marker: string> {
+]: any -> oneof<record<Tapes: table<TapeARN: string, TapeBarcode: string, TapeCreatedDate: string, TapeSizeInBytes: int, TapeStatus: string, VTLDevice: string, Progress: float, TapeUsedInBytes: int, KMSKey: string, PoolId: string, Worm: bool, RetentionStartDate: string, PoolEntryDate: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2646,7 +2652,7 @@ export def "describe-upload-buffer" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-46 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string, DiskIds: list<string>, UploadBufferUsedInBytes: int, UploadBufferAllocatedInBytes: int> {
+]: any -> oneof<record<GatewayARN: string, DiskIds: list<string>, UploadBufferUsedInBytes: int, UploadBufferAllocatedInBytes: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2700,7 +2706,7 @@ export def "describe-vtl-devices" [
   --vtl-device-ar-ns: list<string> # An array of strings, where each string represents the Amazon Resource Name (ARN) of a VTL device. All of the specified VTL devices must be from the same gateway. If no VTL devices are specified, the result will contain all devices on the specified gateway.
   --marker-body: string # An opaque string that indicates the position at which to begin describing the VTL devices. (body field)
   --limit-body: int # Specifies that the number of VTL devices described be limited to the specified number. (body field)
-]: any -> record<GatewayARN: string, VTLDevices: table<VTLDeviceARN: string, VTLDeviceType: string, VTLDeviceVendor: string, VTLDeviceProductIdentifier: string, DeviceiSCSIAttributes: record>, Marker: string> {
+]: any -> oneof<record<GatewayARN: string, VTLDevices: table<VTLDeviceARN: string, VTLDeviceType: string, VTLDeviceVendor: string, VTLDeviceProductIdentifier: string, DeviceiSCSIAttributes: record>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2750,7 +2756,7 @@ export def "describe-working-storage" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-48 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string, DiskIds: list<string>, WorkingStorageUsedInBytes: int, WorkingStorageAllocatedInBytes: int> {
+]: any -> oneof<record<GatewayARN: string, DiskIds: list<string>, WorkingStorageUsedInBytes: int, WorkingStorageAllocatedInBytes: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2800,7 +2806,7 @@ export def "detach-volume" [
   --x-amz-target: string@x-amz-target-completer-49 # required
   volume_arn: string # The Amazon Resource Name (ARN) of the volume to detach from the gateway.
   --force-detach: oneof<nothing, bool> # Set to true to forcibly remove the iSCSI connection of the target volume and detach the volume. The default is false. If this value is set to false, you must manually disconnect the iSCSI connection from the target volume. Valid Values: true | false
-]: any -> record<VolumeARN: string> {
+]: any -> oneof<record<VolumeARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2849,7 +2855,7 @@ export def "disable-gateway" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-50 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2899,7 +2905,7 @@ export def "disassociate-file-system" [
   --x-amz-target: string@x-amz-target-completer-51 # required
   file_system_association_arn: string # The Amazon Resource Name (ARN) of the file system association to be deleted.
   --force-delete: oneof<nothing, bool> # If this value is set to true, the operation disassociates an Amazon FSx file system immediately. It ends all data uploads to the file system, and the file system association enters the FORCE_DELETING status. If this value is set to false, the Amazon FSx file system does not disassociate until all data is uploaded.
-]: any -> record<FileSystemAssociationARN: string> {
+]: any -> oneof<record<FileSystemAssociationARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2954,7 +2960,7 @@ export def "join-domain" [
   --timeout-in-seconds: int # Specifies the time in seconds, in which the JoinDomain operation must complete. The default is 20 seconds.
   user_name: string # Sets the user name of user who has permission to add the gateway to the Active Directory domain. The domain user account should be enabled to join computers to the domain. For example, you can use the domain administrator account or an account with delegated permissions to join computers to the domain.
   password: string # Sets the password of the user who has permission to add the gateway to the Active Directory domain. (format: password)
-]: any -> record<GatewayARN: string, ActiveDirectoryStatus: string> {
+]: any -> oneof<record<GatewayARN: string, ActiveDirectoryStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3003,7 +3009,7 @@ export def "list-automatic-tape-creation-policies" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-53 # required
   --gateway-arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<AutomaticTapeCreationPolicyInfos: table<AutomaticTapeCreationRules: list, GatewayARN: string>> {
+]: any -> oneof<record<AutomaticTapeCreationPolicyInfos: table<AutomaticTapeCreationRules: list, GatewayARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3056,7 +3062,7 @@ export def "list-file-shares" [
   --gateway-arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   --limit-body: int # The maximum number of file shares to return in the response. The value must be an integer with a value greater than zero. Optional. (body field)
   --marker-body: string # Opaque pagination token returned from a previous ListFileShares operation. If present, Marker specifies where to continue the list from after a previous call to ListFileShares. Optional. (body field)
-]: any -> record<Marker: string, NextMarker: string, FileShareInfoList: table<FileShareType: string, FileShareARN: string, FileShareId: string, FileShareStatus: string, GatewayARN: string>> {
+]: any -> oneof<record<Marker: string, NextMarker: string, FileShareInfoList: table<FileShareType: string, FileShareARN: string, FileShareId: string, FileShareStatus: string, GatewayARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3110,7 +3116,7 @@ export def "list-file-system-associations" [
   --gateway-arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   --limit-body: int # The maximum number of file system associations to return in the response. If present, Limit must be an integer with a value greater than zero. Optional. (body field)
   --marker-body: string # Opaque pagination token returned from a previous ListFileSystemAssociations operation. If present, Marker specifies where to continue the list from after a previous call to ListFileSystemAssociations. Optional. (body field)
-]: any -> record<Marker: string, NextMarker: string, FileSystemAssociationSummaryList: table<FileSystemAssociationId: string, FileSystemAssociationARN: string, FileSystemAssociationStatus: string, GatewayARN: string>> {
+]: any -> oneof<record<Marker: string, NextMarker: string, FileSystemAssociationSummaryList: table<FileSystemAssociationId: string, FileSystemAssociationARN: string, FileSystemAssociationStatus: string, GatewayARN: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3163,7 +3169,7 @@ export def "list-gateways" [
   --x-amz-target: string@x-amz-target-completer-56 # required
   --marker-body: string # An opaque string that indicates the position at which to begin the returned list of gateways. (body field)
   --limit-body: int # Specifies that the list of gateways returned be limited to the specified number of items. (body field)
-]: any -> record<Gateways: table<GatewayId: string, GatewayARN: string, GatewayType: string, GatewayOperationalState: string, GatewayName: string, Ec2InstanceId: string, Ec2InstanceRegion: string, HostEnvironment: string, HostEnvironmentId: string>, Marker: string> {
+]: any -> oneof<record<Gateways: table<GatewayId: string, GatewayARN: string, GatewayType: string, GatewayOperationalState: string, GatewayName: string, Ec2InstanceId: string, Ec2InstanceRegion: string, HostEnvironment: string, HostEnvironmentId: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3213,7 +3219,7 @@ export def "list-local-disks" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-57 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string, Disks: table<DiskId: string, DiskPath: string, DiskNode: string, DiskStatus: string, DiskSizeInBytes: int, DiskAllocationType: string, DiskAllocationResource: string, DiskAttributeList: list>> {
+]: any -> oneof<record<GatewayARN: string, Disks: table<DiskId: string, DiskPath: string, DiskNode: string, DiskStatus: string, DiskSizeInBytes: int, DiskAllocationType: string, DiskAllocationResource: string, DiskAttributeList: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3266,7 +3272,7 @@ export def "list-tags-for-resource" [
   resource_arn: string # The Amazon Resource Name (ARN) of the resource for which you want to list tags.
   --marker-body: string # An opaque string that indicates the position at which to begin returning the list of tags. (body field)
   --limit-body: int # Specifies that the list of tags returned be limited to the specified number of items. (body field)
-]: any -> record<ResourceARN: string, Marker: string, Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<ResourceARN: string, Marker: string, Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3320,7 +3326,7 @@ export def "list-tape-pools" [
   --pool-ar-ns: list<string> # The Amazon Resource Name (ARN) of each of the custom tape pools you want to list. If you don't specify a custom tape pool ARN, the response lists all custom tape pools.
   --marker-body: string # A string that indicates the position at which to begin the returned list of tape pools. (body field)
   --limit-body: int # An optional number limit for the tape pools in the list returned by this call. (body field)
-]: any -> record<PoolInfos: table<PoolARN: string, PoolName: string, StorageClass: string, RetentionLockType: string, RetentionLockTimeInDays: int, PoolStatus: string>, Marker: string> {
+]: any -> oneof<record<PoolInfos: table<PoolARN: string, PoolName: string, StorageClass: string, RetentionLockType: string, RetentionLockTimeInDays: int, PoolStatus: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3374,7 +3380,7 @@ export def "list-tapes" [
   --tape-ar-ns: list<string> # The Amazon Resource Name (ARN) of each of the tapes you want to list. If you don't specify a tape ARN, the response lists all tapes in both your VTL and VTS.
   --marker-body: string # A string that indicates the position at which to begin the returned list of tapes. (body field)
   --limit-body: int # An optional number limit for the tapes in the list returned by this call. (body field)
-]: any -> record<TapeInfos: table<TapeARN: string, TapeBarcode: string, TapeSizeInBytes: int, TapeStatus: string, GatewayARN: string, PoolId: string, RetentionStartDate: string, PoolEntryDate: string>, Marker: string> {
+]: any -> oneof<record<TapeInfos: table<TapeARN: string, TapeBarcode: string, TapeSizeInBytes: int, TapeStatus: string, GatewayARN: string, PoolId: string, RetentionStartDate: string, PoolEntryDate: string>, Marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3424,7 +3430,7 @@ export def "list-volume-initiators" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-61 # required
   volume_arn: string # The Amazon Resource Name (ARN) of the volume. Use the ListVolumes operation to return a list of gateway volumes for the gateway.
-]: any -> record<Initiators: list<string>> {
+]: any -> oneof<record<Initiators: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3473,7 +3479,7 @@ export def "list-volume-recovery-points" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-62 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string, VolumeRecoveryPointInfos: table<VolumeARN: string, VolumeSizeInBytes: int, VolumeUsageInBytes: int, VolumeRecoveryPointTime: string>> {
+]: any -> oneof<record<GatewayARN: string, VolumeRecoveryPointInfos: table<VolumeARN: string, VolumeSizeInBytes: int, VolumeUsageInBytes: int, VolumeRecoveryPointTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3526,7 +3532,7 @@ export def "list-volumes" [
   --gateway-arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   --marker-body: string # A string that indicates the position at which to begin the returned list of volumes. Obtain the marker from the response of a previous List iSCSI Volumes request. (body field)
   --limit-body: int # Specifies that the list of volumes returned be limited to the specified number of items. (body field)
-]: any -> record<GatewayARN: string, Marker: string, VolumeInfos: table<VolumeARN: string, VolumeId: string, GatewayARN: string, GatewayId: string, VolumeType: string, VolumeSizeInBytes: int, VolumeAttachmentStatus: string>> {
+]: any -> oneof<record<GatewayARN: string, Marker: string, VolumeInfos: table<VolumeARN: string, VolumeId: string, GatewayARN: string, GatewayId: string, VolumeType: string, VolumeSizeInBytes: int, VolumeAttachmentStatus: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3576,7 +3582,7 @@ export def "notify-when-uploaded" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-64 # required
   file_share_arn: string # The Amazon Resource Name (ARN) of the file share.
-]: any -> record<FileShareARN: string, NotificationId: string> {
+]: any -> oneof<record<FileShareARN: string, NotificationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3627,7 +3633,7 @@ export def "refresh-cache" [
   file_share_arn: string # The Amazon Resource Name (ARN) of the file share.
   --folder-list: list<string> # A comma-separated list of the paths of folders to refresh in the cache. The default is ["/"]. The default refreshes objects and folders at the root of the Amazon S3 bucket. If Recursive is set to true, the entire S3 bucket that the file share has access to is refreshed.
   --recursive: oneof<nothing, bool> # A value that specifies whether to recursively refresh folders in the cache. The refresh includes folders that were in the cache the last time the gateway listed the folder's contents. If this value set to true, each folder that is listed in FolderList is recursively updated. Otherwise, subfolders listed in FolderList are not refreshed. Only objects that are in folders listed directly under FolderList are found and used for the update. The default is true. Valid Values: true | false
-]: any -> record<FileShareARN: string, NotificationId: string> {
+]: any -> oneof<record<FileShareARN: string, NotificationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3677,7 +3683,7 @@ export def "remove-tags-from-resource" [
   --x-amz-target: string@x-amz-target-completer-66 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource you want to remove the tags from.
   tag_keys: list<string> # The keys of the tags you want to remove from the specified resource. A tag is composed of a key-value pair.
-]: any -> record<ResourceARN: string> {
+]: any -> oneof<record<ResourceARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3726,7 +3732,7 @@ export def "reset-cache" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-67 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3776,7 +3782,7 @@ export def "retrieve-tape-archive" [
   --x-amz-target: string@x-amz-target-completer-68 # required
   tape_arn: string # The Amazon Resource Name (ARN) of the virtual tape you want to retrieve from the virtual tape shelf (VTS).
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<TapeARN: string> {
+]: any -> oneof<record<TapeARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3826,7 +3832,7 @@ export def "retrieve-tape-recovery-point" [
   --x-amz-target: string@x-amz-target-completer-69 # required
   tape_arn: string # The Amazon Resource Name (ARN) of the virtual tape for which you want to retrieve the recovery point.
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<TapeARN: string> {
+]: any -> oneof<record<TapeARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3876,7 +3882,7 @@ export def "set-local-console-password" [
   --x-amz-target: string@x-amz-target-completer-70 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   local_console_password: string # The password you want to set for your VM local console. (format: password)
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3926,7 +3932,7 @@ export def "set-smb-guest-password" [
   --x-amz-target: string@x-amz-target-completer-71 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   password: string # The password that you want to set for your SMB server. (format: password)
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3975,7 +3981,7 @@ export def "shutdown-gateway" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-72 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4024,7 +4030,7 @@ export def "start-availability-monitor-test" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-73 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4073,7 +4079,7 @@ export def "start-gateway" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-74 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4103,7 +4109,6 @@ export def "start-gateway" [
 #
 # POST /
 # operationId: UpdateAutomaticTapeCreationPolicy
-# --AutomaticTapeCreationRules item shape: {TapeBarcodePrefix: string, PoolId: string, TapeSizeInBytes: int, MinimumNumTapes: int, Worm?: bool}
 export def "update-automatic-tape-creation-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4124,7 +4129,7 @@ export def "update-automatic-tape-creation-policy" [
   --x-amz-target: string@x-amz-target-completer-75 # required
   automatic_tape_creation_rules: list # An automatic tape creation policy consists of a list of automatic tape creation rules. The rules determine when and how to automatically create new tapes. — item shape: {TapeBarcodePrefix: string, PoolId: string, TapeSizeInBytes: int, MinimumNumTapes: int, Worm?: bool}
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4175,7 +4180,7 @@ export def "update-bandwidth-rate-limit" [
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   --average-upload-rate-limit-in-bits-per-sec: int # The average upload bandwidth rate limit in bits per second.
   --average-download-rate-limit-in-bits-per-sec: int # The average download bandwidth rate limit in bits per second.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4205,7 +4210,6 @@ export def "update-bandwidth-rate-limit" [
 #
 # POST /
 # operationId: UpdateBandwidthRateLimitSchedule
-# --BandwidthRateLimitIntervals item shape: {StartHourOfDay: int, StartMinuteOfHour: int, EndHourOfDay: int, EndMinuteOfHour: int, DaysOfWeek: list<int>, AverageUploadRateLimitInBitsPerSec?: int, AverageDownloadRateLimitInBitsPerSec?: int}
 export def "update-bandwidth-rate-limit-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4226,7 +4230,7 @@ export def "update-bandwidth-rate-limit-schedule" [
   --x-amz-target: string@x-amz-target-completer-77 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   bandwidth_rate_limit_intervals: list # An array containing bandwidth rate limit schedule intervals for a gateway. When no bandwidth rate limit intervals have been scheduled, the array is empty. — item shape: {StartHourOfDay: int, StartMinuteOfHour: int, EndHourOfDay: int, EndMinuteOfHour: int, DaysOfWeek: list<int>, AverageUploadRateLimitInBitsPerSec?: int, AverageDownloadRateLimitInBitsPerSec?: int}
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4278,7 +4282,7 @@ export def "update-chap-credentials" [
   secret_to_authenticate_initiator: string # The secret key that the initiator (for example, the Windows client) must provide to participate in mutual CHAP with the target. The secret key must be between 12 and 16 bytes when encoded in UTF-8. (format: password)
   initiator_name: string # The iSCSI initiator that connects to the target.
   --secret-to-authenticate-target: string # The secret key that the target must provide to participate in mutual CHAP with the initiator (e.g. Windows client). Byte constraints: Minimum bytes of 12. Maximum bytes of 16. The secret key must be between 12 and 16 bytes when encoded in UTF-8. (format: password)
-]: any -> record<TargetARN: string, InitiatorName: string> {
+]: any -> oneof<record<TargetARN: string, InitiatorName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4308,7 +4312,6 @@ export def "update-chap-credentials" [
 #
 # POST /
 # operationId: UpdateFileSystemAssociation
-# --CacheAttributes shape: {CacheStaleTimeoutInSeconds?: int}
 export def "update-file-system-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4332,7 +4335,7 @@ export def "update-file-system-association" [
   --password: string # The password of the user credential. (format: password)
   --audit-destination-arn: string # The Amazon Resource Name (ARN) of the storage used for the audit logs.
   --cache-attributes: record # The refresh cache information for the file share or FSx file systems. — shape: {CacheStaleTimeoutInSeconds?: int}
-]: any -> record<FileSystemAssociationARN: string> {
+]: any -> oneof<record<FileSystemAssociationARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4385,7 +4388,7 @@ export def "update-gateway-information" [
   --gateway-timezone: string # A value that indicates the time zone of the gateway.
   --cloud-watch-log-group-arn: string # The Amazon Resource Name (ARN) of the Amazon CloudWatch log group that you want to use to monitor and log events in the gateway. For more information, see What is Amazon CloudWatch Logs? (https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/WhatIsCloudWatchLogs.html)
   --gateway-capacity: string@gateway-capacity-completer # Specifies the size of the gateway's metadata cache.
-]: any -> record<GatewayARN: string, GatewayName: string> {
+]: any -> oneof<record<GatewayARN: string, GatewayName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4434,7 +4437,7 @@ export def "update-gateway-software-now" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-81 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4487,7 +4490,7 @@ export def "update-maintenance-start-time" [
   minute_of_hour: int # The minute component of the maintenance start time represented as mm, where mm is the minute (00 to 59). The minute of the hour is in the time zone of the gateway.
   --day-of-week: int # The day of the week component of the maintenance start time week represented as an ordinal number from 0 to 6, where 0 represents Sunday and 6 Saturday.
   --day-of-month: int # The day of the month component of the maintenance start time represented as an ordinal number from 1 to 28, where 1 represents the first day of the month and 28 represents the last day of the month.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4517,8 +4520,6 @@ export def "update-maintenance-start-time" [
 #
 # POST /
 # operationId: UpdateNFSFileShare
-# --NFSFileShareDefaults shape: {FileMode?: string, DirectoryMode?: string, GroupId?: int, OwnerId?: int}
-# --CacheAttributes shape: {CacheStaleTimeoutInSeconds?: int}
 export def "update-nfs-file-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4552,7 +4553,7 @@ export def "update-nfs-file-share" [
   --cache-attributes: record # The refresh cache information for the file share or FSx file systems. — shape: {CacheStaleTimeoutInSeconds?: int}
   --notification-policy: string # The notification policy of the file share. SettlingTimeInSeconds controls the number of seconds to wait after the last point in time a client wrote to a file before generating an ObjectUploaded notification. Because clients can make many small writes to files, it's best to set this parameter for as long as possible to avoid generating multiple notifications for the same file in a small time period. SettlingTimeInSeconds has no effect on the timing of the object uploading to Amazon S3, only the timing of the notification. The following example sets NotificationPolicy on with SettlingTimeInSeconds set to 60. {\"Upload\": {\"SettlingTimeInSeconds\": 60}} The following example sets NotificationPolicy off. {}
   --audit-destination-arn: string # The Amazon Resource Name (ARN) of the storage used for audit logs.
-]: any -> record<FileShareARN: string> {
+]: any -> oneof<record<FileShareARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4582,7 +4583,6 @@ export def "update-nfs-file-share" [
 #
 # POST /
 # operationId: UpdateSMBFileShare
-# --CacheAttributes shape: {CacheStaleTimeoutInSeconds?: int}
 export def "update-smb-file-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4620,7 +4620,7 @@ export def "update-smb-file-share" [
   --cache-attributes: record # The refresh cache information for the file share or FSx file systems. — shape: {CacheStaleTimeoutInSeconds?: int}
   --notification-policy: string # The notification policy of the file share. SettlingTimeInSeconds controls the number of seconds to wait after the last point in time a client wrote to a file before generating an ObjectUploaded notification. Because clients can make many small writes to files, it's best to set this parameter for as long as possible to avoid generating multiple notifications for the same file in a small time period. SettlingTimeInSeconds has no effect on the timing of the object uploading to Amazon S3, only the timing of the notification. The following example sets NotificationPolicy on with SettlingTimeInSeconds set to 60. {\"Upload\": {\"SettlingTimeInSeconds\": 60}} The following example sets NotificationPolicy off. {}
   --oplocks-enabled: oneof<nothing, bool> # Specifies whether opportunistic locking is enabled for the SMB file share. Enabling opportunistic locking on case-sensitive shares is not recommended for workloads that involve access to files with the same name in different case. Valid Values: true | false
-]: any -> record<FileShareARN: string> {
+]: any -> oneof<record<FileShareARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4670,7 +4670,7 @@ export def "update-smb-file-share-visibility" [
   --x-amz-target: string@x-amz-target-completer-85 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   --file-shares-visible: oneof<nothing, bool> # The shares on this gateway appear when listing shares.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4701,7 +4701,6 @@ export def "update-smb-file-share-visibility" [
 #
 # POST /
 # operationId: UpdateSMBLocalGroups
-# --SMBLocalGroups shape: {GatewayAdmins?: list<string>}
 export def "update-smb-local-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4722,7 +4721,7 @@ export def "update-smb-local-groups" [
   --x-amz-target: string@x-amz-target-completer-86 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   smb_local_groups: record # A list of Active Directory users and groups that have special permissions for SMB file shares on the gateway. — shape: {GatewayAdmins?: list<string>}
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4772,7 +4771,7 @@ export def "update-smb-security-strategy" [
   --x-amz-target: string@x-amz-target-completer-87 # required
   gateway_arn: string # The Amazon Resource Name (ARN) of the gateway. Use the ListGateways operation to return a list of gateways for your account and Amazon Web Services Region.
   smb_security_strategy: string@smb-security-strategy-completer # Specifies the type of security strategy. ClientSpecified: if you use this option, requests are established based on what is negotiated by the client. This option is recommended when you want to maximize compatibility across different clients in your environment. Supported only in S3 File Gateway. MandatorySigning: if you use this option, file gateway only allows connections from SMBv2 or SMBv3 clients that have signing enabled. This option works with SMB clients on Microsoft Windows Vista, Windows Server 2008 or newer. MandatoryEncryption: if you use this option, file gateway only allows connections from SMBv3 clients that have encryption enabled. This option is highly recommended for environments that handle sensitive data. This option works with SMB clients on Microsoft Windows 8, Windows Server 2012 or newer.
-]: any -> record<GatewayARN: string> {
+]: any -> oneof<record<GatewayARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4802,7 +4801,6 @@ export def "update-smb-security-strategy" [
 #
 # POST /
 # operationId: UpdateSnapshotSchedule
-# --Tags item shape: {Key: string, Value: string}
 export def "update-snapshot-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4826,7 +4824,7 @@ export def "update-snapshot-schedule" [
   recurrence_in_hours: int # Frequency of snapshots. Specify the number of hours between snapshots.
   --description: string # Optional description of the snapshot that overwrites the existing description.
   --tags: list # A list of up to 50 tags that can be assigned to a snapshot. Each tag is a key-value pair. Valid characters for key and value are letters, spaces, and numbers representable in UTF-8 format, and the following special characters: + - = . _ : / @. The maximum length of a tag's key is 128 characters, and the maximum length for a tag's value is 256. — item shape: {Key: string, Value: string}
-]: any -> record<VolumeARN: string> {
+]: any -> oneof<record<VolumeARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4876,7 +4874,7 @@ export def "update-vtl-device-type" [
   --x-amz-target: string@x-amz-target-completer-89 # required
   vtl_device_arn: string # The Amazon Resource Name (ARN) of the medium changer you want to select.
   device_type: string # The type of medium changer you want to select. Valid Values: STK-L700 | AWS-Gateway-VTL | IBM-03584L32-0402
-]: any -> record<VTLDeviceARN: string> {
+]: any -> oneof<record<VTLDeviceARN: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

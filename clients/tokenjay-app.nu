@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -103,9 +127,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-age-usd-info" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-age-usd-info" "ergo-pay-create-babel-box-1" "ergo-pay-create-babel-box" "get-babel-fee-overview" "get-babel-fee-new-offer" "do-create-babel-box" "replace-token-amount-input-fields" "check-for-notifications" "main-app-1" "ep-consolidate" "main-app" "get-burning-transaction" "prepare-transaction" "add-payment-request" "get-payment-state" "get-peers-list" "do-sigma-rsv-exchange" "calc-sigma-rsv-exchange" "get-sigma-rsv-price" "do-sigma-usd-exchange" "calc-sigma-usd-exchange" "get-sigma-usd-price" "check-token" "list-blocked" "list-genuine" "get-token-prices" "get-token-price" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -137,7 +161,7 @@ export def "get-age-usd-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<reserveRatio: int, sigRsvPrice: int, sigUsdPrice: int> {
+]: nothing -> oneof<record<reserveRatio: int, sigRsvPrice: int, sigUsdPrice: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ageusd/info" $auth.query)
@@ -171,7 +195,7 @@ export def "ergo-pay-create-babel-box-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: string, addresses: list<string>, message: string, messageSeverity: string, reducedTx: string, reducedTxList: list<string>, replyTo: string> {
+]: nothing -> oneof<record<address: string, addresses: list<string>, message: string, messageSeverity: string, reducedTx: string, reducedTxList: list<string>, replyTo: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($box_id | is-empty) { error make --unspanned { msg: "path parameter 'boxId' must be non-empty" } }
@@ -209,7 +233,7 @@ export def "ergo-pay-create-babel-box" [
   --token-id: string # required
   --erg-amount: int # required, format: int64
   --token-amount: int # required, format: int64
-]: nothing -> record<address: string, addresses: list<string>, message: string, messageSeverity: string, reducedTx: string, reducedTxList: list<string>, replyTo: string> {
+]: nothing -> oneof<record<address: string, addresses: list<string>, message: string, messageSeverity: string, reducedTx: string, reducedTxList: list<string>, replyTo: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($address | is-empty) { error make --unspanned { msg: "path parameter 'address' must be non-empty" } }
@@ -247,7 +271,7 @@ export def "get-babel-fee-overview" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<actions: table<id: string>, manifest: record<appDescription: string, appName: string, appVersion: int, cacheLifetime: int, errorReportUrl: string, iconUrl: string, notificationCheckUrl: string, onAppLoadedAction: string, onResizeAction: string, targetCanvasDimension: string, targetMosaikVersion: int>, view: record<id: string, onClickAction: string, onLongPressAction: string, visible: bool>> {
+]: nothing -> oneof<record<actions: table<id: string>, manifest: record<appDescription: string, appName: string, appVersion: int, cacheLifetime: int, errorReportUrl: string, iconUrl: string, notificationCheckUrl: string, onAppLoadedAction: string, onResizeAction: string, targetCanvasDimension: string, targetMosaikVersion: int>, view: record<id: string, onClickAction: string, onLongPressAction: string, visible: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/babelfee/" $auth.query)
@@ -280,7 +304,7 @@ export def "get-babel-fee-new-offer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<actions: table<id: string>, manifest: record<appDescription: string, appName: string, appVersion: int, cacheLifetime: int, errorReportUrl: string, iconUrl: string, notificationCheckUrl: string, onAppLoadedAction: string, onResizeAction: string, targetCanvasDimension: string, targetMosaikVersion: int>, view: record<id: string, onClickAction: string, onLongPressAction: string, visible: bool>> {
+]: nothing -> oneof<record<actions: table<id: string>, manifest: record<appDescription: string, appName: string, appVersion: int, cacheLifetime: int, errorReportUrl: string, iconUrl: string, notificationCheckUrl: string, onAppLoadedAction: string, onResizeAction: string, targetCanvasDimension: string, targetMosaikVersion: int>, view: record<id: string, onClickAction: string, onLongPressAction: string, visible: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/babelfee/newoffer" $auth.query)
@@ -314,7 +338,7 @@ export def "do-create-babel-box" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<action: record<id: string>, appVersion: int> {
+]: any -> oneof<record<action: record<id: string>, appVersion: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -351,7 +375,7 @@ export def "replace-token-amount-input-fields" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<action: record<id: string>, appVersion: int> {
+]: any -> oneof<record<action: record<id: string>, appVersion: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -387,7 +411,7 @@ export def "check-for-notifications" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string, messageTs: int, nextCheck: int> {
+]: nothing -> oneof<record<message: string, messageTs: int, nextCheck: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/babelfee/notificationcheck" $auth.query)
@@ -420,7 +444,7 @@ export def "main-app-1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<actions: table<id: string>, manifest: record<appDescription: string, appName: string, appVersion: int, cacheLifetime: int, errorReportUrl: string, iconUrl: string, notificationCheckUrl: string, onAppLoadedAction: string, onResizeAction: string, targetCanvasDimension: string, targetMosaikVersion: int>, view: record<id: string, onClickAction: string, onLongPressAction: string, visible: bool>> {
+]: nothing -> oneof<record<actions: table<id: string>, manifest: record<appDescription: string, appName: string, appVersion: int, cacheLifetime: int, errorReportUrl: string, iconUrl: string, notificationCheckUrl: string, onAppLoadedAction: string, onResizeAction: string, targetCanvasDimension: string, targetMosaikVersion: int>, view: record<id: string, onClickAction: string, onLongPressAction: string, visible: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/boxconsolidation/" $auth.query)
@@ -454,7 +478,7 @@ export def "ep-consolidate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: string, addresses: list<string>, message: string, messageSeverity: string, reducedTx: string, reducedTxList: list<string>, replyTo: string> {
+]: nothing -> oneof<record<address: string, addresses: list<string>, message: string, messageSeverity: string, reducedTx: string, reducedTxList: list<string>, replyTo: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($p2pkaddress | is-empty) { error make --unspanned { msg: "path parameter 'p2pkaddress' must be non-empty" } }
@@ -488,7 +512,7 @@ export def "main-app" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<actions: table<id: string>, manifest: record<appDescription: string, appName: string, appVersion: int, cacheLifetime: int, errorReportUrl: string, iconUrl: string, notificationCheckUrl: string, onAppLoadedAction: string, onResizeAction: string, targetCanvasDimension: string, targetMosaikVersion: int>, view: record<id: string, onClickAction: string, onLongPressAction: string, visible: bool>> {
+]: nothing -> oneof<record<actions: table<id: string>, manifest: record<appDescription: string, appName: string, appVersion: int, cacheLifetime: int, errorReportUrl: string, iconUrl: string, notificationCheckUrl: string, onAppLoadedAction: string, onResizeAction: string, targetCanvasDimension: string, targetMosaikVersion: int>, view: record<id: string, onClickAction: string, onLongPressAction: string, visible: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mosaik/tokenburn" $auth.query)
@@ -522,7 +546,7 @@ export def "get-burning-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<address: string, addresses: list<string>, message: string, messageSeverity: string, reducedTx: string, reducedTxList: list<string>, replyTo: string> {
+]: nothing -> oneof<record<address: string, addresses: list<string>, message: string, messageSeverity: string, reducedTx: string, reducedTxList: list<string>, replyTo: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
@@ -557,7 +581,7 @@ export def "prepare-transaction" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<action: record<id: string>, appVersion: int> {
+]: any -> oneof<record<action: record<id: string>, appVersion: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -600,7 +624,7 @@ export def "add-payment-request" [
   --sender-address: string
   --token-id: string
   --token-raw-amount: int # format: int64
-]: any -> record<ergoPayUrl: string, requestId: string> {
+]: any -> oneof<record<ergoPayUrl: string, requestId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -638,7 +662,7 @@ export def "get-payment-state" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<paymentRequestState: string, requestId: string, txId: string> {
+]: nothing -> oneof<record<paymentRequestState: string, requestId: string, txId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($request_id | is-empty) { error make --unspanned { msg: "path parameter 'requestId' must be non-empty" } }
@@ -676,7 +700,7 @@ export def "get-peers-list" [
   --unreachable: oneof<nothing, bool> # Set to true to show unreachable peers in the list (default: false)
   --closed-api: oneof<nothing, bool> # Set to true to show peers not open to be connected (default: false)
   --limit: int # format: int32, default: 50
-]: nothing -> table<blockHeight: int, blockchainApi: bool, headerHeight: int, lastSeen: int, name: string, openRestApi: bool, responseTime: int, url: string> {
+]: nothing -> oneof<table<blockHeight: int, blockchainApi: bool, headerHeight: int, lastSeen: int, name: string, openRestApi: bool, responseTime: int, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "unreachable" $unreachable "scalar") (serialize-qp "closedApi" $closed_api "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -715,7 +739,7 @@ export def "do-sigma-rsv-exchange" [
   --address: string # required
   --check-rate: int # format: int64, default: 0
   --execution-fee: int # format: int64, default: 0
-]: nothing -> record<address: string, addresses: list<string>, message: string, messageSeverity: string, reducedTx: string, reducedTxList: list<string>, replyTo: string> {
+]: nothing -> oneof<record<address: string, addresses: list<string>, message: string, messageSeverity: string, reducedTx: string, reducedTxList: list<string>, replyTo: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($amount == null) { error make --unspanned { msg: "required query parameter 'amount' missing: pass --amount" } }
@@ -753,7 +777,7 @@ export def "calc-sigma-rsv-exchange" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bankFeeAmount: int, bankFeeDescription: string, ergAmount: int, ergAmountDescription: string, exchangeRate: int, jayFeeAmount: int, jayFeeDescription: string, totalAmount: int> {
+]: nothing -> oneof<record<bankFeeAmount: int, bankFeeDescription: string, ergAmount: int, ergAmountDescription: string, exchangeRate: int, jayFeeAmount: int, jayFeeDescription: string, totalAmount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($amount | is-empty) { error make --unspanned { msg: "path parameter 'amount' must be non-empty" } }
@@ -788,7 +812,7 @@ export def "get-sigma-rsv-price" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<available: int, displayName: string, lastUpdated: int, price: int, tokenId: string, volumeLastDay: int> {
+]: nothing -> oneof<record<available: int, displayName: string, lastUpdated: int, price: int, tokenId: string, volumeLastDay: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sigrsv/price" $auth.query)
@@ -826,7 +850,7 @@ export def "do-sigma-usd-exchange" [
   --address: string # required
   --check-rate: int # format: int64, default: 0
   --execution-fee: int # format: int64, default: 0
-]: nothing -> record<address: string, addresses: list<string>, message: string, messageSeverity: string, reducedTx: string, reducedTxList: list<string>, replyTo: string> {
+]: nothing -> oneof<record<address: string, addresses: list<string>, message: string, messageSeverity: string, reducedTx: string, reducedTxList: list<string>, replyTo: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($amount == null) { error make --unspanned { msg: "required query parameter 'amount' missing: pass --amount" } }
@@ -864,7 +888,7 @@ export def "calc-sigma-usd-exchange" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bankFeeAmount: int, bankFeeDescription: string, ergAmount: int, ergAmountDescription: string, exchangeRate: int, jayFeeAmount: int, jayFeeDescription: string, totalAmount: int> {
+]: nothing -> oneof<record<bankFeeAmount: int, bankFeeDescription: string, ergAmount: int, ergAmountDescription: string, exchangeRate: int, jayFeeAmount: int, jayFeeDescription: string, totalAmount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($amount | is-empty) { error make --unspanned { msg: "path parameter 'amount' must be non-empty" } }
@@ -899,7 +923,7 @@ export def "get-sigma-usd-price" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<available: int, displayName: string, lastUpdated: int, price: int, tokenId: string, volumeLastDay: int> {
+]: nothing -> oneof<record<available: int, displayName: string, lastUpdated: int, price: int, tokenId: string, volumeLastDay: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sigusd/price" $auth.query)
@@ -935,7 +959,7 @@ export def "check-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<genuine: int, token: record<issuer: string, tokenId: string, tokenName: string, uniqueName: bool>> {
+]: nothing -> oneof<record<genuine: int, token: record<issuer: string, tokenId: string, tokenName: string, uniqueName: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_id | is-empty) { error make --unspanned { msg: "path parameter 'tokenId' must be non-empty" } }
@@ -971,7 +995,7 @@ export def "list-blocked" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tokens/listBlocked" $auth.query)
@@ -1005,7 +1029,7 @@ export def "list-genuine" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<issuer: string, tokenId: string, tokenName: string, uniqueName: bool> {
+]: nothing -> oneof<table<issuer: string, tokenId: string, tokenName: string, uniqueName: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tokens/listGenuine" $auth.query)
@@ -1039,7 +1063,7 @@ export def "get-token-prices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<available: int, displayName: string, lastUpdated: int, price: int, tokenId: string, volumeLastDay: int> {
+]: nothing -> oneof<table<available: int, displayName: string, lastUpdated: int, price: int, tokenId: string, volumeLastDay: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tokens/prices/all" $auth.query)
@@ -1074,7 +1098,7 @@ export def "get-token-price" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<available: int, displayName: string, lastUpdated: int, price: int, tokenId: string, volumeLastDay: int> {
+]: nothing -> oneof<record<available: int, displayName: string, lastUpdated: int, price: int, tokenId: string, volumeLastDay: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_id | is-empty) { error make --unspanned { msg: "path parameter 'tokenId' must be non-empty" } }

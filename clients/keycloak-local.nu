@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -118,9 +142,9 @@ def policy-completer [] { ["FAIL" "OVERWRITE" "SKIP"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-op" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-op" "post" "get-id-name" "delete-realm" "get-realm" "put-realm" "delete-realm-admin-events" "get-realm-admin-events" "delete-realm-attack-detection-brute-force-users" "delete-realm-attack-detection-brute-force-users-user-id" "get-realm-attack-detection-brute-force-users-user-id" "get-realm-authentication-authenticator-providers" "get-realm-authentication-client-authenticator-providers" "get-realm-authentication-config-description-provider-id" "delete-realm-authentication-config-id" "get-realm-authentication-config-id" "put-realm-authentication-config-id" "post-realm-authentication-executions" "delete-realm-authentication-executions-execution-id" "get-realm-authentication-executions-execution-id" "post-realm-authentication-executions-execution-id-config" "post-realm-authentication-executions-execution-id-lower-priority" "post-realm-authentication-executions-execution-id-raise-priority" "get-realm-authentication-flows" "post-realm-authentication-flows" "post-realm-authentication-flows-flow-alias-copy" "get-realm-authentication-flows-flow-alias-executions" "put-realm-authentication-flows-flow-alias-executions" "post-realm-authentication-flows-flow-alias-executions-execution" "post-realm-authentication-flows-flow-alias-executions-flow" "delete-realm-authentication-flows-id" "get-realm-authentication-flows-id" "put-realm-authentication-flows-id" "get-realm-authentication-form-action-providers" "get-realm-authentication-form-providers" "get-realm-authentication-per-client-config-description" "post-realm-authentication-register-required-action" "get-realm-authentication-required-actions" "delete-realm-authentication-required-actions-alias" "get-realm-authentication-required-actions-alias" "put-realm-authentication-required-actions-alias" "post-realm-authentication-required-actions-alias-lower-priority" "post-realm-authentication-required-actions-alias-raise-priority" "get-realm-authentication-unregistered-required-actions" "post-realm-clear-keys-cache" "post-realm-clear-realm-cache" "post-realm-clear-user-cache" "post-realm-client-description-converter" "get-realm-client-registration-policy-providers" "get-realm-client-scopes" "post-realm-client-scopes" "delete-realm-client-scopes-id1-protocol-mappers-models-id2" "get-realm-client-scopes-id1-protocol-mappers-models-id2" "put-realm-client-scopes-id1-protocol-mappers-models-id2" "delete-realm-client-scopes-id" "get-realm-client-scopes-id" "put-realm-client-scopes-id" "post-realm-client-scopes-id-protocol-mappers-add-models" "get-realm-client-scopes-id-protocol-mappers-models" "post-realm-client-scopes-id-protocol-mappers-models" "get-realm-client-scopes-id-protocol-mappers-protocol-protocol" "get-realm-client-scopes-id-scope-mappings" "delete-realm-client-scopes-id-scope-mappings-clients-client" "get-realm-client-scopes-id-scope-mappings-clients-client" "post-realm-client-scopes-id-scope-mappings-clients-client" "get-realm-client-scopes-id-scope-mappings-clients-client-available" "get-realm-client-scopes-id-scope-mappings-clients-client-composite" "delete-realm-client-scopes-id-scope-mappings-realm" "get-realm-client-scopes-id-scope-mappings-realm" "post-realm-client-scopes-id-scope-mappings-realm" "get-realm-client-scopes-id-scope-mappings-realm-available" "get-realm-client-scopes-id-scope-mappings-realm-composite" "get-realm-client-session-stats" "get-realm-clients" "post-realm-clients" "get-realm-clients-initial-access" "post-realm-clients-initial-access" "delete-realm-clients-initial-access-id" "delete-realm-clients-id1-protocol-mappers-models-id2" "get-realm-clients-id1-protocol-mappers-models-id2" "put-realm-clients-id1-protocol-mappers-models-id2" "delete-realm-clients-id" "get-realm-clients-id" "put-realm-clients-id" "get-realm-clients-id-certificates-attr" "post-realm-clients-id-certificates-attr-download" "post-realm-clients-id-certificates-attr-generate" "post-realm-clients-id-certificates-attr-generate-and-download" "post-realm-clients-id-certificates-attr-upload" "post-realm-clients-id-certificates-attr-upload-certificate" "get-realm-clients-id-client-secret" "post-realm-clients-id-client-secret" "get-realm-clients-id-default-client-scopes" "delete-realm-clients-id-default-client-scopes-client-scope-id" "put-realm-clients-id-default-client-scopes-client-scope-id" "get-realm-clients-id-evaluate-scopes-generate-example-access-token" "get-realm-clients-id-evaluate-scopes-protocol-mappers" "get-realm-clients-id-evaluate-scopes-scope-mappings-role-container-id-granted" "get-realm-clients-id-evaluate-scopes-scope-mappings-role-container-id-not-granted" "get-realm-clients-id-installation-providers-provider-id" "get-realm-clients-id-management-permissions" "put-realm-clients-id-management-permissions" "post-realm-clients-id-nodes" "delete-realm-clients-id-nodes-node" "get-realm-clients-id-offline-session-count" "get-realm-clients-id-offline-sessions" "get-realm-clients-id-optional-client-scopes" "delete-realm-clients-id-optional-client-scopes-client-scope-id" "put-realm-clients-id-optional-client-scopes-client-scope-id" "post-realm-clients-id-protocol-mappers-add-models" "get-realm-clients-id-protocol-mappers-models" "post-realm-clients-id-protocol-mappers-models" "get-realm-clients-id-protocol-mappers-protocol-protocol" "post-realm-clients-id-push-revocation" "post-realm-clients-id-registration-access-token" "get-realm-clients-id-roles" "post-realm-clients-id-roles" "delete-realm-clients-id-roles-role-name" "get-realm-clients-id-roles-role-name" "put-realm-clients-id-roles-role-name" "delete-realm-clients-id-roles-role-name-composites" "get-realm-clients-id-roles-role-name-composites" "post-realm-clients-id-roles-role-name-composites" "get-realm-clients-id-roles-role-name-composites-clients-client" "get-realm-clients-id-roles-role-name-composites-realm" "get-realm-clients-id-roles-role-name-groups" "get-realm-clients-id-roles-role-name-management-permissions" "put-realm-clients-id-roles-role-name-management-permissions" "get-realm-clients-id-roles-role-name-users" "get-realm-clients-id-scope-mappings" "delete-realm-clients-id-scope-mappings-clients-client" "get-realm-clients-id-scope-mappings-clients-client" "post-realm-clients-id-scope-mappings-clients-client" "get-realm-clients-id-scope-mappings-clients-client-available" "get-realm-clients-id-scope-mappings-clients-client-composite" "delete-realm-clients-id-scope-mappings-realm" "get-realm-clients-id-scope-mappings-realm" "post-realm-clients-id-scope-mappings-realm" "get-realm-clients-id-scope-mappings-realm-available" "get-realm-clients-id-scope-mappings-realm-composite" "get-realm-clients-id-service-account-user" "get-realm-clients-id-session-count" "get-realm-clients-id-test-nodes-available" "get-realm-clients-id-user-sessions" "get-realm-components" "post-realm-components" "delete-realm-components-id" "get-realm-components-id" "put-realm-components-id" "get-realm-components-id-sub-component-types" "get-realm-credential-registrators" "get-realm-default-default-client-scopes" "delete-realm-default-default-client-scopes-client-scope-id" "put-realm-default-default-client-scopes-client-scope-id" "get-realm-default-groups" "delete-realm-default-groups-group-id" "put-realm-default-groups-group-id" "get-realm-default-optional-client-scopes" "delete-realm-default-optional-client-scopes-client-scope-id" "put-realm-default-optional-client-scopes-client-scope-id" "delete-realm-events" "get-realm-events" "get-realm-events-config" "put-realm-events-config" "get-realm-group-by-path-path" "get-realm-groups" "post-realm-groups" "get-realm-groups-count" "delete-realm-groups-id" "get-realm-groups-id" "put-realm-groups-id" "post-realm-groups-id-children" "get-realm-groups-id-management-permissions" "put-realm-groups-id-management-permissions" "get-realm-groups-id-members" "get-realm-groups-id-role-mappings" "delete-realm-groups-id-role-mappings-clients-client" "get-realm-groups-id-role-mappings-clients-client" "post-realm-groups-id-role-mappings-clients-client" "get-realm-groups-id-role-mappings-clients-client-available" "get-realm-groups-id-role-mappings-clients-client-composite" "delete-realm-groups-id-role-mappings-realm" "get-realm-groups-id-role-mappings-realm" "post-realm-groups-id-role-mappings-realm" "get-realm-groups-id-role-mappings-realm-available" "get-realm-groups-id-role-mappings-realm-composite" "post-realm-identity-provider-import-config" "get-realm-identity-provider-instances" "post-realm-identity-provider-instances" "delete-realm-identity-provider-instances-alias" "get-realm-identity-provider-instances-alias" "put-realm-identity-provider-instances-alias" "get-realm-identity-provider-instances-alias-export" "get-realm-identity-provider-instances-alias-management-permissions" "put-realm-identity-provider-instances-alias-management-permissions" "get-realm-identity-provider-instances-alias-mapper-types" "get-realm-identity-provider-instances-alias-mappers" "post-realm-identity-provider-instances-alias-mappers" "delete-realm-identity-provider-instances-alias-mappers-id" "get-realm-identity-provider-instances-alias-mappers-id" "put-realm-identity-provider-instances-alias-mappers-id" "get-realm-identity-provider-providers-provider-id" "get-realm-keys" "post-realm-logout-all" "post-realm-partial-export" "post-realm-partial-import" "post-realm-push-revocation" "get-realm-roles" "post-realm-roles" "delete-realm-roles-by-id-role-id" "get-realm-roles-by-id-role-id" "put-realm-roles-by-id-role-id" "delete-realm-roles-by-id-role-id-composites" "get-realm-roles-by-id-role-id-composites" "post-realm-roles-by-id-role-id-composites" "get-realm-roles-by-id-role-id-composites-clients-client" "get-realm-roles-by-id-role-id-composites-realm" "get-realm-roles-by-id-role-id-management-permissions" "put-realm-roles-by-id-role-id-management-permissions" "delete-realm-roles-role-name" "get-realm-roles-role-name" "put-realm-roles-role-name" "delete-realm-roles-role-name-composites" "get-realm-roles-role-name-composites" "post-realm-roles-role-name-composites" "get-realm-roles-role-name-composites-clients-client" "get-realm-roles-role-name-composites-realm" "get-realm-roles-role-name-groups" "get-realm-roles-role-name-management-permissions" "put-realm-roles-role-name-management-permissions" "get-realm-roles-role-name-users" "delete-realm-sessions-session" "post-realm-test-ldap-connection" "post-realm-test-smtp-connection" "get-realm-user-storage-id-name" "post-realm-user-storage-id-remove-imported-users" "post-realm-user-storage-id-sync" "post-realm-user-storage-id-unlink-users" "post-realm-user-storage-parent-id-mappers-id-sync" "get-realm-users" "post-realm-users" "get-realm-users-management-permissions" "put-realm-users-management-permissions" "get-realm-users-count" "delete-realm-users-id" "get-realm-users-id" "put-realm-users-id" "get-realm-users-id-configured-user-storage-credential-types" "get-realm-users-id-consents" "delete-realm-users-id-consents-client" "get-realm-users-id-credentials" "delete-realm-users-id-credentials-credential-id" "post-realm-users-id-credentials-credential-id-move-after-new-previous-credential-id" "post-realm-users-id-credentials-credential-id-move-to-first" "put-realm-users-id-credentials-credential-id-user-label" "put-realm-users-id-disable-credential-types" "put-realm-users-id-execute-actions-email" "get-realm-users-id-federated-identity" "delete-realm-users-id-federated-identity-provider" "post-realm-users-id-federated-identity-provider" "get-realm-users-id-groups" "get-realm-users-id-groups-count" "delete-realm-users-id-groups-group-id" "put-realm-users-id-groups-group-id" "post-realm-users-id-impersonation" "post-realm-users-id-logout" "get-realm-users-id-offline-sessions-client-id" "put-realm-users-id-reset-password" "get-realm-users-id-role-mappings" "delete-realm-users-id-role-mappings-clients-client" "get-realm-users-id-role-mappings-clients-client" "post-realm-users-id-role-mappings-clients-client" "get-realm-users-id-role-mappings-clients-client-available" "get-realm-users-id-role-mappings-clients-client-composite" "delete-realm-users-id-role-mappings-realm" "get-realm-users-id-role-mappings-realm" "post-realm-users-id-role-mappings-realm" "get-realm-users-id-role-mappings-realm-available" "get-realm-users-id-role-mappings-realm-composite" "put-realm-users-id-send-verify-email" "get-realm-users-id-sessions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -151,7 +175,7 @@ export def "get-op" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<builtinProtocolMappers: record, clientImporters: list<record>, clientInstallations: record, componentTypes: record, enums: record, identityProviders: list<record>, memoryInfo: record<free: int, freeFormated: string, freePercentage: int, total: int, totalFormated: string, used: int, usedFormated: string>, passwordPolicies: table<configType: string, defaultValue: string, displayName: string, id: string, multipleSupported: bool>, profileInfo: record<disabledFeatures: list<string>, experimentalFeatures: list<string>, name: string, previewFeatures: list<string>>, protocolMapperTypes: record, providers: record, socialProviders: list<record>, systemInfo: record<fileEncoding: string, javaHome: string, javaRuntime: string, javaVendor: string, javaVersion: string, javaVm: string, javaVmVersion: string, osArchitecture: string, osName: string, osVersion: string, serverTime: string, uptime: string, uptimeMillis: int, userDir: string, userLocale: string, userName: string, userTimezone: string, version: string>, themes: record> {
+]: nothing -> oneof<record<builtinProtocolMappers: record, clientImporters: list<record>, clientInstallations: record, componentTypes: record, enums: record, identityProviders: list<record>, memoryInfo: record<free: int, freeFormated: string, freePercentage: int, total: int, totalFormated: string, used: int, usedFormated: string>, passwordPolicies: table<configType: string, defaultValue: string, displayName: string, id: string, multipleSupported: bool>, profileInfo: record<disabledFeatures: list<string>, experimentalFeatures: list<string>, name: string, previewFeatures: list<string>>, protocolMapperTypes: record, providers: record, socialProviders: list<record>, systemInfo: record<fileEncoding: string, javaHome: string, javaRuntime: string, javaVendor: string, javaVersion: string, javaVm: string, javaVmVersion: string, osArchitecture: string, osName: string, osVersion: string, serverTime: string, uptime: string, uptimeMillis: int, userDir: string, userLocale: string, userName: string, userTimezone: string, version: string>, themes: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/" $auth.query)
@@ -174,22 +198,6 @@ export def "get-op" [
 # Import a realm Imports a realm from a full representation of that realm.
 #
 # POST /
-# --authenticationFlows item shape: {alias?: string, authenticationExecutions?: list, builtIn?: bool, description?: string, id?: string, providerId?: string, topLevel?: bool}
-# --authenticatorConfig item shape: {alias?: string, config?: record, id?: string}
-# --clientScopes item shape: {attributes?: record, description?: string, id?: string, name?: string, protocol?: string, protocolMappers?: list}
-# --clients item shape: {access?: record, adminUrl?: string, alwaysDisplayInConsole?: bool, attributes?: record, authenticationFlowBindingOverrides?: record, authorizationServicesEnabled?: bool, authorizationSettings?: record, baseUrl?: string, bearerOnly?: bool, clientAuthenticatorType?: string, clientId?: string, consentRequired?: bool, defaultClientScopes?: list<string>, defaultRoles?: list<string>, description?: string, directAccessGrantsEnabled?: bool, enabled?: bool, frontchannelLogout?: bool, ... (20 more fields)}
-# --components shape: {empty?: bool, loadFactor?: float, threshold?: int}
-# --federatedUsers item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list<string>, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list<string>, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list<string>, requiredActions?: list<string>, self?: string, serviceAccountClientId?: string, ... (1 more fields)}
-# --groups item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list<string>, subGroups?: list}
-# --identityProviderMappers item shape: {config?: record, id?: string, identityProviderAlias?: string, identityProviderMapper?: string, name?: string}
-# --identityProviders item shape: {addReadTokenRoleOnCreate?: bool, alias?: string, config?: record, displayName?: string, enabled?: bool, firstBrokerLoginFlowAlias?: string, internalId?: string, linkOnly?: bool, postBrokerLoginFlowAlias?: string, providerId?: string, storeToken?: bool, trustEmail?: bool}
-# --protocolMappers item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
-# --requiredActions item shape: {alias?: string, config?: record, defaultAction?: bool, enabled?: bool, name?: string, priority?: int, providerId?: string}
-# --roles shape: {client?: record, realm?: list}
-# --scopeMappings item shape: {client?: string, clientScope?: string, roles?: list<string>, self?: string}
-# --userFederationMappers item shape: {config?: record, federationMapperType?: string, federationProviderDisplayName?: string, id?: string, name?: string}
-# --userFederationProviders item shape: {changedSyncPeriod?: int, config?: record, displayName?: string, fullSyncPeriod?: int, id?: string, lastSync?: int, priority?: int, providerName?: string}
-# --users item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list<string>, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list<string>, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list<string>, requiredActions?: list<string>, self?: string, serviceAccountClientId?: string, ... (1 more fields)}
 export def "post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +360,7 @@ export def "get-id-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -422,7 +430,7 @@ export def "get-realm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accessCodeLifespan: int, accessCodeLifespanLogin: int, accessCodeLifespanUserAction: int, accessTokenLifespan: int, accessTokenLifespanForImplicitFlow: int, accountTheme: string, actionTokenGeneratedByAdminLifespan: int, actionTokenGeneratedByUserLifespan: int, adminEventsDetailsEnabled: bool, adminEventsEnabled: bool, adminTheme: string, attributes: record, authenticationFlows: table<alias: string, authenticationExecutions: list, builtIn: bool, description: string, id: string, providerId: string, topLevel: bool>, authenticatorConfig: table<alias: string, config: record, id: string>, browserFlow: string, browserSecurityHeaders: record, bruteForceProtected: bool, clientAuthenticationFlow: string, clientScopeMappings: record, clientScopes: table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list>, clientSessionIdleTimeout: int, clientSessionMaxLifespan: int, clients: table<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list, defaultRoles: list, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list, origin: string, protocol: string, protocolMappers: list, publicClient: bool, redirectUris: list, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list>, components: record<empty: bool, loadFactor: float, threshold: int>, defaultDefaultClientScopes: list<string>, defaultGroups: list<string>, defaultLocale: string, defaultOptionalClientScopes: list<string>, defaultRoles: list<string>, defaultSignatureAlgorithm: string, directGrantFlow: string, displayName: string, displayNameHtml: string, dockerAuthenticationFlow: string, duplicateEmailsAllowed: bool, editUsernameAllowed: bool, emailTheme: string, enabled: bool, enabledEventTypes: list<string>, eventsEnabled: bool, eventsExpiration: int, eventsListeners: list<string>, failureFactor: int, federatedUsers: table<access: record, attributes: record, clientConsents: list, clientRoles: record, createdTimestamp: int, credentials: list, disableableCredentialTypes: list, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list, federationLink: string, firstName: string, groups: list, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list, requiredActions: list, self: string, serviceAccountClientId: string, username: string>, groups: table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list, subGroups: list>, id: string, identityProviderMappers: table<config: record, id: string, identityProviderAlias: string, identityProviderMapper: string, name: string>, identityProviders: table<addReadTokenRoleOnCreate: bool, alias: string, config: record, displayName: string, enabled: bool, firstBrokerLoginFlowAlias: string, internalId: string, linkOnly: bool, postBrokerLoginFlowAlias: string, providerId: string, storeToken: bool, trustEmail: bool>, internationalizationEnabled: bool, keycloakVersion: string, loginTheme: string, loginWithEmailAllowed: bool, maxDeltaTimeSeconds: int, maxFailureWaitSeconds: int, minimumQuickLoginWaitSeconds: int, notBefore: int, offlineSessionIdleTimeout: int, offlineSessionMaxLifespan: int, offlineSessionMaxLifespanEnabled: bool, otpPolicyAlgorithm: string, otpPolicyDigits: int, otpPolicyInitialCounter: int, otpPolicyLookAheadWindow: int, otpPolicyPeriod: int, otpPolicyType: string, otpSupportedApplications: list<string>, passwordPolicy: string, permanentLockout: bool, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, quickLoginCheckMilliSeconds: int, realm: string, refreshTokenMaxReuse: int, registrationAllowed: bool, registrationEmailAsUsername: bool, registrationFlow: string, rememberMe: bool, requiredActions: table<alias: string, config: record, defaultAction: bool, enabled: bool, name: string, priority: int, providerId: string>, resetCredentialsFlow: string, resetPasswordAllowed: bool, revokeRefreshToken: bool, roles: record<client: record, realm: list<record>>, scopeMappings: table<client: string, clientScope: string, roles: list, self: string>, smtpServer: record, sslRequired: string, ssoSessionIdleTimeout: int, ssoSessionIdleTimeoutRememberMe: int, ssoSessionMaxLifespan: int, ssoSessionMaxLifespanRememberMe: int, supportedLocales: list<string>, userFederationMappers: table<config: record, federationMapperType: string, federationProviderDisplayName: string, id: string, name: string>, userFederationProviders: table<changedSyncPeriod: int, config: record, displayName: string, fullSyncPeriod: int, id: string, lastSync: int, priority: int, providerName: string>, userManagedAccessAllowed: bool, users: table<access: record, attributes: record, clientConsents: list, clientRoles: record, createdTimestamp: int, credentials: list, disableableCredentialTypes: list, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list, federationLink: string, firstName: string, groups: list, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list, requiredActions: list, self: string, serviceAccountClientId: string, username: string>, verifyEmail: bool, waitIncrementSeconds: int, webAuthnPolicyAcceptableAaguids: list<string>, webAuthnPolicyAttestationConveyancePreference: string, webAuthnPolicyAuthenticatorAttachment: string, webAuthnPolicyAvoidSameAuthenticatorRegister: bool, webAuthnPolicyCreateTimeout: int, webAuthnPolicyPasswordlessAcceptableAaguids: list<string>, webAuthnPolicyPasswordlessAttestationConveyancePreference: string, webAuthnPolicyPasswordlessAuthenticatorAttachment: string, webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: bool, webAuthnPolicyPasswordlessCreateTimeout: int, webAuthnPolicyPasswordlessRequireResidentKey: string, webAuthnPolicyPasswordlessRpEntityName: string, webAuthnPolicyPasswordlessRpId: string, webAuthnPolicyPasswordlessSignatureAlgorithms: list<string>, webAuthnPolicyPasswordlessUserVerificationRequirement: string, webAuthnPolicyRequireResidentKey: string, webAuthnPolicyRpEntityName: string, webAuthnPolicyRpId: string, webAuthnPolicySignatureAlgorithms: list<string>, webAuthnPolicyUserVerificationRequirement: string> {
+]: nothing -> oneof<record<accessCodeLifespan: int, accessCodeLifespanLogin: int, accessCodeLifespanUserAction: int, accessTokenLifespan: int, accessTokenLifespanForImplicitFlow: int, accountTheme: string, actionTokenGeneratedByAdminLifespan: int, actionTokenGeneratedByUserLifespan: int, adminEventsDetailsEnabled: bool, adminEventsEnabled: bool, adminTheme: string, attributes: record, authenticationFlows: table<alias: string, authenticationExecutions: list, builtIn: bool, description: string, id: string, providerId: string, topLevel: bool>, authenticatorConfig: table<alias: string, config: record, id: string>, browserFlow: string, browserSecurityHeaders: record, bruteForceProtected: bool, clientAuthenticationFlow: string, clientScopeMappings: record, clientScopes: table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list>, clientSessionIdleTimeout: int, clientSessionMaxLifespan: int, clients: table<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list, defaultRoles: list, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list, origin: string, protocol: string, protocolMappers: list, publicClient: bool, redirectUris: list, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list>, components: record<empty: bool, loadFactor: float, threshold: int>, defaultDefaultClientScopes: list<string>, defaultGroups: list<string>, defaultLocale: string, defaultOptionalClientScopes: list<string>, defaultRoles: list<string>, defaultSignatureAlgorithm: string, directGrantFlow: string, displayName: string, displayNameHtml: string, dockerAuthenticationFlow: string, duplicateEmailsAllowed: bool, editUsernameAllowed: bool, emailTheme: string, enabled: bool, enabledEventTypes: list<string>, eventsEnabled: bool, eventsExpiration: int, eventsListeners: list<string>, failureFactor: int, federatedUsers: table<access: record, attributes: record, clientConsents: list, clientRoles: record, createdTimestamp: int, credentials: list, disableableCredentialTypes: list, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list, federationLink: string, firstName: string, groups: list, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list, requiredActions: list, self: string, serviceAccountClientId: string, username: string>, groups: table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list, subGroups: list>, id: string, identityProviderMappers: table<config: record, id: string, identityProviderAlias: string, identityProviderMapper: string, name: string>, identityProviders: table<addReadTokenRoleOnCreate: bool, alias: string, config: record, displayName: string, enabled: bool, firstBrokerLoginFlowAlias: string, internalId: string, linkOnly: bool, postBrokerLoginFlowAlias: string, providerId: string, storeToken: bool, trustEmail: bool>, internationalizationEnabled: bool, keycloakVersion: string, loginTheme: string, loginWithEmailAllowed: bool, maxDeltaTimeSeconds: int, maxFailureWaitSeconds: int, minimumQuickLoginWaitSeconds: int, notBefore: int, offlineSessionIdleTimeout: int, offlineSessionMaxLifespan: int, offlineSessionMaxLifespanEnabled: bool, otpPolicyAlgorithm: string, otpPolicyDigits: int, otpPolicyInitialCounter: int, otpPolicyLookAheadWindow: int, otpPolicyPeriod: int, otpPolicyType: string, otpSupportedApplications: list<string>, passwordPolicy: string, permanentLockout: bool, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, quickLoginCheckMilliSeconds: int, realm: string, refreshTokenMaxReuse: int, registrationAllowed: bool, registrationEmailAsUsername: bool, registrationFlow: string, rememberMe: bool, requiredActions: table<alias: string, config: record, defaultAction: bool, enabled: bool, name: string, priority: int, providerId: string>, resetCredentialsFlow: string, resetPasswordAllowed: bool, revokeRefreshToken: bool, roles: record<client: record, realm: list<record>>, scopeMappings: table<client: string, clientScope: string, roles: list, self: string>, smtpServer: record, sslRequired: string, ssoSessionIdleTimeout: int, ssoSessionIdleTimeoutRememberMe: int, ssoSessionMaxLifespan: int, ssoSessionMaxLifespanRememberMe: int, supportedLocales: list<string>, userFederationMappers: table<config: record, federationMapperType: string, federationProviderDisplayName: string, id: string, name: string>, userFederationProviders: table<changedSyncPeriod: int, config: record, displayName: string, fullSyncPeriod: int, id: string, lastSync: int, priority: int, providerName: string>, userManagedAccessAllowed: bool, users: table<access: record, attributes: record, clientConsents: list, clientRoles: record, createdTimestamp: int, credentials: list, disableableCredentialTypes: list, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list, federationLink: string, firstName: string, groups: list, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list, requiredActions: list, self: string, serviceAccountClientId: string, username: string>, verifyEmail: bool, waitIncrementSeconds: int, webAuthnPolicyAcceptableAaguids: list<string>, webAuthnPolicyAttestationConveyancePreference: string, webAuthnPolicyAuthenticatorAttachment: string, webAuthnPolicyAvoidSameAuthenticatorRegister: bool, webAuthnPolicyCreateTimeout: int, webAuthnPolicyPasswordlessAcceptableAaguids: list<string>, webAuthnPolicyPasswordlessAttestationConveyancePreference: string, webAuthnPolicyPasswordlessAuthenticatorAttachment: string, webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: bool, webAuthnPolicyPasswordlessCreateTimeout: int, webAuthnPolicyPasswordlessRequireResidentKey: string, webAuthnPolicyPasswordlessRpEntityName: string, webAuthnPolicyPasswordlessRpId: string, webAuthnPolicyPasswordlessSignatureAlgorithms: list<string>, webAuthnPolicyPasswordlessUserVerificationRequirement: string, webAuthnPolicyRequireResidentKey: string, webAuthnPolicyRpEntityName: string, webAuthnPolicyRpId: string, webAuthnPolicySignatureAlgorithms: list<string>, webAuthnPolicyUserVerificationRequirement: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -446,22 +454,6 @@ export def "get-realm" [
 # Update the top-level information of the realm Any user, roles or client information in the representation will be ignored.
 #
 # PUT /{realm}
-# --authenticationFlows item shape: {alias?: string, authenticationExecutions?: list, builtIn?: bool, description?: string, id?: string, providerId?: string, topLevel?: bool}
-# --authenticatorConfig item shape: {alias?: string, config?: record, id?: string}
-# --clientScopes item shape: {attributes?: record, description?: string, id?: string, name?: string, protocol?: string, protocolMappers?: list}
-# --clients item shape: {access?: record, adminUrl?: string, alwaysDisplayInConsole?: bool, attributes?: record, authenticationFlowBindingOverrides?: record, authorizationServicesEnabled?: bool, authorizationSettings?: record, baseUrl?: string, bearerOnly?: bool, clientAuthenticatorType?: string, clientId?: string, consentRequired?: bool, defaultClientScopes?: list<string>, defaultRoles?: list<string>, description?: string, directAccessGrantsEnabled?: bool, enabled?: bool, frontchannelLogout?: bool, ... (20 more fields)}
-# --components shape: {empty?: bool, loadFactor?: float, threshold?: int}
-# --federatedUsers item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list<string>, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list<string>, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list<string>, requiredActions?: list<string>, self?: string, serviceAccountClientId?: string, ... (1 more fields)}
-# --groups item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list<string>, subGroups?: list}
-# --identityProviderMappers item shape: {config?: record, id?: string, identityProviderAlias?: string, identityProviderMapper?: string, name?: string}
-# --identityProviders item shape: {addReadTokenRoleOnCreate?: bool, alias?: string, config?: record, displayName?: string, enabled?: bool, firstBrokerLoginFlowAlias?: string, internalId?: string, linkOnly?: bool, postBrokerLoginFlowAlias?: string, providerId?: string, storeToken?: bool, trustEmail?: bool}
-# --protocolMappers item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
-# --requiredActions item shape: {alias?: string, config?: record, defaultAction?: bool, enabled?: bool, name?: string, priority?: int, providerId?: string}
-# --roles shape: {client?: record, realm?: list}
-# --scopeMappings item shape: {client?: string, clientScope?: string, roles?: list<string>, self?: string}
-# --userFederationMappers item shape: {config?: record, federationMapperType?: string, federationProviderDisplayName?: string, id?: string, name?: string}
-# --userFederationProviders item shape: {changedSyncPeriod?: int, config?: record, displayName?: string, fullSyncPeriod?: int, id?: string, lastSync?: int, priority?: int, providerName?: string}
-# --users item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list<string>, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list<string>, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list<string>, requiredActions?: list<string>, self?: string, serviceAccountClientId?: string, ... (1 more fields)}
 export def "put-realm" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -672,7 +664,7 @@ export def "get-realm-admin-events" [
   --operation-types: list<string>
   --resource-path: string
   --resource-types: list<string>
-]: nothing -> table<authDetails: record<clientId: string, ipAddress: string, realmId: string, userId: string>, error: string, operationType: string, realmId: string, representation: string, resourcePath: string, resourceType: string, time: int> {
+]: nothing -> oneof<table<authDetails: record<clientId: string, ipAddress: string, realmId: string, userId: string>, error: string, operationType: string, realmId: string, representation: string, resourcePath: string, resourceType: string, time: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -781,7 +773,7 @@ export def "get-realm-attack-detection-brute-force-users-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -817,7 +809,7 @@ export def "get-realm-authentication-authenticator-providers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -852,7 +844,7 @@ export def "get-realm-authentication-client-authenticator-providers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -888,7 +880,7 @@ export def "get-realm-authentication-config-description-provider-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<helpText: string, name: string, properties: table<defaultValue: record, helpText: string, label: string, name: string, options: list, secret: bool, type: string>, providerId: string> {
+]: nothing -> oneof<record<helpText: string, name: string, properties: table<defaultValue: record, helpText: string, label: string, name: string, options: list, secret: bool, type: string>, providerId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -962,7 +954,7 @@ export def "get-realm-authentication-config-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<alias: string, config: record, id: string> {
+]: nothing -> oneof<record<alias: string, config: record, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -1279,7 +1271,7 @@ export def "get-realm-authentication-flows" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<alias: string, authenticationExecutions: list<record>, builtIn: bool, description: string, id: string, providerId: string, topLevel: bool> {
+]: nothing -> oneof<table<alias: string, authenticationExecutions: list<record>, builtIn: bool, description: string, id: string, providerId: string, topLevel: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -1303,7 +1295,6 @@ export def "get-realm-authentication-flows" [
 # Create a new authentication flow
 #
 # POST /{realm}/authentication/flows
-# --authenticationExecutions item shape: {authenticator?: string, authenticatorConfig?: string, authenticatorFlow?: bool, autheticatorFlow?: bool, flowAlias?: string, priority?: int, requirement?: string, userSetupAllowed?: bool}
 export def "post-realm-authentication-flows" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1610,7 +1601,7 @@ export def "get-realm-authentication-flows-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<alias: string, authenticationExecutions: table<authenticator: string, authenticatorConfig: string, authenticatorFlow: bool, autheticatorFlow: bool, flowAlias: string, priority: int, requirement: string, userSetupAllowed: bool>, builtIn: bool, description: string, id: string, providerId: string, topLevel: bool> {
+]: nothing -> oneof<record<alias: string, authenticationExecutions: table<authenticator: string, authenticatorConfig: string, authenticatorFlow: bool, autheticatorFlow: bool, flowAlias: string, priority: int, requirement: string, userSetupAllowed: bool>, builtIn: bool, description: string, id: string, providerId: string, topLevel: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -1635,7 +1626,6 @@ export def "get-realm-authentication-flows-id" [
 # Update an authentication flow
 #
 # PUT /{realm}/authentication/flows/{id}
-# --authenticationExecutions item shape: {authenticator?: string, authenticatorConfig?: string, authenticatorFlow?: bool, autheticatorFlow?: bool, flowAlias?: string, priority?: int, requirement?: string, userSetupAllowed?: bool}
 export def "put-realm-authentication-flows-id" [
   realm: string
   id: string
@@ -1694,7 +1684,7 @@ export def "get-realm-authentication-form-action-providers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -1729,7 +1719,7 @@ export def "get-realm-authentication-form-providers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -1764,7 +1754,7 @@ export def "get-realm-authentication-per-client-config-description" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -1838,7 +1828,7 @@ export def "get-realm-authentication-required-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<alias: string, config: record, defaultAction: bool, enabled: bool, name: string, priority: int, providerId: string> {
+]: nothing -> oneof<table<alias: string, config: record, defaultAction: bool, enabled: bool, name: string, priority: int, providerId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -1911,7 +1901,7 @@ export def "get-realm-authentication-required-actions-alias" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<alias: string, config: record, defaultAction: bool, enabled: bool, name: string, priority: int, providerId: string> {
+]: nothing -> oneof<record<alias: string, config: record, defaultAction: bool, enabled: bool, name: string, priority: int, providerId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -2068,7 +2058,7 @@ export def "get-realm-authentication-unregistered-required-actions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -2209,7 +2199,7 @@ export def "post-realm-client-description-converter" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> record<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record<allowRemoteResourceManagement: bool, clientId: string, decisionStrategy: string, id: string, name: string, policies: list<record>, policyEnforcementMode: string, resources: list<record>, scopes: list<record>>, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list<string>, defaultRoles: list<string>, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list<string>, origin: string, protocol: string, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, publicClient: bool, redirectUris: list<string>, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list<string>> {
+]: any -> oneof<record<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record<allowRemoteResourceManagement: bool, clientId: string, decisionStrategy: string, id: string, name: string, policies: list<record>, policyEnforcementMode: string, resources: list<record>, scopes: list<record>>, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list<string>, defaultRoles: list<string>, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list<string>, origin: string, protocol: string, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, publicClient: bool, redirectUris: list<string>, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2247,7 +2237,7 @@ export def "get-realm-client-registration-policy-providers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<helpText: string, id: string, metadata: record, properties: list<record>> {
+]: nothing -> oneof<table<helpText: string, id: string, metadata: record, properties: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -2282,7 +2272,7 @@ export def "get-realm-client-scopes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list<record>> {
+]: nothing -> oneof<table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -2306,7 +2296,6 @@ export def "get-realm-client-scopes" [
 # Create a new client scope Client Scope’s name must be unique!
 #
 # POST /{realm}/client-scopes
-# --protocolMappers item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
 export def "post-realm-client-scopes" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2403,7 +2392,7 @@ export def "get-realm-client-scopes-id1-protocol-mappers-models-id2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<config: record, id: string, name: string, protocol: string, protocolMapper: string> {
+]: nothing -> oneof<record<config: record, id: string, name: string, protocol: string, protocolMapper: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -2525,7 +2514,7 @@ export def "get-realm-client-scopes-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>> {
+]: nothing -> oneof<record<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -2550,7 +2539,6 @@ export def "get-realm-client-scopes-id" [
 # Update the client scope
 #
 # PUT /{realm}/client-scopes/{id}
-# --protocolMappers item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
 export def "put-realm-client-scopes-id" [
   realm: string
   id: string
@@ -2650,7 +2638,7 @@ export def "get-realm-client-scopes-id-protocol-mappers-models" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<config: record, id: string, name: string, protocol: string, protocolMapper: string> {
+]: nothing -> oneof<table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -2733,7 +2721,7 @@ export def "get-realm-client-scopes-id-protocol-mappers-protocol-protocol" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<config: record, id: string, name: string, protocol: string, protocolMapper: string> {
+]: nothing -> oneof<table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -2771,7 +2759,7 @@ export def "get-realm-client-scopes-id-scope-mappings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<clientMappings: record, realmMappings: table<attributes: record, clientRole: bool, composite: bool, composites: record, containerId: string, description: string, id: string, name: string>> {
+]: nothing -> oneof<record<clientMappings: record, realmMappings: table<attributes: record, clientRole: bool, composite: bool, composites: record, containerId: string, description: string, id: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -2852,7 +2840,7 @@ export def "get-realm-client-scopes-id-scope-mappings-clients-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -2934,7 +2922,7 @@ export def "get-realm-client-scopes-id-scope-mappings-clients-client-available" 
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -2973,7 +2961,7 @@ export def "get-realm-client-scopes-id-scope-mappings-clients-client-composite" 
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -3052,7 +3040,7 @@ export def "get-realm-client-scopes-id-scope-mappings-realm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -3130,7 +3118,7 @@ export def "get-realm-client-scopes-id-scope-mappings-realm-available" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -3167,7 +3155,7 @@ export def "get-realm-client-scopes-id-scope-mappings-realm-composite" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -3203,7 +3191,7 @@ export def "get-realm-client-session-stats" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -3243,7 +3231,7 @@ export def "get-realm-clients" [
   --max: int # the max results to return (format: int32)
   --search: oneof<nothing, bool> # whether this is a search query or a getClientById query
   --viewable-only: oneof<nothing, bool> # filter clients that cannot be viewed in full by admin
-]: nothing -> table<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record<allowRemoteResourceManagement: bool, clientId: string, decisionStrategy: string, id: string, name: string, policies: list, policyEnforcementMode: string, resources: list, scopes: list>, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list<string>, defaultRoles: list<string>, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list<string>, origin: string, protocol: string, protocolMappers: list<record>, publicClient: bool, redirectUris: list<string>, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list<string>> {
+]: nothing -> oneof<table<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record<allowRemoteResourceManagement: bool, clientId: string, decisionStrategy: string, id: string, name: string, policies: list, policyEnforcementMode: string, resources: list, scopes: list>, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list<string>, defaultRoles: list<string>, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list<string>, origin: string, protocol: string, protocolMappers: list<record>, publicClient: bool, redirectUris: list<string>, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -3268,8 +3256,6 @@ export def "get-realm-clients" [
 # Create a new client Client’s client_id must be unique!
 #
 # POST /{realm}/clients
-# --authorizationSettings shape: {allowRemoteResourceManagement?: bool, clientId?: string, decisionStrategy?: "AFFIRMATIVE"|"UNANIMOUS"|"CONSENSUS", id?: string, name?: string, policies?: list, policyEnforcementMode?: "ENFORCING"|"PERMISSIVE"|"DISABLED", resources?: list, scopes?: list}
-# --protocolMappers item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
 export def "post-realm-clients" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3355,7 +3341,7 @@ export def "get-realm-clients-initial-access" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<count: int, expiration: int, id: string, remainingCount: int, timestamp: int, token: string> {
+]: nothing -> oneof<table<count: int, expiration: int, id: string, remainingCount: int, timestamp: int, token: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -3392,7 +3378,7 @@ export def "post-realm-clients-initial-access" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # format: int32
   --expiration: int # format: int32
-]: any -> record<count: int, expiration: int, id: string, remainingCount: int, timestamp: int, token: string> {
+]: any -> oneof<record<count: int, expiration: int, id: string, remainingCount: int, timestamp: int, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3506,7 +3492,7 @@ export def "get-realm-clients-id1-protocol-mappers-models-id2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<config: record, id: string, name: string, protocol: string, protocolMapper: string> {
+]: nothing -> oneof<record<config: record, id: string, name: string, protocol: string, protocolMapper: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -3628,7 +3614,7 @@ export def "get-realm-clients-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record<allowRemoteResourceManagement: bool, clientId: string, decisionStrategy: string, id: string, name: string, policies: list<record>, policyEnforcementMode: string, resources: list<record>, scopes: list<record>>, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list<string>, defaultRoles: list<string>, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list<string>, origin: string, protocol: string, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, publicClient: bool, redirectUris: list<string>, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list<string>> {
+]: nothing -> oneof<record<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record<allowRemoteResourceManagement: bool, clientId: string, decisionStrategy: string, id: string, name: string, policies: list<record>, policyEnforcementMode: string, resources: list<record>, scopes: list<record>>, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list<string>, defaultRoles: list<string>, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list<string>, origin: string, protocol: string, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, publicClient: bool, redirectUris: list<string>, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -3653,8 +3639,6 @@ export def "get-realm-clients-id" [
 # Update the client
 #
 # PUT /{realm}/clients/{id}
-# --authorizationSettings shape: {allowRemoteResourceManagement?: bool, clientId?: string, decisionStrategy?: "AFFIRMATIVE"|"UNANIMOUS"|"CONSENSUS", id?: string, name?: string, policies?: list, policyEnforcementMode?: "ENFORCING"|"PERMISSIVE"|"DISABLED", resources?: list, scopes?: list}
-# --protocolMappers item shape: {config?: record, id?: string, name?: string, protocol?: string, protocolMapper?: string}
 export def "put-realm-clients-id" [
   realm: string
   id: string
@@ -3746,7 +3730,7 @@ export def "get-realm-clients-id-certificates-attr" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<certificate: string, kid: string, privateKey: string, publicKey: string> {
+]: nothing -> oneof<record<certificate: string, kid: string, privateKey: string, publicKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -3833,7 +3817,7 @@ export def "post-realm-clients-id-certificates-attr-generate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<certificate: string, kid: string, privateKey: string, publicKey: string> {
+]: nothing -> oneof<record<certificate: string, kid: string, privateKey: string, publicKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -3920,7 +3904,7 @@ export def "post-realm-clients-id-certificates-attr-upload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<certificate: string, kid: string, privateKey: string, publicKey: string> {
+]: nothing -> oneof<record<certificate: string, kid: string, privateKey: string, publicKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -3959,7 +3943,7 @@ export def "post-realm-clients-id-certificates-attr-upload-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<certificate: string, kid: string, privateKey: string, publicKey: string> {
+]: nothing -> oneof<record<certificate: string, kid: string, privateKey: string, publicKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -3997,7 +3981,7 @@ export def "get-realm-clients-id-client-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdDate: int, credentialData: string, id: string, priority: int, secretData: string, temporary: bool, type: string, userLabel: string, value: string> {
+]: nothing -> oneof<record<createdDate: int, credentialData: string, id: string, priority: int, secretData: string, temporary: bool, type: string, userLabel: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4034,7 +4018,7 @@ export def "post-realm-clients-id-client-secret" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdDate: int, credentialData: string, id: string, priority: int, secretData: string, temporary: bool, type: string, userLabel: string, value: string> {
+]: nothing -> oneof<record<createdDate: int, credentialData: string, id: string, priority: int, secretData: string, temporary: bool, type: string, userLabel: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4071,7 +4055,7 @@ export def "get-realm-clients-id-default-client-scopes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list<record>> {
+]: nothing -> oneof<table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4184,7 +4168,7 @@ export def "get-realm-clients-id-evaluate-scopes-generate-example-access-token" 
   --dry-run(-n) # Return the request that would be sent without executing it
   --scope: string
   --user-id: string
-]: nothing -> record<acr: string, address: record<country: string, formatted: string, locality: string, postal_code: string, region: string, street_address: string>, allowed_origins: list<string>, at_hash: string, auth_time: int, authorization: record<permissions: list<record>>, azp: string, birthdate: string, c_hash: string, category: string, claims_locales: string, cnf: record<x5t_S256: string>, email: string, email_verified: bool, exp: int, family_name: string, gender: string, given_name: string, iat: int, iss: string, jti: string, locale: string, middle_name: string, name: string, nbf: int, nickname: string, nonce: string, otherClaims: record, phone_number: string, phone_number_verified: bool, picture: string, preferred_username: string, profile: string, realm_access: record<roles: list<string>, verify_caller: bool>, s_hash: string, scope: string, session_state: string, sub: string, trusted_certs: list<string>, typ: string, updated_at: int, website: string, zoneinfo: string> {
+]: nothing -> oneof<record<acr: string, address: record<country: string, formatted: string, locality: string, postal_code: string, region: string, street_address: string>, allowed_origins: list<string>, at_hash: string, auth_time: int, authorization: record<permissions: list<record>>, azp: string, birthdate: string, c_hash: string, category: string, claims_locales: string, cnf: record<x5t_S256: string>, email: string, email_verified: bool, exp: int, family_name: string, gender: string, given_name: string, iat: int, iss: string, jti: string, locale: string, middle_name: string, name: string, nbf: int, nickname: string, nonce: string, otherClaims: record, phone_number: string, phone_number_verified: bool, picture: string, preferred_username: string, profile: string, realm_access: record<roles: list<string>, verify_caller: bool>, s_hash: string, scope: string, session_state: string, sub: string, trusted_certs: list<string>, typ: string, updated_at: int, website: string, zoneinfo: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4223,7 +4207,7 @@ export def "get-realm-clients-id-evaluate-scopes-protocol-mappers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --scope: string
-]: nothing -> table<containerId: string, containerName: string, containerType: string, mapperId: string, mapperName: string, protocolMapper: string> {
+]: nothing -> oneof<table<containerId: string, containerName: string, containerType: string, mapperId: string, mapperName: string, protocolMapper: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4263,7 +4247,7 @@ export def "get-realm-clients-id-evaluate-scopes-scope-mappings-role-container-i
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --scope: string
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4304,7 +4288,7 @@ export def "get-realm-clients-id-evaluate-scopes-scope-mappings-role-container-i
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --scope: string
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4380,7 +4364,7 @@ export def "get-realm-clients-id-management-permissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, resource: string, scopePermissions: record> {
+]: nothing -> oneof<record<enabled: bool, resource: string, scopePermissions: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4420,7 +4404,7 @@ export def "put-realm-clients-id-management-permissions" [
   --enabled: oneof<nothing, bool>
   --resource: string
   --scope-permissions: record
-]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
+]: any -> oneof<record<enabled: bool, resource: string, scopePermissions: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4540,7 +4524,7 @@ export def "get-realm-clients-id-offline-session-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4579,7 +4563,7 @@ export def "get-realm-clients-id-offline-sessions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --first: int # Paging offset (format: int32)
   --max: int # Maximum results size (defaults to 100) (format: int32)
-]: nothing -> table<clients: record, id: string, ipAddress: string, lastAccess: int, start: int, userId: string, username: string> {
+]: nothing -> oneof<table<clients: record, id: string, ipAddress: string, lastAccess: int, start: int, userId: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4617,7 +4601,7 @@ export def "get-realm-clients-id-optional-client-scopes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list<record>> {
+]: nothing -> oneof<table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4769,7 +4753,7 @@ export def "get-realm-clients-id-protocol-mappers-models" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<config: record, id: string, name: string, protocol: string, protocolMapper: string> {
+]: nothing -> oneof<table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4852,7 +4836,7 @@ export def "get-realm-clients-id-protocol-mappers-protocol-protocol" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<config: record, id: string, name: string, protocol: string, protocolMapper: string> {
+]: nothing -> oneof<table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4890,7 +4874,7 @@ export def "post-realm-clients-id-push-revocation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<failedRequests: list<string>, successRequests: list<string>> {
+]: nothing -> oneof<record<failedRequests: list<string>, successRequests: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4927,7 +4911,7 @@ export def "post-realm-clients-id-registration-access-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record<allowRemoteResourceManagement: bool, clientId: string, decisionStrategy: string, id: string, name: string, policies: list<record>, policyEnforcementMode: string, resources: list<record>, scopes: list<record>>, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list<string>, defaultRoles: list<string>, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list<string>, origin: string, protocol: string, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, publicClient: bool, redirectUris: list<string>, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list<string>> {
+]: nothing -> oneof<record<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record<allowRemoteResourceManagement: bool, clientId: string, decisionStrategy: string, id: string, name: string, policies: list<record>, policyEnforcementMode: string, resources: list<record>, scopes: list<record>>, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list<string>, defaultRoles: list<string>, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list<string>, origin: string, protocol: string, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, publicClient: bool, redirectUris: list<string>, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4968,7 +4952,7 @@ export def "get-realm-clients-id-roles" [
   --first: int # format: int32
   --max: int # format: int32
   --search: string
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -4994,7 +4978,6 @@ export def "get-realm-clients-id-roles" [
 # Create a new role for the realm or client
 #
 # POST /{realm}/clients/{id}/roles
-# --composites shape: {client?: record, realm?: list<string>}
 export def "post-realm-clients-id-roles" [
   realm: string
   id: string
@@ -5095,7 +5078,7 @@ export def "get-realm-clients-id-roles-role-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list<string>>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<record<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list<string>>, containerId: string, description: string, id: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -5121,7 +5104,6 @@ export def "get-realm-clients-id-roles-role-name" [
 # Update a role by name
 #
 # PUT /{realm}/clients/{id}/roles/{role-name}
-# --composites shape: {client?: record, realm?: list<string>}
 export def "put-realm-clients-id-roles-role-name" [
   realm: string
   id: string
@@ -5228,7 +5210,7 @@ export def "get-realm-clients-id-roles-role-name-composites" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -5311,7 +5293,7 @@ export def "get-realm-clients-id-roles-role-name-composites-clients-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -5351,7 +5333,7 @@ export def "get-realm-clients-id-roles-role-name-composites-realm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -5393,7 +5375,7 @@ export def "get-realm-clients-id-roles-role-name-groups" [
   --brief-representation: oneof<nothing, bool> # if false, return a full representation of the GroupRepresentation objects
   --first: int # format: int32
   --max: int # format: int32
-]: nothing -> table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
+]: nothing -> oneof<table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -5433,7 +5415,7 @@ export def "get-realm-clients-id-roles-role-name-management-permissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, resource: string, scopePermissions: record> {
+]: nothing -> oneof<record<enabled: bool, resource: string, scopePermissions: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -5475,7 +5457,7 @@ export def "put-realm-clients-id-roles-role-name-management-permissions" [
   --enabled: oneof<nothing, bool>
   --resource: string
   --scope-permissions: record
-]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
+]: any -> oneof<record<enabled: bool, resource: string, scopePermissions: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5519,7 +5501,7 @@ export def "get-realm-clients-id-roles-role-name-users" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --first: int # format: int32
   --max: int # format: int32
-]: nothing -> table<access: record, attributes: record, clientConsents: list<record>, clientRoles: record, createdTimestamp: int, credentials: list<record>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list<record>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string> {
+]: nothing -> oneof<table<access: record, attributes: record, clientConsents: list<record>, clientRoles: record, createdTimestamp: int, credentials: list<record>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list<record>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -5558,7 +5540,7 @@ export def "get-realm-clients-id-scope-mappings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<clientMappings: record, realmMappings: table<attributes: record, clientRole: bool, composite: bool, composites: record, containerId: string, description: string, id: string, name: string>> {
+]: nothing -> oneof<record<clientMappings: record, realmMappings: table<attributes: record, clientRole: bool, composite: bool, composites: record, containerId: string, description: string, id: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -5639,7 +5621,7 @@ export def "get-realm-clients-id-scope-mappings-clients-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -5721,7 +5703,7 @@ export def "get-realm-clients-id-scope-mappings-clients-client-available" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -5760,7 +5742,7 @@ export def "get-realm-clients-id-scope-mappings-clients-client-composite" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -5839,7 +5821,7 @@ export def "get-realm-clients-id-scope-mappings-realm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -5917,7 +5899,7 @@ export def "get-realm-clients-id-scope-mappings-realm-available" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -5954,7 +5936,7 @@ export def "get-realm-clients-id-scope-mappings-realm-composite" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -5991,7 +5973,7 @@ export def "get-realm-clients-id-service-account-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<access: record, attributes: record, clientConsents: table<clientId: string, createdDate: int, grantedClientScopes: list, lastUpdatedDate: int>, clientRoles: record, createdTimestamp: int, credentials: table<createdDate: int, credentialData: string, id: string, priority: int, secretData: string, temporary: bool, type: string, userLabel: string, value: string>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: table<identityProvider: string, userId: string, userName: string>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string> {
+]: nothing -> oneof<record<access: record, attributes: record, clientConsents: table<clientId: string, createdDate: int, grantedClientScopes: list, lastUpdatedDate: int>, clientRoles: record, createdTimestamp: int, credentials: table<createdDate: int, credentialData: string, id: string, priority: int, secretData: string, temporary: bool, type: string, userLabel: string, value: string>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: table<identityProvider: string, userId: string, userName: string>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -6028,7 +6010,7 @@ export def "get-realm-clients-id-session-count" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -6065,7 +6047,7 @@ export def "get-realm-clients-id-test-nodes-available" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<failedRequests: list<string>, successRequests: list<string>> {
+]: nothing -> oneof<record<failedRequests: list<string>, successRequests: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -6104,7 +6086,7 @@ export def "get-realm-clients-id-user-sessions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --first: int # Paging offset (format: int32)
   --max: int # Maximum results size (defaults to 100) (format: int32)
-]: nothing -> table<clients: record, id: string, ipAddress: string, lastAccess: int, start: int, userId: string, username: string> {
+]: nothing -> oneof<table<clients: record, id: string, ipAddress: string, lastAccess: int, start: int, userId: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -6142,7 +6124,7 @@ export def "get-realm-components" [
   --name: string
   --parent: string
   --type: string
-]: nothing -> table<config: record<empty: bool, loadFactor: float, threshold: int>, id: string, name: string, parentId: string, providerId: string, providerType: string, subType: string> {
+]: nothing -> oneof<table<config: record<empty: bool, loadFactor: float, threshold: int>, id: string, name: string, parentId: string, providerId: string, providerType: string, subType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -6165,8 +6147,6 @@ export def "get-realm-components" [
 }
 
 # POST /{realm}/components
-#
-# --config shape: {empty?: bool, loadFactor?: float, threshold?: int}
 export def "post-realm-components" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6257,7 +6237,7 @@ export def "get-realm-components-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<config: record<empty: bool, loadFactor: float, threshold: int>, id: string, name: string, parentId: string, providerId: string, providerType: string, subType: string> {
+]: nothing -> oneof<record<config: record<empty: bool, loadFactor: float, threshold: int>, id: string, name: string, parentId: string, providerId: string, providerType: string, subType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -6280,8 +6260,6 @@ export def "get-realm-components-id" [
 }
 
 # PUT /{realm}/components/{id}
-#
-# --config shape: {empty?: bool, loadFactor?: float, threshold?: int}
 export def "put-realm-components-id" [
   realm: string
   id: string
@@ -6342,7 +6320,7 @@ export def "get-realm-components-id-sub-component-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --type: string
-]: nothing -> table<helpText: string, id: string, metadata: record, properties: list<record>> {
+]: nothing -> oneof<table<helpText: string, id: string, metadata: record, properties: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -6377,7 +6355,7 @@ export def "get-realm-credential-registrators" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -6412,7 +6390,7 @@ export def "get-realm-default-default-client-scopes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list<record>> {
+]: nothing -> oneof<table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -6517,7 +6495,7 @@ export def "get-realm-default-groups" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
+]: nothing -> oneof<table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -6622,7 +6600,7 @@ export def "get-realm-default-optional-client-scopes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list<record>> {
+]: nothing -> oneof<table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -6770,7 +6748,7 @@ export def "get-realm-events" [
   --max: int # Maximum results size (defaults to 100) (format: int32)
   --type: list<string> # The types of events to return
   --user: string # User id
-]: nothing -> table<clientId: string, details: record, error: string, ipAddress: string, realmId: string, sessionId: string, time: int, type: string, userId: string> {
+]: nothing -> oneof<table<clientId: string, details: record, error: string, ipAddress: string, realmId: string, sessionId: string, time: int, type: string, userId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -6806,7 +6784,7 @@ export def "get-realm-events-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<adminEventsDetailsEnabled: bool, adminEventsEnabled: bool, enabledEventTypes: list<string>, eventsEnabled: bool, eventsExpiration: int, eventsListeners: list<string>> {
+]: nothing -> oneof<record<adminEventsDetailsEnabled: bool, adminEventsEnabled: bool, enabledEventTypes: list<string>, eventsEnabled: bool, eventsExpiration: int, eventsListeners: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -6884,7 +6862,7 @@ export def "get-realm-group-by-path-path" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
+]: nothing -> oneof<record<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -6924,7 +6902,7 @@ export def "get-realm-groups" [
   --first: int # format: int32
   --max: int # format: int32
   --search: string
-]: nothing -> table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
+]: nothing -> oneof<table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -6949,7 +6927,6 @@ export def "get-realm-groups" [
 # create or add a top level realm groupSet or create child.
 #
 # POST /{realm}/groups
-# --subGroups item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list<string>, subGroups?: list}
 export def "post-realm-groups" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7009,7 +6986,7 @@ export def "get-realm-groups-count" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string
   --top: oneof<nothing, bool>
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -7079,7 +7056,7 @@ export def "get-realm-groups-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
+]: nothing -> oneof<record<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -7104,7 +7081,6 @@ export def "get-realm-groups-id" [
 # Update group, ignores subgroups.
 #
 # PUT /{realm}/groups/{id}
-# --subGroups item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list<string>, subGroups?: list}
 export def "put-realm-groups-id" [
   realm: string
   id: string
@@ -7153,7 +7129,6 @@ export def "put-realm-groups-id" [
 # Set or create child.
 #
 # POST /{realm}/groups/{id}/children
-# --subGroups item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list<string>, subGroups?: list}
 export def "post-realm-groups-id-children" [
   realm: string
   id: string
@@ -7214,7 +7189,7 @@ export def "get-realm-groups-id-management-permissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, resource: string, scopePermissions: record> {
+]: nothing -> oneof<record<enabled: bool, resource: string, scopePermissions: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -7254,7 +7229,7 @@ export def "put-realm-groups-id-management-permissions" [
   --enabled: oneof<nothing, bool>
   --resource: string
   --scope-permissions: record
-]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
+]: any -> oneof<record<enabled: bool, resource: string, scopePermissions: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7297,7 +7272,7 @@ export def "get-realm-groups-id-members" [
   --brief-representation: oneof<nothing, bool> # Only return basic information (only guaranteed to return id, username, created, first and last name, email, enabled state, email verification state, federation link, and access. Note that it means that namely user attributes, required actions, and not before are not returned.)
   --first: int # Pagination offset (format: int32)
   --max: int # Maximum results size (defaults to 100) (format: int32)
-]: nothing -> table<access: record, attributes: record, clientConsents: list<record>, clientRoles: record, createdTimestamp: int, credentials: list<record>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list<record>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string> {
+]: nothing -> oneof<table<access: record, attributes: record, clientConsents: list<record>, clientRoles: record, createdTimestamp: int, credentials: list<record>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list<record>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -7335,7 +7310,7 @@ export def "get-realm-groups-id-role-mappings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<clientMappings: record, realmMappings: table<attributes: record, clientRole: bool, composite: bool, composites: record, containerId: string, description: string, id: string, name: string>> {
+]: nothing -> oneof<record<clientMappings: record, realmMappings: table<attributes: record, clientRole: bool, composite: bool, composites: record, containerId: string, description: string, id: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -7416,7 +7391,7 @@ export def "get-realm-groups-id-role-mappings-clients-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -7498,7 +7473,7 @@ export def "get-realm-groups-id-role-mappings-clients-client-available" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -7537,7 +7512,7 @@ export def "get-realm-groups-id-role-mappings-clients-client-composite" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -7616,7 +7591,7 @@ export def "get-realm-groups-id-role-mappings-realm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -7694,7 +7669,7 @@ export def "get-realm-groups-id-role-mappings-realm-available" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -7731,7 +7706,7 @@ export def "get-realm-groups-id-role-mappings-realm-composite" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -7767,7 +7742,7 @@ export def "post-realm-identity-provider-import-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -7802,7 +7777,7 @@ export def "get-realm-identity-provider-instances" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<addReadTokenRoleOnCreate: bool, alias: string, config: record, displayName: string, enabled: bool, firstBrokerLoginFlowAlias: string, internalId: string, linkOnly: bool, postBrokerLoginFlowAlias: string, providerId: string, storeToken: bool, trustEmail: bool> {
+]: nothing -> oneof<table<addReadTokenRoleOnCreate: bool, alias: string, config: record, displayName: string, enabled: bool, firstBrokerLoginFlowAlias: string, internalId: string, linkOnly: bool, postBrokerLoginFlowAlias: string, providerId: string, storeToken: bool, trustEmail: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -7925,7 +7900,7 @@ export def "get-realm-identity-provider-instances-alias" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<addReadTokenRoleOnCreate: bool, alias: string, config: record, displayName: string, enabled: bool, firstBrokerLoginFlowAlias: string, internalId: string, linkOnly: bool, postBrokerLoginFlowAlias: string, providerId: string, storeToken: bool, trustEmail: bool> {
+]: nothing -> oneof<record<addReadTokenRoleOnCreate: bool, alias: string, config: record, displayName: string, enabled: bool, firstBrokerLoginFlowAlias: string, internalId: string, linkOnly: bool, postBrokerLoginFlowAlias: string, providerId: string, storeToken: bool, trustEmail: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -8053,7 +8028,7 @@ export def "get-realm-identity-provider-instances-alias-management-permissions" 
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, resource: string, scopePermissions: record> {
+]: nothing -> oneof<record<enabled: bool, resource: string, scopePermissions: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -8093,7 +8068,7 @@ export def "put-realm-identity-provider-instances-alias-management-permissions" 
   --enabled: oneof<nothing, bool>
   --resource: string
   --scope-permissions: record
-]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
+]: any -> oneof<record<enabled: bool, resource: string, scopePermissions: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8170,7 +8145,7 @@ export def "get-realm-identity-provider-instances-alias-mappers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<config: record, id: string, identityProviderAlias: string, identityProviderMapper: string, name: string> {
+]: nothing -> oneof<table<config: record, id: string, identityProviderAlias: string, identityProviderMapper: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -8292,7 +8267,7 @@ export def "get-realm-identity-provider-instances-alias-mappers-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<config: record, id: string, identityProviderAlias: string, identityProviderMapper: string, name: string> {
+]: nothing -> oneof<record<config: record, id: string, identityProviderAlias: string, identityProviderMapper: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -8411,7 +8386,7 @@ export def "get-realm-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active: record, keys: table<algorithm: string, certificate: string, kid: string, providerId: string, providerPriority: int, publicKey: string, status: string, type: string>> {
+]: nothing -> oneof<record<active: record, keys: table<algorithm: string, certificate: string, kid: string, providerId: string, providerPriority: int, publicKey: string, status: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -8483,7 +8458,7 @@ export def "post-realm-partial-export" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --export-clients: oneof<nothing, bool>
   --export-groups-and-roles: oneof<nothing, bool>
-]: nothing -> record<accessCodeLifespan: int, accessCodeLifespanLogin: int, accessCodeLifespanUserAction: int, accessTokenLifespan: int, accessTokenLifespanForImplicitFlow: int, accountTheme: string, actionTokenGeneratedByAdminLifespan: int, actionTokenGeneratedByUserLifespan: int, adminEventsDetailsEnabled: bool, adminEventsEnabled: bool, adminTheme: string, attributes: record, authenticationFlows: table<alias: string, authenticationExecutions: list, builtIn: bool, description: string, id: string, providerId: string, topLevel: bool>, authenticatorConfig: table<alias: string, config: record, id: string>, browserFlow: string, browserSecurityHeaders: record, bruteForceProtected: bool, clientAuthenticationFlow: string, clientScopeMappings: record, clientScopes: table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list>, clientSessionIdleTimeout: int, clientSessionMaxLifespan: int, clients: table<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list, defaultRoles: list, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list, origin: string, protocol: string, protocolMappers: list, publicClient: bool, redirectUris: list, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list>, components: record<empty: bool, loadFactor: float, threshold: int>, defaultDefaultClientScopes: list<string>, defaultGroups: list<string>, defaultLocale: string, defaultOptionalClientScopes: list<string>, defaultRoles: list<string>, defaultSignatureAlgorithm: string, directGrantFlow: string, displayName: string, displayNameHtml: string, dockerAuthenticationFlow: string, duplicateEmailsAllowed: bool, editUsernameAllowed: bool, emailTheme: string, enabled: bool, enabledEventTypes: list<string>, eventsEnabled: bool, eventsExpiration: int, eventsListeners: list<string>, failureFactor: int, federatedUsers: table<access: record, attributes: record, clientConsents: list, clientRoles: record, createdTimestamp: int, credentials: list, disableableCredentialTypes: list, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list, federationLink: string, firstName: string, groups: list, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list, requiredActions: list, self: string, serviceAccountClientId: string, username: string>, groups: table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list, subGroups: list>, id: string, identityProviderMappers: table<config: record, id: string, identityProviderAlias: string, identityProviderMapper: string, name: string>, identityProviders: table<addReadTokenRoleOnCreate: bool, alias: string, config: record, displayName: string, enabled: bool, firstBrokerLoginFlowAlias: string, internalId: string, linkOnly: bool, postBrokerLoginFlowAlias: string, providerId: string, storeToken: bool, trustEmail: bool>, internationalizationEnabled: bool, keycloakVersion: string, loginTheme: string, loginWithEmailAllowed: bool, maxDeltaTimeSeconds: int, maxFailureWaitSeconds: int, minimumQuickLoginWaitSeconds: int, notBefore: int, offlineSessionIdleTimeout: int, offlineSessionMaxLifespan: int, offlineSessionMaxLifespanEnabled: bool, otpPolicyAlgorithm: string, otpPolicyDigits: int, otpPolicyInitialCounter: int, otpPolicyLookAheadWindow: int, otpPolicyPeriod: int, otpPolicyType: string, otpSupportedApplications: list<string>, passwordPolicy: string, permanentLockout: bool, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, quickLoginCheckMilliSeconds: int, realm: string, refreshTokenMaxReuse: int, registrationAllowed: bool, registrationEmailAsUsername: bool, registrationFlow: string, rememberMe: bool, requiredActions: table<alias: string, config: record, defaultAction: bool, enabled: bool, name: string, priority: int, providerId: string>, resetCredentialsFlow: string, resetPasswordAllowed: bool, revokeRefreshToken: bool, roles: record<client: record, realm: list<record>>, scopeMappings: table<client: string, clientScope: string, roles: list, self: string>, smtpServer: record, sslRequired: string, ssoSessionIdleTimeout: int, ssoSessionIdleTimeoutRememberMe: int, ssoSessionMaxLifespan: int, ssoSessionMaxLifespanRememberMe: int, supportedLocales: list<string>, userFederationMappers: table<config: record, federationMapperType: string, federationProviderDisplayName: string, id: string, name: string>, userFederationProviders: table<changedSyncPeriod: int, config: record, displayName: string, fullSyncPeriod: int, id: string, lastSync: int, priority: int, providerName: string>, userManagedAccessAllowed: bool, users: table<access: record, attributes: record, clientConsents: list, clientRoles: record, createdTimestamp: int, credentials: list, disableableCredentialTypes: list, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list, federationLink: string, firstName: string, groups: list, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list, requiredActions: list, self: string, serviceAccountClientId: string, username: string>, verifyEmail: bool, waitIncrementSeconds: int, webAuthnPolicyAcceptableAaguids: list<string>, webAuthnPolicyAttestationConveyancePreference: string, webAuthnPolicyAuthenticatorAttachment: string, webAuthnPolicyAvoidSameAuthenticatorRegister: bool, webAuthnPolicyCreateTimeout: int, webAuthnPolicyPasswordlessAcceptableAaguids: list<string>, webAuthnPolicyPasswordlessAttestationConveyancePreference: string, webAuthnPolicyPasswordlessAuthenticatorAttachment: string, webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: bool, webAuthnPolicyPasswordlessCreateTimeout: int, webAuthnPolicyPasswordlessRequireResidentKey: string, webAuthnPolicyPasswordlessRpEntityName: string, webAuthnPolicyPasswordlessRpId: string, webAuthnPolicyPasswordlessSignatureAlgorithms: list<string>, webAuthnPolicyPasswordlessUserVerificationRequirement: string, webAuthnPolicyRequireResidentKey: string, webAuthnPolicyRpEntityName: string, webAuthnPolicyRpId: string, webAuthnPolicySignatureAlgorithms: list<string>, webAuthnPolicyUserVerificationRequirement: string> {
+]: nothing -> oneof<record<accessCodeLifespan: int, accessCodeLifespanLogin: int, accessCodeLifespanUserAction: int, accessTokenLifespan: int, accessTokenLifespanForImplicitFlow: int, accountTheme: string, actionTokenGeneratedByAdminLifespan: int, actionTokenGeneratedByUserLifespan: int, adminEventsDetailsEnabled: bool, adminEventsEnabled: bool, adminTheme: string, attributes: record, authenticationFlows: table<alias: string, authenticationExecutions: list, builtIn: bool, description: string, id: string, providerId: string, topLevel: bool>, authenticatorConfig: table<alias: string, config: record, id: string>, browserFlow: string, browserSecurityHeaders: record, bruteForceProtected: bool, clientAuthenticationFlow: string, clientScopeMappings: record, clientScopes: table<attributes: record, description: string, id: string, name: string, protocol: string, protocolMappers: list>, clientSessionIdleTimeout: int, clientSessionMaxLifespan: int, clients: table<access: record, adminUrl: string, alwaysDisplayInConsole: bool, attributes: record, authenticationFlowBindingOverrides: record, authorizationServicesEnabled: bool, authorizationSettings: record, baseUrl: string, bearerOnly: bool, clientAuthenticatorType: string, clientId: string, consentRequired: bool, defaultClientScopes: list, defaultRoles: list, description: string, directAccessGrantsEnabled: bool, enabled: bool, frontchannelLogout: bool, fullScopeAllowed: bool, id: string, implicitFlowEnabled: bool, name: string, nodeReRegistrationTimeout: int, notBefore: int, optionalClientScopes: list, origin: string, protocol: string, protocolMappers: list, publicClient: bool, redirectUris: list, registeredNodes: record, registrationAccessToken: string, rootUrl: string, secret: string, serviceAccountsEnabled: bool, standardFlowEnabled: bool, surrogateAuthRequired: bool, webOrigins: list>, components: record<empty: bool, loadFactor: float, threshold: int>, defaultDefaultClientScopes: list<string>, defaultGroups: list<string>, defaultLocale: string, defaultOptionalClientScopes: list<string>, defaultRoles: list<string>, defaultSignatureAlgorithm: string, directGrantFlow: string, displayName: string, displayNameHtml: string, dockerAuthenticationFlow: string, duplicateEmailsAllowed: bool, editUsernameAllowed: bool, emailTheme: string, enabled: bool, enabledEventTypes: list<string>, eventsEnabled: bool, eventsExpiration: int, eventsListeners: list<string>, failureFactor: int, federatedUsers: table<access: record, attributes: record, clientConsents: list, clientRoles: record, createdTimestamp: int, credentials: list, disableableCredentialTypes: list, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list, federationLink: string, firstName: string, groups: list, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list, requiredActions: list, self: string, serviceAccountClientId: string, username: string>, groups: table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list, subGroups: list>, id: string, identityProviderMappers: table<config: record, id: string, identityProviderAlias: string, identityProviderMapper: string, name: string>, identityProviders: table<addReadTokenRoleOnCreate: bool, alias: string, config: record, displayName: string, enabled: bool, firstBrokerLoginFlowAlias: string, internalId: string, linkOnly: bool, postBrokerLoginFlowAlias: string, providerId: string, storeToken: bool, trustEmail: bool>, internationalizationEnabled: bool, keycloakVersion: string, loginTheme: string, loginWithEmailAllowed: bool, maxDeltaTimeSeconds: int, maxFailureWaitSeconds: int, minimumQuickLoginWaitSeconds: int, notBefore: int, offlineSessionIdleTimeout: int, offlineSessionMaxLifespan: int, offlineSessionMaxLifespanEnabled: bool, otpPolicyAlgorithm: string, otpPolicyDigits: int, otpPolicyInitialCounter: int, otpPolicyLookAheadWindow: int, otpPolicyPeriod: int, otpPolicyType: string, otpSupportedApplications: list<string>, passwordPolicy: string, permanentLockout: bool, protocolMappers: table<config: record, id: string, name: string, protocol: string, protocolMapper: string>, quickLoginCheckMilliSeconds: int, realm: string, refreshTokenMaxReuse: int, registrationAllowed: bool, registrationEmailAsUsername: bool, registrationFlow: string, rememberMe: bool, requiredActions: table<alias: string, config: record, defaultAction: bool, enabled: bool, name: string, priority: int, providerId: string>, resetCredentialsFlow: string, resetPasswordAllowed: bool, revokeRefreshToken: bool, roles: record<client: record, realm: list<record>>, scopeMappings: table<client: string, clientScope: string, roles: list, self: string>, smtpServer: record, sslRequired: string, ssoSessionIdleTimeout: int, ssoSessionIdleTimeoutRememberMe: int, ssoSessionMaxLifespan: int, ssoSessionMaxLifespanRememberMe: int, supportedLocales: list<string>, userFederationMappers: table<config: record, federationMapperType: string, federationProviderDisplayName: string, id: string, name: string>, userFederationProviders: table<changedSyncPeriod: int, config: record, displayName: string, fullSyncPeriod: int, id: string, lastSync: int, priority: int, providerName: string>, userManagedAccessAllowed: bool, users: table<access: record, attributes: record, clientConsents: list, clientRoles: record, createdTimestamp: int, credentials: list, disableableCredentialTypes: list, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list, federationLink: string, firstName: string, groups: list, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list, requiredActions: list, self: string, serviceAccountClientId: string, username: string>, verifyEmail: bool, waitIncrementSeconds: int, webAuthnPolicyAcceptableAaguids: list<string>, webAuthnPolicyAttestationConveyancePreference: string, webAuthnPolicyAuthenticatorAttachment: string, webAuthnPolicyAvoidSameAuthenticatorRegister: bool, webAuthnPolicyCreateTimeout: int, webAuthnPolicyPasswordlessAcceptableAaguids: list<string>, webAuthnPolicyPasswordlessAttestationConveyancePreference: string, webAuthnPolicyPasswordlessAuthenticatorAttachment: string, webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister: bool, webAuthnPolicyPasswordlessCreateTimeout: int, webAuthnPolicyPasswordlessRequireResidentKey: string, webAuthnPolicyPasswordlessRpEntityName: string, webAuthnPolicyPasswordlessRpId: string, webAuthnPolicyPasswordlessSignatureAlgorithms: list<string>, webAuthnPolicyPasswordlessUserVerificationRequirement: string, webAuthnPolicyRequireResidentKey: string, webAuthnPolicyRpEntityName: string, webAuthnPolicyRpId: string, webAuthnPolicySignatureAlgorithms: list<string>, webAuthnPolicyUserVerificationRequirement: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -8508,11 +8483,6 @@ export def "post-realm-partial-export" [
 # Partial import from a JSON file to an existing realm.
 #
 # POST /{realm}/partialImport
-# --clients item shape: {access?: record, adminUrl?: string, alwaysDisplayInConsole?: bool, attributes?: record, authenticationFlowBindingOverrides?: record, authorizationServicesEnabled?: bool, authorizationSettings?: record, baseUrl?: string, bearerOnly?: bool, clientAuthenticatorType?: string, clientId?: string, consentRequired?: bool, defaultClientScopes?: list<string>, defaultRoles?: list<string>, description?: string, directAccessGrantsEnabled?: bool, enabled?: bool, frontchannelLogout?: bool, ... (20 more fields)}
-# --groups item shape: {access?: record, attributes?: record, clientRoles?: record, id?: string, name?: string, path?: string, realmRoles?: list<string>, subGroups?: list}
-# --identityProviders item shape: {addReadTokenRoleOnCreate?: bool, alias?: string, config?: record, displayName?: string, enabled?: bool, firstBrokerLoginFlowAlias?: string, internalId?: string, linkOnly?: bool, postBrokerLoginFlowAlias?: string, providerId?: string, storeToken?: bool, trustEmail?: bool}
-# --roles shape: {client?: record, realm?: list}
-# --users item shape: {access?: record, attributes?: record, clientConsents?: list, clientRoles?: record, createdTimestamp?: int, credentials?: list, disableableCredentialTypes?: list<string>, email?: string, emailVerified?: bool, enabled?: bool, federatedIdentities?: list, federationLink?: string, firstName?: string, groups?: list<string>, id?: string, lastName?: string, notBefore?: int, origin?: string, realmRoles?: list<string>, requiredActions?: list<string>, self?: string, serviceAccountClientId?: string, ... (1 more fields)}
 export def "post-realm-partial-import" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8608,7 +8578,7 @@ export def "get-realm-roles" [
   --first: int # format: int32
   --max: int # format: int32
   --search: string
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -8633,7 +8603,6 @@ export def "get-realm-roles" [
 # Create a new role for the realm or client
 #
 # POST /{realm}/roles
-# --composites shape: {client?: record, realm?: list<string>}
 export def "post-realm-roles" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8729,7 +8698,7 @@ export def "get-realm-roles-by-id-role-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list<string>>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<record<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list<string>>, containerId: string, description: string, id: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -8754,7 +8723,6 @@ export def "get-realm-roles-by-id-role-id" [
 # Update the role
 #
 # PUT /{realm}/roles-by-id/{role-id}
-# --composites shape: {client?: record, realm?: list<string>}
 export def "put-realm-roles-by-id-role-id" [
   realm: string
   role_id: string
@@ -8856,7 +8824,7 @@ export def "get-realm-roles-by-id-role-id-composites" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -8935,7 +8903,7 @@ export def "get-realm-roles-by-id-role-id-composites-clients-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -8973,7 +8941,7 @@ export def "get-realm-roles-by-id-role-id-composites-realm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -9010,7 +8978,7 @@ export def "get-realm-roles-by-id-role-id-management-permissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, resource: string, scopePermissions: record> {
+]: nothing -> oneof<record<enabled: bool, resource: string, scopePermissions: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -9050,7 +9018,7 @@ export def "put-realm-roles-by-id-role-id-management-permissions" [
   --enabled: oneof<nothing, bool>
   --resource: string
   --scope-permissions: record
-]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
+]: any -> oneof<record<enabled: bool, resource: string, scopePermissions: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9127,7 +9095,7 @@ export def "get-realm-roles-role-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list<string>>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<record<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list<string>>, containerId: string, description: string, id: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -9152,7 +9120,6 @@ export def "get-realm-roles-role-name" [
 # Update a role by name
 #
 # PUT /{realm}/roles/{role-name}
-# --composites shape: {client?: record, realm?: list<string>}
 export def "put-realm-roles-role-name" [
   realm: string
   role_name: string
@@ -9254,7 +9221,7 @@ export def "get-realm-roles-role-name-composites" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -9333,7 +9300,7 @@ export def "get-realm-roles-role-name-composites-clients-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -9371,7 +9338,7 @@ export def "get-realm-roles-role-name-composites-realm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -9411,7 +9378,7 @@ export def "get-realm-roles-role-name-groups" [
   --brief-representation: oneof<nothing, bool> # if false, return a full representation of the GroupRepresentation objects
   --first: int # format: int32
   --max: int # format: int32
-]: nothing -> table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
+]: nothing -> oneof<table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -9449,7 +9416,7 @@ export def "get-realm-roles-role-name-management-permissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, resource: string, scopePermissions: record> {
+]: nothing -> oneof<record<enabled: bool, resource: string, scopePermissions: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -9489,7 +9456,7 @@ export def "put-realm-roles-role-name-management-permissions" [
   --enabled: oneof<nothing, bool>
   --resource: string
   --scope-permissions: record
-]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
+]: any -> oneof<record<enabled: bool, resource: string, scopePermissions: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9531,7 +9498,7 @@ export def "get-realm-roles-role-name-users" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --first: int # format: int32
   --max: int # format: int32
-]: nothing -> table<access: record, attributes: record, clientConsents: list<record>, clientRoles: record, createdTimestamp: int, credentials: list<record>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list<record>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string> {
+]: nothing -> oneof<table<access: record, attributes: record, clientConsents: list<record>, clientRoles: record, createdTimestamp: int, credentials: list<record>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list<record>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -9689,7 +9656,7 @@ export def "get-realm-user-storage-id-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -9764,7 +9731,7 @@ export def "post-realm-user-storage-id-sync" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --action: string
-]: nothing -> record<added: int, failed: int, ignored: bool, removed: int, status: string, updated: int> {
+]: nothing -> oneof<record<added: int, failed: int, ignored: bool, removed: int, status: string, updated: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -9841,7 +9808,7 @@ export def "post-realm-user-storage-parent-id-mappers-id-sync" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --direction: string
-]: nothing -> record<added: int, failed: int, ignored: bool, removed: int, status: string, updated: int> {
+]: nothing -> oneof<record<added: int, failed: int, ignored: bool, removed: int, status: string, updated: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -9887,7 +9854,7 @@ export def "get-realm-users" [
   --max: int # Maximum results size (defaults to 100) (format: int32)
   --search: string # A String contained in username, first or last name, or email
   --username: string
-]: nothing -> table<access: record, attributes: record, clientConsents: list<record>, clientRoles: record, createdTimestamp: int, credentials: list<record>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list<record>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string> {
+]: nothing -> oneof<table<access: record, attributes: record, clientConsents: list<record>, clientRoles: record, createdTimestamp: int, credentials: list<record>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: list<record>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -9912,9 +9879,6 @@ export def "get-realm-users" [
 # Create a new user Username must be unique.
 #
 # POST /{realm}/users
-# --clientConsents item shape: {clientId?: string, createdDate?: int, grantedClientScopes?: list<string>, lastUpdatedDate?: int}
-# --credentials item shape: {createdDate?: int, credentialData?: string, id?: string, priority?: int, secretData?: string, temporary?: bool, type?: string, userLabel?: string, value?: string}
-# --federatedIdentities item shape: {identityProvider?: string, userId?: string, userName?: string}
 export def "post-realm-users" [
   realm: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9985,7 +9949,7 @@ export def "get-realm-users-management-permissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<enabled: bool, resource: string, scopePermissions: record> {
+]: nothing -> oneof<record<enabled: bool, resource: string, scopePermissions: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -10021,7 +9985,7 @@ export def "put-realm-users-management-permissions" [
   --enabled: oneof<nothing, bool>
   --resource: string
   --scope-permissions: record
-]: any -> record<enabled: bool, resource: string, scopePermissions: record> {
+]: any -> oneof<record<enabled: bool, resource: string, scopePermissions: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10138,7 +10102,7 @@ export def "get-realm-users-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<access: record, attributes: record, clientConsents: table<clientId: string, createdDate: int, grantedClientScopes: list, lastUpdatedDate: int>, clientRoles: record, createdTimestamp: int, credentials: table<createdDate: int, credentialData: string, id: string, priority: int, secretData: string, temporary: bool, type: string, userLabel: string, value: string>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: table<identityProvider: string, userId: string, userName: string>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string> {
+]: nothing -> oneof<record<access: record, attributes: record, clientConsents: table<clientId: string, createdDate: int, grantedClientScopes: list, lastUpdatedDate: int>, clientRoles: record, createdTimestamp: int, credentials: table<createdDate: int, credentialData: string, id: string, priority: int, secretData: string, temporary: bool, type: string, userLabel: string, value: string>, disableableCredentialTypes: list<string>, email: string, emailVerified: bool, enabled: bool, federatedIdentities: table<identityProvider: string, userId: string, userName: string>, federationLink: string, firstName: string, groups: list<string>, id: string, lastName: string, notBefore: int, origin: string, realmRoles: list<string>, requiredActions: list<string>, self: string, serviceAccountClientId: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -10163,9 +10127,6 @@ export def "get-realm-users-id" [
 # Update the user
 #
 # PUT /{realm}/users/{id}
-# --clientConsents item shape: {clientId?: string, createdDate?: int, grantedClientScopes?: list<string>, lastUpdatedDate?: int}
-# --credentials item shape: {createdDate?: int, credentialData?: string, id?: string, priority?: int, secretData?: string, temporary?: bool, type?: string, userLabel?: string, value?: string}
-# --federatedIdentities item shape: {identityProvider?: string, userId?: string, userName?: string}
 export def "put-realm-users-id" [
   realm: string
   id: string
@@ -10241,7 +10202,7 @@ export def "get-realm-users-id-configured-user-storage-credential-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -10278,7 +10239,7 @@ export def "get-realm-users-id-consents" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -10352,7 +10313,7 @@ export def "get-realm-users-id-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<createdDate: int, credentialData: string, id: string, priority: int, secretData: string, temporary: bool, type: string, userLabel: string, value: string> {
+]: nothing -> oneof<table<createdDate: int, credentialData: string, id: string, priority: int, secretData: string, temporary: bool, type: string, userLabel: string, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -10637,7 +10598,7 @@ export def "get-realm-users-id-federated-identity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<identityProvider: string, userId: string, userName: string> {
+]: nothing -> oneof<table<identityProvider: string, userId: string, userName: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -10760,7 +10721,7 @@ export def "get-realm-users-id-groups" [
   --first: int # format: int32
   --max: int # format: int32
   --search: string
-]: nothing -> table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>> {
+]: nothing -> oneof<table<access: record, attributes: record, clientRoles: record, id: string, name: string, path: string, realmRoles: list<string>, subGroups: list<any>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -10797,7 +10758,7 @@ export def "get-realm-users-id-groups-count" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -10909,7 +10870,7 @@ export def "post-realm-users-id-impersonation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -10984,7 +10945,7 @@ export def "get-realm-users-id-offline-sessions-client-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<clients: record, id: string, ipAddress: string, lastAccess: int, start: int, userId: string, username: string> {
+]: nothing -> oneof<table<clients: record, id: string, ipAddress: string, lastAccess: int, start: int, userId: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -11071,7 +11032,7 @@ export def "get-realm-users-id-role-mappings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<clientMappings: record, realmMappings: table<attributes: record, clientRole: bool, composite: bool, composites: record, containerId: string, description: string, id: string, name: string>> {
+]: nothing -> oneof<record<clientMappings: record, realmMappings: table<attributes: record, clientRole: bool, composite: bool, composites: record, containerId: string, description: string, id: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -11152,7 +11113,7 @@ export def "get-realm-users-id-role-mappings-clients-client" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -11234,7 +11195,7 @@ export def "get-realm-users-id-role-mappings-clients-client-available" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -11273,7 +11234,7 @@ export def "get-realm-users-id-role-mappings-clients-client-composite" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -11352,7 +11313,7 @@ export def "get-realm-users-id-role-mappings-realm" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -11430,7 +11391,7 @@ export def "get-realm-users-id-role-mappings-realm-available" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -11467,7 +11428,7 @@ export def "get-realm-users-id-role-mappings-realm-composite" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string> {
+]: nothing -> oneof<table<attributes: record, clientRole: bool, composite: bool, composites: record<client: record, realm: list>, containerId: string, description: string, id: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }
@@ -11544,7 +11505,7 @@ export def "get-realm-users-id-sessions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<clients: record, id: string, ipAddress: string, lastAccess: int, start: int, userId: string, username: string> {
+]: nothing -> oneof<table<clients: record, id: string, ipAddress: string, lastAccess: int, start: int, userId: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }

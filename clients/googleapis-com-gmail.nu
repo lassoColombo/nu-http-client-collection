@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -137,9 +161,9 @@ def label-filter-action-completer [] { ["exclude" "include"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "gmail-users-drafts-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["gmail-users-drafts-list" "gmail-users-drafts-create" "gmail-users-drafts-send" "gmail-users-drafts-delete" "gmail-users-drafts-get" "gmail-users-drafts-update" "gmail-users-history-list" "gmail-users-labels-list" "gmail-users-labels-create" "gmail-users-labels-delete" "gmail-users-labels-get" "gmail-users-labels-patch" "gmail-users-labels-update" "gmail-users-messages-list" "gmail-users-messages-insert" "gmail-users-messages-batch-delete" "gmail-users-messages-batch-modify" "gmail-users-messages-import" "gmail-users-messages-send" "gmail-users-messages-delete" "gmail-users-messages-get" "gmail-users-messages-modify" "gmail-users-messages-trash" "gmail-users-messages-untrash" "gmail-users-messages-attachments-get" "gmail-users-get-profile" "gmail-users-settings-get-auto-forwarding" "gmail-users-settings-update-auto-forwarding" "gmail-users-settings-cse-identities-list" "gmail-users-settings-cse-identities-create" "gmail-users-settings-cse-identities-delete" "gmail-users-settings-cse-identities-get" "gmail-users-settings-cse-identities-patch" "gmail-users-settings-cse-keypairs-list" "gmail-users-settings-cse-keypairs-create" "gmail-users-settings-cse-keypairs-get" "gmail-users-settings-cse-keypairs-disable" "gmail-users-settings-cse-keypairs-enable" "gmail-users-settings-cse-keypairs-obliterate" "gmail-users-settings-delegates-list" "gmail-users-settings-delegates-create" "gmail-users-settings-delegates-delete" "gmail-users-settings-delegates-get" "gmail-users-settings-filters-list" "gmail-users-settings-filters-create" "gmail-users-settings-filters-delete" "gmail-users-settings-filters-get" "gmail-users-settings-forwarding-addresses-list" "gmail-users-settings-forwarding-addresses-create" "gmail-users-settings-forwarding-addresses-delete" "gmail-users-settings-forwarding-addresses-get" "gmail-users-settings-get-imap" "gmail-users-settings-update-imap" "gmail-users-settings-get-language" "gmail-users-settings-update-language" "gmail-users-settings-get-pop" "gmail-users-settings-update-pop" "gmail-users-settings-send-as-list" "gmail-users-settings-send-as-create" "gmail-users-settings-send-as-delete" "gmail-users-settings-send-as-get" "gmail-users-settings-send-as-patch" "gmail-users-settings-send-as-update" "gmail-users-settings-send-as-smime-info-list" "gmail-users-settings-send-as-smime-info-insert" "gmail-users-settings-send-as-smime-info-delete" "gmail-users-settings-send-as-smime-info-get" "gmail-users-settings-send-as-smime-info-set-default" "gmail-users-settings-send-as-verify" "gmail-users-settings-get-vacation" "gmail-users-settings-update-vacation" "gmail-users-stop" "gmail-users-threads-list" "gmail-users-threads-delete" "gmail-users-threads-get" "gmail-users-threads-modify" "gmail-users-threads-trash" "gmail-users-threads-untrash" "gmail-users-watch" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -187,7 +211,7 @@ export def "gmail-users-drafts-list" [
   --max-results: int # Maximum number of drafts to return. This field defaults to 100. The maximum allowed value for this field is 500.
   --page-token: string # Page token to retrieve a specific page of results in the list.
   --q: string # Only return draft messages matching the specified query. Supports the same query format as the Gmail search box. For example, `"from:someuser@example.com rfc822msgid: is:unread"`.
-]: nothing -> record<drafts: table<id: string, message: record>, nextPageToken: string, resultSizeEstimate: int> {
+]: nothing -> oneof<record<drafts: table<id: string, message: record>, nextPageToken: string, resultSizeEstimate: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -236,7 +260,7 @@ export def "gmail-users-drafts-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: any
-]: any -> record<id: string, message: record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record, filename: string, headers: list, mimeType: string, partId: string, parts: list>, raw: string, sizeEstimate: int, snippet: string, threadId: string>> {
+]: any -> oneof<record<id: string, message: record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record, filename: string, headers: list, mimeType: string, partId: string, parts: list>, raw: string, sizeEstimate: int, snippet: string, threadId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -288,7 +312,7 @@ export def "gmail-users-drafts-send" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: any
-]: any -> record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string> {
+]: any -> oneof<record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -391,7 +415,7 @@ export def "gmail-users-drafts-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --format: string@format-completer # The format to return the draft in.
-]: nothing -> record<id: string, message: record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record, filename: string, headers: list, mimeType: string, partId: string, parts: list>, raw: string, sizeEstimate: int, snippet: string, threadId: string>> {
+]: nothing -> oneof<record<id: string, message: record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record, filename: string, headers: list, mimeType: string, partId: string, parts: list>, raw: string, sizeEstimate: int, snippet: string, threadId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -442,7 +466,7 @@ export def "gmail-users-drafts-update" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: any
-]: any -> record<id: string, message: record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record, filename: string, headers: list, mimeType: string, partId: string, parts: list>, raw: string, sizeEstimate: int, snippet: string, threadId: string>> {
+]: any -> oneof<record<id: string, message: record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record, filename: string, headers: list, mimeType: string, partId: string, parts: list>, raw: string, sizeEstimate: int, snippet: string, threadId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -499,7 +523,7 @@ export def "gmail-users-history-list" [
   --max-results: int # Maximum number of history records to return. This field defaults to 100. The maximum allowed value for this field is 500.
   --page-token: string # Page token to retrieve a specific page of results in the list.
   --start-history-id: string # Required. Returns history records after the specified `startHistoryId`. The supplied `startHistoryId` should be obtained from the `historyId` of a message, thread, or previous `list` response. History IDs increase chronologically but are not contiguous with random gaps in between valid IDs. Supplying an invalid or out of date `startHistoryId` typically returns an `HTTP 404` error code. A `historyId` is typically valid for at least a week, but in some rare circumstances may be valid for only a few hours. If you receive an `HTTP 404` error response, your application should perform a full sync. If you receive no `nextPageToken` in the response, there are no updates to retrieve and you can store the returned `historyId` for a future request.
-]: nothing -> record<history: table<id: string, labelsAdded: list, labelsRemoved: list, messages: list, messagesAdded: list, messagesDeleted: list>, historyId: string, nextPageToken: string> {
+]: nothing -> oneof<record<history: table<id: string, labelsAdded: list, labelsRemoved: list, messages: list, messagesAdded: list, messagesDeleted: list>, historyId: string, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -547,7 +571,7 @@ export def "gmail-users-labels-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<labels: table<color: record, id: string, labelListVisibility: string, messageListVisibility: string, messagesTotal: int, messagesUnread: int, name: string, threadsTotal: int, threadsUnread: int, type: string>> {
+]: nothing -> oneof<record<labels: table<color: record, id: string, labelListVisibility: string, messageListVisibility: string, messagesTotal: int, messagesUnread: int, name: string, threadsTotal: int, threadsUnread: int, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -573,7 +597,6 @@ export def "gmail-users-labels-list" [
 #
 # POST /gmail/v1/users/{userId}/labels
 # operationId: gmail.users.labels.create
-# --color shape: {backgroundColor?: string, textColor?: string}
 export def "gmail-users-labels-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -606,7 +629,7 @@ export def "gmail-users-labels-create" [
   --threads-total: int # The total number of threads with the label. (format: int32)
   --threads-unread: int # The number of unread threads with the label. (format: int32)
   --type: string@type-completer # The owner type for the label. User labels are created by the user and can be modified and deleted by the user and can be applied to any message or thread. System labels are internally created and cannot be added, modified, or deleted. System labels may be able to be applied to or removed from messages and threads under some circumstances but this is not guaranteed. For example, users can apply and remove the `INBOX` and `UNREAD` labels from messages and threads, but cannot apply or remove the `DRAFTS` or `SENT` labels from messages or threads.
-]: any -> record<color: record<backgroundColor: string, textColor: string>, id: string, labelListVisibility: string, messageListVisibility: string, messagesTotal: int, messagesUnread: int, name: string, threadsTotal: int, threadsUnread: int, type: string> {
+]: any -> oneof<record<color: record<backgroundColor: string, textColor: string>, id: string, labelListVisibility: string, messageListVisibility: string, messagesTotal: int, messagesUnread: int, name: string, threadsTotal: int, threadsUnread: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -708,7 +731,7 @@ export def "gmail-users-labels-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<color: record<backgroundColor: string, textColor: string>, id: string, labelListVisibility: string, messageListVisibility: string, messagesTotal: int, messagesUnread: int, name: string, threadsTotal: int, threadsUnread: int, type: string> {
+]: nothing -> oneof<record<color: record<backgroundColor: string, textColor: string>, id: string, labelListVisibility: string, messageListVisibility: string, messagesTotal: int, messagesUnread: int, name: string, threadsTotal: int, threadsUnread: int, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -735,7 +758,6 @@ export def "gmail-users-labels-get" [
 #
 # PATCH /gmail/v1/users/{userId}/labels/{id}
 # operationId: gmail.users.labels.patch
-# --color shape: {backgroundColor?: string, textColor?: string}
 export def "gmail-users-labels-patch" [
   user_id: string
   id: string
@@ -769,7 +791,7 @@ export def "gmail-users-labels-patch" [
   --threads-total: int # The total number of threads with the label. (format: int32)
   --threads-unread: int # The number of unread threads with the label. (format: int32)
   --type: string@type-completer # The owner type for the label. User labels are created by the user and can be modified and deleted by the user and can be applied to any message or thread. System labels are internally created and cannot be added, modified, or deleted. System labels may be able to be applied to or removed from messages and threads under some circumstances but this is not guaranteed. For example, users can apply and remove the `INBOX` and `UNREAD` labels from messages and threads, but cannot apply or remove the `DRAFTS` or `SENT` labels from messages or threads.
-]: any -> record<color: record<backgroundColor: string, textColor: string>, id: string, labelListVisibility: string, messageListVisibility: string, messagesTotal: int, messagesUnread: int, name: string, threadsTotal: int, threadsUnread: int, type: string> {
+]: any -> oneof<record<color: record<backgroundColor: string, textColor: string>, id: string, labelListVisibility: string, messageListVisibility: string, messagesTotal: int, messagesUnread: int, name: string, threadsTotal: int, threadsUnread: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -799,7 +821,6 @@ export def "gmail-users-labels-patch" [
 #
 # PUT /gmail/v1/users/{userId}/labels/{id}
 # operationId: gmail.users.labels.update
-# --color shape: {backgroundColor?: string, textColor?: string}
 export def "gmail-users-labels-update" [
   user_id: string
   id: string
@@ -833,7 +854,7 @@ export def "gmail-users-labels-update" [
   --threads-total: int # The total number of threads with the label. (format: int32)
   --threads-unread: int # The number of unread threads with the label. (format: int32)
   --type: string@type-completer # The owner type for the label. User labels are created by the user and can be modified and deleted by the user and can be applied to any message or thread. System labels are internally created and cannot be added, modified, or deleted. System labels may be able to be applied to or removed from messages and threads under some circumstances but this is not guaranteed. For example, users can apply and remove the `INBOX` and `UNREAD` labels from messages and threads, but cannot apply or remove the `DRAFTS` or `SENT` labels from messages or threads.
-]: any -> record<color: record<backgroundColor: string, textColor: string>, id: string, labelListVisibility: string, messageListVisibility: string, messagesTotal: int, messagesUnread: int, name: string, threadsTotal: int, threadsUnread: int, type: string> {
+]: any -> oneof<record<color: record<backgroundColor: string, textColor: string>, id: string, labelListVisibility: string, messageListVisibility: string, messagesTotal: int, messagesUnread: int, name: string, threadsTotal: int, threadsUnread: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -890,7 +911,7 @@ export def "gmail-users-messages-list" [
   --max-results: int # Maximum number of messages to return. This field defaults to 100. The maximum allowed value for this field is 500.
   --page-token: string # Page token to retrieve a specific page of results in the list.
   --q: string # Only return messages matching the specified query. Supports the same query format as the Gmail search box. For example, `"from:someuser@example.com rfc822msgid: is:unread"`. Parameter cannot be used when accessing the api using the gmail.metadata scope.
-]: nothing -> record<messages: table<historyId: string, id: string, internalDate: string, labelIds: list, payload: record, raw: string, sizeEstimate: int, snippet: string, threadId: string>, nextPageToken: string, resultSizeEstimate: int> {
+]: nothing -> oneof<record<messages: table<historyId: string, id: string, internalDate: string, labelIds: list, payload: record, raw: string, sizeEstimate: int, snippet: string, threadId: string>, nextPageToken: string, resultSizeEstimate: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -941,7 +962,7 @@ export def "gmail-users-messages-insert" [
   --deleted: oneof<nothing, bool> # Mark the email as permanently deleted (not TRASH) and only visible in Google Vault to a Vault administrator. Only used for Google Workspace accounts.
   --internal-date-source: string@internal-date-source-completer # Source for Gmail's internal date of the message.
   --body: any
-]: any -> record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string> {
+]: any -> oneof<record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1103,7 +1124,7 @@ export def "gmail-users-messages-import" [
   --never-mark-spam: oneof<nothing, bool> # Ignore the Gmail spam classifier decision and never mark this email as SPAM in the mailbox.
   --process-for-calendar: oneof<nothing, bool> # Process calendar invites in the email and add any extracted meetings to the Google Calendar for this user.
   --body: any
-]: any -> record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string> {
+]: any -> oneof<record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1155,7 +1176,7 @@ export def "gmail-users-messages-send" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: any
-]: any -> record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string> {
+]: any -> oneof<record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1259,7 +1280,7 @@ export def "gmail-users-messages-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --format: string@format-completer # The format to return the message in.
   --metadata-headers: list<string> # When given and format is `METADATA`, only include headers specified.
-]: nothing -> record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string> {
+]: nothing -> oneof<record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -1311,7 +1332,7 @@ export def "gmail-users-messages-modify" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --add-label-ids: list<string> # A list of IDs of labels to add to this message. You can add up to 100 labels with each update.
   --remove-label-ids: list<string> # A list IDs of labels to remove from this message. You can remove up to 100 labels with each update.
-]: any -> record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string> {
+]: any -> oneof<record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1364,7 +1385,7 @@ export def "gmail-users-messages-trash" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string> {
+]: nothing -> oneof<record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -1414,7 +1435,7 @@ export def "gmail-users-messages-untrash" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string> {
+]: nothing -> oneof<record<historyId: string, id: string, internalDate: string, labelIds: list<string>, payload: record<body: record<attachmentId: string, data: string, size: int>, filename: string, headers: list<record>, mimeType: string, partId: string, parts: list<any>>, raw: string, sizeEstimate: int, snippet: string, threadId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -1465,7 +1486,7 @@ export def "gmail-users-messages-attachments-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<attachmentId: string, data: string, size: int> {
+]: nothing -> oneof<record<attachmentId: string, data: string, size: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -1515,7 +1536,7 @@ export def "gmail-users-get-profile" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<emailAddress: string, historyId: string, messagesTotal: int, threadsTotal: int> {
+]: nothing -> oneof<record<emailAddress: string, historyId: string, messagesTotal: int, threadsTotal: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -1563,7 +1584,7 @@ export def "gmail-users-settings-get-auto-forwarding" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<disposition: string, emailAddress: string, enabled: bool> {
+]: nothing -> oneof<record<disposition: string, emailAddress: string, enabled: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -1614,7 +1635,7 @@ export def "gmail-users-settings-update-auto-forwarding" [
   --disposition: string@disposition-completer # The state that a message should be left in after it has been forwarded.
   --email-address: string # Email address to which all incoming messages are forwarded. This email address must be a verified member of the forwarding addresses.
   --enabled: oneof<nothing, bool> # Whether all incoming mail is automatically forwarded to another address.
-]: any -> record<disposition: string, emailAddress: string, enabled: bool> {
+]: any -> oneof<record<disposition: string, emailAddress: string, enabled: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1667,7 +1688,7 @@ export def "gmail-users-settings-cse-identities-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The number of identities to return. If not provided, the page size will default to 20 entries.
   --page-token: string # Pagination token indicating which page of identities to return. If the token is not supplied, then the API will return the first page of results.
-]: nothing -> record<cseIdentities: table<emailAddress: string, primaryKeyPairId: string>, nextPageToken: string> {
+]: nothing -> oneof<record<cseIdentities: table<emailAddress: string, primaryKeyPairId: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -1717,7 +1738,7 @@ export def "gmail-users-settings-cse-identities-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --email-address: string # The email address for the sending identity. The email address must be the primary email address of the authenticated user.
   --primary-key-pair-id: string # If a key pair is associated, the identifier of the key pair, CseKeyPair.
-]: any -> record<emailAddress: string, primaryKeyPairId: string> {
+]: any -> oneof<record<emailAddress: string, primaryKeyPairId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1819,7 +1840,7 @@ export def "gmail-users-settings-cse-identities-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<emailAddress: string, primaryKeyPairId: string> {
+]: nothing -> oneof<record<emailAddress: string, primaryKeyPairId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -1871,7 +1892,7 @@ export def "gmail-users-settings-cse-identities-patch" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body-email-address: string # The email address for the sending identity. The email address must be the primary email address of the authenticated user.
   --primary-key-pair-id: string # If a key pair is associated, the identifier of the key pair, CseKeyPair.
-]: any -> record<emailAddress: string, primaryKeyPairId: string> {
+]: any -> oneof<record<emailAddress: string, primaryKeyPairId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1925,7 +1946,7 @@ export def "gmail-users-settings-cse-keypairs-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The number of key pairs to return. If not provided, the page size will default to 20 entries.
   --page-token: string # Pagination token indicating which page of key pairs to return. If the token is not supplied, then the API will return the first page of results.
-]: nothing -> record<cseKeyPairs: table<disableTime: string, enablementState: string, keyPairId: string, pem: string, pkcs7: string, privateKeyMetadata: list, subjectEmailAddresses: list>, nextPageToken: string> {
+]: nothing -> oneof<record<cseKeyPairs: table<disableTime: string, enablementState: string, keyPairId: string, pem: string, pkcs7: string, privateKeyMetadata: list, subjectEmailAddresses: list>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -1951,7 +1972,6 @@ export def "gmail-users-settings-cse-keypairs-list" [
 #
 # POST /gmail/v1/users/{userId}/settings/cse/keypairs
 # operationId: gmail.users.settings.cse.keypairs.create
-# --privateKeyMetadata item shape: {kaclsKeyMetadata?: record}
 export def "gmail-users-settings-cse-keypairs-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1976,7 +1996,7 @@ export def "gmail-users-settings-cse-keypairs-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --pkcs7: string # Input only. The public key and its certificate chain. The chain must be in [PKCS#7](https://en.wikipedia.org/wiki/PKCS_7) format and use PEM encoding and ASCII armor.
   --private-key-metadata: list # Metadata for instances of this key pair's private key. — item shape: {kaclsKeyMetadata?: record}
-]: any -> record<disableTime: string, enablementState: string, keyPairId: string, pem: string, pkcs7: string, privateKeyMetadata: table<kaclsKeyMetadata: record, privateKeyMetadataId: string>, subjectEmailAddresses: list<string>> {
+]: any -> oneof<record<disableTime: string, enablementState: string, keyPairId: string, pem: string, pkcs7: string, privateKeyMetadata: table<kaclsKeyMetadata: record, privateKeyMetadataId: string>, subjectEmailAddresses: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2028,7 +2048,7 @@ export def "gmail-users-settings-cse-keypairs-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<disableTime: string, enablementState: string, keyPairId: string, pem: string, pkcs7: string, privateKeyMetadata: table<kaclsKeyMetadata: record, privateKeyMetadataId: string>, subjectEmailAddresses: list<string>> {
+]: nothing -> oneof<record<disableTime: string, enablementState: string, keyPairId: string, pem: string, pkcs7: string, privateKeyMetadata: table<kaclsKeyMetadata: record, privateKeyMetadataId: string>, subjectEmailAddresses: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -2079,7 +2099,7 @@ export def "gmail-users-settings-cse-keypairs-disable" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<disableTime: string, enablementState: string, keyPairId: string, pem: string, pkcs7: string, privateKeyMetadata: table<kaclsKeyMetadata: record, privateKeyMetadataId: string>, subjectEmailAddresses: list<string>> {
+]: any -> oneof<record<disableTime: string, enablementState: string, keyPairId: string, pem: string, pkcs7: string, privateKeyMetadata: table<kaclsKeyMetadata: record, privateKeyMetadataId: string>, subjectEmailAddresses: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2133,7 +2153,7 @@ export def "gmail-users-settings-cse-keypairs-enable" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<disableTime: string, enablementState: string, keyPairId: string, pem: string, pkcs7: string, privateKeyMetadata: table<kaclsKeyMetadata: record, privateKeyMetadataId: string>, subjectEmailAddresses: list<string>> {
+]: any -> oneof<record<disableTime: string, enablementState: string, keyPairId: string, pem: string, pkcs7: string, privateKeyMetadata: table<kaclsKeyMetadata: record, privateKeyMetadataId: string>, subjectEmailAddresses: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2239,7 +2259,7 @@ export def "gmail-users-settings-delegates-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<delegates: table<delegateEmail: string, verificationStatus: string>> {
+]: nothing -> oneof<record<delegates: table<delegateEmail: string, verificationStatus: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -2289,7 +2309,7 @@ export def "gmail-users-settings-delegates-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --delegate-email: string # The email address of the delegate.
   --verification-status: string@verification-status-completer # Indicates whether this address has been verified and can act as a delegate for the account. Read-only.
-]: any -> record<delegateEmail: string, verificationStatus: string> {
+]: any -> oneof<record<delegateEmail: string, verificationStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2391,7 +2411,7 @@ export def "gmail-users-settings-delegates-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<delegateEmail: string, verificationStatus: string> {
+]: nothing -> oneof<record<delegateEmail: string, verificationStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -2440,7 +2460,7 @@ export def "gmail-users-settings-filters-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<filter: table<action: record, criteria: record, id: string>> {
+]: nothing -> oneof<record<filter: table<action: record, criteria: record, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -2466,8 +2486,6 @@ export def "gmail-users-settings-filters-list" [
 #
 # POST /gmail/v1/users/{userId}/settings/filters
 # operationId: gmail.users.settings.filters.create
-# --action shape: {addLabelIds?: list<string>, forward?: string, removeLabelIds?: list<string>}
-# --criteria shape: {excludeChats?: bool, from?: string, hasAttachment?: bool, negatedQuery?: string, query?: string, size?: int, sizeComparison?: "unspecified"|"smaller"|"larger", subject?: string, to?: string}
 export def "gmail-users-settings-filters-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2493,7 +2511,7 @@ export def "gmail-users-settings-filters-create" [
   --action: record # A set of actions to perform on a message. — shape: {addLabelIds?: list<string>, forward?: string, removeLabelIds?: list<string>}
   --criteria: record # Message matching criteria. — shape: {excludeChats?: bool, from?: string, hasAttachment?: bool, negatedQuery?: string, query?: string, size?: int, sizeComparison?: "unspecified"|"smaller"|"larger", subject?: string, to?: string}
   --id: string # The server assigned ID of the filter.
-]: any -> record<action: record<addLabelIds: list<string>, forward: string, removeLabelIds: list<string>>, criteria: record<excludeChats: bool, from: string, hasAttachment: bool, negatedQuery: string, query: string, size: int, sizeComparison: string, subject: string, to: string>, id: string> {
+]: any -> oneof<record<action: record<addLabelIds: list<string>, forward: string, removeLabelIds: list<string>>, criteria: record<excludeChats: bool, from: string, hasAttachment: bool, negatedQuery: string, query: string, size: int, sizeComparison: string, subject: string, to: string>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2595,7 +2613,7 @@ export def "gmail-users-settings-filters-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<action: record<addLabelIds: list<string>, forward: string, removeLabelIds: list<string>>, criteria: record<excludeChats: bool, from: string, hasAttachment: bool, negatedQuery: string, query: string, size: int, sizeComparison: string, subject: string, to: string>, id: string> {
+]: nothing -> oneof<record<action: record<addLabelIds: list<string>, forward: string, removeLabelIds: list<string>>, criteria: record<excludeChats: bool, from: string, hasAttachment: bool, negatedQuery: string, query: string, size: int, sizeComparison: string, subject: string, to: string>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -2644,7 +2662,7 @@ export def "gmail-users-settings-forwarding-addresses-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<forwardingAddresses: table<forwardingEmail: string, verificationStatus: string>> {
+]: nothing -> oneof<record<forwardingAddresses: table<forwardingEmail: string, verificationStatus: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -2694,7 +2712,7 @@ export def "gmail-users-settings-forwarding-addresses-create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --forwarding-email: string # An email address to which messages can be forwarded.
   --verification-status: string@verification-status-completer-1 # Indicates whether this address has been verified and is usable for forwarding. Read-only.
-]: any -> record<forwardingEmail: string, verificationStatus: string> {
+]: any -> oneof<record<forwardingEmail: string, verificationStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2796,7 +2814,7 @@ export def "gmail-users-settings-forwarding-addresses-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<forwardingEmail: string, verificationStatus: string> {
+]: nothing -> oneof<record<forwardingEmail: string, verificationStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -2845,7 +2863,7 @@ export def "gmail-users-settings-get-imap" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<autoExpunge: bool, enabled: bool, expungeBehavior: string, maxFolderSize: int> {
+]: nothing -> oneof<record<autoExpunge: bool, enabled: bool, expungeBehavior: string, maxFolderSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -2897,7 +2915,7 @@ export def "gmail-users-settings-update-imap" [
   --enabled: oneof<nothing, bool> # Whether IMAP is enabled for the account.
   --expunge-behavior: string@expunge-behavior-completer # The action that will be executed on a message when it is marked as deleted and expunged from the last visible IMAP folder.
   --max-folder-size: int # An optional limit on the number of messages that an IMAP folder may contain. Legal values are 0, 1000, 2000, 5000 or 10000. A value of zero is interpreted to mean that there is no limit. (format: int32)
-]: any -> record<autoExpunge: bool, enabled: bool, expungeBehavior: string, maxFolderSize: int> {
+]: any -> oneof<record<autoExpunge: bool, enabled: bool, expungeBehavior: string, maxFolderSize: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2948,7 +2966,7 @@ export def "gmail-users-settings-get-language" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<displayLanguage: string> {
+]: nothing -> oneof<record<displayLanguage: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -2997,7 +3015,7 @@ export def "gmail-users-settings-update-language" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --display-language: string # The language to display Gmail in, formatted as an RFC 3066 Language Tag (for example `en-GB`, `fr` or `ja` for British English, French, or Japanese respectively). The set of languages supported by Gmail evolves over time, so please refer to the "Language" dropdown in the Gmail settings for all available options, as described in the language settings help article. A table of sample values is also provided in the Managing Language Settings guide Not all Gmail clients can display the same set of languages. In the case that a user's display language is not available for use on a particular client, said client automatically chooses to display in the closest supported variant (or a reasonable default).
-]: any -> record<displayLanguage: string> {
+]: any -> oneof<record<displayLanguage: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3048,7 +3066,7 @@ export def "gmail-users-settings-get-pop" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<accessWindow: string, disposition: string> {
+]: nothing -> oneof<record<accessWindow: string, disposition: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -3098,7 +3116,7 @@ export def "gmail-users-settings-update-pop" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --access-window: string@access-window-completer # The range of messages which are accessible via POP.
   --disposition: string@disposition-completer # The action that will be executed on a message after it has been fetched via POP.
-]: any -> record<accessWindow: string, disposition: string> {
+]: any -> oneof<record<accessWindow: string, disposition: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3149,7 +3167,7 @@ export def "gmail-users-settings-send-as-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<sendAs: table<displayName: string, isDefault: bool, isPrimary: bool, replyToAddress: string, sendAsEmail: string, signature: string, smtpMsa: record, treatAsAlias: bool, verificationStatus: string>> {
+]: nothing -> oneof<record<sendAs: table<displayName: string, isDefault: bool, isPrimary: bool, replyToAddress: string, sendAsEmail: string, signature: string, smtpMsa: record, treatAsAlias: bool, verificationStatus: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -3175,7 +3193,6 @@ export def "gmail-users-settings-send-as-list" [
 #
 # POST /gmail/v1/users/{userId}/settings/sendAs
 # operationId: gmail.users.settings.sendAs.create
-# --smtpMsa shape: {host?: string, password?: string, port?: int, securityMode?: "securityModeUnspecified"|"none"|"ssl"|"starttls", username?: string}
 export def "gmail-users-settings-send-as-create" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3207,7 +3224,7 @@ export def "gmail-users-settings-send-as-create" [
   --smtp-msa: record # Configuration for communication with an SMTP service. — shape: {host?: string, password?: string, port?: int, securityMode?: "securityModeUnspecified"|"none"|"ssl"|"starttls", username?: string}
   --treat-as-alias: oneof<nothing, bool> # Whether Gmail should treat this address as an alias for the user's primary email address. This setting only applies to custom "from" aliases.
   --verification-status: string@verification-status-completer-1 # Indicates whether this address has been verified for use as a send-as alias. Read-only. This setting only applies to custom "from" aliases.
-]: any -> record<displayName: string, isDefault: bool, isPrimary: bool, replyToAddress: string, sendAsEmail: string, signature: string, smtpMsa: record<host: string, password: string, port: int, securityMode: string, username: string>, treatAsAlias: bool, verificationStatus: string> {
+]: any -> oneof<record<displayName: string, isDefault: bool, isPrimary: bool, replyToAddress: string, sendAsEmail: string, signature: string, smtpMsa: record<host: string, password: string, port: int, securityMode: string, username: string>, treatAsAlias: bool, verificationStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3309,7 +3326,7 @@ export def "gmail-users-settings-send-as-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<displayName: string, isDefault: bool, isPrimary: bool, replyToAddress: string, sendAsEmail: string, signature: string, smtpMsa: record<host: string, password: string, port: int, securityMode: string, username: string>, treatAsAlias: bool, verificationStatus: string> {
+]: nothing -> oneof<record<displayName: string, isDefault: bool, isPrimary: bool, replyToAddress: string, sendAsEmail: string, signature: string, smtpMsa: record<host: string, password: string, port: int, securityMode: string, username: string>, treatAsAlias: bool, verificationStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -3336,7 +3353,6 @@ export def "gmail-users-settings-send-as-get" [
 #
 # PATCH /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}
 # operationId: gmail.users.settings.sendAs.patch
-# --smtpMsa shape: {host?: string, password?: string, port?: int, securityMode?: "securityModeUnspecified"|"none"|"ssl"|"starttls", username?: string}
 export def "gmail-users-settings-send-as-patch" [
   user_id: string
   send_as_email: string
@@ -3369,7 +3385,7 @@ export def "gmail-users-settings-send-as-patch" [
   --smtp-msa: record # Configuration for communication with an SMTP service. — shape: {host?: string, password?: string, port?: int, securityMode?: "securityModeUnspecified"|"none"|"ssl"|"starttls", username?: string}
   --treat-as-alias: oneof<nothing, bool> # Whether Gmail should treat this address as an alias for the user's primary email address. This setting only applies to custom "from" aliases.
   --verification-status: string@verification-status-completer-1 # Indicates whether this address has been verified for use as a send-as alias. Read-only. This setting only applies to custom "from" aliases.
-]: any -> record<displayName: string, isDefault: bool, isPrimary: bool, replyToAddress: string, sendAsEmail: string, signature: string, smtpMsa: record<host: string, password: string, port: int, securityMode: string, username: string>, treatAsAlias: bool, verificationStatus: string> {
+]: any -> oneof<record<displayName: string, isDefault: bool, isPrimary: bool, replyToAddress: string, sendAsEmail: string, signature: string, smtpMsa: record<host: string, password: string, port: int, securityMode: string, username: string>, treatAsAlias: bool, verificationStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3399,7 +3415,6 @@ export def "gmail-users-settings-send-as-patch" [
 #
 # PUT /gmail/v1/users/{userId}/settings/sendAs/{sendAsEmail}
 # operationId: gmail.users.settings.sendAs.update
-# --smtpMsa shape: {host?: string, password?: string, port?: int, securityMode?: "securityModeUnspecified"|"none"|"ssl"|"starttls", username?: string}
 export def "gmail-users-settings-send-as-update" [
   user_id: string
   send_as_email: string
@@ -3432,7 +3447,7 @@ export def "gmail-users-settings-send-as-update" [
   --smtp-msa: record # Configuration for communication with an SMTP service. — shape: {host?: string, password?: string, port?: int, securityMode?: "securityModeUnspecified"|"none"|"ssl"|"starttls", username?: string}
   --treat-as-alias: oneof<nothing, bool> # Whether Gmail should treat this address as an alias for the user's primary email address. This setting only applies to custom "from" aliases.
   --verification-status: string@verification-status-completer-1 # Indicates whether this address has been verified for use as a send-as alias. Read-only. This setting only applies to custom "from" aliases.
-]: any -> record<displayName: string, isDefault: bool, isPrimary: bool, replyToAddress: string, sendAsEmail: string, signature: string, smtpMsa: record<host: string, password: string, port: int, securityMode: string, username: string>, treatAsAlias: bool, verificationStatus: string> {
+]: any -> oneof<record<displayName: string, isDefault: bool, isPrimary: bool, replyToAddress: string, sendAsEmail: string, signature: string, smtpMsa: record<host: string, password: string, port: int, securityMode: string, username: string>, treatAsAlias: bool, verificationStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3485,7 +3500,7 @@ export def "gmail-users-settings-send-as-smime-info-list" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<smimeInfo: table<encryptedKeyPassword: string, expiration: string, id: string, isDefault: bool, issuerCn: string, pem: string, pkcs12: string>> {
+]: nothing -> oneof<record<smimeInfo: table<encryptedKeyPassword: string, expiration: string, id: string, isDefault: bool, issuerCn: string, pem: string, pkcs12: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -3542,7 +3557,7 @@ export def "gmail-users-settings-send-as-smime-info-insert" [
   --issuer-cn: string # The S/MIME certificate issuer's common name.
   --pem: string # PEM formatted X509 concatenated certificate string (standard base64 encoding). Format used for returning key, which includes public key as well as certificate chain (not private key).
   --pkcs12: string # PKCS#12 format containing a single private/public key pair and certificate chain. This format is only accepted from client for creating a new SmimeInfo and is never returned, because the private key is not intended to be exported. PKCS#12 may be encrypted, in which case encryptedKeyPassword should be set appropriately. (format: byte)
-]: any -> record<encryptedKeyPassword: string, expiration: string, id: string, isDefault: bool, issuerCn: string, pem: string, pkcs12: string> {
+]: any -> oneof<record<encryptedKeyPassword: string, expiration: string, id: string, isDefault: bool, issuerCn: string, pem: string, pkcs12: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3648,7 +3663,7 @@ export def "gmail-users-settings-send-as-smime-info-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<encryptedKeyPassword: string, expiration: string, id: string, isDefault: bool, issuerCn: string, pem: string, pkcs12: string> {
+]: nothing -> oneof<record<encryptedKeyPassword: string, expiration: string, id: string, isDefault: bool, issuerCn: string, pem: string, pkcs12: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -3800,7 +3815,7 @@ export def "gmail-users-settings-get-vacation" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<enableAutoReply: bool, endTime: string, responseBodyHtml: string, responseBodyPlainText: string, responseSubject: string, restrictToContacts: bool, restrictToDomain: bool, startTime: string> {
+]: nothing -> oneof<record<enableAutoReply: bool, endTime: string, responseBodyHtml: string, responseBodyPlainText: string, responseSubject: string, restrictToContacts: bool, restrictToDomain: bool, startTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -3856,7 +3871,7 @@ export def "gmail-users-settings-update-vacation" [
   --restrict-to-contacts: oneof<nothing, bool> # Flag that determines whether responses are sent to recipients who are not in the user's list of contacts.
   --restrict-to-domain: oneof<nothing, bool> # Flag that determines whether responses are sent to recipients who are outside of the user's domain. This feature is only available for Google Workspace users.
   --start-time: string # An optional start time for sending auto-replies (epoch ms). When this is specified, Gmail will automatically reply only to messages that it receives after the start time. If both `startTime` and `endTime` are specified, `startTime` must precede `endTime`. (format: int64)
-]: any -> record<enableAutoReply: bool, endTime: string, responseBodyHtml: string, responseBodyPlainText: string, responseSubject: string, restrictToContacts: bool, restrictToDomain: bool, startTime: string> {
+]: any -> oneof<record<enableAutoReply: bool, endTime: string, responseBodyHtml: string, responseBodyPlainText: string, responseSubject: string, restrictToContacts: bool, restrictToDomain: bool, startTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3960,7 +3975,7 @@ export def "gmail-users-threads-list" [
   --max-results: int # Maximum number of threads to return. This field defaults to 100. The maximum allowed value for this field is 500.
   --page-token: string # Page token to retrieve a specific page of results in the list.
   --q: string # Only return threads matching the specified query. Supports the same query format as the Gmail search box. For example, `"from:someuser@example.com rfc822msgid: is:unread"`. Parameter cannot be used when accessing the api using the gmail.metadata scope.
-]: nothing -> record<nextPageToken: string, resultSizeEstimate: int, threads: table<historyId: string, id: string, messages: list, snippet: string>> {
+]: nothing -> oneof<record<nextPageToken: string, resultSizeEstimate: int, threads: table<historyId: string, id: string, messages: list, snippet: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -4061,7 +4076,7 @@ export def "gmail-users-threads-get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --format: string@format-completer-1 # The format to return the messages in.
   --metadata-headers: list<string> # When given and format is METADATA, only include headers specified.
-]: nothing -> record<historyId: string, id: string, messages: table<historyId: string, id: string, internalDate: string, labelIds: list, payload: record, raw: string, sizeEstimate: int, snippet: string, threadId: string>, snippet: string> {
+]: nothing -> oneof<record<historyId: string, id: string, messages: table<historyId: string, id: string, internalDate: string, labelIds: list, payload: record, raw: string, sizeEstimate: int, snippet: string, threadId: string>, snippet: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -4113,7 +4128,7 @@ export def "gmail-users-threads-modify" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --add-label-ids: list<string> # A list of IDs of labels to add to this thread. You can add up to 100 labels with each update.
   --remove-label-ids: list<string> # A list of IDs of labels to remove from this thread. You can remove up to 100 labels with each update.
-]: any -> record<historyId: string, id: string, messages: table<historyId: string, id: string, internalDate: string, labelIds: list, payload: record, raw: string, sizeEstimate: int, snippet: string, threadId: string>, snippet: string> {
+]: any -> oneof<record<historyId: string, id: string, messages: table<historyId: string, id: string, internalDate: string, labelIds: list, payload: record, raw: string, sizeEstimate: int, snippet: string, threadId: string>, snippet: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4166,7 +4181,7 @@ export def "gmail-users-threads-trash" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<historyId: string, id: string, messages: table<historyId: string, id: string, internalDate: string, labelIds: list, payload: record, raw: string, sizeEstimate: int, snippet: string, threadId: string>, snippet: string> {
+]: nothing -> oneof<record<historyId: string, id: string, messages: table<historyId: string, id: string, internalDate: string, labelIds: list, payload: record, raw: string, sizeEstimate: int, snippet: string, threadId: string>, snippet: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -4216,7 +4231,7 @@ export def "gmail-users-threads-untrash" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<historyId: string, id: string, messages: table<historyId: string, id: string, internalDate: string, labelIds: list, payload: record, raw: string, sizeEstimate: int, snippet: string, threadId: string>, snippet: string> {
+]: nothing -> oneof<record<historyId: string, id: string, messages: table<historyId: string, id: string, internalDate: string, labelIds: list, payload: record, raw: string, sizeEstimate: int, snippet: string, threadId: string>, snippet: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -4268,7 +4283,7 @@ export def "gmail-users-watch" [
   --label-filter-action: string@label-filter-action-completer # Filtering behavior of labelIds list specified.
   --label-ids: list<string> # List of label_ids to restrict notifications about. By default, if unspecified, all changes are pushed out. If specified then dictates which labels are required for a push notification to be generated.
   --topic-name: string # A fully qualified Google Cloud Pub/Sub API topic name to publish the events to. This topic name **must** already exist in Cloud Pub/Sub and you **must** have already granted gmail "publish" permission on it. For example, "projects/my-project-identifier/topics/my-topic-name" (using the Cloud Pub/Sub "v1" topic naming format). Note that the "my-project-identifier" portion must exactly match your Google developer project id (the one executing this watch request).
-]: any -> record<expiration: string, historyId: string> {
+]: any -> oneof<record<expiration: string, historyId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

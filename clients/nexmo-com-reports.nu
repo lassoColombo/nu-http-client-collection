@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -108,18 +132,21 @@ def base-url-completer [] { ["https://api.nexmo.com"] }
 def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 
 # Completers for enum parameters
-def product-completer [] { ["ASR" "CONVERSATIONS" "IN-APP-VOICE" "MESSAGES" "NUMBER-INSIGHT" "REPORTS-USAGE" "SMS" "VERIFY-API" "VOICE-CALL" "VOICE-FAILED" "WEBSOCKET-CALL"] }
+def include-subaccounts-completer [] { ["false" "true"] }
+def product-completer [] { ["ASR" "CONVERSATIONS" "IN-APP-VOICE" "MESSAGES" "NUMBER-INSIGHT" "SMS" "VERIFY-API" "VOICE-CALL" "WEBSOCKET-CALL"] }
 def direction-completer [] { ["inbound" "outbound"] }
+def status-completer [] { ["accepted" "buffered" "delivered" "expired" "failed" "rejected" "unknown"] }
+def product-completer-1 [] { ["ASR" "CONVERSATIONS" "IN-APP-VOICE" "MESSAGES" "NUMBER-INSIGHT" "REPORTS-USAGE" "SMS" "VERIFY-API" "VOICE-CALL" "VOICE-FAILED" "WEBSOCKET-CALL"] }
 def include-message-completer [] { ["false" "true"] }
 def show-concatenated-completer [] { ["false" "true"] }
-def status-completer [] { ["accepted" "buffered" "deleted" "delivered" "expired" "failed" "rejected" "unknown"] }
+def status-completer-1 [] { ["accepted" "buffered" "deleted" "delivered" "expired" "failed" "rejected" "unknown"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-reports" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-reports" "create-async-report" "get-records" "cancel-report" "get-report" "download-report" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -155,7 +182,7 @@ export def "list-reports" [
   --status: string # A comma-separated list of report status values. Reports with any of the statuses specified are returned. The values in the comma-seperated list specified for `status` can be any of `PENDING`, `PROCESSING`, `SUCCESS`, `ABORTED`, `FAILED`, `TRUNCATED`. (required, e.g. SUCCESS, FAILED)
   --date-from: string # ISO-8601 extended time zone offset or ISO-8601 UTC zone offset formatted date from which the list of reports will be queried. Format `yyyy-mm-ddThh:mm:ss[.sss]±hh:mm` or `yyyy-mm-ddThh:mm:ss[.sss]Z`. (format: date, e.g. 2019-06-28T00:00:00-00:00)
   --date-to: string # ISO-8601 extended time zone offset or ISO-8601 UTC zone offset formatted date until which the list of reports will be queried. Format `yyyy-mm-ddThh:mm:ss[.sss]±hh:mm` or `yyyy-mm-ddThh:mm:ss[.sss]Z`. (format: date, e.g. 2019-06-28T23:59:59-00:00)
-]: nothing -> record<items_count: int, reports: list<record>, self_link: string> {
+]: nothing -> oneof<record<items_count: int, reports: list<record>, self_link: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id == null) { error make --unspanned { msg: "required query parameter 'account_id' missing: pass --account-id" } }
@@ -193,13 +220,30 @@ export def "create-async-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
+  account_id: string # The account ID (API key) you wish to search for. This can differ from the API key in the authorization header because some accounts can request reports for other accounts, e.g. a primary account owner wants to create a report for one of its subaccounts. (e.g. abcdef01)
+  --callback-url: string # URL to send a callback upon completion of the report. This POST callback contains the same information as the response to [Get status of report](/api/reports#get-report). (format: uri, e.g. https://requestb.in/12345)
+  --date-end: string # ISO-8601 extended time zone offset or ISO-8601 UTC zone offset formatted date (format `yyyy-mm-ddThh:mm:ss[.sss]±hh:mm` or `yyyy-mm-ddThh:mm:ss[.sss]Z`) for when report should end. It is exclusive, i.e. the provided value is strictly greater than the value in the field `date_received` in the CDR. If unspecified, defaults to the current time. (format: date, e.g. 2018-01-01T00:00:00+00:00)
+  --date-start: string # ISO-8601 extended time zone offset or ISO-8601 UTC zone offset formatted date (format `yyyy-mm-ddThh:mm:ss[.sss]±hh:mm` or `yyyy-mm-ddThh:mm:ss[.sss]Z`) for when reports should begin. It filters on the time the API call was received by Vonage and corresponds to the field `date_received` (`date_start` for Voice) in the report file. It is inclusive, i.e. the provided value is less than or equal to the value in the field `date_received` (`date_start` for Voice) in the CDR.If unspecified, defaults to seven days ago. (format: date, e.g. 2017-12-01T00:00:00+00:00)
+  --include-subaccounts: oneof<nothing, bool> # Whether to include subaccounts or not. (default: false, e.g. false)
+  product: string@product-completer # Which product you wish to generate a report for. (e.g. SMS)
+  --account-ref: string # Search for messages with this `account_ref`.
+  --client-ref: string # Search for messages with this `client_ref`.
+  --direction: string@direction-completer # Direction of the communication, either `inbound` (received by our services), or `outbound` (originated from our services). Required for products `SMS` and `MESSAGES`. Optional for `VOICE-CALL`. Invalid for `IN-APP-VOICE`, `CONVERSATIONS`, `NUMBER-INSIGHT`, `VERIFY-API`. (e.g. outbound)
+  --from: string # Request from this number. (e.g. 441234567890)
+  --include-message: oneof<nothing, bool> # Include the text of messages in the report. (default: false, e.g. true)
+  --network: string # Network used to send the request. (e.g. 23415)
+  --show-concatenated: oneof<nothing, bool> # Indicates whether the SMS was split up into multiple parts (due to its length). (default: false, e.g. false)
+  --status: string@status-completer # Search only for sms with the corresponding status. (e.g. delivered)
+  --to: string # Request to this number. (e.g. 441234567890)
+  --conversation-id: string # Search only for In App Voive calls attached to this particular Conversation. This should include the "CON-" prefix. (e.g. CON-abc123)
+  --number: string # Search only request for the target number. (e.g. 441234567890)
+  --id: string # Search only messages with the specified uuid. (e.g. aaaaaaaa-bbbb-cccc-dddd-0123456789ab)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/reports" $auth.query)
-  let req_body = $body
+  let req_body = {"account_id": $account_id, "callback_url": $callback_url, "date_end": $date_end, "date_start": $date_start, "include_subaccounts": $include_subaccounts, "product": $product, "account_ref": $account_ref, "client_ref": $client_ref, "direction": $direction, "from": $from, "include_message": $include_message, "network": $network, "show_concatenated": $show_concatenated, "status": $status, "to": $to, "conversation_id": $conversation_id, "number": $number, "id": $id} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -232,14 +276,14 @@ export def "get-records" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-id: string # The account for which the list of reports will be queried. (required, e.g. abcd1234)
-  --product: string@product-completer # The product to return records for (required, e.g. SMS)
+  --product: string@product-completer-1 # The product to return records for (required, e.g. SMS)
   --direction: string@direction-completer # Direction of the communication, either `inbound` (received by our services), or `outbound` (originated from our services). Required for products `SMS` and `MESSAGES`. Optional for `VOICE-CALL`. Invalid for `IN-APP-VOICE`, `CONVERSATIONS`, `NUMBER-INSIGHT`, `VERIFY-API`. (e.g. inbound)
   --id: string # The UUID of the message or call to be searched for. You can specify a comma-separated list of UUIDs. If UUIDs are not found they are listed in the response in the `ids_not_found` field. If you specify `id`, you must not specify `status`, `date_start` or `date_end`. (e.g. aaaaaaaa-bbbb-cccc-dddd-0123456789ab)
   --date-start: string # ISO-8601 extended time zone offset or ISO-8601 UTC zone offset formatted date (format `yyyy-mm-ddThh:mm:ss[.sss]±hh:mm` or `yyyy-mm-ddThh:mm:ss[.sss]Z`) for when reports should begin. It filters on the time the API call was received by Vonage and corresponds to the field `date_received` (`date_start` for Voice) in the report file. It is inclusive, i.e. the provided value is less than or equal to the value in the field `date_received` (`date_start` for Voice) in the CDR. If you provide this, you must provide `date_end` and must not provide `id`. (format: date, e.g. 2017-12-01T00:00:00+0000)
   --date-end: string # **Must be no more than 24 hours later than `date_start`** ISO-8601 extended time zone offset or ISO-8601 UTC zone offset formatted date (format `yyyy-mm-ddThh:mm:ss[.sss]±hh:mm` or `yyyy-mm-ddThh:mm:ss[.sss]Z`) for when report should end. It is exclusive, i.e. the provided value is strictly greater than the value in the field `date_received` in the CDR. If you provide this, you must provide `date_start` and must not provide `id`. (format: date, e.g. 2018-01-01T00:00:00+0000)
   --include-message: oneof<nothing, bool> # Include the message contents in the records. Only applicable for use with products `SMS` and `MESSAGES`, where it is optional. (default: false, e.g. true)
   --show-concatenated: oneof<nothing, bool> # Indicates whether the SMS was split up into multiple parts (due to its length). (default: false, e.g. false)
-  --status: string@status-completer # The SMS status to search for. Optional where product is `SMS`. (default: none, e.g. delivered)
+  --status: string@status-completer-1 # The SMS status to search for. Optional where product is `SMS`. (default: none, e.g. delivered)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -350,7 +394,7 @@ export def "download-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<report: list<record>> {
+]: nothing -> oneof<record<report: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }

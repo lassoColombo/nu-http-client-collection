@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -124,9 +148,9 @@ def type-completer [] { ["unapproved" "uncategorized"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-budgets" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-budgets" "get-budget-by-id" "get-accounts" "create-account" "get-account-by-id" "get-transactions-by-account" "get-categories" "get-category-by-id" "get-transactions-by-category" "get-budget-months" "get-budget-month" "get-month-category-by-id" "update-month-category" "get-payee-locations" "get-payee-location-by-id" "get-payees" "get-payee-by-id" "get-payee-locations-by-payee" "get-transactions-by-payee" "get-scheduled-transactions" "get-scheduled-transaction-by-id" "get-budget-settings-by-id" "get-transactions" "update-transactions" "create-transaction" "bulk-create-transactions" "import-transactions" "delete-transaction" "get-transaction-by-id" "update-transaction" "get-user" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -159,7 +183,7 @@ export def "get-budgets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-accounts: oneof<nothing, bool> # Whether to include the list of budget accounts
-]: nothing -> record<data: record<budgets: list<record>, default_budget: record<accounts: list, currency_format: record, date_format: record, first_month: string, id: string, last_modified_on: string, last_month: string, name: string>>> {
+]: nothing -> oneof<record<data: record<budgets: list<record>, default_budget: record<accounts: list, currency_format: record, date_format: record, first_month: string, id: string, last_modified_on: string, last_month: string, name: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include_accounts" $include_accounts "scalar")] | flatten | str join "&"
@@ -196,7 +220,7 @@ export def "get-budget-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
-]: nothing -> record<data: record<budget: record<accounts: list, currency_format: record, date_format: record, first_month: string, id: string, last_modified_on: string, last_month: string, name: string, categories: list, category_groups: list, months: list, payee_locations: list, payees: list, scheduled_subtransactions: list, scheduled_transactions: list, subtransactions: list, transactions: list>, server_knowledge: int>> {
+]: nothing -> oneof<record<data: record<budget: record<accounts: list, currency_format: record, date_format: record, first_month: string, id: string, last_modified_on: string, last_month: string, name: string, categories: list, category_groups: list, months: list, payee_locations: list, payees: list, scheduled_subtransactions: list, scheduled_transactions: list, subtransactions: list, transactions: list>, server_knowledge: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -234,7 +258,7 @@ export def "get-accounts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
-]: nothing -> record<data: record<accounts: list<record>, server_knowledge: int>> {
+]: nothing -> oneof<record<data: record<accounts: list<record>, server_knowledge: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -260,7 +284,6 @@ export def "get-accounts" [
 #
 # POST /budgets/{budget_id}/accounts
 # operationId: createAccount
-# --account shape: {balance: int, name: string, type: "checking"|"savings"|"cash"|"creditCard"|"lineOfCredit"|"otherAsset"|"otherLiability"|"mortgage"|"autoLoan"|"studentLoan"|"personalLoan"|"medicalDebt"|"otherDebt"}
 export def "create-account" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -273,7 +296,7 @@ export def "create-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   account: record # shape: {balance: int, name: string, type: "checking"|"savings"|"cash"|"creditCard"|"lineOfCredit"|"otherAsset"|"otherLiability"|"mortgage"|"autoLoan"|"studentLoan"|"personalLoan"|"medicalDebt"|"otherDebt"}
-]: any -> record<data: record<account: record<balance: int, cleared_balance: int, closed: bool, debt_escrow_amounts: record, debt_interest_rates: record, debt_minimum_payments: record, debt_original_balance: int, deleted: bool, direct_import_in_error: bool, direct_import_linked: bool, id: string, last_reconciled_at: string, name: string, note: string, on_budget: bool, transfer_payee_id: string, type: string, uncleared_balance: int>>> {
+]: any -> oneof<record<data: record<account: record<balance: int, cleared_balance: int, closed: bool, debt_escrow_amounts: record, debt_interest_rates: record, debt_minimum_payments: record, debt_original_balance: int, deleted: bool, direct_import_in_error: bool, direct_import_linked: bool, id: string, last_reconciled_at: string, name: string, note: string, on_budget: bool, transfer_payee_id: string, type: string, uncleared_balance: int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -313,7 +336,7 @@ export def "get-account-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<account: record<balance: int, cleared_balance: int, closed: bool, debt_escrow_amounts: record, debt_interest_rates: record, debt_minimum_payments: record, debt_original_balance: int, deleted: bool, direct_import_in_error: bool, direct_import_linked: bool, id: string, last_reconciled_at: string, name: string, note: string, on_budget: bool, transfer_payee_id: string, type: string, uncleared_balance: int>>> {
+]: nothing -> oneof<record<data: record<account: record<balance: int, cleared_balance: int, closed: bool, debt_escrow_amounts: record, debt_interest_rates: record, debt_minimum_payments: record, debt_original_balance: int, deleted: bool, direct_import_in_error: bool, direct_import_linked: bool, id: string, last_reconciled_at: string, name: string, note: string, on_budget: bool, transfer_payee_id: string, type: string, uncleared_balance: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -354,7 +377,7 @@ export def "get-transactions-by-account" [
   --since-date: string # If specified, only transactions on or after this date will be included. The date should be ISO formatted (e.g. 2016-12-30). (format: date)
   --type: string@type-completer # If specified, only transactions of the specified type will be included. "uncategorized" and "unapproved" are currently supported.
   --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
-]: nothing -> record<data: record<server_knowledge: int, transactions: list<record>>> {
+]: nothing -> oneof<record<data: record<server_knowledge: int, transactions: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -393,7 +416,7 @@ export def "get-categories" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
-]: nothing -> record<data: record<category_groups: list<record>, server_knowledge: int>> {
+]: nothing -> oneof<record<data: record<category_groups: list<record>, server_knowledge: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -431,7 +454,7 @@ export def "get-category-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<category: record<activity: int, balance: int, budgeted: int, category_group_id: string, deleted: bool, goal_cadence: int, goal_cadence_frequency: int, goal_creation_month: string, goal_day: int, goal_months_to_budget: int, goal_overall_funded: int, goal_overall_left: int, goal_percentage_complete: int, goal_target: int, goal_target_month: string, goal_type: string, goal_under_funded: int, hidden: bool, id: string, name: string, note: string, original_category_group_id: string>>> {
+]: nothing -> oneof<record<data: record<category: record<activity: int, balance: int, budgeted: int, category_group_id: string, deleted: bool, goal_cadence: int, goal_cadence_frequency: int, goal_creation_month: string, goal_day: int, goal_months_to_budget: int, goal_overall_funded: int, goal_overall_left: int, goal_percentage_complete: int, goal_target: int, goal_target_month: string, goal_type: string, goal_under_funded: int, hidden: bool, id: string, name: string, note: string, original_category_group_id: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -472,7 +495,7 @@ export def "get-transactions-by-category" [
   --since-date: string # If specified, only transactions on or after this date will be included. The date should be ISO formatted (e.g. 2016-12-30). (format: date)
   --type: string@type-completer # If specified, only transactions of the specified type will be included. "uncategorized" and "unapproved" are currently supported.
   --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
-]: nothing -> record<data: record<server_knowledge: int, transactions: list<record>>> {
+]: nothing -> oneof<record<data: record<server_knowledge: int, transactions: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -511,7 +534,7 @@ export def "get-budget-months" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
-]: nothing -> record<data: record<months: list<record>, server_knowledge: int>> {
+]: nothing -> oneof<record<data: record<months: list<record>, server_knowledge: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -549,7 +572,7 @@ export def "get-budget-month" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<month: record<activity: int, age_of_money: int, budgeted: int, deleted: bool, income: int, month: string, note: string, to_be_budgeted: int, categories: list>>> {
+]: nothing -> oneof<record<data: record<month: record<activity: int, age_of_money: int, budgeted: int, deleted: bool, income: int, month: string, note: string, to_be_budgeted: int, categories: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -588,7 +611,7 @@ export def "get-month-category-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<category: record<activity: int, balance: int, budgeted: int, category_group_id: string, deleted: bool, goal_cadence: int, goal_cadence_frequency: int, goal_creation_month: string, goal_day: int, goal_months_to_budget: int, goal_overall_funded: int, goal_overall_left: int, goal_percentage_complete: int, goal_target: int, goal_target_month: string, goal_type: string, goal_under_funded: int, hidden: bool, id: string, name: string, note: string, original_category_group_id: string>>> {
+]: nothing -> oneof<record<data: record<category: record<activity: int, balance: int, budgeted: int, category_group_id: string, deleted: bool, goal_cadence: int, goal_cadence_frequency: int, goal_creation_month: string, goal_day: int, goal_months_to_budget: int, goal_overall_funded: int, goal_overall_left: int, goal_percentage_complete: int, goal_target: int, goal_target_month: string, goal_type: string, goal_under_funded: int, hidden: bool, id: string, name: string, note: string, original_category_group_id: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -615,7 +638,6 @@ export def "get-month-category-by-id" [
 #
 # PATCH /budgets/{budget_id}/months/{month}/categories/{category_id}
 # operationId: updateMonthCategory
-# --category shape: {budgeted: int}
 export def "update-month-category" [
   budget_id: string
   month: string
@@ -630,7 +652,7 @@ export def "update-month-category" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   category: record # shape: {budgeted: int}
-]: any -> record<data: record<category: record<activity: int, balance: int, budgeted: int, category_group_id: string, deleted: bool, goal_cadence: int, goal_cadence_frequency: int, goal_creation_month: string, goal_day: int, goal_months_to_budget: int, goal_overall_funded: int, goal_overall_left: int, goal_percentage_complete: int, goal_target: int, goal_target_month: string, goal_type: string, goal_under_funded: int, hidden: bool, id: string, name: string, note: string, original_category_group_id: string>, server_knowledge: int>> {
+]: any -> oneof<record<data: record<category: record<activity: int, balance: int, budgeted: int, category_group_id: string, deleted: bool, goal_cadence: int, goal_cadence_frequency: int, goal_creation_month: string, goal_day: int, goal_months_to_budget: int, goal_overall_funded: int, goal_overall_left: int, goal_percentage_complete: int, goal_target: int, goal_target_month: string, goal_type: string, goal_under_funded: int, hidden: bool, id: string, name: string, note: string, original_category_group_id: string>, server_knowledge: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -671,7 +693,7 @@ export def "get-payee-locations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<payee_locations: list<record>>> {
+]: nothing -> oneof<record<data: record<payee_locations: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -708,7 +730,7 @@ export def "get-payee-location-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<payee_location: record<deleted: bool, id: string, latitude: string, longitude: string, payee_id: string>>> {
+]: nothing -> oneof<record<data: record<payee_location: record<deleted: bool, id: string, latitude: string, longitude: string, payee_id: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -746,7 +768,7 @@ export def "get-payees" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
-]: nothing -> record<data: record<payees: list<record>, server_knowledge: int>> {
+]: nothing -> oneof<record<data: record<payees: list<record>, server_knowledge: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -784,7 +806,7 @@ export def "get-payee-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<payee: record<deleted: bool, id: string, name: string, transfer_account_id: string>>> {
+]: nothing -> oneof<record<data: record<payee: record<deleted: bool, id: string, name: string, transfer_account_id: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -822,7 +844,7 @@ export def "get-payee-locations-by-payee" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<payee_locations: list<record>>> {
+]: nothing -> oneof<record<data: record<payee_locations: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -863,7 +885,7 @@ export def "get-transactions-by-payee" [
   --since-date: string # If specified, only transactions on or after this date will be included. The date should be ISO formatted (e.g. 2016-12-30). (format: date)
   --type: string@type-completer # If specified, only transactions of the specified type will be included. "uncategorized" and "unapproved" are currently supported.
   --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
-]: nothing -> record<data: record<server_knowledge: int, transactions: list<record>>> {
+]: nothing -> oneof<record<data: record<server_knowledge: int, transactions: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -902,7 +924,7 @@ export def "get-scheduled-transactions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
-]: nothing -> record<data: record<scheduled_transactions: list<record>, server_knowledge: int>> {
+]: nothing -> oneof<record<data: record<scheduled_transactions: list<record>, server_knowledge: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -940,7 +962,7 @@ export def "get-scheduled-transaction-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<scheduled_transaction: record<account_id: string, amount: int, category_id: string, date_first: string, date_next: string, deleted: bool, flag_color: string, frequency: string, id: string, memo: string, payee_id: string, transfer_account_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>>> {
+]: nothing -> oneof<record<data: record<scheduled_transaction: record<account_id: string, amount: int, category_id: string, date_first: string, date_next: string, deleted: bool, flag_color: string, frequency: string, id: string, memo: string, payee_id: string, transfer_account_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -977,7 +999,7 @@ export def "get-budget-settings-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<settings: record<currency_format: record, date_format: record>>> {
+]: nothing -> oneof<record<data: record<settings: record<currency_format: record, date_format: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -1016,7 +1038,7 @@ export def "get-transactions" [
   --since-date: string # If specified, only transactions on or after this date will be included. The date should be ISO formatted (e.g. 2016-12-30). (format: date)
   --type: string@type-completer # If specified, only transactions of the specified type will be included. "uncategorized" and "unapproved" are currently supported.
   --last-knowledge-of-server: int # The starting server knowledge. If provided, only entities that have changed since `last_knowledge_of_server` will be included. (format: int64)
-]: nothing -> record<data: record<server_knowledge: int, transactions: list<record>>> {
+]: nothing -> oneof<record<data: record<server_knowledge: int, transactions: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -1042,7 +1064,6 @@ export def "get-transactions" [
 #
 # PATCH /budgets/{budget_id}/transactions
 # operationId: updateTransactions
-# --transactions item shape: {id?: string, account_id?: string, amount?: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date?: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
 export def "update-transactions" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1054,8 +1075,8 @@ export def "update-transactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  transactions: list # item shape: {id?: string, account_id?: string, amount?: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date?: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
-]: any -> any {
+  transactions: list # item shape: {id?: string, account_id?: string, amount?: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date?: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
+]: any -> oneof<record<data: record<duplicate_import_ids: list<string>, server_knowledge: int, transaction: record<account_id: string, amount: int, approved: bool, category_id: string, cleared: string, date: string, debt_transaction_type: string, deleted: bool, flag_color: string, id: string, import_id: string, import_payee_name: string, import_payee_name_original: string, matched_transaction_id: string, memo: string, payee_id: string, transfer_account_id: string, transfer_transaction_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>, transaction_ids: list<string>, transactions: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1083,8 +1104,6 @@ export def "update-transactions" [
 #
 # POST /budgets/{budget_id}/transactions
 # operationId: createTransaction
-# --transaction shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
-# --transactions item shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
 export def "create-transaction" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1096,9 +1115,9 @@ export def "create-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --transaction: record # shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
-  --transactions: list # item shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
-]: any -> record<data: record<duplicate_import_ids: list<string>, server_knowledge: int, transaction: record<account_id: string, amount: int, approved: bool, category_id: string, cleared: string, date: string, debt_transaction_type: string, deleted: bool, flag_color: string, id: string, import_id: string, import_payee_name: string, import_payee_name_original: string, matched_transaction_id: string, memo: string, payee_id: string, transfer_account_id: string, transfer_transaction_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>, transaction_ids: list<string>, transactions: list<record>>> {
+  --transaction: record # shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
+  --transactions: list # item shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
+]: any -> oneof<record<data: record<duplicate_import_ids: list<string>, server_knowledge: int, transaction: record<account_id: string, amount: int, approved: bool, category_id: string, cleared: string, date: string, debt_transaction_type: string, deleted: bool, flag_color: string, id: string, import_id: string, import_payee_name: string, import_payee_name_original: string, matched_transaction_id: string, memo: string, payee_id: string, transfer_account_id: string, transfer_transaction_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>, transaction_ids: list<string>, transactions: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1126,7 +1145,6 @@ export def "create-transaction" [
 #
 # POST /budgets/{budget_id}/transactions/bulk
 # operationId: bulkCreateTransactions
-# --transactions item shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
 export def "bulk-create-transactions" [
   budget_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1138,8 +1156,8 @@ export def "bulk-create-transactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  transactions: list # item shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
-]: any -> record<data: record<bulk: record<duplicate_import_ids: list, transaction_ids: list>>> {
+  transactions: list # item shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
+]: any -> oneof<record<data: record<bulk: record<duplicate_import_ids: list, transaction_ids: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1178,7 +1196,7 @@ export def "import-transactions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<transaction_ids: list<string>>> {
+]: nothing -> oneof<record<data: record<transaction_ids: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -1215,7 +1233,7 @@ export def "delete-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<transaction: record<account_id: string, amount: int, approved: bool, category_id: string, cleared: string, date: string, debt_transaction_type: string, deleted: bool, flag_color: string, id: string, import_id: string, import_payee_name: string, import_payee_name_original: string, matched_transaction_id: string, memo: string, payee_id: string, transfer_account_id: string, transfer_transaction_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>>> {
+]: nothing -> oneof<record<data: record<transaction: record<account_id: string, amount: int, approved: bool, category_id: string, cleared: string, date: string, debt_transaction_type: string, deleted: bool, flag_color: string, id: string, import_id: string, import_payee_name: string, import_payee_name_original: string, matched_transaction_id: string, memo: string, payee_id: string, transfer_account_id: string, transfer_transaction_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -1253,7 +1271,7 @@ export def "get-transaction-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<transaction: record<account_id: string, amount: int, approved: bool, category_id: string, cleared: string, date: string, debt_transaction_type: string, deleted: bool, flag_color: string, id: string, import_id: string, import_payee_name: string, import_payee_name_original: string, matched_transaction_id: string, memo: string, payee_id: string, transfer_account_id: string, transfer_transaction_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>>> {
+]: nothing -> oneof<record<data: record<transaction: record<account_id: string, amount: int, approved: bool, category_id: string, cleared: string, date: string, debt_transaction_type: string, deleted: bool, flag_color: string, id: string, import_id: string, import_payee_name: string, import_payee_name_original: string, matched_transaction_id: string, memo: string, payee_id: string, transfer_account_id: string, transfer_transaction_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($budget_id | is-empty) { error make --unspanned { msg: "path parameter 'budget_id' must be non-empty" } }
@@ -1279,7 +1297,6 @@ export def "get-transaction-by-id" [
 #
 # PUT /budgets/{budget_id}/transactions/{transaction_id}
 # operationId: updateTransaction
-# --transaction shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
 export def "update-transaction" [
   budget_id: string
   transaction_id: string
@@ -1292,8 +1309,8 @@ export def "update-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  transaction: record # shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple"|"", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
-]: any -> record<data: record<transaction: record<account_id: string, amount: int, approved: bool, category_id: string, cleared: string, date: string, debt_transaction_type: string, deleted: bool, flag_color: string, id: string, import_id: string, import_payee_name: string, import_payee_name_original: string, matched_transaction_id: string, memo: string, payee_id: string, transfer_account_id: string, transfer_transaction_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>>> {
+  transaction: record # shape: {account_id: string, amount: int, approved?: bool, category_id?: string, cleared?: "cleared"|"uncleared"|"reconciled", date: string, flag_color?: "red"|"orange"|"yellow"|"green"|"blue"|"purple", import_id?: string, memo?: string, payee_id?: string, payee_name?: string, subtransactions?: list}
+]: any -> oneof<record<data: record<transaction: record<account_id: string, amount: int, approved: bool, category_id: string, cleared: string, date: string, debt_transaction_type: string, deleted: bool, flag_color: string, id: string, import_id: string, import_payee_name: string, import_payee_name_original: string, matched_transaction_id: string, memo: string, payee_id: string, transfer_account_id: string, transfer_transaction_id: string, account_name: string, category_name: string, payee_name: string, subtransactions: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1332,7 +1349,7 @@ export def "get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<user: record<id: string>>> {
+]: nothing -> oneof<record<data: record<user: record<id: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user" $auth.query)

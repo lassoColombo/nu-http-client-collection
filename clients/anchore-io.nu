@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -153,9 +177,9 @@ def notification-type-completer [] { ["analysis_update" "policy_eval" "tag_updat
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ping" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["ping" "get-users-account" "list-accounts" "create-account" "delete-account" "get-account" "update-account-state" "list-users" "create-user" "delete-user" "get-account-user" "delete-user-credential" "list-user-credentials" "create-user-credential" "list-archives" "list-analysis-archive" "archive-image-analysis" "delete-archived-analysis" "get-archived-analysis" "list-analysis-archive-rules" "create-analysis-archive-rule" "delete-analysis-archive-rule" "get-analysis-archive-rule" "list-event-types" "delete-events" "list-events" "delete-event" "get-event" "health-check" "delete-images-async" "list-images" "add-image" "delete-image-by-image-id" "get-image-by-image-id" "get-image-policy-check-by-image-id" "list-image-content-by-imageid" "get-image-content-by-type-image-id-files" "get-image-content-by-type-image-id-javapackage" "get-image-content-by-type-image-id" "get-image-vulnerability-types-by-image-id" "get-image-vulnerabilities-by-type-image-id" "delete-image" "get-image" "list-file-content-search-results" "list-retrieved-files" "list-secret-search-results" "get-image-policy-check" "list-image-content" "get-image-content-by-type-files" "get-image-content-by-type-javapackage" "get-image-content-by-type-malware" "get-image-content-by-type" "list-image-metadata" "get-image-metadata-by-type" "get-image-sbom-native" "get-image-vulnerability-types" "get-image-vulnerabilities-by-type" "import-image-archive" "list-operations" "create-operation" "invalidate-operation" "get-operation" "list-import-dockerfiles" "import-image-dockerfile" "list-import-image-configs" "import-image-config" "list-import-image-manifests" "import-image-manifest" "list-import-packages" "import-image-packages" "list-import-parent-manifests" "import-image-parent-manifest" "get-oauth-token" "list-policies" "add-policy" "delete-policy" "get-policy" "update-policy" "query-images-by-package" "query-images-by-vulnerability" "query-vulnerabilities" "list-registries" "create-registry" "delete-registry" "get-registry" "update-registry" "add-repository" "get-status" "list-subscriptions" "add-subscription" "delete-subscription" "get-subscription" "update-subscription" "list-imagetags" "get-service-detail" "describe-error-codes" "get-system-feeds" "post-system-feeds" "delete-feed" "toggle-feed-enabled" "delete-feed-group" "toggle-group-enabled" "describe-policy" "list-services" "get-services-by-name" "delete-service" "get-services-by-name-and-host" "test-webhook" "get-user" "get-credentials" "add-credential" "version-check" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -221,7 +245,7 @@ export def "get-users-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, email: string, last_updated: string, name: string, state: string, type: string> {
+]: nothing -> oneof<record<created_at: string, email: string, last_updated: string, name: string, state: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account" $auth.query)
@@ -256,7 +280,7 @@ export def "list-accounts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer # Filter accounts by state
-]: nothing -> table<created_at: string, email: string, last_updated: string, name: string, state: string, type: string> {
+]: nothing -> oneof<table<created_at: string, email: string, last_updated: string, name: string, state: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar")] | flatten | str join "&"
@@ -293,7 +317,7 @@ export def "create-account" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # An optional email to associate with the account for contact purposes
   name: string # The account name to use. This will identify the account and must be globally unique in the system.
-]: any -> record<created_at: string, email: string, last_updated: string, name: string, state: string, type: string> {
+]: any -> oneof<record<created_at: string, email: string, last_updated: string, name: string, state: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -367,7 +391,7 @@ export def "get-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, email: string, last_updated: string, name: string, state: string, type: string> {
+]: nothing -> oneof<record<created_at: string, email: string, last_updated: string, name: string, state: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($accountname | is-empty) { error make --unspanned { msg: "path parameter 'accountname' must be non-empty" } }
@@ -404,7 +428,7 @@ export def "update-account-state" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer-1 # The status of the account
-]: any -> record<state: string> {
+]: any -> oneof<record<state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -443,7 +467,7 @@ export def "list-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<created_at: string, last_updated: string, source: string, type: string, username: string> {
+]: nothing -> oneof<table<created_at: string, last_updated: string, source: string, type: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($accountname | is-empty) { error make --unspanned { msg: "path parameter 'accountname' must be non-empty" } }
@@ -481,7 +505,7 @@ export def "create-user" [
   --dry-run(-n) # Return the request that would be sent without executing it
   password: string # The initial password for the user, must be at least 6 characters, up to 128
   username: string # The username to create
-]: any -> record<created_at: string, last_updated: string, source: string, type: string, username: string> {
+]: any -> oneof<record<created_at: string, last_updated: string, source: string, type: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -559,7 +583,7 @@ export def "get-account-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, last_updated: string, source: string, type: string, username: string> {
+]: nothing -> oneof<record<created_at: string, last_updated: string, source: string, type: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($accountname | is-empty) { error make --unspanned { msg: "path parameter 'accountname' must be non-empty" } }
@@ -638,7 +662,7 @@ export def "list-user-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<created_at: string, type: string, value: string> {
+]: nothing -> oneof<table<created_at: string, type: string, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($accountname | is-empty) { error make --unspanned { msg: "path parameter 'accountname' must be non-empty" } }
@@ -679,7 +703,7 @@ export def "create-user-credential" [
   --created-at: string # The timestamp of creation of the credential
   type: string@type-completer # The type of credential
   value: string # The credential value (e.g. the password)
-]: any -> record<created_at: string, last_updated: string, source: string, type: string, username: string> {
+]: any -> oneof<record<created_at: string, last_updated: string, source: string, type: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -717,7 +741,7 @@ export def "list-archives" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<images: record<last_updated: string, total_data_bytes: int, total_image_count: int, total_tag_count: int>, rules: record<count: int, last_updated: string>> {
+]: nothing -> oneof<record<images: record<last_updated: string, total_data_bytes: int, total_image_count: int, total_tag_count: int>, rules: record<count: int, last_updated: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/archives" $auth.query)
@@ -750,7 +774,7 @@ export def "list-analysis-archive" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<analyzed_at: string, annotations: record, archive_size_bytes: int, created_at: string, imageDigest: string, image_detail: list<record>, last_updated: string, parentDigest: string, status: string> {
+]: nothing -> oneof<table<analyzed_at: string, annotations: record, archive_size_bytes: int, created_at: string, imageDigest: string, image_detail: list<record>, last_updated: string, parentDigest: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/archives/images" $auth.query)
@@ -784,7 +808,7 @@ export def "archive-image-analysis" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> table<detail: string, digest: string, status: string> {
+]: any -> oneof<table<detail: string, digest: string, status: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -860,7 +884,7 @@ export def "get-archived-analysis" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<analyzed_at: string, annotations: record, archive_size_bytes: int, created_at: string, imageDigest: string, image_detail: table<detected_at: string, pullstring: string, registry: string, repository: string, tag: string>, last_updated: string, parentDigest: string, status: string> {
+]: nothing -> oneof<record<analyzed_at: string, annotations: record, archive_size_bytes: int, created_at: string, imageDigest: string, image_detail: table<detected_at: string, pullstring: string, registry: string, repository: string, tag: string>, last_updated: string, parentDigest: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -895,7 +919,7 @@ export def "list-analysis-archive-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --system-global: oneof<nothing, bool> # If true include system global rules (owned by admin) even for non-admin users. Defaults to true if not set. Can be set to false to exclude globals
-]: nothing -> table<analysis_age_days: int, created_at: string, exclude: record<expiration_days: int, selector: record>, last_updated: string, max_images_per_account: int, rule_id: string, selector: record<registry: string, repository: string, tag: string>, system_global: bool, tag_versions_newer: int, transition: string> {
+]: nothing -> oneof<table<analysis_age_days: int, created_at: string, exclude: record<expiration_days: int, selector: record>, last_updated: string, max_images_per_account: int, rule_id: string, selector: record<registry: string, repository: string, tag: string>, system_global: bool, tag_versions_newer: int, transition: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "system_global" $system_global "scalar")] | flatten | str join "&"
@@ -919,8 +943,6 @@ export def "list-analysis-archive-rules" [
 # POST /archives/rules
 #
 # operationId: create_analysis_archive_rule
-# --exclude shape: {expiration_days?: int, selector?: record}
-# --selector shape: {registry?: string, repository?: string, tag?: string}
 export def "create-analysis-archive-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -941,7 +963,7 @@ export def "create-analysis-archive-rule" [
   --system-global: oneof<nothing, bool> # True if the rule applies to all accounts in the system. This is only available to admin users to update/modify, but all users with permission to list rules can see them
   --tag-versions-newer: int # Number of images mapped to the tag that are newer
   transition: string@transition-completer # The type of transition to make. If "archive", then archive an image from the working set and remove it from the working set. If "delete", then match against archived images and delete from the archive if match.
-]: any -> record<analysis_age_days: int, created_at: string, exclude: record<expiration_days: int, selector: record<registry: string, repository: string, tag: string>>, last_updated: string, max_images_per_account: int, rule_id: string, selector: record<registry: string, repository: string, tag: string>, system_global: bool, tag_versions_newer: int, transition: string> {
+]: any -> oneof<record<analysis_age_days: int, created_at: string, exclude: record<expiration_days: int, selector: record<registry: string, repository: string, tag: string>>, last_updated: string, max_images_per_account: int, rule_id: string, selector: record<registry: string, repository: string, tag: string>, system_global: bool, tag_versions_newer: int, transition: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1013,7 +1035,7 @@ export def "get-analysis-archive-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<analysis_age_days: int, created_at: string, exclude: record<expiration_days: int, selector: record<registry: string, repository: string, tag: string>>, last_updated: string, max_images_per_account: int, rule_id: string, selector: record<registry: string, repository: string, tag: string>, system_global: bool, tag_versions_newer: int, transition: string> {
+]: nothing -> oneof<record<analysis_age_days: int, created_at: string, exclude: record<expiration_days: int, selector: record<registry: string, repository: string, tag: string>>, last_updated: string, max_images_per_account: int, rule_id: string, selector: record<registry: string, repository: string, tag: string>, system_global: bool, tag_versions_newer: int, transition: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
@@ -1048,7 +1070,7 @@ export def "list-event-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<category: string, description: string, subcategories: list<record>> {
+]: nothing -> oneof<table<category: string, description: string, subcategories: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/event_types" $auth.query)
@@ -1086,7 +1108,7 @@ export def "delete-events" [
   --since: string # Delete events that occurred after the timestamp
   --level: string # Delete events that match the level - INFO or ERROR
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "before" $before "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "level" $level "scalar")] | flatten | str join "&"
@@ -1134,7 +1156,7 @@ export def "list-events" [
   --page: int # Pagination controls - return the nth page of results. Defaults to first page if left empty (default: 1)
   --limit: int # Number of events in the result set. Defaults to 100 if left empty (default: 100)
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<item_count: int, next_page: bool, page: int, results: table<created_at: string, event: record, generated_uuid: string>> {
+]: nothing -> oneof<record<item_count: int, next_page: bool, page: int, results: table<created_at: string, event: record, generated_uuid: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "source_servicename" $source_servicename "scalar") (serialize-qp "source_hostid" $source_hostid "scalar") (serialize-qp "event_type" $event_type "scalar") (serialize-qp "resource_type" $resource_type "scalar") (serialize-qp "resource_id" $resource_id "scalar") (serialize-qp "level" $level "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -1212,7 +1234,7 @@ export def "get-event" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<created_at: string, event: record<category: string, details: record, level: string, message: string, resource: record<id: string, type: string, user_id: string>, source: record<base_url: string, hostid: string, request_id: string, servicename: string>, timestamp: string, type: string>, generated_uuid: string> {
+]: nothing -> oneof<record<created_at: string, event: record<category: string, details: record, level: string, message: string, resource: record<id: string, type: string, user_id: string>, source: record<base_url: string, hostid: string, request_id: string, servicename: string>, timestamp: string, type: string>, generated_uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
@@ -1286,7 +1308,7 @@ export def "delete-images-async" [
   --image-digests: list<string> # required
   --force: oneof<nothing, bool>
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> table<detail: string, digest: string, status: string> {
+]: nothing -> oneof<table<detail: string, digest: string, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digests == null) { error make --unspanned { msg: "required query parameter 'imageDigests' missing: pass --image-digests" } }
@@ -1329,7 +1351,7 @@ export def "list-images" [
   --image-status: string@image-status-completer # Filter by image_status value on the record. Default if omitted is 'active'. (default: active)
   --analysis-status: string@analysis-status-completer # Filter by analysis_status value on the record.
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> table<analysis_status: string, annotations: record, created_at: string, imageDigest: string, image_content: record, image_detail: list<record>, image_status: string, last_updated: string, record_version: string, userId: string> {
+]: nothing -> oneof<table<analysis_status: string, annotations: record, created_at: string, imageDigest: string, image_content: record, image_detail: list<record>, image_status: string, last_updated: string, record_version: string, userId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "history" $history "scalar") (serialize-qp "fulltag" $fulltag "scalar") (serialize-qp "image_status" $image_status "scalar") (serialize-qp "analysis_status" $analysis_status "scalar")] | flatten | str join "&"
@@ -1356,7 +1378,6 @@ export def "list-images" [
 #
 # POST /images
 # operationId: add_image
-# --source shape: {archive?: record, digest?: record, import?: record, tag?: record}
 export def "add-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1377,7 +1398,7 @@ export def "add-image" [
   --image-type: string # Optional. The type of image this is adding, defaults to "docker". This can be ommitted until multiple image types are supported.
   --source: record # A set of analysis source types. Only one may be set in any given request. — shape: {archive?: record, digest?: record, import?: record, tag?: record}
   --tag: string # Full pullable tag reference for image. e.g. docker.io/nginx:latest. Deprecated in favor of the 'source' field
-]: any -> table<analysis_status: string, annotations: record, created_at: string, imageDigest: string, image_content: record, image_detail: list<record>, image_status: string, last_updated: string, record_version: string, userId: string> {
+]: any -> oneof<table<analysis_status: string, annotations: record, created_at: string, imageDigest: string, image_content: record, image_detail: list<record>, image_status: string, last_updated: string, record_version: string, userId: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1420,7 +1441,7 @@ export def "delete-image-by-image-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool>
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<detail: string, digest: string, status: string> {
+]: nothing -> oneof<record<detail: string, digest: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
@@ -1460,7 +1481,7 @@ export def "get-image-by-image-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> table<analysis_status: string, annotations: record, created_at: string, imageDigest: string, image_content: record, image_detail: list<record>, image_status: string, last_updated: string, record_version: string, userId: string> {
+]: nothing -> oneof<table<analysis_status: string, annotations: record, created_at: string, imageDigest: string, image_content: record, image_detail: list<record>, image_status: string, last_updated: string, record_version: string, userId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
@@ -1503,7 +1524,7 @@ export def "get-image-policy-check-by-image-id" [
   --detail: oneof<nothing, bool>
   --history: oneof<nothing, bool>
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
@@ -1544,7 +1565,7 @@ export def "list-image-content-by-imageid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
@@ -1583,7 +1604,7 @@ export def "get-image-content-by-type-image-id-files" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<content: table<filename: string, gid: int, linkdest: string, mode: string, sha256: string, size: int, type: string, uid: int>, content_type: string, imageDigest: string> {
+]: nothing -> oneof<record<content: table<filename: string, gid: int, linkdest: string, mode: string, sha256: string, size: int, type: string, uid: int>, content_type: string, imageDigest: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
@@ -1622,7 +1643,7 @@ export def "get-image-content-by-type-image-id-javapackage" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<content: table<cpes: list, implementation_version: string, location: string, maven_version: string, origin: string, package: string, specification_version: string, type: string>, content_type: string, imageDigest: string> {
+]: nothing -> oneof<record<content: table<cpes: list, implementation_version: string, location: string, maven_version: string, origin: string, package: string, specification_version: string, type: string>, content_type: string, imageDigest: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
@@ -1662,7 +1683,7 @@ export def "get-image-content-by-type-image-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<content: table<cpes: list, license: string, licenses: list, location: string, origin: string, package: string, size: string, type: string, version: string>, content_type: string, imageDigest: string> {
+]: nothing -> oneof<record<content: table<cpes: list, license: string, licenses: list, location: string, origin: string, package: string, size: string, type: string, version: string>, content_type: string, imageDigest: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
@@ -1702,7 +1723,7 @@ export def "get-image-vulnerability-types-by-image-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
@@ -1742,7 +1763,7 @@ export def "get-image-vulnerabilities-by-type-image-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<imageDigest: string, vulnerabilities: table<feed: string, feed_group: string, fix: string, nvd_data: list, package: string, package_cpe: string, package_name: string, package_path: string, package_type: string, package_version: string, severity: string, url: string, vendor_data: list, vuln: string, will_not_fix: bool>, vulnerability_type: string> {
+]: nothing -> oneof<record<imageDigest: string, vulnerabilities: table<feed: string, feed_group: string, fix: string, nvd_data: list, package: string, package_cpe: string, package_name: string, package_path: string, package_type: string, package_version: string, severity: string, url: string, vendor_data: list, vuln: string, will_not_fix: bool>, vulnerability_type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_id | is-empty) { error make --unspanned { msg: "path parameter 'imageId' must be non-empty" } }
@@ -1783,7 +1804,7 @@ export def "delete-image" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --force: oneof<nothing, bool>
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<detail: string, digest: string, status: string> {
+]: nothing -> oneof<record<detail: string, digest: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -1823,7 +1844,7 @@ export def "get-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> table<analysis_status: string, annotations: record, created_at: string, imageDigest: string, image_content: record, image_detail: list<record>, image_status: string, last_updated: string, record_version: string, userId: string> {
+]: nothing -> oneof<table<analysis_status: string, annotations: record, created_at: string, imageDigest: string, image_content: record, image_detail: list<record>, image_status: string, last_updated: string, record_version: string, userId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -1861,7 +1882,7 @@ export def "list-file-content-search-results" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<matches: list<record>, path: string> {
+]: nothing -> oneof<table<matches: list<record>, path: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -1897,7 +1918,7 @@ export def "list-retrieved-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<b64_content: string, path: string> {
+]: nothing -> oneof<table<b64_content: string, path: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -1933,7 +1954,7 @@ export def "list-secret-search-results" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<matches: list<record>, path: string> {
+]: nothing -> oneof<table<matches: list<record>, path: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -1975,7 +1996,7 @@ export def "get-image-policy-check" [
   --history: oneof<nothing, bool>
   --interactive: oneof<nothing, bool>
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> list<record> {
+]: nothing -> oneof<list<record>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -2016,7 +2037,7 @@ export def "list-image-content" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -2055,7 +2076,7 @@ export def "get-image-content-by-type-files" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<content: table<filename: string, gid: int, linkdest: string, mode: string, sha256: string, size: int, type: string, uid: int>, content_type: string, imageDigest: string> {
+]: nothing -> oneof<record<content: table<filename: string, gid: int, linkdest: string, mode: string, sha256: string, size: int, type: string, uid: int>, content_type: string, imageDigest: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -2094,7 +2115,7 @@ export def "get-image-content-by-type-javapackage" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<content: table<cpes: list, implementation_version: string, location: string, maven_version: string, origin: string, package: string, specification_version: string, type: string>, content_type: string, imageDigest: string> {
+]: nothing -> oneof<record<content: table<cpes: list, implementation_version: string, location: string, maven_version: string, origin: string, package: string, specification_version: string, type: string>, content_type: string, imageDigest: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -2133,7 +2154,7 @@ export def "get-image-content-by-type-malware" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<content: table<enabled: bool, findings: list, metadata: record, scanner: string>, content_type: string, imageDigest: string> {
+]: nothing -> oneof<record<content: table<enabled: bool, findings: list, metadata: record, scanner: string>, content_type: string, imageDigest: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -2173,7 +2194,7 @@ export def "get-image-content-by-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<content: table<cpes: list, license: string, licenses: list, location: string, origin: string, package: string, size: string, type: string, version: string>, content_type: string, imageDigest: string> {
+]: nothing -> oneof<record<content: table<cpes: list, license: string, licenses: list, location: string, origin: string, package: string, size: string, type: string, version: string>, content_type: string, imageDigest: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -2213,7 +2234,7 @@ export def "list-image-metadata" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -2253,7 +2274,7 @@ export def "get-image-metadata-by-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<imageDigest: string, metadata: any, metadata_type: string> {
+]: nothing -> oneof<record<imageDigest: string, metadata: any, metadata_type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -2332,7 +2353,7 @@ export def "get-image-vulnerability-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -2374,7 +2395,7 @@ export def "get-image-vulnerabilities-by-type" [
   --force-refresh: oneof<nothing, bool>
   --vendor-only: oneof<nothing, bool> # Filter results to include only vulnerabilities that are not marked as invalid by upstream OS vendor data. When set to true, it will filter out all vulnerabilities where `will_not_fix` is False. If false all vulnerabilities are returned regardless of `will_not_fix`
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<imageDigest: string, vulnerabilities: table<feed: string, feed_group: string, fix: string, nvd_data: list, package: string, package_cpe: string, package_name: string, package_path: string, package_type: string, package_version: string, severity: string, url: string, vendor_data: list, vuln: string, will_not_fix: bool>, vulnerability_type: string> {
+]: nothing -> oneof<record<imageDigest: string, vulnerabilities: table<feed: string, feed_group: string, fix: string, nvd_data: list, package: string, package_cpe: string, package_name: string, package_path: string, package_type: string, package_version: string, severity: string, url: string, vendor_data: list, vuln: string, will_not_fix: bool>, vulnerability_type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($image_digest | is-empty) { error make --unspanned { msg: "path parameter 'imageDigest' must be non-empty" } }
@@ -2414,7 +2435,7 @@ export def "import-image-archive" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   archive_file: string # anchore image tar archive. (format: binary)
-]: any -> table<analysis_status: string, annotations: record, created_at: string, imageDigest: string, image_content: record, image_detail: list<record>, image_status: string, last_updated: string, record_version: string, userId: string> {
+]: any -> oneof<table<analysis_status: string, annotations: record, created_at: string, imageDigest: string, image_content: record, image_detail: list<record>, image_status: string, last_updated: string, record_version: string, userId: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2453,7 +2474,7 @@ export def "list-operations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<created_at: string, expires_at: string, status: string, uuid: string> {
+]: nothing -> oneof<table<created_at: string, expires_at: string, status: string, uuid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/imports/images" $auth.query)
@@ -2487,7 +2508,7 @@ export def "create-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, expires_at: string, status: string, uuid: string> {
+]: nothing -> oneof<record<created_at: string, expires_at: string, status: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/imports/images" $auth.query)
@@ -2522,7 +2543,7 @@ export def "invalidate-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, expires_at: string, status: string, uuid: string> {
+]: nothing -> oneof<record<created_at: string, expires_at: string, status: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operation_id' must be non-empty" } }
@@ -2558,7 +2579,7 @@ export def "get-operation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, expires_at: string, status: string, uuid: string> {
+]: nothing -> oneof<record<created_at: string, expires_at: string, status: string, uuid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operation_id' must be non-empty" } }
@@ -2594,7 +2615,7 @@ export def "list-import-dockerfiles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operation_id' must be non-empty" } }
@@ -2631,7 +2652,7 @@ export def "import-image-dockerfile" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> record<created_at: string, digest: string> {
+]: any -> oneof<record<created_at: string, digest: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2670,7 +2691,7 @@ export def "list-import-image-configs" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operation_id' must be non-empty" } }
@@ -2707,7 +2728,7 @@ export def "import-image-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record<created_at: string, digest: string> {
+]: any -> oneof<record<created_at: string, digest: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2746,7 +2767,7 @@ export def "list-import-image-manifests" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operation_id' must be non-empty" } }
@@ -2783,7 +2804,7 @@ export def "import-image-manifest" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> record<created_at: string, digest: string> {
+]: any -> oneof<record<created_at: string, digest: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2822,7 +2843,7 @@ export def "list-import-packages" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operation_id' must be non-empty" } }
@@ -2847,12 +2868,6 @@ export def "list-import-packages" [
 #
 # POST /imports/images/{operation_id}/packages
 # operationId: import_image_packages
-# --artifactRelationships item shape: {child: string, metadata?: record, parent: string, type: string}
-# --artifacts item shape: {cpes: list<string>, foundBy?: string, id?: string, language: string, licenses: list<string>, locations: list, metadata?: record, metadataType: string, name: string, purl?: string, type: string, version: string}
-# --descriptor shape: {name: string, version: string}
-# --distro shape: {idLike: string, name: string, version: string}
-# --schema shape: {url: string, version: string}
-# --source shape: {target: any, type: string}
 export def "import-image-packages" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2870,7 +2885,7 @@ export def "import-image-packages" [
   distro: record # shape: {idLike: string, name: string, version: string}
   --schema: record # shape: {url: string, version: string}
   source: record # shape: {target: any, type: string}
-]: any -> record<created_at: string, digest: string> {
+]: any -> oneof<record<created_at: string, digest: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2909,7 +2924,7 @@ export def "list-import-parent-manifests" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> list<string> {
+]: nothing -> oneof<list<string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($operation_id | is-empty) { error make --unspanned { msg: "path parameter 'operation_id' must be non-empty" } }
@@ -2946,7 +2961,7 @@ export def "import-image-parent-manifest" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> record<created_at: string, digest: string> {
+]: any -> oneof<record<created_at: string, digest: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2988,7 +3003,7 @@ export def "get-oauth-token" [
   --grant-type: string # OAuth Grant type for token (default: password)
   --password: string # Password for corresponding user
   --username: string # User to assign OAuth token to
-]: any -> record<token: string> {
+]: any -> oneof<record<token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2997,7 +3012,7 @@ export def "get-oauth-token" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3028,7 +3043,7 @@ export def "list-policies" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --detail: oneof<nothing, bool> # Include policy bundle detail in the form of the full bundle content for each entry
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> table<active: bool, created_at: string, last_updated: string, policyId: string, policy_source: string, policybundle: record<blacklisted_images: list, comment: string, id: string, mappings: list, name: string, policies: list, version: string, whitelisted_images: list, whitelists: list>, userId: string> {
+]: nothing -> oneof<table<active: bool, created_at: string, last_updated: string, policyId: string, policy_source: string, policybundle: record<blacklisted_images: list, comment: string, id: string, mappings: list, name: string, policies: list, version: string, whitelisted_images: list, whitelists: list>, userId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "detail" $detail "scalar")] | flatten | str join "&"
@@ -3055,11 +3070,6 @@ export def "list-policies" [
 #
 # POST /policies
 # operationId: add_policy
-# --blacklisted_images item shape: {id?: string, image: record, name: string, registry: string, repository: string}
-# --mappings item shape: {id?: string, image: record, name: string, policy_id?: string, policy_ids?: list<string>, registry: string, repository: string, whitelist_ids?: list<string>}
-# --policies item shape: {comment?: string, id: string, name?: string, rules?: list, version: string}
-# --whitelisted_images item shape: {id?: string, image: record, name: string, registry: string, repository: string}
-# --whitelists item shape: {comment?: string, id: string, items?: list, name?: string, version: string}
 export def "add-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3080,7 +3090,7 @@ export def "add-policy" [
   version: string # Version id for this bundle format
   --whitelisted-images: list # List of mapping rules that define which images should always be passed (unless also on the blacklist), regardless of policy result. — item shape: {id?: string, image: record, name: string, registry: string, repository: string}
   --whitelists: list # Whitelists which define which policy matches to disregard explicitly in the final policy decision — item shape: {comment?: string, id: string, items?: list, name?: string, version: string}
-]: any -> record<active: bool, created_at: string, last_updated: string, policyId: string, policy_source: string, policybundle: record<blacklisted_images: list<record>, comment: string, id: string, mappings: list<record>, name: string, policies: list<record>, version: string, whitelisted_images: list<record>, whitelists: list<record>>, userId: string> {
+]: any -> oneof<record<active: bool, created_at: string, last_updated: string, policyId: string, policy_source: string, policybundle: record<blacklisted_images: list<record>, comment: string, id: string, mappings: list<record>, name: string, policies: list<record>, version: string, whitelisted_images: list<record>, whitelists: list<record>>, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3161,7 +3171,7 @@ export def "get-policy" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --detail: oneof<nothing, bool> # Include policy bundle detail in the form of the full bundle content for each entry
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> table<active: bool, created_at: string, last_updated: string, policyId: string, policy_source: string, policybundle: record<blacklisted_images: list, comment: string, id: string, mappings: list, name: string, policies: list, version: string, whitelisted_images: list, whitelists: list>, userId: string> {
+]: nothing -> oneof<table<active: bool, created_at: string, last_updated: string, policyId: string, policy_source: string, policybundle: record<blacklisted_images: list, comment: string, id: string, mappings: list, name: string, policies: list, version: string, whitelisted_images: list, whitelists: list>, userId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($policy_id | is-empty) { error make --unspanned { msg: "path parameter 'policyId' must be non-empty" } }
@@ -3189,7 +3199,6 @@ export def "get-policy" [
 #
 # PUT /policies/{policyId}
 # operationId: update_policy
-# --policybundle shape: {blacklisted_images?: list, comment?: string, id: string, mappings: list, name?: string, policies: list, version: string, whitelisted_images?: list, whitelists?: list}
 export def "update-policy" [
   policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3210,7 +3219,7 @@ export def "update-policy" [
   --policy-source: string # Source location of where the policy bundle originated
   --policybundle: record # A bundle containing a set of policies, whitelists, and rules for mapping them to specific images — shape: {blacklisted_images?: list, comment?: string, id: string, mappings: list, name?: string, policies: list, version: string, whitelisted_images?: list, whitelists?: list}
   --user-id: string # UserId of the user that owns the bundle
-]: any -> table<active: bool, created_at: string, last_updated: string, policyId: string, policy_source: string, policybundle: record<blacklisted_images: list, comment: string, id: string, mappings: list, name: string, policies: list, version: string, whitelisted_images: list, whitelists: list>, userId: string> {
+]: any -> oneof<table<active: bool, created_at: string, last_updated: string, policyId: string, policy_source: string, policybundle: record<blacklisted_images: list, comment: string, id: string, mappings: list, name: string, policies: list, version: string, whitelisted_images: list, whitelists: list>, userId: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3257,7 +3266,7 @@ export def "query-images-by-package" [
   --page: string # The page of results to fetch. Pages start at 1
   --limit: int # Limit the number of records for the requested page. If omitted or set to 0, return all results in a single page
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<next_page: string, page: string, returned_count: int, images: table<image: record, packages: list>> {
+]: nothing -> oneof<record<next_page: string, page: string, returned_count: int, images: table<image: record, packages: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name == null) { error make --unspanned { msg: "required query parameter 'name' missing: pass --name" } }
@@ -3303,7 +3312,7 @@ export def "query-images-by-vulnerability" [
   --page: int # The page of results to fetch. Pages start at 1
   --limit: int # Limit the number of records for the requested page. If omitted or set to 0, return all results in a single page
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> record<next_page: string, page: string, returned_count: int, images: table<affected_packages: list, image: record>> {
+]: nothing -> oneof<record<next_page: string, page: string, returned_count: int, images: table<affected_packages: list, image: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($vulnerability_id == null) { error make --unspanned { msg: "required query parameter 'vulnerability_id' missing: pass --vulnerability-id" } }
@@ -3347,7 +3356,7 @@ export def "query-vulnerabilities" [
   --page: string # The page of results to fetch. Pages start at 1 (default: 1)
   --limit: int # Limit the number of records for the requested page. If omitted or set to 0, return all results in a single page
   --namespace: list<string> # Namespace(s) to filter vulnerability records by
-]: nothing -> record<next_page: string, page: string, returned_count: int, vulnerabilities: table<affected_packages: list, description: string, id: string, link: string, namespace: string, nvd_data: list, references: list, severity: string, vendor_data: list>> {
+]: nothing -> oneof<record<next_page: string, page: string, returned_count: int, vulnerabilities: table<affected_packages: list, description: string, id: string, link: string, namespace: string, nvd_data: list, references: list, severity: string, vendor_data: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id == null) { error make --unspanned { msg: "required query parameter 'id' missing: pass --id" } }
@@ -3384,7 +3393,7 @@ export def "list-registries" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> table<created_at: string, last_upated: string, registry: string, registry_name: string, registry_type: string, registry_user: string, registry_verify: bool, userId: string> {
+]: nothing -> oneof<table<created_at: string, last_upated: string, registry: string, registry_name: string, registry_type: string, registry_user: string, registry_verify: bool, userId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/registries" $auth.query)
@@ -3428,7 +3437,7 @@ export def "create-registry" [
   --registry-type: string # Type of registry
   --registry-user: string # Username portion of credential to use for this registry
   --registry-verify: oneof<nothing, bool> # Use TLS/SSL verification for the registry URL
-]: any -> table<created_at: string, last_upated: string, registry: string, registry_name: string, registry_type: string, registry_user: string, registry_verify: bool, userId: string> {
+]: any -> oneof<table<created_at: string, last_upated: string, registry: string, registry_name: string, registry_type: string, registry_user: string, registry_verify: bool, userId: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3509,7 +3518,7 @@ export def "get-registry" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> table<created_at: string, last_upated: string, registry: string, registry_name: string, registry_type: string, registry_user: string, registry_verify: bool, userId: string> {
+]: nothing -> oneof<table<created_at: string, last_upated: string, registry: string, registry_name: string, registry_type: string, registry_user: string, registry_verify: bool, userId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registry | is-empty) { error make --unspanned { msg: "path parameter 'registry' must be non-empty" } }
@@ -3555,7 +3564,7 @@ export def "update-registry" [
   --registry-type: string # Type of registry
   --registry-user: string # Username portion of credential to use for this registry
   --registry-verify: oneof<nothing, bool> # Use TLS/SSL verification for the registry URL
-]: any -> table<created_at: string, last_upated: string, registry: string, registry_name: string, registry_type: string, registry_user: string, registry_verify: bool, userId: string> {
+]: any -> oneof<table<created_at: string, last_upated: string, registry: string, registry_name: string, registry_type: string, registry_user: string, registry_verify: bool, userId: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3600,7 +3609,7 @@ export def "add-repository" [
   --autosubscribe: oneof<nothing, bool> # flag to enable/disable auto tag_update activation when new images from a repo are added
   --dryrun: oneof<nothing, bool> # flag to return tags in the repository without actually watching the repository, default is false
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> table<active: bool, subscription_id: string, subscription_key: string, subscription_type: string, subscription_value: string, userId: string> {
+]: nothing -> oneof<table<active: bool, subscription_id: string, subscription_key: string, subscription_type: string, subscription_value: string, userId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($repository == null) { error make --unspanned { msg: "required query parameter 'repository' missing: pass --repository" } }
@@ -3638,7 +3647,7 @@ export def "get-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<available: bool, busy: bool, db_version: string, detail: record, message: string, up: bool, version: string> {
+]: nothing -> oneof<record<available: bool, busy: bool, db_version: string, detail: record, message: string, up: bool, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/status" $auth.query)
@@ -3675,7 +3684,7 @@ export def "list-subscriptions" [
   --subscription-key: string # filter only subscriptions matching key
   --subscription-type: string # filter only subscriptions matching type
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> table<active: bool, subscription_id: string, subscription_key: string, subscription_type: string, subscription_value: string, userId: string> {
+]: nothing -> oneof<table<active: bool, subscription_id: string, subscription_key: string, subscription_type: string, subscription_value: string, userId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "subscription_key" $subscription_key "scalar") (serialize-qp "subscription_type" $subscription_type "scalar")] | flatten | str join "&"
@@ -3716,7 +3725,7 @@ export def "add-subscription" [
   --subscription-key: string
   --subscription-type: string
   --subscription-value: string # nullable
-]: any -> table<active: bool, subscription_id: string, subscription_key: string, subscription_type: string, subscription_value: string, userId: string> {
+]: any -> oneof<table<active: bool, subscription_id: string, subscription_key: string, subscription_type: string, subscription_value: string, userId: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3796,7 +3805,7 @@ export def "get-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> table<active: bool, subscription_id: string, subscription_key: string, subscription_type: string, subscription_value: string, userId: string> {
+]: nothing -> oneof<table<active: bool, subscription_id: string, subscription_key: string, subscription_type: string, subscription_value: string, userId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3837,7 +3846,7 @@ export def "update-subscription" [
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
   --active: oneof<nothing, bool> # Toggle the subscription processing on or off
   --subscription-value: string # The new subscription value, e.g. the new tag to be subscribed to (nullable)
-]: any -> table<active: bool, subscription_id: string, subscription_key: string, subscription_type: string, subscription_value: string, userId: string> {
+]: any -> oneof<table<active: bool, subscription_id: string, subscription_key: string, subscription_type: string, subscription_value: string, userId: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3879,7 +3888,7 @@ export def "list-imagetags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --image-status: list<string> # Filter images in one or more states such as active, deleting. Defaults to active images only if unspecified (default: [active])
   --x-anchore-account: string # An account name to change the resource scope of the request to that account, if permissions allow (admin only)
-]: nothing -> table<analysis_status: string, analyzed_at: int, created_at: int, fulltag: string, imageDigest: string, imageId: string, image_status: string, parentDigest: string, tag_detected_at: int> {
+]: nothing -> oneof<table<analysis_status: string, analyzed_at: int, created_at: int, fulltag: string, imageDigest: string, imageId: string, image_status: string, parentDigest: string, tag_detected_at: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "image_status" $image_status "csv")] | flatten | str join "&"
@@ -3916,7 +3925,7 @@ export def "get-service-detail" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<service_states: table<base_url: string, hostid: string, service_detail: record, servicename: string, status: bool, status_message: string, version: string>> {
+]: nothing -> oneof<record<service_states: table<base_url: string, hostid: string, service_detail: record, servicename: string, status: bool, status_message: string, version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system" $auth.query)
@@ -3950,7 +3959,7 @@ export def "describe-error-codes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, name: string> {
+]: nothing -> oneof<table<description: string, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/error_codes" $auth.query)
@@ -3984,7 +3993,7 @@ export def "get-system-feeds" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<created_at: string, groups: list<record>, last_full_sync: string, name: string, updated_at: string> {
+]: nothing -> oneof<table<created_at: string, groups: list<record>, last_full_sync: string, name: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/feeds" $auth.query)
@@ -4020,7 +4029,7 @@ export def "post-system-feeds" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --flush: oneof<nothing, bool> # instruct system to flush existing data feeds records from anchore-engine
   --sync: oneof<nothing, bool> # instruct system to re-sync data feeds
-]: nothing -> table<feed: string, groups: list<record>, status: string, total_time_seconds: float> {
+]: nothing -> oneof<table<feed: string, groups: list<record>, status: string, total_time_seconds: float>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "flush" $flush "scalar") (serialize-qp "sync" $sync "scalar")] | flatten | str join "&"
@@ -4093,7 +4102,7 @@ export def "toggle-feed-enabled" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # required
-]: nothing -> record<created_at: string, groups: table<created_at: string, last_sync: string, name: string, record_count: int>, last_full_sync: string, name: string, updated_at: string> {
+]: nothing -> oneof<record<created_at: string, groups: table<created_at: string, last_sync: string, name: string, record_count: int>, last_full_sync: string, name: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($feed | is-empty) { error make --unspanned { msg: "path parameter 'feed' must be non-empty" } }
@@ -4171,7 +4180,7 @@ export def "toggle-group-enabled" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # required
-]: nothing -> table<created_at: string, groups: list<record>, last_full_sync: string, name: string, updated_at: string> {
+]: nothing -> oneof<table<created_at: string, groups: list<record>, last_full_sync: string, name: string, updated_at: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($feed | is-empty) { error make --unspanned { msg: "path parameter 'feed' must be non-empty" } }
@@ -4209,7 +4218,7 @@ export def "describe-policy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<description: string, name: string, state: string, superceded_by: string, triggers: list<record>> {
+]: nothing -> oneof<table<description: string, name: string, state: string, superceded_by: string, triggers: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/policy_spec" $auth.query)
@@ -4243,7 +4252,7 @@ export def "list-services" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<base_url: string, hostid: string, service_detail: record<available: bool, busy: bool, db_version: string, detail: record, message: string, up: bool, version: string>, servicename: string, status: bool, status_message: string, version: string> {
+]: nothing -> oneof<table<base_url: string, hostid: string, service_detail: record<available: bool, busy: bool, db_version: string, detail: record, message: string, up: bool, version: string>, servicename: string, status: bool, status_message: string, version: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/services" $auth.query)
@@ -4278,7 +4287,7 @@ export def "get-services-by-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<base_url: string, hostid: string, service_detail: record<available: bool, busy: bool, db_version: string, detail: record, message: string, up: bool, version: string>, servicename: string, status: bool, status_message: string, version: string> {
+]: nothing -> oneof<table<base_url: string, hostid: string, service_detail: record<available: bool, busy: bool, db_version: string, detail: record, message: string, up: bool, version: string>, servicename: string, status: bool, status_message: string, version: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($servicename | is-empty) { error make --unspanned { msg: "path parameter 'servicename' must be non-empty" } }
@@ -4353,7 +4362,7 @@ export def "get-services-by-name-and-host" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<base_url: string, hostid: string, service_detail: record<available: bool, busy: bool, db_version: string, detail: record, message: string, up: bool, version: string>, servicename: string, status: bool, status_message: string, version: string> {
+]: nothing -> oneof<table<base_url: string, hostid: string, service_detail: record<available: bool, busy: bool, db_version: string, detail: record, message: string, up: bool, version: string>, servicename: string, status: bool, status_message: string, version: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($servicename | is-empty) { error make --unspanned { msg: "path parameter 'servicename' must be non-empty" } }
@@ -4427,7 +4436,7 @@ export def "get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, last_updated: string, source: string, type: string, username: string> {
+]: nothing -> oneof<record<created_at: string, last_updated: string, source: string, type: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user" $auth.query)
@@ -4461,7 +4470,7 @@ export def "get-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<created_at: string, type: string, value: string> {
+]: nothing -> oneof<table<created_at: string, type: string, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/credentials" $auth.query)
@@ -4498,7 +4507,7 @@ export def "add-credential" [
   --created-at: string # The timestamp of creation of the credential
   type: string@type-completer # The type of credential
   value: string # The credential value (e.g. the password)
-]: any -> record<created_at: string, last_updated: string, source: string, type: string, username: string> {
+]: any -> oneof<record<created_at: string, last_updated: string, source: string, type: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4535,7 +4544,7 @@ export def "version-check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<api: record<version: string>, db: record<schema_version: string>, service: record<version: string>> {
+]: nothing -> oneof<record<api: record<version: string>, db: record<schema_version: string>, service: record<version: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/version" $auth.query)

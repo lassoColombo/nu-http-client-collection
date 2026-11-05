@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "x-api-key" => { {scheme: $scheme, headers: {"X-API-Key": $token_val}, query: "", location: "header"} }
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -90,7 +113,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -128,9 +152,9 @@ def type-completer-2 [] { ["allowList" "blockList" "maxUsage" "velocity"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-account-holders" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-account-holders" "get-account-holders-id" "patch-account-holders-id" "get-account-holders-id-balance-accounts" "post-balance-accounts" "get-balance-accounts-balance-account-id-sweeps" "post-balance-accounts-balance-account-id-sweeps" "delete-balance-accounts-balance-account-id-sweeps-sweep-id" "get-balance-accounts-balance-account-id-sweeps-sweep-id" "patch-balance-accounts-balance-account-id-sweeps-sweep-id" "get-balance-accounts-id" "patch-balance-accounts-id" "get-balance-accounts-id-payment-instruments" "get-balance-platforms-id" "get-balance-platforms-id-account-holders" "get-grant-accounts-id" "get-grant-offers" "get-grant-offers-grant-offer-id" "post-payment-instrument-groups" "get-payment-instrument-groups-id" "get-payment-instrument-groups-id-transaction-rules" "post-payment-instruments" "get-payment-instruments-id" "patch-payment-instruments-id" "get-payment-instruments-id-reveal" "get-payment-instruments-id-transaction-rules" "post-transaction-rules" "delete-transaction-rules-transaction-rule-id" "get-transaction-rules-transaction-rule-id" "patch-transaction-rules-transaction-rule-id" "post-validate-bank-account-identification" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -152,7 +176,6 @@ export def commands []: nothing -> table {
 #
 # POST /accountHolders
 # operationId: post-accountHolders
-# --contactDetails shape: {address: record, email: string, phone: record, webAddress?: string}
 export def "post-account-holders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -170,7 +193,7 @@ export def "post-account-holders" [
   legal_entity_id: string # The unique identifier of the [legal entity](https://docs.adyen.com/api-explorer/legalentity/latest/post/legalEntities#responses-200-id) associated with the account holder. Adyen performs a verification process against the legal entity of the account holder.
   --reference: string # Your reference for the account holder, maximum 150 characters.
   --time-zone: string # The [time zone](https://www.iana.org/time-zones) of the account holder. For example, **Europe/Amsterdam**. Defaults to the time zone of the balance platform if no time zone is set. For possible values, see the [list of time zone codes](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
-]: any -> record<balancePlatform: string, capabilities: record, contactDetails: record<address: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, email: string, phone: record<number: string, type: string>, webAddress: string>, description: string, id: string, legalEntityId: string, primaryBalanceAccount: string, reference: string, status: string, timeZone: string, verificationDeadlines: table<capabilities: list, expiresAt: string>> {
+]: any -> oneof<record<balancePlatform: string, capabilities: record, contactDetails: record<address: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, email: string, phone: record<number: string, type: string>, webAddress: string>, description: string, id: string, legalEntityId: string, primaryBalanceAccount: string, reference: string, status: string, timeZone: string, verificationDeadlines: table<capabilities: list, expiresAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -208,7 +231,7 @@ export def "get-account-holders-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<balancePlatform: string, capabilities: record, contactDetails: record<address: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, email: string, phone: record<number: string, type: string>, webAddress: string>, description: string, id: string, legalEntityId: string, primaryBalanceAccount: string, reference: string, status: string, timeZone: string, verificationDeadlines: table<capabilities: list, expiresAt: string>> {
+]: nothing -> oneof<record<balancePlatform: string, capabilities: record, contactDetails: record<address: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, email: string, phone: record<number: string, type: string>, webAddress: string>, description: string, id: string, legalEntityId: string, primaryBalanceAccount: string, reference: string, status: string, timeZone: string, verificationDeadlines: table<capabilities: list, expiresAt: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -233,7 +256,6 @@ export def "get-account-holders-id" [
 #
 # PATCH /accountHolders/{id}
 # operationId: patch-accountHolders-id
-# --contactDetails shape: {address: record, email: string, phone: record, webAddress?: string}
 export def "patch-account-holders-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -254,7 +276,7 @@ export def "patch-account-holders-id" [
   --reference: string # Your reference for the account holder, maximum 150 characters.
   --status: string@status-completer # The status of the account holder. Possible values: * **active**: The account holder is active. This is the default status when creating an account holder. * **inactive (Deprecated)**: The account holder is temporarily inactive due to missing KYC details. You can set the account back to active by providing the missing KYC details. * **suspended**: The account holder is permanently deactivated by Adyen. This action cannot be undone. * **closed**: The account holder is permanently deactivated by you. This action cannot be undone.
   --time-zone: string # The [time zone](https://www.iana.org/time-zones) of the account holder. For example, **Europe/Amsterdam**. Defaults to the time zone of the balance platform if no time zone is set. For possible values, see the [list of time zone codes](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
-]: any -> record<balancePlatform: string, capabilities: record, contactDetails: record<address: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, email: string, phone: record<number: string, type: string>, webAddress: string>, description: string, id: string, legalEntityId: string, primaryBalanceAccount: string, reference: string, status: string, timeZone: string, verificationDeadlines: table<capabilities: list, expiresAt: string>> {
+]: any -> oneof<record<balancePlatform: string, capabilities: record, contactDetails: record<address: record<city: string, country: string, houseNumberOrName: string, postalCode: string, stateOrProvince: string, street: string>, email: string, phone: record<number: string, type: string>, webAddress: string>, description: string, id: string, legalEntityId: string, primaryBalanceAccount: string, reference: string, status: string, timeZone: string, verificationDeadlines: table<capabilities: list, expiresAt: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -295,7 +317,7 @@ export def "get-account-holders-id-balance-accounts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of items that you want to skip. (format: int32)
   --limit: int # The number of items returned per page, maximum 100 items. By default, the response returns 10 items per page. (format: int32)
-]: nothing -> record<balanceAccounts: table<accountHolderId: string, defaultCurrencyCode: string, description: string, id: string, reference: string, status: string, timeZone: string>, hasNext: bool, hasPrevious: bool> {
+]: nothing -> oneof<record<balanceAccounts: table<accountHolderId: string, defaultCurrencyCode: string, description: string, id: string, reference: string, status: string, timeZone: string>, hasNext: bool, hasPrevious: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -336,7 +358,7 @@ export def "post-balance-accounts" [
   --description: string # A human-readable description of the balance account, maximum 300 characters. You can use this parameter to distinguish between multiple balance accounts under an account holder.
   --reference: string # Your reference for the balance account, maximum 150 characters.
   --time-zone: string # The [time zone](https://www.iana.org/time-zones) of the balance account. For example, **Europe/Amsterdam**. Defaults to the time zone of the account holder if no time zone is set. For possible values, see the [list of time zone codes](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
-]: any -> record<accountHolderId: string, balances: table<available: int, balance: int, currency: string, reserved: int>, defaultCurrencyCode: string, description: string, id: string, reference: string, status: string, timeZone: string> {
+]: any -> oneof<record<accountHolderId: string, balances: table<available: int, balance: int, currency: string, reserved: int>, defaultCurrencyCode: string, description: string, id: string, reference: string, status: string, timeZone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -376,7 +398,7 @@ export def "get-balance-accounts-balance-account-id-sweeps" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of items that you want to skip. (format: int32)
   --limit: int # The number of items returned per page, maximum 100 items. By default, the response returns 10 items per page. (format: int32)
-]: nothing -> record<hasNext: bool, hasPrevious: bool, sweeps: table<category: string, counterparty: record, currency: string, description: string, id: string, priorities: list, reason: string, schedule: any, status: string, sweepAmount: record, targetAmount: record, triggerAmount: record, type: string>> {
+]: nothing -> oneof<record<hasNext: bool, hasPrevious: bool, sweeps: table<category: string, counterparty: record, currency: string, description: string, id: string, priorities: list, reason: string, schedule: any, status: string, sweepAmount: record, targetAmount: record, triggerAmount: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($balance_account_id | is-empty) { error make --unspanned { msg: "path parameter 'balanceAccountId' must be non-empty" } }
@@ -402,10 +424,6 @@ export def "get-balance-accounts-balance-account-id-sweeps" [
 #
 # POST /balanceAccounts/{balanceAccountId}/sweeps
 # operationId: post-balanceAccounts-balanceAccountId-sweeps
-# --counterparty shape: {balanceAccountId?: string, merchantAccount?: string, transferInstrumentId?: string}
-# --sweepAmount shape: {currency: string, value: int}
-# --targetAmount shape: {currency: string, value: int}
-# --triggerAmount shape: {currency: string, value: int}
 export def "post-balance-accounts-balance-account-id-sweeps" [
   balance_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -428,7 +446,7 @@ export def "post-balance-accounts-balance-account-id-sweeps" [
   --target-amount: record # shape: {currency: string, value: int}
   --trigger-amount: record # shape: {currency: string, value: int}
   --type: string@type-completer # The direction of sweep, whether pushing out or pulling in funds to the balance account. If not provided, by default, this is set to **push**. Possible values: * **push**: _push out funds_ to a destination balance account or transfer instrument. * **pull**: _pull in funds_ from a source merchant account, transfer instrument, or balance account. (default: push)
-]: any -> record<category: string, counterparty: record<balanceAccountId: string, merchantAccount: string, transferInstrumentId: string>, currency: string, description: string, id: string, priorities: list<string>, reason: string, schedule: any, status: string, sweepAmount: record<currency: string, value: int>, targetAmount: record<currency: string, value: int>, triggerAmount: record<currency: string, value: int>, type: string> {
+]: any -> oneof<record<category: string, counterparty: record<balanceAccountId: string, merchantAccount: string, transferInstrumentId: string>, currency: string, description: string, id: string, priorities: list<string>, reason: string, schedule: any, status: string, sweepAmount: record<currency: string, value: int>, targetAmount: record<currency: string, value: int>, triggerAmount: record<currency: string, value: int>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -506,7 +524,7 @@ export def "get-balance-accounts-balance-account-id-sweeps-sweep-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<category: string, counterparty: record<balanceAccountId: string, merchantAccount: string, transferInstrumentId: string>, currency: string, description: string, id: string, priorities: list<string>, reason: string, schedule: any, status: string, sweepAmount: record<currency: string, value: int>, targetAmount: record<currency: string, value: int>, triggerAmount: record<currency: string, value: int>, type: string> {
+]: nothing -> oneof<record<category: string, counterparty: record<balanceAccountId: string, merchantAccount: string, transferInstrumentId: string>, currency: string, description: string, id: string, priorities: list<string>, reason: string, schedule: any, status: string, sweepAmount: record<currency: string, value: int>, targetAmount: record<currency: string, value: int>, triggerAmount: record<currency: string, value: int>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($balance_account_id | is-empty) { error make --unspanned { msg: "path parameter 'balanceAccountId' must be non-empty" } }
@@ -532,10 +550,6 @@ export def "get-balance-accounts-balance-account-id-sweeps-sweep-id" [
 #
 # PATCH /balanceAccounts/{balanceAccountId}/sweeps/{sweepId}
 # operationId: patch-balanceAccounts-balanceAccountId-sweeps-sweepId
-# --counterparty shape: {balanceAccountId?: string, merchantAccount?: string, transferInstrumentId?: string}
-# --sweepAmount shape: {currency: string, value: int}
-# --targetAmount shape: {currency: string, value: int}
-# --triggerAmount shape: {currency: string, value: int}
 export def "patch-balance-accounts-balance-account-id-sweeps-sweep-id" [
   balance_account_id: string
   sweep_id: string
@@ -559,7 +573,7 @@ export def "patch-balance-accounts-balance-account-id-sweeps-sweep-id" [
   --target-amount: record # shape: {currency: string, value: int}
   --trigger-amount: record # shape: {currency: string, value: int}
   --type: string@type-completer # The direction of sweep, whether pushing out or pulling in funds to the balance account. If not provided, by default, this is set to **push**. Possible values: * **push**: _push out funds_ to a destination balance account or transfer instrument. * **pull**: _pull in funds_ from a source merchant account, transfer instrument, or balance account. (default: push)
-]: any -> record<category: string, counterparty: record<balanceAccountId: string, merchantAccount: string, transferInstrumentId: string>, currency: string, description: string, id: string, priorities: list<string>, reason: string, schedule: any, status: string, sweepAmount: record<currency: string, value: int>, targetAmount: record<currency: string, value: int>, triggerAmount: record<currency: string, value: int>, type: string> {
+]: any -> oneof<record<category: string, counterparty: record<balanceAccountId: string, merchantAccount: string, transferInstrumentId: string>, currency: string, description: string, id: string, priorities: list<string>, reason: string, schedule: any, status: string, sweepAmount: record<currency: string, value: int>, targetAmount: record<currency: string, value: int>, triggerAmount: record<currency: string, value: int>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -599,7 +613,7 @@ export def "get-balance-accounts-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accountHolderId: string, balances: table<available: int, balance: int, currency: string, reserved: int>, defaultCurrencyCode: string, description: string, id: string, reference: string, status: string, timeZone: string> {
+]: nothing -> oneof<record<accountHolderId: string, balances: table<available: int, balance: int, currency: string, reserved: int>, defaultCurrencyCode: string, description: string, id: string, reference: string, status: string, timeZone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -641,7 +655,7 @@ export def "patch-balance-accounts-id" [
   --reference: string # Your reference to the balance account, maximum 150 characters.
   --status: string@status-completer # The status of the balance account. Payment instruments linked to the balance account can only be used if the balance account status is **active**. Possible values: **active**, **inactive**, **closed**, **suspended**.
   --time-zone: string # The [time zone](https://www.iana.org/time-zones) of the balance account. For example, **Europe/Amsterdam**. Defaults to the time zone of the account holder if no time zone is set. For possible values, see the [list of time zone codes](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
-]: any -> record<accountHolderId: string, balances: table<available: int, balance: int, currency: string, reserved: int>, defaultCurrencyCode: string, description: string, id: string, reference: string, status: string, timeZone: string> {
+]: any -> oneof<record<accountHolderId: string, balances: table<available: int, balance: int, currency: string, reserved: int>, defaultCurrencyCode: string, description: string, id: string, reference: string, status: string, timeZone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -682,7 +696,7 @@ export def "get-balance-accounts-id-payment-instruments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of items that you want to skip. (format: int32)
   --limit: int # The number of items returned per page, maximum 100 items. By default, the response returns 10 items per page. (format: int32)
-]: nothing -> record<hasNext: bool, hasPrevious: bool, paymentInstruments: table<balanceAccountId: string, bankAccount: any, card: record, description: string, id: string, issuingCountryCode: string, paymentInstrumentGroupId: string, reference: string, status: string, statusReason: string, type: string>> {
+]: nothing -> oneof<record<hasNext: bool, hasPrevious: bool, paymentInstruments: table<balanceAccountId: string, bankAccount: any, card: record, description: string, id: string, issuingCountryCode: string, paymentInstrumentGroupId: string, reference: string, status: string, statusReason: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -719,7 +733,7 @@ export def "get-balance-platforms-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<description: string, id: string, status: string> {
+]: nothing -> oneof<record<description: string, id: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -757,7 +771,7 @@ export def "get-balance-platforms-id-account-holders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The number of items that you want to skip. (format: int32)
   --limit: int # The number of items returned per page, maximum 100 items. By default, the response returns 10 items per page. (format: int32)
-]: nothing -> record<accountHolders: table<balancePlatform: string, capabilities: record, contactDetails: record, description: string, id: string, legalEntityId: string, primaryBalanceAccount: string, reference: string, status: string, timeZone: string, verificationDeadlines: list>, hasNext: bool, hasPrevious: bool> {
+]: nothing -> oneof<record<accountHolders: table<balancePlatform: string, capabilities: record, contactDetails: record, description: string, id: string, legalEntityId: string, primaryBalanceAccount: string, reference: string, status: string, timeZone: string, verificationDeadlines: list>, hasNext: bool, hasPrevious: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -794,7 +808,7 @@ export def "get-grant-accounts-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<balances: table<currency: string, fee: int, principal: int, total: int>, fundingBalanceAccountId: string, id: string, limits: table<amount: record>> {
+]: nothing -> oneof<record<balances: table<currency: string, fee: int, principal: int, total: int>, fundingBalanceAccountId: string, id: string, limits: table<amount: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -830,7 +844,7 @@ export def "get-grant-offers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account-holder-id: string # The unique identifier of the grant account. (required)
-]: nothing -> record<grantOffers: table<accountHolderId: string, amount: record, contractType: string, expiresAt: record, fee: record, id: string, repayment: record, startsAt: record>> {
+]: nothing -> oneof<record<grantOffers: table<accountHolderId: string, amount: record, contractType: string, expiresAt: record, fee: record, id: string, repayment: record, startsAt: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($account_holder_id == null) { error make --unspanned { msg: "required query parameter 'accountHolderId' missing: pass --account-holder-id" } }
@@ -867,7 +881,7 @@ export def "get-grant-offers-grant-offer-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accountHolderId: string, amount: record<currency: string, value: int>, contractType: string, expiresAt: record, fee: record<amount: record<currency: string, value: int>>, id: string, repayment: record<basisPoints: int, term: record<estimatedDays: int, maximumDays: int>, threshold: record<amount: record>>, startsAt: record> {
+]: nothing -> oneof<record<accountHolderId: string, amount: record<currency: string, value: int>, contractType: string, expiresAt: record, fee: record<amount: record<currency: string, value: int>>, id: string, repayment: record<basisPoints: int, term: record<estimatedDays: int, maximumDays: int>, threshold: record<amount: record>>, startsAt: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($grant_offer_id | is-empty) { error make --unspanned { msg: "path parameter 'grantOfferId' must be non-empty" } }
@@ -907,7 +921,7 @@ export def "post-payment-instrument-groups" [
   --properties: record # Properties of the payment instrument group.
   --reference: string # Your reference for the payment instrument group, maximum 150 characters.
   tx_variant: string # The tx variant of the payment instrument group.
-]: any -> record<balancePlatform: string, description: string, id: string, properties: record, reference: string, txVariant: string> {
+]: any -> oneof<record<balancePlatform: string, description: string, id: string, properties: record, reference: string, txVariant: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -945,7 +959,7 @@ export def "get-payment-instrument-groups-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<balancePlatform: string, description: string, id: string, properties: record, reference: string, txVariant: string> {
+]: nothing -> oneof<record<balancePlatform: string, description: string, id: string, properties: record, reference: string, txVariant: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -981,7 +995,7 @@ export def "get-payment-instrument-groups-id-transaction-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<transactionRules: table<aggregationLevel: string, description: string, endDate: string, entityKey: record, id: string, interval: record, outcomeType: string, reference: string, requestType: string, ruleRestrictions: record, score: int, startDate: string, status: string, type: string>> {
+]: nothing -> oneof<record<transactionRules: table<aggregationLevel: string, description: string, endDate: string, entityKey: record, id: string, interval: record, outcomeType: string, reference: string, requestType: string, ruleRestrictions: record, score: int, startDate: string, status: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1006,7 +1020,6 @@ export def "get-payment-instrument-groups-id-transaction-rules" [
 #
 # POST /paymentInstruments
 # operationId: post-paymentInstruments
-# --card shape: {authentication?: record, brand: string, brandVariant: string, cardholderName: string, configuration?: record, deliveryContact?: record, formFactor: "physical"|"unknown"|"virtual"}
 export def "post-payment-instruments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1026,7 +1039,7 @@ export def "post-payment-instruments" [
   --status: string@status-completer # The status of the payment instrument. If a status is not specified when creating a payment instrument, it is set to **active** by default. However, there can be exceptions for cards based on the `card.formFactor` and the `issuingCountryCode`. For example, when issuing physical cards in the US, the default status is **inactive**. Possible values: * **active**: The payment instrument is active and can be used to make payments. * **inactive**: The payment instrument is inactive and cannot be used to make payments. * **suspended**: The payment instrument is suspended, either because it was stolen or lost. * **closed**: The payment instrument is permanently closed. This action cannot be undone.
   --status-reason: string@status-reason-completer # The reason for updating the status of the payment instrument. Possible values: **lost**, **stolen**, **damaged**, **suspectedFraud**, **expired**, **endOfLife**, **accountClosure**, **other**. If the reason is **other**, you must also send the `statusComment` parameter describing the status change.
   type: string@type-completer-1 # Type of payment instrument. Possible value: **card**, **bankAccount**.
-]: any -> record<balanceAccountId: string, bankAccount: any, card: record<authentication: record<email: string, password: string, phone: record>, bin: string, brand: string, brandVariant: string, cardholderName: string, configuration: record<activation: string, activationUrl: string, bulkAddress: record, cardImageId: string, carrier: string, carrierImageId: string, configurationProfileId: string, currency: string, envelope: string, insert: string, language: string, logoImageId: string, pinMailer: string, shipmentMethod: string>, cvc: string, deliveryContact: record<address: record, email: string, fullPhoneNumber: string, name: record, phoneNumber: record, webAddress: string>, expiration: record<month: string, year: string>, formFactor: string, lastFour: string, number: string>, description: string, id: string, issuingCountryCode: string, paymentInstrumentGroupId: string, reference: string, status: string, statusReason: string, type: string> {
+]: any -> oneof<record<balanceAccountId: string, bankAccount: any, card: record<authentication: record<email: string, password: string, phone: record>, bin: string, brand: string, brandVariant: string, cardholderName: string, configuration: record<activation: string, activationUrl: string, bulkAddress: record, cardImageId: string, carrier: string, carrierImageId: string, configurationProfileId: string, currency: string, envelope: string, insert: string, language: string, logoImageId: string, pinMailer: string, shipmentMethod: string>, cvc: string, deliveryContact: record<address: record, email: string, fullPhoneNumber: string, name: record, phoneNumber: record, webAddress: string>, expiration: record<month: string, year: string>, formFactor: string, lastFour: string, number: string>, description: string, id: string, issuingCountryCode: string, paymentInstrumentGroupId: string, reference: string, status: string, statusReason: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1064,7 +1077,7 @@ export def "get-payment-instruments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<balanceAccountId: string, bankAccount: any, card: record<authentication: record<email: string, password: string, phone: record>, bin: string, brand: string, brandVariant: string, cardholderName: string, configuration: record<activation: string, activationUrl: string, bulkAddress: record, cardImageId: string, carrier: string, carrierImageId: string, configurationProfileId: string, currency: string, envelope: string, insert: string, language: string, logoImageId: string, pinMailer: string, shipmentMethod: string>, cvc: string, deliveryContact: record<address: record, email: string, fullPhoneNumber: string, name: record, phoneNumber: record, webAddress: string>, expiration: record<month: string, year: string>, formFactor: string, lastFour: string, number: string>, description: string, id: string, issuingCountryCode: string, paymentInstrumentGroupId: string, reference: string, status: string, statusReason: string, type: string> {
+]: nothing -> oneof<record<balanceAccountId: string, bankAccount: any, card: record<authentication: record<email: string, password: string, phone: record>, bin: string, brand: string, brandVariant: string, cardholderName: string, configuration: record<activation: string, activationUrl: string, bulkAddress: record, cardImageId: string, carrier: string, carrierImageId: string, configurationProfileId: string, currency: string, envelope: string, insert: string, language: string, logoImageId: string, pinMailer: string, shipmentMethod: string>, cvc: string, deliveryContact: record<address: record, email: string, fullPhoneNumber: string, name: record, phoneNumber: record, webAddress: string>, expiration: record<month: string, year: string>, formFactor: string, lastFour: string, number: string>, description: string, id: string, issuingCountryCode: string, paymentInstrumentGroupId: string, reference: string, status: string, statusReason: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1089,7 +1102,6 @@ export def "get-payment-instruments-id" [
 #
 # PATCH /paymentInstruments/{id}
 # operationId: patch-paymentInstruments-id
-# --card shape: {authentication?: record, brand: string, brandVariant: string, cardholderName: string, configuration?: record, deliveryContact?: record, formFactor: "physical"|"unknown"|"virtual"}
 export def "patch-payment-instruments-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1106,7 +1118,7 @@ export def "patch-payment-instruments-id" [
   --status: string@status-completer # The status of the payment instrument. If a status is not specified when creating a payment instrument, it is set to **active** by default. However, there can be exceptions for cards based on the `card.formFactor` and the `issuingCountryCode`. For example, when issuing physical cards in the US, the default status is **inactive**. Possible values: * **active**: The payment instrument is active and can be used to make payments. * **inactive**: The payment instrument is inactive and cannot be used to make payments. * **suspended**: The payment instrument is suspended, either because it was stolen or lost. * **closed**: The payment instrument is permanently closed. This action cannot be undone.
   --status-comment: string # Comment for the status of the payment instrument. Required if `statusReason` is **other**.
   --status-reason: string@status-reason-completer # The reason for updating the status of the payment instrument. Possible values: **lost**, **stolen**, **damaged**, **suspectedFraud**, **expired**, **endOfLife**, **accountClosure**, **other**. If the reason is **other**, you must also send the `statusComment` parameter describing the status change.
-]: any -> record<balanceAccountId: string, bankAccount: any, card: record<authentication: record<email: string, password: string, phone: record>, bin: string, brand: string, brandVariant: string, cardholderName: string, configuration: record<activation: string, activationUrl: string, bulkAddress: record, cardImageId: string, carrier: string, carrierImageId: string, configurationProfileId: string, currency: string, envelope: string, insert: string, language: string, logoImageId: string, pinMailer: string, shipmentMethod: string>, cvc: string, deliveryContact: record<address: record, email: string, fullPhoneNumber: string, name: record, phoneNumber: record, webAddress: string>, expiration: record<month: string, year: string>, formFactor: string, lastFour: string, number: string>, description: string, id: string, issuingCountryCode: string, paymentInstrumentGroupId: string, reference: string, status: string, statusComment: string, statusReason: string, type: string> {
+]: any -> oneof<record<balanceAccountId: string, bankAccount: any, card: record<authentication: record<email: string, password: string, phone: record>, bin: string, brand: string, brandVariant: string, cardholderName: string, configuration: record<activation: string, activationUrl: string, bulkAddress: record, cardImageId: string, carrier: string, carrierImageId: string, configurationProfileId: string, currency: string, envelope: string, insert: string, language: string, logoImageId: string, pinMailer: string, shipmentMethod: string>, cvc: string, deliveryContact: record<address: record, email: string, fullPhoneNumber: string, name: record, phoneNumber: record, webAddress: string>, expiration: record<month: string, year: string>, formFactor: string, lastFour: string, number: string>, description: string, id: string, issuingCountryCode: string, paymentInstrumentGroupId: string, reference: string, status: string, statusComment: string, statusReason: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1145,7 +1157,7 @@ export def "get-payment-instruments-id-reveal" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cvc: string, expiration: record<month: string, year: string>, pan: string> {
+]: nothing -> oneof<record<cvc: string, expiration: record<month: string, year: string>, pan: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1181,7 +1193,7 @@ export def "get-payment-instruments-id-transaction-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<transactionRules: table<aggregationLevel: string, description: string, endDate: string, entityKey: record, id: string, interval: record, outcomeType: string, reference: string, requestType: string, ruleRestrictions: record, score: int, startDate: string, status: string, type: string>> {
+]: nothing -> oneof<record<transactionRules: table<aggregationLevel: string, description: string, endDate: string, entityKey: record, id: string, interval: record, outcomeType: string, reference: string, requestType: string, ruleRestrictions: record, score: int, startDate: string, status: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1206,9 +1218,6 @@ export def "get-payment-instruments-id-transaction-rules" [
 #
 # POST /transactionRules
 # operationId: post-transactionRules
-# --entityKey shape: {entityReference?: string, entityType?: string}
-# --interval shape: {dayOfMonth?: int, dayOfWeek?: "friday"|"monday"|"saturday"|"sunday"|"thursday"|"tuesday"|"wednesday", duration?: record, timeOfDay?: string, timeZone?: string, type: "daily"|"lifetime"|"monthly"|"perTransaction"|"rolling"|"sliding"|"weekly"}
-# --ruleRestrictions shape: {activeNetworkTokens?: record, brandVariants?: record, countries?: record, dayOfWeek?: record, differentCurrencies?: record, entryModes?: record, internationalTransaction?: record, matchingTransactions?: record, mccs?: record, merchantNames?: record, merchants?: record, processingTypes?: record, timeOfDay?: record, totalAmount?: record}
 export def "post-transaction-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1232,7 +1241,7 @@ export def "post-transaction-rules" [
   --start-date: string # The date when the rule will start to be evaluated, in ISO 8601 extended offset date-time format. For example, **2020-12-18T10:15:30+01:00**. If not provided when creating a transaction rule, the `startDate` is set to the date when the rule status is set to **active**.
   --status: string@status-completer-1 # The status of the transaction rule. If you provide a `startDate` in the request, the rule is automatically created with an **active** status. Possible values: **active**, **inactive**.
   type: string@type-completer-2 # The [type of rule](https://docs.adyen.com/issuing/transaction-rules#rule-types), which defines if a rule blocks transactions based on individual characteristics or accumulates data. Possible values: * **blockList**: decline a transaction when the conditions are met. * **maxUsage**: add the amount or number of transactions for the lifetime of a payment instrument, and then decline a transaction when the specified limits are met. * **velocity**: add the amount or number of transactions based on a specified time interval, and then decline a transaction when the specified limits are met.
-]: any -> record<aggregationLevel: string, description: string, endDate: string, entityKey: record<entityReference: string, entityType: string>, id: string, interval: record<dayOfMonth: int, dayOfWeek: string, duration: record<unit: string, value: int>, timeOfDay: string, timeZone: string, type: string>, outcomeType: string, reference: string, requestType: string, ruleRestrictions: record<activeNetworkTokens: record<operation: string, value: int>, brandVariants: record<operation: string, value: list>, countries: record<operation: string, value: list>, dayOfWeek: record<operation: string, value: list>, differentCurrencies: record<operation: string, value: bool>, entryModes: record<operation: string, value: list>, internationalTransaction: record<operation: string, value: bool>, matchingTransactions: record<operation: string, value: int>, mccs: record<operation: string, value: list>, merchantNames: record<operation: string, value: list>, merchants: record<operation: string, value: list>, processingTypes: record<operation: string, value: list>, timeOfDay: record<operation: string, value: record>, totalAmount: record<operation: string, value: record>>, score: int, startDate: string, status: string, type: string> {
+]: any -> oneof<record<aggregationLevel: string, description: string, endDate: string, entityKey: record<entityReference: string, entityType: string>, id: string, interval: record<dayOfMonth: int, dayOfWeek: string, duration: record<unit: string, value: int>, timeOfDay: string, timeZone: string, type: string>, outcomeType: string, reference: string, requestType: string, ruleRestrictions: record<activeNetworkTokens: record<operation: string, value: int>, brandVariants: record<operation: string, value: list>, countries: record<operation: string, value: list>, dayOfWeek: record<operation: string, value: list>, differentCurrencies: record<operation: string, value: bool>, entryModes: record<operation: string, value: list>, internationalTransaction: record<operation: string, value: bool>, matchingTransactions: record<operation: string, value: int>, mccs: record<operation: string, value: list>, merchantNames: record<operation: string, value: list>, merchants: record<operation: string, value: list>, processingTypes: record<operation: string, value: list>, timeOfDay: record<operation: string, value: record>, totalAmount: record<operation: string, value: record>>, score: int, startDate: string, status: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1270,7 +1279,7 @@ export def "delete-transaction-rules-transaction-rule-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<aggregationLevel: string, description: string, endDate: string, entityKey: record<entityReference: string, entityType: string>, id: string, interval: record<dayOfMonth: int, dayOfWeek: string, duration: record<unit: string, value: int>, timeOfDay: string, timeZone: string, type: string>, outcomeType: string, reference: string, requestType: string, ruleRestrictions: record<activeNetworkTokens: record<operation: string, value: int>, brandVariants: record<operation: string, value: list>, countries: record<operation: string, value: list>, dayOfWeek: record<operation: string, value: list>, differentCurrencies: record<operation: string, value: bool>, entryModes: record<operation: string, value: list>, internationalTransaction: record<operation: string, value: bool>, matchingTransactions: record<operation: string, value: int>, mccs: record<operation: string, value: list>, merchantNames: record<operation: string, value: list>, merchants: record<operation: string, value: list>, processingTypes: record<operation: string, value: list>, timeOfDay: record<operation: string, value: record>, totalAmount: record<operation: string, value: record>>, score: int, startDate: string, status: string, type: string> {
+]: nothing -> oneof<record<aggregationLevel: string, description: string, endDate: string, entityKey: record<entityReference: string, entityType: string>, id: string, interval: record<dayOfMonth: int, dayOfWeek: string, duration: record<unit: string, value: int>, timeOfDay: string, timeZone: string, type: string>, outcomeType: string, reference: string, requestType: string, ruleRestrictions: record<activeNetworkTokens: record<operation: string, value: int>, brandVariants: record<operation: string, value: list>, countries: record<operation: string, value: list>, dayOfWeek: record<operation: string, value: list>, differentCurrencies: record<operation: string, value: bool>, entryModes: record<operation: string, value: list>, internationalTransaction: record<operation: string, value: bool>, matchingTransactions: record<operation: string, value: int>, mccs: record<operation: string, value: list>, merchantNames: record<operation: string, value: list>, merchants: record<operation: string, value: list>, processingTypes: record<operation: string, value: list>, timeOfDay: record<operation: string, value: record>, totalAmount: record<operation: string, value: record>>, score: int, startDate: string, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($transaction_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionRuleId' must be non-empty" } }
@@ -1306,7 +1315,7 @@ export def "get-transaction-rules-transaction-rule-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<transactionRule: record<aggregationLevel: string, description: string, endDate: string, entityKey: record<entityReference: string, entityType: string>, id: string, interval: record<dayOfMonth: int, dayOfWeek: string, duration: record, timeOfDay: string, timeZone: string, type: string>, outcomeType: string, reference: string, requestType: string, ruleRestrictions: record<activeNetworkTokens: record, brandVariants: record, countries: record, dayOfWeek: record, differentCurrencies: record, entryModes: record, internationalTransaction: record, matchingTransactions: record, mccs: record, merchantNames: record, merchants: record, processingTypes: record, timeOfDay: record, totalAmount: record>, score: int, startDate: string, status: string, type: string>> {
+]: nothing -> oneof<record<transactionRule: record<aggregationLevel: string, description: string, endDate: string, entityKey: record<entityReference: string, entityType: string>, id: string, interval: record<dayOfMonth: int, dayOfWeek: string, duration: record, timeOfDay: string, timeZone: string, type: string>, outcomeType: string, reference: string, requestType: string, ruleRestrictions: record<activeNetworkTokens: record, brandVariants: record, countries: record, dayOfWeek: record, differentCurrencies: record, entryModes: record, internationalTransaction: record, matchingTransactions: record, mccs: record, merchantNames: record, merchants: record, processingTypes: record, timeOfDay: record, totalAmount: record>, score: int, startDate: string, status: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($transaction_rule_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionRuleId' must be non-empty" } }
@@ -1331,9 +1340,6 @@ export def "get-transaction-rules-transaction-rule-id" [
 #
 # PATCH /transactionRules/{transactionRuleId}
 # operationId: patch-transactionRules-transactionRuleId
-# --entityKey shape: {entityReference?: string, entityType?: string}
-# --interval shape: {dayOfMonth?: int, dayOfWeek?: "friday"|"monday"|"saturday"|"sunday"|"thursday"|"tuesday"|"wednesday", duration?: record, timeOfDay?: string, timeZone?: string, type: "daily"|"lifetime"|"monthly"|"perTransaction"|"rolling"|"sliding"|"weekly"}
-# --ruleRestrictions shape: {activeNetworkTokens?: record, brandVariants?: record, countries?: record, dayOfWeek?: record, differentCurrencies?: record, entryModes?: record, internationalTransaction?: record, matchingTransactions?: record, mccs?: record, merchantNames?: record, merchants?: record, processingTypes?: record, timeOfDay?: record, totalAmount?: record}
 export def "patch-transaction-rules-transaction-rule-id" [
   transaction_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1358,7 +1364,7 @@ export def "patch-transaction-rules-transaction-rule-id" [
   --start-date: string # The date when the rule will start to be evaluated, in ISO 8601 extended offset date-time format. For example, **2020-12-18T10:15:30+01:00**. If not provided when creating a transaction rule, the `startDate` is set to the date when the rule status is set to **active**.
   --status: string@status-completer-1 # The status of the transaction rule. If you provide a `startDate` in the request, the rule is automatically created with an **active** status. Possible values: **active**, **inactive**.
   type: string@type-completer-2 # The [type of rule](https://docs.adyen.com/issuing/transaction-rules#rule-types), which defines if a rule blocks transactions based on individual characteristics or accumulates data. Possible values: * **blockList**: decline a transaction when the conditions are met. * **maxUsage**: add the amount or number of transactions for the lifetime of a payment instrument, and then decline a transaction when the specified limits are met. * **velocity**: add the amount or number of transactions based on a specified time interval, and then decline a transaction when the specified limits are met.
-]: any -> record<aggregationLevel: string, description: string, endDate: string, entityKey: record<entityReference: string, entityType: string>, id: string, interval: record<dayOfMonth: int, dayOfWeek: string, duration: record<unit: string, value: int>, timeOfDay: string, timeZone: string, type: string>, outcomeType: string, reference: string, requestType: string, ruleRestrictions: record<activeNetworkTokens: record<operation: string, value: int>, brandVariants: record<operation: string, value: list>, countries: record<operation: string, value: list>, dayOfWeek: record<operation: string, value: list>, differentCurrencies: record<operation: string, value: bool>, entryModes: record<operation: string, value: list>, internationalTransaction: record<operation: string, value: bool>, matchingTransactions: record<operation: string, value: int>, mccs: record<operation: string, value: list>, merchantNames: record<operation: string, value: list>, merchants: record<operation: string, value: list>, processingTypes: record<operation: string, value: list>, timeOfDay: record<operation: string, value: record>, totalAmount: record<operation: string, value: record>>, score: int, startDate: string, status: string, type: string> {
+]: any -> oneof<record<aggregationLevel: string, description: string, endDate: string, entityKey: record<entityReference: string, entityType: string>, id: string, interval: record<dayOfMonth: int, dayOfWeek: string, duration: record<unit: string, value: int>, timeOfDay: string, timeZone: string, type: string>, outcomeType: string, reference: string, requestType: string, ruleRestrictions: record<activeNetworkTokens: record<operation: string, value: int>, brandVariants: record<operation: string, value: list>, countries: record<operation: string, value: list>, dayOfWeek: record<operation: string, value: list>, differentCurrencies: record<operation: string, value: bool>, entryModes: record<operation: string, value: list>, internationalTransaction: record<operation: string, value: bool>, matchingTransactions: record<operation: string, value: int>, mccs: record<operation: string, value: list>, merchantNames: record<operation: string, value: list>, merchants: record<operation: string, value: list>, processingTypes: record<operation: string, value: list>, timeOfDay: record<operation: string, value: record>, totalAmount: record<operation: string, value: record>>, score: int, startDate: string, status: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1397,7 +1403,7 @@ export def "post-validate-bank-account-identification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   account_identification: any # Bank account identification.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

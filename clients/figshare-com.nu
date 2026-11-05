@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -142,8 +166,8 @@ def auth-scheme-completer [] { ["bearer" "none"] }
 
 # Completers for enum parameters
 def order-completer [] { ["cites" "downloads" "modified_date" "published_date" "shares" "views"] }
-def embargo-type-completer [] { ["article" "file"] }
 def order-direction-completer [] { ["asc" "desc"] }
+def embargo-type-completer [] { ["article" "file"] }
 def order-completer-1 [] { ["cites" "modified_date" "published_date" "shares" "views"] }
 def status-completer [] { ["approved" "closed" "pending" "rejected"] }
 def order-completer-2 [] { ["modified_date" "published_date" "views"] }
@@ -153,9 +177,9 @@ def role-name-completer [] { ["collaborator" "viewer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "private-account" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["private-account" "private-articles-list" "private-article-create" "account-article-report" "account-article-report-generate" "private-articles-search" "private-article-delete" "private-article-details" "private-article-update" "private-article-authors-list" "private-article-authors-add" "private-article-authors-replace" "private-article-author-delete" "private-article-categories-list" "private-article-categories-add" "private-article-categories-replace" "private-article-category-delete" "private-article-confidentiality-delete" "private-article-confidentiality-details" "private-article-confidentiality-update" "private-article-embargo-delete" "private-article-embargo-details" "private-article-embargo-update" "private-article-files-list" "private-article-upload-initiate" "private-article-file-delete" "private-article-file" "private-article-upload-complete" "private-article-private-link" "private-article-private-link-create" "private-article-private-link-delete" "private-article-private-link-update" "private-article-publish" "private-article-reserve-doi" "private-article-reserve-handle" "private-article-resource" "article-version-update" "article-version-update-thumb" "private-authors-search" "private-author-details" "private-categories-list" "private-collections-list" "private-collection-create" "private-collections-search" "private-collection-delete" "private-collection-details" "private-collection-update" "private-collection-articles-list" "private-collection-articles-add" "private-collection-articles-replace" "private-collection-article-delete" "private-collection-authors-list" "private-collection-authors-add" "private-collection-authors-replace" "private-collection-author-delete" "private-collection-categories-list" "private-collection-categories-add" "private-collection-categories-replace" "private-collection-category-delete" "private-collection-private-links-list" "private-collection-private-link-create" "private-collection-private-link-delete" "private-collection-private-link-update" "private-collection-publish" "private-collection-reserve-doi" "private-collection-reserve-handle" "private-collection-resource" "private-funding-search" "private-institution-details" "private-institution-accounts-list" "private-institution-accounts-create" "private-institution-accounts-search" "private-institution-accounts-update" "private-institution-articles" "custom-fields-list" "custom-fields-upload" "private-institution-embargo-options-details" "private-institution-groups-list" "private-group-embargo-options-details" "account-institution-curation" "account-institution-curation-comments" "post-account-institution-review-curation-id-comments" "account-institution-curations" "private-institution-roles-list" "private-institution-account-group-roles" "private-institution-account-group-roles-create" "private-institution-account-group-role-delete" "private-account-institution-user" "private-licenses-list" "private-projects-list" "private-project-create" "private-projects-search" "private-project-delete" "private-project-details" "private-project-update" "private-project-articles-list" "private-project-articles-create" "private-project-article-delete" "private-project-article-details" "private-project-article-files" "private-project-article-file" "private-project-collaborators-list" "private-project-collaborators-invite" "private-project-collaborator-delete" "private-project-leave" "private-project-notes-list" "private-project-notes-create" "private-project-note-delete" "private-project-note" "private-project-note-update" "private-project-publish" "articles-list" "articles-search" "article-details" "article-files" "article-file-details" "article-versions" "article-version-details" "article-version-confidentiality" "article-version-embargo" "categories-list" "collections-list" "collections-search" "collection-details" "collection-articles" "collection-versions" "collection-version-details" "file-download" "institution-hrfeed-upload" "institution-articles" "item-types-list" "licenses-list" "projects-list" "projects-search" "project-details" "project-articles" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -187,7 +211,7 @@ export def "private-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<active: int, created_date: string, email: string, first_name: string, group_id: int, id: int, institution_id: int, institution_user_id: string, last_name: string, maximum_file_size: int, modified_date: string, pending_quota_request: bool, quota: int, used_quota: int, used_quota_private: int, used_quota_public: int> {
+]: nothing -> oneof<record<active: int, created_date: string, email: string, first_name: string, group_id: int, id: int, institution_id: int, institution_user_id: string, last_name: string, maximum_file_size: int, modified_date: string, pending_quota_request: bool, quota: int, used_quota: int, used_quota_private: int, used_quota_public: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account" $auth.query)
@@ -225,7 +249,7 @@ export def "private-articles-list" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10)
   --limit: int # Number of results included on a page. Used for pagination with query (format: int64)
   --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64)
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> oneof<table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -250,9 +274,6 @@ export def "private-articles-list" [
 #
 # POST /account/articles
 # operationId: private_article_create
-# --custom_fields_list item shape: {name: string, value: any}
-# --funding_list item shape: {id?: int, title?: string}
-# --timeline shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
 export def "private-article-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -285,7 +306,7 @@ export def "private-article-create" [
   --tags: list<string> # List of tags to be associated with the article. Keywords can be used instead (default: [], e.g. [tag1, tag2])
   --timeline: record # shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
   title: string # Title of article (e.g. Test article title)
-]: any -> record<entity_id: int, location: string, warnings: list<string>> {
+]: any -> oneof<record<entity_id: int, location: string, warnings: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -323,7 +344,7 @@ export def "account-article-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-id: int # A group ID to filter by (format: int64)
-]: nothing -> table<account_id: int, created_date: string, download_url: string, group_id: int, id: int, status: string> {
+]: nothing -> oneof<table<account_id: int, created_date: string, download_url: string, group_id: int, id: int, status: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
@@ -358,7 +379,7 @@ export def "account-article-report-generate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_id: int, created_date: string, download_url: string, group_id: int, id: int, status: string> {
+]: nothing -> oneof<record<account_id: int, created_date: string, download_url: string, group_id: int, id: int, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/articles/export" $auth.query)
@@ -399,12 +420,22 @@ export def "private-articles-search" [
   --order: string@order-completer # The field by which to order (default: created_date, e.g. published_date)
   --project-id: int # Only return articles in this project (format: int64, e.g. 1)
   --resource-doi: string # Only return articles with this resource_doi (e.g. 10.6084/m9.figshare.1407024)
-]: any -> table<project_id: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+  --group: int # only return collections from this group (format: int32, e.g. 2000013)
+  --institution: int # only return collections from this institution (format: int32, e.g. 2000013)
+  --limit: int # Number of results included on a page. Used for pagination with query (format: int64, e.g. 10)
+  --modified-since: string # Filter by article modified date. Will only return articles published after the date. date(ISO 8601) YYYY-MM-DD (e.g. 2017-12-22)
+  --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64, e.g. 0)
+  --order-direction: string@order-direction-completer # Direction of ordering (default: desc, e.g. desc)
+  --page: int # Page number. Used for pagination with page_size (format: int64, e.g. 1)
+  --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10, e.g. 10)
+  --published-since: string # Filter by article publishing date. Will only return articles published after the date. date(ISO 8601) YYYY-MM-DD (e.g. 2017-12-22)
+  --search-for: string # Search term (e.g. figshare)
+]: any -> oneof<table<project_id: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/articles/search" $auth.query)
-  let req_body = {"resource_id": $resource_id, "doi": $doi, "handle": $handle, "item_type": $item_type, "order": $order, "project_id": $project_id, "resource_doi": $resource_doi} | compact
+  let req_body = {"resource_id": $resource_id, "doi": $doi, "handle": $handle, "item_type": $item_type, "order": $order, "project_id": $project_id, "resource_doi": $resource_doi, "group": $group, "institution": $institution, "limit": $limit, "modified_since": $modified_since, "offset": $offset, "order_direction": $order_direction, "page": $page, "page_size": $page_size, "published_since": $published_since, "search_for": $search_for} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -473,7 +504,7 @@ export def "private-article-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_id: int, group_resource_id: string, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, custom_fields: table<is_mandatory: bool, name: string, value: string>, embargo_options: table<id: int, ip_name: string, type: string>, figshare_url: string, files: table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, resource_doi: string, resource_title: string, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> oneof<record<account_id: int, group_resource_id: string, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, custom_fields: table<is_mandatory: bool, name: string, value: string>, embargo_options: table<id: int, ip_name: string, type: string>, figshare_url: string, files: table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, resource_doi: string, resource_title: string, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -498,9 +529,6 @@ export def "private-article-details" [
 #
 # PUT /account/articles/{article_id}
 # operationId: private_article_update
-# --custom_fields_list item shape: {name: string, value: any}
-# --funding_list item shape: {id?: int, title?: string}
-# --timeline shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
 export def "private-article-update" [
   article_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -534,7 +562,7 @@ export def "private-article-update" [
   --tags: list<string> # List of tags to be associated with the article. Keywords can be used instead (default: [], e.g. [tag1, tag2])
   --timeline: record # shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
   --title: string # Title of article (e.g. Test article title)
-]: any -> any {
+]: any -> oneof<record<location: string, warnings: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -573,7 +601,7 @@ export def "private-article-authors-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string> {
+]: nothing -> oneof<table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -727,7 +755,7 @@ export def "private-article-categories-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string> {
+]: nothing -> oneof<table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -917,7 +945,7 @@ export def "private-article-confidentiality-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<is_confidential: bool, reason: string> {
+]: nothing -> oneof<record<is_confidential: bool, reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -1029,7 +1057,7 @@ export def "private-article-embargo-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<embargo_date: string, embargo_options: list<record>, embargo_reason: string, embargo_title: string, embargo_type: string, is_embargoed: bool> {
+]: nothing -> oneof<record<embargo_date: string, embargo_options: list<record>, embargo_reason: string, embargo_title: string, embargo_type: string, is_embargoed: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -1111,7 +1139,7 @@ export def "private-article-files-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string, computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string> {
+]: nothing -> oneof<table<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string, computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -1151,7 +1179,7 @@ export def "private-article-upload-initiate" [
   --md5: string # MD5 sum pre-computed on client side. (e.g. 6c16e6e7d7587bd078e5117dda01d565)
   --name: string # File name including the extension; can be omitted only for linked files. (e.g. test.py)
   --size: int # File size in bytes; can be omitted only for linked files. (format: int64, e.g. 70)
-]: any -> record<location: string> {
+]: any -> oneof<record<location: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1229,7 +1257,7 @@ export def "private-article-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string, computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string> {
+]: nothing -> oneof<record<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string, computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -1304,7 +1332,7 @@ export def "private-article-private-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<expires_date: string, html_location: string, id: string, is_active: bool> {
+]: nothing -> oneof<table<expires_date: string, html_location: string, id: string, is_active: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -1342,7 +1370,7 @@ export def "private-article-private-link-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expires-date: string # Date when this private link should expire - optional. By default private links expire in 365 days. (e.g. 2018-02-22 22:22:22)
   --read-only: oneof<nothing, bool> # Optional, default true. Set to false to give private link users editing rights for this collection. (e.g. true)
-]: any -> record<html_location: string, location: string, token: string> {
+]: any -> oneof<record<html_location: string, location: string, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1462,7 +1490,7 @@ export def "private-article-publish" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<location: string> {
+]: nothing -> oneof<record<location: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -1498,7 +1526,7 @@ export def "private-article-reserve-doi" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<doi: string> {
+]: nothing -> oneof<record<doi: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -1534,7 +1562,7 @@ export def "private-article-reserve-handle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<handle: string> {
+]: nothing -> oneof<record<handle: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -1576,7 +1604,7 @@ export def "private-article-resource" [
   --status: string # Status of resource item (default: "", e.g. frozen)
   --title: string # Title of resource item (default: "", e.g. Test title)
   --version: int # Version of resource item (format: int64, default: 0, e.g. 1)
-]: any -> any {
+]: any -> oneof<record<location: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1604,9 +1632,6 @@ export def "private-article-resource" [
 #
 # PUT /account/articles/{article_id}/versions/{version_id}/
 # operationId: article_version_update
-# --custom_fields_list item shape: {name: string, value: any}
-# --funding_list item shape: {id?: int, title?: string}
-# --timeline shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
 export def "article-version-update" [
   article_id: int
   version_id: int
@@ -1641,7 +1666,7 @@ export def "article-version-update" [
   --tags: list<string> # List of tags to be associated with the article. Keywords can be used instead (default: [], e.g. [tag1, tag2])
   --timeline: record # shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
   --title: string # Title of article (e.g. Test article title)
-]: any -> any {
+]: any -> oneof<record<location: string, warnings: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1734,7 +1759,7 @@ export def "private-authors-search" [
   --page: int # Page number. Used for pagination with page_size (format: int64, e.g. 1)
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10, e.g. 10)
   --search-for: string # Search term (e.g. figshare)
-]: any -> table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string> {
+]: any -> oneof<table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1772,7 +1797,7 @@ export def "private-author-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<first_name: string, group_id: int, institution_id: int, is_public: int, job_title: string, last_name: string, full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string> {
+]: nothing -> oneof<record<first_name: string, group_id: int, institution_id: int, is_public: int, job_title: string, last_name: string, full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($author_id | is-empty) { error make --unspanned { msg: "path parameter 'author_id' must be non-empty" } }
@@ -1807,7 +1832,7 @@ export def "private-categories-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string> {
+]: nothing -> oneof<table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/categories" $auth.query)
@@ -1847,7 +1872,7 @@ export def "private-collections-list" [
   --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64)
   --order: string@order-completer-1 # The field by which to order. Default varies by endpoint/resource. (default: published_date)
   --order-direction: string@order-direction-completer # default: desc
-]: nothing -> table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string> {
+]: nothing -> oneof<table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar")] | flatten | str join "&"
@@ -1872,9 +1897,6 @@ export def "private-collections-list" [
 #
 # POST /account/collections
 # operationId: private_collection_create
-# --custom_fields_list item shape: {name: string, value: any}
-# --funding_list item shape: {id?: int, title?: string}
-# --timeline shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
 export def "private-collection-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1907,7 +1929,7 @@ export def "private-collection-create" [
   --tags: list<string> # List of tags to be associated with the collection. Keywords can be used instead (default: [], e.g. [tag1, tag2])
   --timeline: record # shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
   title: string # Title of collection (e.g. Test collection title)
-]: any -> record<entity_id: int, location: string, warnings: list<string>> {
+]: any -> oneof<record<entity_id: int, location: string, warnings: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1949,12 +1971,22 @@ export def "private-collections-search" [
   --handle: string # Only return collections with this handle (e.g. 10084/figshare.1407024)
   --order: string@order-completer-1 # The field by which to order. (default: created_date, e.g. published_date)
   --resource-doi: string # Only return collections with this resource_doi (e.g. 10.6084/m9.figshare.1407024)
-]: any -> table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string> {
+  --group: int # only return collections from this group (format: int32, e.g. 2000013)
+  --institution: int # only return collections from this institution (format: int32, e.g. 2000013)
+  --limit: int # Number of results included on a page. Used for pagination with query (format: int64, e.g. 10)
+  --modified-since: string # Filter by article modified date. Will only return articles published after the date. date(ISO 8601) YYYY-MM-DD (e.g. 2017-12-22)
+  --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64, e.g. 0)
+  --order-direction: string@order-direction-completer # Direction of ordering (default: desc, e.g. desc)
+  --page: int # Page number. Used for pagination with page_size (format: int64, e.g. 1)
+  --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10, e.g. 10)
+  --published-since: string # Filter by article publishing date. Will only return articles published after the date. date(ISO 8601) YYYY-MM-DD (e.g. 2017-12-22)
+  --search-for: string # Search term (e.g. figshare)
+]: any -> oneof<table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/collections/search" $auth.query)
-  let req_body = {"resource_id": $resource_id, "doi": $doi, "handle": $handle, "order": $order, "resource_doi": $resource_doi} | compact
+  let req_body = {"resource_id": $resource_id, "doi": $doi, "handle": $handle, "order": $order, "resource_doi": $resource_doi, "group": $group, "institution": $institution, "limit": $limit, "modified_since": $modified_since, "offset": $offset, "order_direction": $order_direction, "page": $page, "page_size": $page_size, "published_since": $published_since, "search_for": $search_for} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2023,7 +2055,7 @@ export def "private-collection-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_id: int, articles_count: int, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, funding: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, group_resource_id: string, institution_id: int, modified_date: string, public: bool, references: list<string>, resource_doi: string, resource_id: string, resource_link: string, resource_title: string, resource_version: int, tags: list<string>, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, version: int, doi: string, handle: string, id: int, published_date: string, title: string, url: string> {
+]: nothing -> oneof<record<account_id: int, articles_count: int, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, funding: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, group_resource_id: string, institution_id: int, modified_date: string, public: bool, references: list<string>, resource_doi: string, resource_id: string, resource_link: string, resource_title: string, resource_version: int, tags: list<string>, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, version: int, doi: string, handle: string, id: int, published_date: string, title: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -2048,9 +2080,6 @@ export def "private-collection-details" [
 #
 # PUT /account/collections/{collection_id}
 # operationId: private_collection_update
-# --custom_fields_list item shape: {name: string, value: any}
-# --funding_list item shape: {id?: int, title?: string}
-# --timeline shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
 export def "private-collection-update" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2084,7 +2113,7 @@ export def "private-collection-update" [
   --tags: list<string> # List of tags to be associated with the collection. Keywords can be used instead (default: [], e.g. [tag1, tag2])
   --timeline: record # shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
   --title: string # Title of collection (e.g. Test collection title)
-]: any -> any {
+]: any -> oneof<record<location: string, warnings: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2127,7 +2156,7 @@ export def "private-collection-articles-list" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10)
   --limit: int # Number of results included on a page. Used for pagination with query (format: int64)
   --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64)
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> oneof<table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -2165,7 +2194,7 @@ export def "private-collection-articles-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   articles: list<int> # List of article ids (e.g. [2000003, 2000004])
-]: any -> record<location: string> {
+]: any -> oneof<record<location: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2282,7 +2311,7 @@ export def "private-collection-authors-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string> {
+]: nothing -> oneof<table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -2319,7 +2348,7 @@ export def "private-collection-authors-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   authors: list # List of authors to be associated with the article. The list can contain the following fields: id, name, first_name, last_name, email, orcid_id. If an id is supplied, it will take priority and everything else will be ignored. No more than 10 authors. For adding more authors use the specific authors endpoint. (e.g. [{id: 12121}, {id: 34345}, {name: John Doe}])
-]: any -> record<location: string> {
+]: any -> oneof<record<location: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2436,7 +2465,7 @@ export def "private-collection-categories-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string> {
+]: nothing -> oneof<table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -2473,7 +2502,7 @@ export def "private-collection-categories-add" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   categories: list<int> # List of category ids (e.g. [1, 10, 11])
-]: any -> record<location: string> {
+]: any -> oneof<record<location: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2590,7 +2619,7 @@ export def "private-collection-private-links-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<expires_date: string, html_location: string, id: string, is_active: bool> {
+]: nothing -> oneof<table<expires_date: string, html_location: string, id: string, is_active: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -2628,7 +2657,7 @@ export def "private-collection-private-link-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expires-date: string # Date when this private link should expire - optional. By default private links expire in 365 days. (e.g. 2018-02-22 22:22:22)
   --read-only: oneof<nothing, bool> # Optional, default true. Set to false to give private link users editing rights for this collection. (e.g. true)
-]: any -> record<html_location: string, location: string, token: string> {
+]: any -> oneof<record<html_location: string, location: string, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2748,7 +2777,7 @@ export def "private-collection-publish" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<location: string> {
+]: nothing -> oneof<record<location: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -2784,7 +2813,7 @@ export def "private-collection-reserve-doi" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<doi: string> {
+]: nothing -> oneof<record<doi: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -2820,7 +2849,7 @@ export def "private-collection-reserve-handle" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<handle: string> {
+]: nothing -> oneof<record<handle: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -2862,7 +2891,7 @@ export def "private-collection-resource" [
   --status: string # Status of resource item (default: "", e.g. frozen)
   --title: string # Title of resource item (default: "", e.g. Test title)
   --version: int # Version of resource item (format: int64, default: 0, e.g. 1)
-]: any -> any {
+]: any -> oneof<record<location: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2901,7 +2930,7 @@ export def "private-funding-search" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search-for: string # Search term
-]: any -> table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string> {
+]: any -> oneof<table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2938,7 +2967,7 @@ export def "private-institution-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<domain: string, id: int, name: string> {
+]: nothing -> oneof<record<domain: string, id: int, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/institution" $auth.query)
@@ -2981,7 +3010,7 @@ export def "private-institution-accounts-list" [
   --email: string # Filter by email
   --id-lte: int # Retrieve accounts with an ID lower or equal to the specified value (format: int64)
   --id-gte: int # Retrieve accounts with an ID greater or equal to the specified value (format: int64)
-]: nothing -> table<active: int, email: string, first_name: string, id: int, institution_id: int, institution_user_id: string, last_name: string, orcid_id: string, quota: int, used_quota: int, user_id: int> {
+]: nothing -> oneof<table<active: int, email: string, first_name: string, id: int, institution_id: int, institution_user_id: string, last_name: string, orcid_id: string, quota: int, used_quota: int, user_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "is_active" $is_active "scalar") (serialize-qp "institution_user_id" $institution_user_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "id_lte" $id_lte "scalar") (serialize-qp "id_gte" $id_gte "scalar")] | flatten | str join "&"
@@ -3069,7 +3098,7 @@ export def "private-institution-accounts-search" [
   --page: int # Page number. Used for pagination with page_size (format: int64, e.g. 1)
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10, e.g. 10)
   --search-for: string # Search term (e.g. figshare)
-]: any -> table<active: int, email: string, first_name: string, id: int, institution_id: int, institution_user_id: string, last_name: string, orcid_id: string, quota: int, used_quota: int, user_id: int> {
+]: any -> oneof<table<active: int, email: string, first_name: string, id: int, institution_id: int, institution_user_id: string, last_name: string, orcid_id: string, quota: int, used_quota: int, user_id: int>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3159,7 +3188,7 @@ export def "private-institution-articles" [
   --status: int # only return collections with this status (format: int64)
   --resource-doi: string # only return collections with this resource_doi
   --item-type: int # Only return articles with the respective type. Mapping for item_type is: 1 - Figure, 2 - Media, 3 - Dataset, 5 - Poster, 6 - Journal contribution, 7 - Presentation, 8 - Thesis, 9 - Software, 11 - Online resource, 12 - Preprint, 13 - Book, 14 - Conference contribution, 15 - Chapter, 16 - Peer review, 17 - Educational resource, 18 - Report, 19 - Standard, 20 - Composition, 21 - Funding, 22 - Physical object, 23 - Data management plan, 24 - Workflow, 25 - Monograph, 26 - Performance, 27 - Event, 28 - Service, 29 - Model (format: int64)
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> oneof<table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "published_since" $published_since "scalar") (serialize-qp "modified_since" $modified_since "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "resource_doi" $resource_doi "scalar") (serialize-qp "item_type" $item_type "scalar")] | flatten | str join "&"
@@ -3195,7 +3224,7 @@ export def "custom-fields-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-id: int # Group_id (format: int64)
-]: nothing -> table<field_type: string, id: int, name: string> {
+]: nothing -> oneof<table<field_type: string, id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
@@ -3232,7 +3261,7 @@ export def "custom-fields-upload" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --external-file: string # CSV file to be uploaded (format: binary)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3272,7 +3301,7 @@ export def "private-institution-embargo-options-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: int, ip_name: string, type: string> {
+]: nothing -> oneof<table<id: int, ip_name: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/institution/embargo_options" $auth.query)
@@ -3306,7 +3335,7 @@ export def "private-institution-groups-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<association_criteria: string, id: int, name: string, parent_id: int, resource_id: string> {
+]: nothing -> oneof<table<association_criteria: string, id: int, name: string, parent_id: int, resource_id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/institution/groups" $auth.query)
@@ -3341,7 +3370,7 @@ export def "private-group-embargo-options-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: int, ip_name: string, type: string> {
+]: nothing -> oneof<table<id: int, ip_name: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -3377,7 +3406,7 @@ export def "account-institution-curation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<item: record<authors: list<record>, custom_fields: list<record>, embargo_options: list<record>, figshare_url: string, files: list<record>, resource_doi: string, resource_title: string, categories: list<record>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, account_id: int, article_id: int, assigned_to: int, comments_count: int, created_date: string, group_id: int, id: int, modified_date: string, review_date: string, status: string, version: int> {
+]: nothing -> oneof<record<item: record<authors: list<record>, custom_fields: list<record>, embargo_options: list<record>, figshare_url: string, files: list<record>, resource_doi: string, resource_title: string, categories: list<record>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, account_id: int, article_id: int, assigned_to: int, comments_count: int, created_date: string, group_id: int, id: int, modified_date: string, review_date: string, status: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($curation_id | is-empty) { error make --unspanned { msg: "path parameter 'curation_id' must be non-empty" } }
@@ -3415,7 +3444,7 @@ export def "account-institution-curation-comments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results included on a page. Used for pagination with query (format: int64)
   --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64)
-]: nothing -> record<account_id: int, id: int, text: string, type: string> {
+]: nothing -> oneof<record<account_id: int, id: int, text: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($curation_id | is-empty) { error make --unspanned { msg: "path parameter 'curation_id' must be non-empty" } }
@@ -3495,7 +3524,7 @@ export def "account-institution-curations" [
   --status: string@status-completer # Filter by the status of the review
   --limit: int # Number of results included on a page. Used for pagination with query (format: int64)
   --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64)
-]: nothing -> record<account_id: int, article_id: int, assigned_to: int, comments_count: int, created_date: string, group_id: int, id: int, modified_date: string, review_date: string, status: string, version: int> {
+]: nothing -> oneof<record<account_id: int, article_id: int, assigned_to: int, comments_count: int, created_date: string, group_id: int, id: int, modified_date: string, review_date: string, status: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "group_id" $group_id "scalar") (serialize-qp "article_id" $article_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -3530,7 +3559,7 @@ export def "private-institution-roles-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<category: string, description: string, id: int, name: string> {
+]: nothing -> oneof<table<category: string, description: string, id: int, name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/institution/roles" $auth.query)
@@ -3565,7 +3594,7 @@ export def "private-institution-account-group-roles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
@@ -3681,7 +3710,7 @@ export def "private-account-institution-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<first_name: string, id: int, is_active: bool, is_public: bool, job_title: string, last_name: string, name: string, orcid_id: string, url_name: string> {
+]: nothing -> oneof<record<first_name: string, id: int, is_active: bool, is_public: bool, job_title: string, last_name: string, name: string, orcid_id: string, url_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account_id' must be non-empty" } }
@@ -3716,7 +3745,7 @@ export def "private-licenses-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, url: string, value: int> {
+]: nothing -> oneof<table<name: string, url: string, value: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/licenses" $auth.query)
@@ -3758,7 +3787,7 @@ export def "private-projects-list" [
   --order-direction: string@order-direction-completer # default: desc
   --storage: string@storage-completer # only return collections from this institution
   --roles: string # Any combination of owner, collaborator, viewer separated by comma. Examples: "owner" or "owner,collaborator".
-]: nothing -> table<role: string, storage: string, id: int, published_date: string, title: string, url: string> {
+]: nothing -> oneof<table<role: string, storage: string, id: int, published_date: string, title: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "storage" $storage "scalar") (serialize-qp "roles" $roles "scalar")] | flatten | str join "&"
@@ -3783,8 +3812,6 @@ export def "private-projects-list" [
 #
 # POST /account/projects
 # operationId: private_project_create
-# --custom_fields_list item shape: {name: string, value: any}
-# --funding_list item shape: {id?: int, title?: string}
 export def "private-project-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3802,7 +3829,7 @@ export def "private-project-create" [
   --funding-list: list # Funding creation / update items — item shape: {id?: int, title?: string}
   --group-id: int # Only if project type is group. (format: int64, e.g. 0)
   title: string # The title for this project - mandatory. 3 - 1000 characters. (e.g. project title)
-]: any -> record<entity_id: int, location: string> {
+]: any -> oneof<record<entity_id: int, location: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3850,7 +3877,7 @@ export def "private-projects-search" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10, e.g. 10)
   --published-since: string # Filter by article publishing date. Will only return articles published after the date. date(ISO 8601) YYYY-MM-DD (e.g. 2017-12-22)
   --search-for: string # Search term (e.g. figshare)
-]: any -> table<role: string, storage: string, id: int, published_date: string, title: string, url: string> {
+]: any -> oneof<table<role: string, storage: string, id: int, published_date: string, title: string, url: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -3924,7 +3951,7 @@ export def "private-project-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_id: int, collaborators: table<name: string, role_name: string, user_id: int>, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, figshare_url: string, funding: string, funding_list: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, modified_date: string, quota: int, used_quota: int, used_quota_private: int, used_quota_public: int, role: string, storage: string, id: int, published_date: string, title: string, url: string> {
+]: nothing -> oneof<record<account_id: int, collaborators: table<name: string, role_name: string, user_id: int>, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, figshare_url: string, funding: string, funding_list: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, modified_date: string, quota: int, used_quota: int, used_quota_private: int, used_quota_public: int, role: string, storage: string, id: int, published_date: string, title: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -3949,8 +3976,6 @@ export def "private-project-details" [
 #
 # PUT /account/projects/{project_id}
 # operationId: private_project_update
-# --custom_fields_list item shape: {name: string, value: any}
-# --funding_list item shape: {id?: int, title?: string}
 export def "private-project-update" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4011,7 +4036,7 @@ export def "private-project-articles-list" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10)
   --limit: int # Number of results included on a page. Used for pagination with query (format: int64)
   --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64)
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> oneof<table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -4037,9 +4062,6 @@ export def "private-project-articles-list" [
 #
 # POST /account/projects/{project_id}/articles
 # operationId: private_project_articles_create
-# --custom_fields_list item shape: {name: string, value: any}
-# --funding_list item shape: {id?: int, title?: string}
-# --timeline shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
 export def "private-project-articles-create" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4074,7 +4096,7 @@ export def "private-project-articles-create" [
   --tags: list<string> # List of tags to be associated with the article. Keywords can be used instead (default: [], e.g. [tag1, tag2])
   --timeline: record # shape: {firstOnline?: string, publisherAcceptance?: string, publisherPublication?: string}
   title: string # Title of article (e.g. Test article title)
-]: any -> record<entity_id: int, location: string, warnings: list<string>> {
+]: any -> oneof<record<entity_id: int, location: string, warnings: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4153,7 +4175,7 @@ export def "private-project-article-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> oneof<record<categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -4191,7 +4213,7 @@ export def "private-project-article-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string, computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string> {
+]: nothing -> oneof<table<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string, computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -4230,7 +4252,7 @@ export def "private-project-article-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string, computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string> {
+]: nothing -> oneof<record<is_attached_to_public_version: bool, preview_state: string, status: string, upload_token: string, upload_url: string, viewer_type: string, computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -4268,7 +4290,7 @@ export def "private-project-collaborators-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, role_name: string, status: string, user_id: int> {
+]: nothing -> oneof<table<name: string, role_name: string, status: string, user_id: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -4308,7 +4330,7 @@ export def "private-project-collaborators-invite" [
   --email: string # Collaborator email (e.g. user@domain.com)
   role_name: string@role-name-completer # Role of the the collaborator inside the project (e.g. viewer)
   --user-id: int # User id of the collaborator (format: int64, e.g. 100008)
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4425,7 +4447,7 @@ export def "private-project-notes-list" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10)
   --limit: int # Number of results included on a page. Used for pagination with query (format: int64)
   --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64)
-]: nothing -> table<abstract: string, created_date: string, id: int, modified_date: string, user_id: int, user_name: string> {
+]: nothing -> oneof<table<abstract: string, created_date: string, id: int, modified_date: string, user_id: int, user_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -4463,7 +4485,7 @@ export def "private-project-notes-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   text: string # Text of the note (e.g. note to remember)
-]: any -> record<location: string> {
+]: any -> oneof<record<location: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4541,7 +4563,7 @@ export def "private-project-note" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<text: string, abstract: string, created_date: string, id: int, modified_date: string, user_id: int, user_name: string> {
+]: nothing -> oneof<record<text: string, abstract: string, created_date: string, id: int, modified_date: string, user_id: int, user_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -4620,7 +4642,7 @@ export def "private-project-publish" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -4670,7 +4692,7 @@ export def "articles-list" [
   --doi: string # only return articles with this doi
   --handle: string # only return articles with this handle
   --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected. (format: uuid)
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> oneof<table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "institution" $institution "scalar") (serialize-qp "published_since" $published_since "scalar") (serialize-qp "modified_since" $modified_since "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "resource_doi" $resource_doi "scalar") (serialize-qp "item_type" $item_type "scalar") (serialize-qp "doi" $doi "scalar") (serialize-qp "handle" $handle "scalar")] | flatten | str join "&"
@@ -4724,7 +4746,7 @@ export def "articles-search" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10, e.g. 10)
   --published-since: string # Filter by article publishing date. Will only return articles published after the date. date(ISO 8601) YYYY-MM-DD (e.g. 2017-12-22)
   --search-for: string # Search term (e.g. figshare)
-]: any -> table<project_id: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: any -> oneof<table<project_id: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -4764,7 +4786,7 @@ export def "article-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, custom_fields: table<is_mandatory: bool, name: string, value: string>, embargo_options: table<id: int, ip_name: string, type: string>, figshare_url: string, files: table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, resource_doi: string, resource_title: string, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> oneof<record<authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, custom_fields: table<is_mandatory: bool, name: string, value: string>, embargo_options: table<id: int, ip_name: string, type: string>, figshare_url: string, files: table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, resource_doi: string, resource_title: string, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -4800,7 +4822,7 @@ export def "article-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string> {
+]: nothing -> oneof<table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -4837,7 +4859,7 @@ export def "article-file-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string> {
+]: nothing -> oneof<record<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -4874,7 +4896,7 @@ export def "article-versions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<url: string, version: int> {
+]: nothing -> oneof<table<url: string, version: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -4911,7 +4933,7 @@ export def "article-version-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, custom_fields: table<is_mandatory: bool, name: string, value: string>, embargo_options: table<id: int, ip_name: string, type: string>, figshare_url: string, files: table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, resource_doi: string, resource_title: string, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> oneof<record<authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, custom_fields: table<is_mandatory: bool, name: string, value: string>, embargo_options: table<id: int, ip_name: string, type: string>, figshare_url: string, files: table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, resource_doi: string, resource_title: string, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, confidential_reason: string, created_date: string, description: string, embargo_date: string, embargo_reason: string, embargo_title: string, embargo_type: string, funding: string, funding_list: list<int>, has_linked_file: bool, is_active: bool, is_confidential: bool, is_embargoed: bool, is_metadata_record: bool, is_public: bool, license: record<name: string, url: string, value: int>, metadata_reason: string, modified_date: string, references: list<string>, size: int, status: string, tags: list<string>, version: int, defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -4949,7 +4971,7 @@ export def "article-version-confidentiality" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<is_confidential: bool, reason: string> {
+]: nothing -> oneof<record<is_confidential: bool, reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -4987,7 +5009,7 @@ export def "article-version-embargo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<embargo_date: string, embargo_options: list<record>, embargo_reason: string, embargo_title: string, embargo_type: string, is_embargoed: bool> {
+]: nothing -> oneof<record<embargo_date: string, embargo_options: list<record>, embargo_reason: string, embargo_title: string, embargo_type: string, is_embargoed: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
@@ -5023,7 +5045,7 @@ export def "categories-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string> {
+]: nothing -> oneof<table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/categories" $auth.query)
@@ -5071,7 +5093,7 @@ export def "collections-list" [
   --doi: string # only return collections with this doi
   --handle: string # only return collections with this handle
   --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected. (format: uuid)
-]: nothing -> table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string> {
+]: nothing -> oneof<table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "institution" $institution "scalar") (serialize-qp "published_since" $published_since "scalar") (serialize-qp "modified_since" $modified_since "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "resource_doi" $resource_doi "scalar") (serialize-qp "doi" $doi "scalar") (serialize-qp "handle" $handle "scalar")] | flatten | str join "&"
@@ -5123,7 +5145,7 @@ export def "collections-search" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10, e.g. 10)
   --published-since: string # Filter by article publishing date. Will only return articles published after the date. date(ISO 8601) YYYY-MM-DD (e.g. 2017-12-22)
   --search-for: string # Search term (e.g. figshare)
-]: any -> table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string> {
+]: any -> oneof<table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -5163,7 +5185,7 @@ export def "collection-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<articles_count: int, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, funding: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, group_resource_id: string, institution_id: int, modified_date: string, public: bool, references: list<string>, resource_doi: string, resource_id: string, resource_link: string, resource_title: string, resource_version: int, tags: list<string>, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, version: int, doi: string, handle: string, id: int, published_date: string, title: string, url: string> {
+]: nothing -> oneof<record<articles_count: int, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, funding: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, group_resource_id: string, institution_id: int, modified_date: string, public: bool, references: list<string>, resource_doi: string, resource_id: string, resource_link: string, resource_title: string, resource_version: int, tags: list<string>, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, version: int, doi: string, handle: string, id: int, published_date: string, title: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -5203,7 +5225,7 @@ export def "collection-articles" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10)
   --limit: int # Number of results included on a page. Used for pagination with query (format: int64)
   --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64)
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> oneof<table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -5240,7 +5262,7 @@ export def "collection-versions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<id: int, url: string> {
+]: nothing -> oneof<table<id: int, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -5277,7 +5299,7 @@ export def "collection-version-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<articles_count: int, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, funding: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, group_resource_id: string, institution_id: int, modified_date: string, public: bool, references: list<string>, resource_doi: string, resource_id: string, resource_link: string, resource_title: string, resource_version: int, tags: list<string>, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, version: int, doi: string, handle: string, id: int, published_date: string, title: string, url: string> {
+]: nothing -> oneof<record<articles_count: int, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, funding: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, group_resource_id: string, institution_id: int, modified_date: string, public: bool, references: list<string>, resource_doi: string, resource_id: string, resource_link: string, resource_title: string, resource_version: int, tags: list<string>, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, version: int, doi: string, handle: string, id: int, published_date: string, title: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -5350,7 +5372,7 @@ export def "institution-hrfeed-upload" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hrfeed: string # You can find an example in the Hr Feed section (format: binary)
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5392,7 +5414,7 @@ export def "institution-articles" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --resource-id: string # required
   --filename: string # required
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> oneof<table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($institution_string_id | is-empty) { error make --unspanned { msg: "path parameter 'institution_string_id' must be non-empty" } }
@@ -5431,7 +5453,7 @@ export def "item-types-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-id: int # Identifier of the group for which the item types are requested (format: int64, default: 0)
-]: nothing -> table<icon: string, id: int, is_selectable: bool, name: string, public_description: string, string_id: string, url_name: string> {
+]: nothing -> oneof<table<icon: string, id: int, is_selectable: bool, name: string, public_description: string, string_id: string, url_name: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
@@ -5466,7 +5488,7 @@ export def "licenses-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<name: string, url: string, value: int> {
+]: nothing -> oneof<table<name: string, url: string, value: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/licenses" $auth.query)
@@ -5510,7 +5532,7 @@ export def "projects-list" [
   --published-since: string # Filter by article publishing date. Will only return articles published after the date. date(ISO 8601) YYYY-MM-DD
   --group: int # only return collections from this group (format: int64)
   --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected. (format: uuid)
-]: nothing -> table<id: int, published_date: string, title: string, url: string> {
+]: nothing -> oneof<table<id: int, published_date: string, title: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "institution" $institution "scalar") (serialize-qp "published_since" $published_since "scalar") (serialize-qp "group" $group "scalar")] | flatten | str join "&"
@@ -5559,7 +5581,7 @@ export def "projects-search" [
   --page-size: int # The number of results included on a page. Used for pagination with page (format: int64, default: 10, e.g. 10)
   --published-since: string # Filter by article publishing date. Will only return articles published after the date. date(ISO 8601) YYYY-MM-DD (e.g. 2017-12-22)
   --search-for: string # Search term (e.g. figshare)
-]: any -> table<id: int, published_date: string, title: string, url: string> {
+]: any -> oneof<table<id: int, published_date: string, title: string, url: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -5599,7 +5621,7 @@ export def "project-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<collaborators: table<name: string, role_name: string, user_id: int>, description: string, figshare_url: string, funding: string, funding_list: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, id: int, published_date: string, title: string, url: string> {
+]: nothing -> oneof<record<collaborators: table<name: string, role_name: string, user_id: int>, description: string, figshare_url: string, funding: string, funding_list: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, id: int, published_date: string, title: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -5635,7 +5657,7 @@ export def "project-articles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
+]: nothing -> oneof<table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string, firstOnline: string, publisherAcceptance: string, publisherPublication: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }

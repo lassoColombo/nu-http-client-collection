@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "virtual-networks-list-all" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["virtual-networks-list-all" "virtual-networks-list" "virtual-networks-delete" "virtual-networks-get" "virtual-networks-update-tags" "virtual-networks-create-or-update" "virtual-networks-check-ip-address-availability" "subnets-list" "subnets-delete" "subnets-get" "subnets-create-or-update" "subnets-prepare-network-policies" "resource-navigation-links-list" "service-association-links-list" "subnets-unprepare-network-policies" "virtual-networks-list-usage" "virtual-network-peerings-list" "virtual-network-peerings-delete" "virtual-network-peerings-get" "virtual-network-peerings-create-or-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -158,7 +182,7 @@ export def "virtual-networks-list-all" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -198,7 +222,7 @@ export def "virtual-networks-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -284,7 +308,7 @@ export def "virtual-networks-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --expand: string # Expands referenced resources.
-]: nothing -> record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpCommunities: record<regionalCommunity: string, virtualNetworkCommunity: string>, ddosProtectionPlan: record<id: string>, dhcpOptions: record<dnsServers: list>, enableDdosProtection: bool, enableVmProtection: bool, provisioningState: string, resourceGuid: string, subnets: list<record>, virtualNetworkPeerings: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpCommunities: record<regionalCommunity: string, virtualNetworkCommunity: string>, ddosProtectionPlan: record<id: string>, dhcpOptions: record<dnsServers: list>, enableDdosProtection: bool, enableVmProtection: bool, provisioningState: string, resourceGuid: string, subnets: list<record>, virtualNetworkPeerings: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -328,7 +352,7 @@ export def "virtual-networks-update-tags" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --tags: record # Resource tags.
-]: any -> record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpCommunities: record<regionalCommunity: string, virtualNetworkCommunity: string>, ddosProtectionPlan: record<id: string>, dhcpOptions: record<dnsServers: list>, enableDdosProtection: bool, enableVmProtection: bool, provisioningState: string, resourceGuid: string, subnets: list<record>, virtualNetworkPeerings: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpCommunities: record<regionalCommunity: string, virtualNetworkCommunity: string>, ddosProtectionPlan: record<id: string>, dhcpOptions: record<dnsServers: list>, enableDdosProtection: bool, enableVmProtection: bool, provisioningState: string, resourceGuid: string, subnets: list<record>, virtualNetworkPeerings: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -360,7 +384,6 @@ export def "virtual-networks-update-tags" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}
 # operationId: VirtualNetworks_CreateOrUpdate
-# --properties shape: {addressSpace?: any, bgpCommunities?: any, ddosProtectionPlan?: any, dhcpOptions?: any, enableDdosProtection?: bool, enableVmProtection?: bool, resourceGuid?: string, subnets?: list, virtualNetworkPeerings?: list}
 export def "virtual-networks-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -380,7 +403,7 @@ export def "virtual-networks-create-or-update" [
   --id: string # Resource ID.
   --location: string # Resource location.
   --tags: record # Resource tags.
-]: any -> record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpCommunities: record<regionalCommunity: string, virtualNetworkCommunity: string>, ddosProtectionPlan: record<id: string>, dhcpOptions: record<dnsServers: list>, enableDdosProtection: bool, enableVmProtection: bool, provisioningState: string, resourceGuid: string, subnets: list<record>, virtualNetworkPeerings: list<record>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<addressSpace: record<addressPrefixes: list>, bgpCommunities: record<regionalCommunity: string, virtualNetworkCommunity: string>, ddosProtectionPlan: record<id: string>, dhcpOptions: record<dnsServers: list>, enableDdosProtection: bool, enableVmProtection: bool, provisioningState: string, resourceGuid: string, subnets: list<record>, virtualNetworkPeerings: list<record>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -427,7 +450,7 @@ export def "virtual-networks-check-ip-address-availability" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ip-address: string # The private IP address to be verified. (required)
   --api-version: string # Client API version. (required)
-]: nothing -> record<available: bool, availableIPAddresses: list<string>> {
+]: nothing -> oneof<record<available: bool, availableIPAddresses: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -471,7 +494,7 @@ export def "subnets-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -561,7 +584,7 @@ export def "subnets-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --expand: string # Expands referenced resources.
-]: nothing -> record<etag: string, name: string, properties: record<addressPrefix: string, addressPrefixes: list<string>, delegations: list<record>, ipConfigurationProfiles: list<any>, ipConfigurations: list<any>, natGateway: record<id: string>, networkSecurityGroup: any, privateEndpointNetworkPolicies: string, privateEndpoints: list<any>, privateLinkServiceNetworkPolicies: string, provisioningState: string, purpose: string, resourceNavigationLinks: list<record>, routeTable: any, serviceAssociationLinks: list<record>, serviceEndpointPolicies: list<any>, serviceEndpoints: list<record>>, id: string> {
+]: nothing -> oneof<record<etag: string, name: string, properties: record<addressPrefix: string, addressPrefixes: list<string>, delegations: list<record>, ipConfigurationProfiles: list<any>, ipConfigurations: list<any>, natGateway: record<id: string>, networkSecurityGroup: any, privateEndpointNetworkPolicies: string, privateEndpoints: list<any>, privateLinkServiceNetworkPolicies: string, provisioningState: string, purpose: string, resourceNavigationLinks: list<record>, routeTable: any, serviceAssociationLinks: list<record>, serviceEndpointPolicies: list<any>, serviceEndpoints: list<record>>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -591,7 +614,6 @@ export def "subnets-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}
 # operationId: Subnets_CreateOrUpdate
-# --properties shape: {addressPrefix?: string, addressPrefixes?: list<string>, delegations?: list, natGateway?: any, networkSecurityGroup?: any, privateEndpointNetworkPolicies?: string, privateLinkServiceNetworkPolicies?: string, resourceNavigationLinks?: list, routeTable?: any, serviceAssociationLinks?: list, serviceEndpointPolicies?: list, serviceEndpoints?: list}
 export def "subnets-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -611,7 +633,7 @@ export def "subnets-create-or-update" [
   --name: string # The name of the resource that is unique within a resource group. This name can be used to access the resource.
   --properties: any # Properties of the subnet. — shape: {addressPrefix?: string, addressPrefixes?: list<string>, delegations?: list, natGateway?: any, networkSecurityGroup?: any, privateEndpointNetworkPolicies?: string, privateLinkServiceNetworkPolicies?: string, resourceNavigationLinks?: list, routeTable?: any, serviceAssociationLinks?: list, serviceEndpointPolicies?: list, serviceEndpoints?: list}
   --id: string # Resource ID.
-]: any -> record<etag: string, name: string, properties: record<addressPrefix: string, addressPrefixes: list<string>, delegations: list<record>, ipConfigurationProfiles: list<any>, ipConfigurations: list<any>, natGateway: record<id: string>, networkSecurityGroup: any, privateEndpointNetworkPolicies: string, privateEndpoints: list<any>, privateLinkServiceNetworkPolicies: string, provisioningState: string, purpose: string, resourceNavigationLinks: list<record>, routeTable: any, serviceAssociationLinks: list<record>, serviceEndpointPolicies: list<any>, serviceEndpoints: list<record>>, id: string> {
+]: any -> oneof<record<etag: string, name: string, properties: record<addressPrefix: string, addressPrefixes: list<string>, delegations: list<record>, ipConfigurationProfiles: list<any>, ipConfigurations: list<any>, natGateway: record<id: string>, networkSecurityGroup: any, privateEndpointNetworkPolicies: string, privateEndpoints: list<any>, privateLinkServiceNetworkPolicies: string, provisioningState: string, purpose: string, resourceNavigationLinks: list<record>, routeTable: any, serviceAssociationLinks: list<record>, serviceEndpointPolicies: list<any>, serviceEndpoints: list<record>>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -644,7 +666,6 @@ export def "subnets-create-or-update" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}/PrepareNetworkPolicies
 # operationId: Subnets_PrepareNetworkPolicies
-# --networkIntentPolicyConfigurations item shape: {networkIntentPolicyName?: string, sourceNetworkIntentPolicy?: any}
 export def "subnets-prepare-network-policies" [
   subscription_id: string
   resource_group_name: string
@@ -710,7 +731,7 @@ export def "resource-navigation-links-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, id: string, name: string, properties: record, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, id: string, name: string, properties: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -755,7 +776,7 @@ export def "service-association-links-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, type: string, id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, name: string, properties: record, type: string, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -848,7 +869,7 @@ export def "virtual-networks-list-usage" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<currentValue: float, id: string, limit: float, name: record, unit: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<currentValue: float, id: string, limit: float, name: record, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -891,7 +912,7 @@ export def "virtual-network-peerings-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<etag: string, name: string, properties: record, id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -980,7 +1001,7 @@ export def "virtual-network-peerings-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<etag: string, name: string, properties: record<allowForwardedTraffic: bool, allowGatewayTransit: bool, allowVirtualNetworkAccess: bool, peeringState: string, provisioningState: string, remoteAddressSpace: record<addressPrefixes: list>, remoteVirtualNetwork: record<id: string>, useRemoteGateways: bool>, id: string> {
+]: nothing -> oneof<record<etag: string, name: string, properties: record<allowForwardedTraffic: bool, allowGatewayTransit: bool, allowVirtualNetworkAccess: bool, peeringState: string, provisioningState: string, remoteAddressSpace: record<addressPrefixes: list>, remoteVirtualNetwork: record<id: string>, useRemoteGateways: bool>, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1010,7 +1031,6 @@ export def "virtual-network-peerings-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/virtualNetworkPeerings/{virtualNetworkPeeringName}
 # operationId: VirtualNetworkPeerings_CreateOrUpdate
-# --properties shape: {allowForwardedTraffic?: bool, allowGatewayTransit?: bool, allowVirtualNetworkAccess?: bool, peeringState?: "Initiated"|"Connected"|"Disconnected", remoteAddressSpace?: any, remoteVirtualNetwork?: any, useRemoteGateways?: bool}
 export def "virtual-network-peerings-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1030,7 +1050,7 @@ export def "virtual-network-peerings-create-or-update" [
   --name: string # The name of the resource that is unique within a resource group. This name can be used to access the resource.
   --properties: any # Properties of the virtual network peering. — shape: {allowForwardedTraffic?: bool, allowGatewayTransit?: bool, allowVirtualNetworkAccess?: bool, peeringState?: "Initiated"|"Connected"|"Disconnected", remoteAddressSpace?: any, remoteVirtualNetwork?: any, useRemoteGateways?: bool}
   --id: string # Resource ID.
-]: any -> record<etag: string, name: string, properties: record<allowForwardedTraffic: bool, allowGatewayTransit: bool, allowVirtualNetworkAccess: bool, peeringState: string, provisioningState: string, remoteAddressSpace: record<addressPrefixes: list>, remoteVirtualNetwork: record<id: string>, useRemoteGateways: bool>, id: string> {
+]: any -> oneof<record<etag: string, name: string, properties: record<allowForwardedTraffic: bool, allowGatewayTransit: bool, allowVirtualNetworkAccess: bool, peeringState: string, provisioningState: string, remoteAddressSpace: record<addressPrefixes: list>, remoteVirtualNetwork: record<id: string>, useRemoteGateways: bool>, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 def base-url-completer [] { ["https://chromemanagement.googleapis.com"] }
@@ -102,9 +126,9 @@ def app-type-completer [] { ["ANDROID_APP" "APP" "APP_TYPE_UNSPECIFIED" "EXTENSI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chromemanagement-customers-apps-count-chrome-app-requests" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["chromemanagement-customers-apps-count-chrome-app-requests" "chromemanagement-customers-reports-count-chrome-browsers-needing-attention" "chromemanagement-customers-reports-count-chrome-devices-reaching-auto-expiration-date" "chromemanagement-customers-reports-count-chrome-devices-that-need-attention" "chromemanagement-customers-reports-count-chrome-hardware-fleet-devices" "chromemanagement-customers-reports-count-chrome-versions" "chromemanagement-customers-reports-count-installed-apps" "chromemanagement-customers-reports-find-installed-app-devices" "chromemanagement-customers-telemetry-users-get" "chromemanagement-customers-telemetry-devices-list" "chromemanagement-customers-telemetry-events-list" "chromemanagement-customers-telemetry-users-list" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -152,7 +176,7 @@ export def "chromemanagement-customers-apps-count-chrome-app-requests" [
   --org-unit-id: string # The ID of the organizational unit.
   --page-size: int # Maximum number of results to return. Maximum and default are 50, anything above will be coerced to 50.
   --page-token: string # Token to specify the page of the request to be returned.
-]: nothing -> record<nextPageToken: string, requestedApps: table<appDetails: string, appId: string, detailUri: string, displayName: string, iconUri: string, latestRequestTime: string, requestCount: string>, totalSize: int> {
+]: nothing -> oneof<record<nextPageToken: string, requestedApps: table<appDetails: string, appId: string, detailUri: string, displayName: string, iconUri: string, latestRequestTime: string, requestCount: string>, totalSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer | is-empty) { error make --unspanned { msg: "path parameter 'customer' must be non-empty" } }
@@ -201,7 +225,7 @@ export def "chromemanagement-customers-reports-count-chrome-browsers-needing-att
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --org-unit-id: string # Optional. The ID of the organizational unit. If omitted, all data will be returned.
-]: nothing -> record<noRecentActivityCount: string, pendingBrowserUpdateCount: string, recentlyEnrolledCount: string> {
+]: nothing -> oneof<record<noRecentActivityCount: string, pendingBrowserUpdateCount: string, recentlyEnrolledCount: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer | is-empty) { error make --unspanned { msg: "path parameter 'customer' must be non-empty" } }
@@ -252,7 +276,7 @@ export def "chromemanagement-customers-reports-count-chrome-devices-reaching-aut
   --max-aue-date: string # Optional. Maximum expiration date in format yyyy-mm-dd in UTC timezone. If included returns all devices that have already expired and devices with auto expiration date equal to or earlier than the maximum date.
   --min-aue-date: string # Optional. Maximum expiration date in format yyyy-mm-dd in UTC timezone. If included returns all devices that have already expired and devices with auto expiration date equal to or later than the minimum date.
   --org-unit-id: string # Optional. The organizational unit ID, if omitted, will return data for all organizational units.
-]: nothing -> record<deviceAueCountReports: table<aueMonth: string, aueYear: string, count: string, expired: bool, model: string>> {
+]: nothing -> oneof<record<deviceAueCountReports: table<aueMonth: string, aueYear: string, count: string, expired: bool, model: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer | is-empty) { error make --unspanned { msg: "path parameter 'customer' must be non-empty" } }
@@ -302,7 +326,7 @@ export def "chromemanagement-customers-reports-count-chrome-devices-that-need-at
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --org-unit-id: string # Optional. The ID of the organizational unit. If omitted, all data will be returned.
   --read-mask: string # Required. Mask of the fields that should be populated in the returned report.
-]: nothing -> record<noRecentPolicySyncCount: string, noRecentUserActivityCount: string, osVersionNotCompliantCount: string, pendingUpdate: string, unsupportedPolicyCount: string> {
+]: nothing -> oneof<record<noRecentPolicySyncCount: string, noRecentUserActivityCount: string, osVersionNotCompliantCount: string, pendingUpdate: string, unsupportedPolicyCount: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer | is-empty) { error make --unspanned { msg: "path parameter 'customer' must be non-empty" } }
@@ -352,7 +376,7 @@ export def "chromemanagement-customers-reports-count-chrome-hardware-fleet-devic
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --org-unit-id: string # Optional. The ID of the organizational unit. If omitted, all data will be returned.
   --read-mask: string # Required. Mask of the fields that should be populated in the returned report.
-]: nothing -> record<cpuReports: table<bucket: string, count: string>, memoryReports: table<bucket: string, count: string>, modelReports: table<bucket: string, count: string>, storageReports: table<bucket: string, count: string>> {
+]: nothing -> oneof<record<cpuReports: table<bucket: string, count: string>, memoryReports: table<bucket: string, count: string>, modelReports: table<bucket: string, count: string>, storageReports: table<bucket: string, count: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer | is-empty) { error make --unspanned { msg: "path parameter 'customer' must be non-empty" } }
@@ -404,7 +428,7 @@ export def "chromemanagement-customers-reports-count-chrome-versions" [
   --org-unit-id: string # The ID of the organizational unit.
   --page-size: int # Maximum number of results to return. Maximum and default are 100.
   --page-token: string # Token to specify the page of the request to be returned.
-]: nothing -> record<browserVersions: table<channel: string, count: string, deviceOsVersion: string, system: string, version: string>, nextPageToken: string, totalSize: int> {
+]: nothing -> oneof<record<browserVersions: table<channel: string, count: string, deviceOsVersion: string, system: string, version: string>, nextPageToken: string, totalSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer | is-empty) { error make --unspanned { msg: "path parameter 'customer' must be non-empty" } }
@@ -457,7 +481,7 @@ export def "chromemanagement-customers-reports-count-installed-apps" [
   --org-unit-id: string # The ID of the organizational unit.
   --page-size: int # Maximum number of results to return. Maximum and default are 100.
   --page-token: string # Token to specify the page of the request to be returned.
-]: nothing -> record<installedApps: table<appId: string, appInstallType: string, appSource: string, appType: string, browserDeviceCount: string, description: string, disabled: bool, displayName: string, homepageUri: string, osUserCount: string, permissions: list>, nextPageToken: string, totalSize: int> {
+]: nothing -> oneof<record<installedApps: table<appId: string, appInstallType: string, appSource: string, appType: string, browserDeviceCount: string, description: string, disabled: bool, displayName: string, homepageUri: string, osUserCount: string, permissions: list>, nextPageToken: string, totalSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer | is-empty) { error make --unspanned { msg: "path parameter 'customer' must be non-empty" } }
@@ -512,7 +536,7 @@ export def "chromemanagement-customers-reports-find-installed-app-devices" [
   --org-unit-id: string # The ID of the organizational unit.
   --page-size: int # Maximum number of results to return. Maximum and default are 100.
   --page-token: string # Token to specify the page of the request to be returned.
-]: nothing -> record<devices: table<deviceId: string, machine: string>, nextPageToken: string, totalSize: int> {
+]: nothing -> oneof<record<devices: table<deviceId: string, machine: string>, nextPageToken: string, totalSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer | is-empty) { error make --unspanned { msg: "path parameter 'customer' must be non-empty" } }
@@ -561,7 +585,7 @@ export def "chromemanagement-customers-telemetry-users-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --read-mask: string # Read mask to specify which fields to return.
-]: nothing -> record<customer: string, name: string, orgUnitId: string, userDevice: table<audioStatusReport: list, deviceId: string, peripheralsReport: list>, userEmail: string, userId: string> {
+]: nothing -> oneof<record<customer: string, name: string, orgUnitId: string, userDevice: table<audioStatusReport: list, deviceId: string, peripheralsReport: list>, userEmail: string, userId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -613,7 +637,7 @@ export def "chromemanagement-customers-telemetry-devices-list" [
   --page-size: int # Maximum number of results to return. Default value is 100. Maximum value is 1000.
   --page-token: string # Token to specify next page in the list.
   --read-mask: string # Required. Read mask to specify which fields to return.
-]: nothing -> record<devices: table<audioStatusReport: list, batteryInfo: list, batteryStatusReport: list, bootPerformanceReport: list, cpuInfo: list, cpuStatusReport: list, customer: string, deviceId: string, graphicsInfo: record, graphicsStatusReport: list, memoryInfo: record, memoryStatusReport: list, name: string, networkDiagnosticsReport: list, networkInfo: record, networkStatusReport: list, orgUnitId: string, osUpdateStatus: list, peripheralsReport: list, serialNumber: string, storageInfo: record, storageStatusReport: list, thunderboltInfo: list>, nextPageToken: string> {
+]: nothing -> oneof<record<devices: table<audioStatusReport: list, batteryInfo: list, batteryStatusReport: list, bootPerformanceReport: list, cpuInfo: list, cpuStatusReport: list, customer: string, deviceId: string, graphicsInfo: record, graphicsStatusReport: list, memoryInfo: record, memoryStatusReport: list, name: string, networkDiagnosticsReport: list, networkInfo: record, networkStatusReport: list, orgUnitId: string, osUpdateStatus: list, peripheralsReport: list, serialNumber: string, storageInfo: record, storageStatusReport: list, thunderboltInfo: list>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -665,7 +689,7 @@ export def "chromemanagement-customers-telemetry-events-list" [
   --page-size: int # Optional. Maximum number of results to return. Default value is 100. Maximum value is 1000.
   --page-token: string # Optional. Token to specify next page in the list.
   --read-mask: string # Required. Read mask to specify which fields to return.
-]: nothing -> record<nextPageToken: string, telemetryEvents: table<audioSevereUnderrunEvent: record, device: record, eventType: string, httpsLatencyChangeEvent: record, name: string, reportTime: string, usbPeripheralsEvent: record, user: record>> {
+]: nothing -> oneof<record<nextPageToken: string, telemetryEvents: table<audioSevereUnderrunEvent: record, device: record, eventType: string, httpsLatencyChangeEvent: record, name: string, reportTime: string, usbPeripheralsEvent: record, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -717,7 +741,7 @@ export def "chromemanagement-customers-telemetry-users-list" [
   --page-size: int # Maximum number of results to return. Default value is 100. Maximum value is 1000.
   --page-token: string # Token to specify next page in the list.
   --read-mask: string # Read mask to specify which fields to return.
-]: nothing -> record<nextPageToken: string, telemetryUsers: table<customer: string, name: string, orgUnitId: string, userDevice: list, userEmail: string, userId: string>> {
+]: nothing -> oneof<record<nextPageToken: string, telemetryUsers: table<customer: string, name: string, orgUnitId: string, userDevice: list, userEmail: string, userId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }

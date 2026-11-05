@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -126,9 +150,9 @@ def config-name-completer [] { ["$default"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["operations-list" "namespaces-check-name-availability" "namespaces-list" "premium-messaging-regions-list" "regions-list-by-sku" "namespaces-list-by-resource-group" "namespaces-delete" "namespaces-get" "namespaces-update" "namespaces-create-or-update" "namespaces-list-authorization-rules" "namespaces-delete-authorization-rule" "namespaces-get-authorization-rule" "namespaces-create-or-update-authorization-rule" "namespaces-list-keys" "namespaces-regenerate-keys" "disaster-recovery-configs-list" "disaster-recovery-configs-check-name-availability" "disaster-recovery-configs-delete" "disaster-recovery-configs-get" "disaster-recovery-configs-create-or-update" "disaster-recovery-configs-list-authorization-rules" "disaster-recovery-configs-get-authorization-rule" "disaster-recovery-configs-list-keys" "disaster-recovery-configs-break-pairing" "disaster-recovery-configs-fail-over" "event-hubs-list-by-namespace" "namespaces-migrate" "migration-configs-list" "migration-configs-delete" "migration-configs-get" "migration-configs-create-and-start-migration" "migration-configs-revert" "migration-configs-complete-migration" "namespaces-list-network-rule-sets" "namespaces-get-network-rule-set" "namespaces-create-or-update-network-rule-set" "queues-list-by-namespace" "queues-delete" "queues-get" "queues-create-or-update" "queues-list-authorization-rules" "queues-delete-authorization-rule" "queues-get-authorization-rule" "queues-create-or-update-authorization-rule" "queues-list-keys" "queues-regenerate-keys" "topics-list-by-namespace" "topics-delete" "topics-get" "topics-create-or-update" "topics-list-authorization-rules" "topics-delete-authorization-rule" "topics-get-authorization-rule" "topics-create-or-update-authorization-rule" "topics-list-keys" "topics-regenerate-keys" "subscriptions-list-by-topic" "subscriptions-delete" "subscriptions-get" "subscriptions-create-or-update" "rules-list-by-subscriptions" "rules-delete" "rules-get" "rules-create-or-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +185,7 @@ export def "operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<display: record, name: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<display: record, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -200,7 +224,7 @@ export def "namespaces-check-name-availability" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   name: string # The Name to check the namespace name availability and The namespace name can contain only letters, numbers, and hyphens. The namespace must start with a letter, and it must end with a letter or number.
-]: any -> record<message: string, nameAvailable: bool, reason: string> {
+]: any -> oneof<record<message: string, nameAvailable: bool, reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -243,7 +267,7 @@ export def "namespaces-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -282,7 +306,7 @@ export def "premium-messaging-regions-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -322,7 +346,7 @@ export def "regions-list-by-sku" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -364,7 +388,7 @@ export def "namespaces-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, sku: record, location: string, tags: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -451,7 +475,7 @@ export def "namespaces-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<properties: record<createdAt: string, metricId: string, provisioningState: string, serviceBusEndpoint: string, updatedAt: string>, sku: record<capacity: int, name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<createdAt: string, metricId: string, provisioningState: string, serviceBusEndpoint: string, updatedAt: string>, sku: record<capacity: int, name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -480,7 +504,6 @@ export def "namespaces-get" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}
 # operationId: Namespaces_Update
-# --sku shape: {capacity?: int, name: "Basic"|"Standard"|"Premium", tier?: "Basic"|"Standard"|"Premium"}
 export def "namespaces-update" [
   subscription_id: string
   resource_group_name: string
@@ -499,7 +522,7 @@ export def "namespaces-update" [
   --sku: record # SKU of the namespace. — shape: {capacity?: int, name: "Basic"|"Standard"|"Premium", tier?: "Basic"|"Standard"|"Premium"}
   --location: string # Resource location
   --tags: record # Resource tags
-]: any -> record<properties: record<createdAt: string, metricId: string, provisioningState: string, serviceBusEndpoint: string, updatedAt: string>, sku: record<capacity: int, name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<createdAt: string, metricId: string, provisioningState: string, serviceBusEndpoint: string, updatedAt: string>, sku: record<capacity: int, name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -532,7 +555,6 @@ export def "namespaces-update" [
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639408.aspx
 # operationId: Namespaces_CreateOrUpdate
-# --sku shape: {capacity?: int, name: "Basic"|"Standard"|"Premium", tier?: "Basic"|"Standard"|"Premium"}
 export def "namespaces-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -551,7 +573,7 @@ export def "namespaces-create-or-update" [
   --sku: record # SKU of the namespace. — shape: {capacity?: int, name: "Basic"|"Standard"|"Premium", tier?: "Basic"|"Standard"|"Premium"}
   location: string # The Geo-location where the resource lives
   --tags: record # Resource tags
-]: any -> record<properties: record<createdAt: string, metricId: string, provisioningState: string, serviceBusEndpoint: string, updatedAt: string>, sku: record<capacity: int, name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<createdAt: string, metricId: string, provisioningState: string, serviceBusEndpoint: string, updatedAt: string>, sku: record<capacity: int, name: string, tier: string>, location: string, tags: record, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -598,7 +620,7 @@ export def "namespaces-list-authorization-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -689,7 +711,7 @@ export def "namespaces-get-authorization-rule" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<properties: record<rights: list<string>>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<rights: list<string>>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -720,7 +742,6 @@ export def "namespaces-get-authorization-rule" [
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639410.aspx
 # operationId: Namespaces_CreateOrUpdateAuthorizationRule
-# --properties shape: {rights: list<string>}
 export def "namespaces-create-or-update-authorization-rule" [
   subscription_id: string
   resource_group_name: string
@@ -737,7 +758,7 @@ export def "namespaces-create-or-update-authorization-rule" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --properties: any # AuthorizationRule properties. — shape: {rights: list<string>}
-]: any -> record<properties: record<rights: list<string>>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<rights: list<string>>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -786,7 +807,7 @@ export def "namespaces-list-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string> {
+]: nothing -> oneof<record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -834,7 +855,7 @@ export def "namespaces-regenerate-keys" [
   --api-version: string # Client API version. (required)
   --key: string # Optional, if the key value provided, is reset for KeyType value or autogenerate Key value set for keyType
   key_type: string@key-type-completer # The access key to regenerate.
-]: any -> record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string> {
+]: any -> oneof<record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -881,7 +902,7 @@ export def "disaster-recovery-configs-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -925,7 +946,7 @@ export def "disaster-recovery-configs-check-name-availability" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   name: string # The Name to check the namespace name availability and The namespace name can contain only letters, numbers, and hyphens. The namespace must start with a letter, and it must end with a letter or number.
-]: any -> record<message: string, nameAvailable: bool, reason: string> {
+]: any -> oneof<record<message: string, nameAvailable: bool, reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1017,7 +1038,7 @@ export def "disaster-recovery-configs-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<properties: record<alternateName: string, partnerNamespace: string, pendingReplicationOperationsCount: int, provisioningState: string, role: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<alternateName: string, partnerNamespace: string, pendingReplicationOperationsCount: int, provisioningState: string, role: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1047,7 +1068,6 @@ export def "disaster-recovery-configs-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}
 # operationId: DisasterRecoveryConfigs_CreateOrUpdate
-# --properties shape: {alternateName?: string, partnerNamespace?: string}
 export def "disaster-recovery-configs-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1064,7 +1084,7 @@ export def "disaster-recovery-configs-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --properties: any # Properties required to the Create Or Update Alias(Disaster Recovery configurations) — shape: {alternateName?: string, partnerNamespace?: string}
-]: any -> record<properties: record<alternateName: string, partnerNamespace: string, pendingReplicationOperationsCount: int, provisioningState: string, role: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<alternateName: string, partnerNamespace: string, pendingReplicationOperationsCount: int, provisioningState: string, role: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1113,7 +1133,7 @@ export def "disaster-recovery-configs-list-authorization-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1160,7 +1180,7 @@ export def "disaster-recovery-configs-get-authorization-rule" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<properties: record<rights: list<string>>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<rights: list<string>>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1208,7 +1228,7 @@ export def "disaster-recovery-configs-list-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string> {
+]: nothing -> oneof<record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1343,7 +1363,7 @@ export def "event-hubs-list-by-namespace" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1433,7 +1453,7 @@ export def "migration-configs-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1522,7 +1542,7 @@ export def "migration-configs-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<properties: record<migrationState: string, pendingReplicationOperationsCount: int, postMigrationName: string, provisioningState: string, targetNamespace: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<migrationState: string, pendingReplicationOperationsCount: int, postMigrationName: string, provisioningState: string, targetNamespace: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1552,7 +1572,6 @@ export def "migration-configs-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/migrationConfigurations/{configName}
 # operationId: MigrationConfigs_CreateAndStartMigration
-# --properties shape: {postMigrationName: string, targetNamespace: string}
 export def "migration-configs-create-and-start-migration" [
   subscription_id: string
   resource_group_name: string
@@ -1569,7 +1588,7 @@ export def "migration-configs-create-and-start-migration" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --properties: any # Properties required to the Create Migration Configuration — shape: {postMigrationName: string, targetNamespace: string}
-]: any -> record<properties: record<migrationState: string, pendingReplicationOperationsCount: int, postMigrationName: string, provisioningState: string, targetNamespace: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<migrationState: string, pendingReplicationOperationsCount: int, postMigrationName: string, provisioningState: string, targetNamespace: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1706,7 +1725,7 @@ export def "namespaces-list-network-rule-sets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1749,7 +1768,7 @@ export def "namespaces-get-network-rule-set" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<properties: record<defaultAction: string, ipRules: list<record>, virtualNetworkRules: list<record>>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<defaultAction: string, ipRules: list<record>, virtualNetworkRules: list<record>>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1778,7 +1797,6 @@ export def "namespaces-get-network-rule-set" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/networkRuleSets/default
 # operationId: Namespaces_CreateOrUpdateNetworkRuleSet
-# --properties shape: {defaultAction?: "Allow"|"Deny", ipRules?: list, virtualNetworkRules?: list}
 export def "namespaces-create-or-update-network-rule-set" [
   subscription_id: string
   resource_group_name: string
@@ -1794,7 +1812,7 @@ export def "namespaces-create-or-update-network-rule-set" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --properties: any # NetworkRuleSet properties — shape: {defaultAction?: "Allow"|"Deny", ipRules?: list, virtualNetworkRules?: list}
-]: any -> record<properties: record<defaultAction: string, ipRules: list<record>, virtualNetworkRules: list<record>>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<defaultAction: string, ipRules: list<record>, virtualNetworkRules: list<record>>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1843,7 +1861,7 @@ export def "queues-list-by-namespace" [
   --api-version: string # Client API version. (required)
   --skip: int # Skip is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skip parameter that specifies a starting point to use for subsequent calls.
   --top: int # May be used to limit the number of results to the most recent N usageDetails.
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1934,7 +1952,7 @@ export def "queues-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<properties: record<accessedAt: string, autoDeleteOnIdle: string, countDetails: record<activeMessageCount: int, deadLetterMessageCount: int, scheduledMessageCount: int, transferDeadLetterMessageCount: int, transferMessageCount: int>, createdAt: string, deadLetteringOnMessageExpiration: bool, defaultMessageTimeToLive: string, duplicateDetectionHistoryTimeWindow: string, enableBatchedOperations: bool, enableExpress: bool, enablePartitioning: bool, forwardDeadLetteredMessagesTo: string, forwardTo: string, lockDuration: string, maxDeliveryCount: int, maxSizeInMegabytes: int, messageCount: int, requiresDuplicateDetection: bool, requiresSession: bool, sizeInBytes: int, status: string, updatedAt: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<accessedAt: string, autoDeleteOnIdle: string, countDetails: record<activeMessageCount: int, deadLetterMessageCount: int, scheduledMessageCount: int, transferDeadLetterMessageCount: int, transferMessageCount: int>, createdAt: string, deadLetteringOnMessageExpiration: bool, defaultMessageTimeToLive: string, duplicateDetectionHistoryTimeWindow: string, enableBatchedOperations: bool, enableExpress: bool, enablePartitioning: bool, forwardDeadLetteredMessagesTo: string, forwardTo: string, lockDuration: string, maxDeliveryCount: int, maxSizeInMegabytes: int, messageCount: int, requiresDuplicateDetection: bool, requiresSession: bool, sizeInBytes: int, status: string, updatedAt: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1965,7 +1983,6 @@ export def "queues-get" [
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/queues/{queueName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639395.aspx
 # operationId: Queues_CreateOrUpdate
-# --properties shape: {autoDeleteOnIdle?: string, countDetails?: record, deadLetteringOnMessageExpiration?: bool, defaultMessageTimeToLive?: string, duplicateDetectionHistoryTimeWindow?: string, enableBatchedOperations?: bool, enableExpress?: bool, enablePartitioning?: bool, forwardDeadLetteredMessagesTo?: string, forwardTo?: string, lockDuration?: string, maxDeliveryCount?: int, maxSizeInMegabytes?: int, requiresDuplicateDetection?: bool, requiresSession?: bool, ... (1 more fields)}
 export def "queues-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1982,7 +1999,7 @@ export def "queues-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --properties: any # The Queue Properties definition. — shape: {autoDeleteOnIdle?: string, countDetails?: record, deadLetteringOnMessageExpiration?: bool, defaultMessageTimeToLive?: string, duplicateDetectionHistoryTimeWindow?: string, enableBatchedOperations?: bool, enableExpress?: bool, enablePartitioning?: bool, forwardDeadLetteredMessagesTo?: string, forwardTo?: string, lockDuration?: string, maxDeliveryCount?: int, maxSizeInMegabytes?: int, requiresDuplicateDetection?: bool, requiresSession?: bool, ... (1 more fields)}
-]: any -> record<properties: record<accessedAt: string, autoDeleteOnIdle: string, countDetails: record<activeMessageCount: int, deadLetterMessageCount: int, scheduledMessageCount: int, transferDeadLetterMessageCount: int, transferMessageCount: int>, createdAt: string, deadLetteringOnMessageExpiration: bool, defaultMessageTimeToLive: string, duplicateDetectionHistoryTimeWindow: string, enableBatchedOperations: bool, enableExpress: bool, enablePartitioning: bool, forwardDeadLetteredMessagesTo: string, forwardTo: string, lockDuration: string, maxDeliveryCount: int, maxSizeInMegabytes: int, messageCount: int, requiresDuplicateDetection: bool, requiresSession: bool, sizeInBytes: int, status: string, updatedAt: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<accessedAt: string, autoDeleteOnIdle: string, countDetails: record<activeMessageCount: int, deadLetterMessageCount: int, scheduledMessageCount: int, transferDeadLetterMessageCount: int, transferMessageCount: int>, createdAt: string, deadLetteringOnMessageExpiration: bool, defaultMessageTimeToLive: string, duplicateDetectionHistoryTimeWindow: string, enableBatchedOperations: bool, enableExpress: bool, enablePartitioning: bool, forwardDeadLetteredMessagesTo: string, forwardTo: string, lockDuration: string, maxDeliveryCount: int, maxSizeInMegabytes: int, messageCount: int, requiresDuplicateDetection: bool, requiresSession: bool, sizeInBytes: int, status: string, updatedAt: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2031,7 +2048,7 @@ export def "queues-list-authorization-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2126,7 +2143,7 @@ export def "queues-get-authorization-rule" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<properties: record<rights: list<string>>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<rights: list<string>>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2157,7 +2174,6 @@ export def "queues-get-authorization-rule" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/queues/{queueName}/authorizationRules/{authorizationRuleName}
 # operationId: Queues_CreateOrUpdateAuthorizationRule
-# --properties shape: {rights: list<string>}
 export def "queues-create-or-update-authorization-rule" [
   subscription_id: string
   resource_group_name: string
@@ -2175,7 +2191,7 @@ export def "queues-create-or-update-authorization-rule" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --properties: any # AuthorizationRule properties. — shape: {rights: list<string>}
-]: any -> record<properties: record<rights: list<string>>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<rights: list<string>>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2226,7 +2242,7 @@ export def "queues-list-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string> {
+]: nothing -> oneof<record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2276,7 +2292,7 @@ export def "queues-regenerate-keys" [
   --api-version: string # Client API version. (required)
   --key: string # Optional, if the key value provided, is reset for KeyType value or autogenerate Key value set for keyType
   key_type: string@key-type-completer # The access key to regenerate.
-]: any -> record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string> {
+]: any -> oneof<record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2327,7 +2343,7 @@ export def "topics-list-by-namespace" [
   --api-version: string # Client API version. (required)
   --skip: int # Skip is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skip parameter that specifies a starting point to use for subsequent calls.
   --top: int # May be used to limit the number of results to the most recent N usageDetails.
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2418,7 +2434,7 @@ export def "topics-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<properties: record<accessedAt: string, autoDeleteOnIdle: string, countDetails: record<activeMessageCount: int, deadLetterMessageCount: int, scheduledMessageCount: int, transferDeadLetterMessageCount: int, transferMessageCount: int>, createdAt: string, defaultMessageTimeToLive: string, duplicateDetectionHistoryTimeWindow: string, enableBatchedOperations: bool, enableExpress: bool, enablePartitioning: bool, maxSizeInMegabytes: int, requiresDuplicateDetection: bool, sizeInBytes: int, status: string, subscriptionCount: int, supportOrdering: bool, updatedAt: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<accessedAt: string, autoDeleteOnIdle: string, countDetails: record<activeMessageCount: int, deadLetterMessageCount: int, scheduledMessageCount: int, transferDeadLetterMessageCount: int, transferMessageCount: int>, createdAt: string, defaultMessageTimeToLive: string, duplicateDetectionHistoryTimeWindow: string, enableBatchedOperations: bool, enableExpress: bool, enablePartitioning: bool, maxSizeInMegabytes: int, requiresDuplicateDetection: bool, sizeInBytes: int, status: string, subscriptionCount: int, supportOrdering: bool, updatedAt: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2449,7 +2465,6 @@ export def "topics-get" [
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639409.aspx
 # operationId: Topics_CreateOrUpdate
-# --properties shape: {autoDeleteOnIdle?: string, countDetails?: record, defaultMessageTimeToLive?: string, duplicateDetectionHistoryTimeWindow?: string, enableBatchedOperations?: bool, enableExpress?: bool, enablePartitioning?: bool, maxSizeInMegabytes?: int, requiresDuplicateDetection?: bool, status?: "Active"|"Disabled"|"Restoring"|"SendDisabled"|"ReceiveDisabled"|"Creating"|"Deleting"|"Renaming"|"Unknown", supportOrdering?: bool}
 export def "topics-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2466,7 +2481,7 @@ export def "topics-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --properties: any # The Topic Properties definition. — shape: {autoDeleteOnIdle?: string, countDetails?: record, defaultMessageTimeToLive?: string, duplicateDetectionHistoryTimeWindow?: string, enableBatchedOperations?: bool, enableExpress?: bool, enablePartitioning?: bool, maxSizeInMegabytes?: int, requiresDuplicateDetection?: bool, status?: "Active"|"Disabled"|"Restoring"|"SendDisabled"|"ReceiveDisabled"|"Creating"|"Deleting"|"Renaming"|"Unknown", supportOrdering?: bool}
-]: any -> record<properties: record<accessedAt: string, autoDeleteOnIdle: string, countDetails: record<activeMessageCount: int, deadLetterMessageCount: int, scheduledMessageCount: int, transferDeadLetterMessageCount: int, transferMessageCount: int>, createdAt: string, defaultMessageTimeToLive: string, duplicateDetectionHistoryTimeWindow: string, enableBatchedOperations: bool, enableExpress: bool, enablePartitioning: bool, maxSizeInMegabytes: int, requiresDuplicateDetection: bool, sizeInBytes: int, status: string, subscriptionCount: int, supportOrdering: bool, updatedAt: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<accessedAt: string, autoDeleteOnIdle: string, countDetails: record<activeMessageCount: int, deadLetterMessageCount: int, scheduledMessageCount: int, transferDeadLetterMessageCount: int, transferMessageCount: int>, createdAt: string, defaultMessageTimeToLive: string, duplicateDetectionHistoryTimeWindow: string, enableBatchedOperations: bool, enableExpress: bool, enablePartitioning: bool, maxSizeInMegabytes: int, requiresDuplicateDetection: bool, sizeInBytes: int, status: string, subscriptionCount: int, supportOrdering: bool, updatedAt: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2515,7 +2530,7 @@ export def "topics-list-authorization-rules" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2610,7 +2625,7 @@ export def "topics-get-authorization-rule" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<properties: record<rights: list<string>>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<rights: list<string>>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2642,7 +2657,6 @@ export def "topics-get-authorization-rule" [
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}/authorizationRules/{authorizationRuleName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt720678.aspx
 # operationId: Topics_CreateOrUpdateAuthorizationRule
-# --properties shape: {rights: list<string>}
 export def "topics-create-or-update-authorization-rule" [
   subscription_id: string
   resource_group_name: string
@@ -2660,7 +2674,7 @@ export def "topics-create-or-update-authorization-rule" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --properties: any # AuthorizationRule properties. — shape: {rights: list<string>}
-]: any -> record<properties: record<rights: list<string>>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<rights: list<string>>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2711,7 +2725,7 @@ export def "topics-list-keys" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string> {
+]: nothing -> oneof<record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2761,7 +2775,7 @@ export def "topics-regenerate-keys" [
   --api-version: string # Client API version. (required)
   --key: string # Optional, if the key value provided, is reset for KeyType value or autogenerate Key value set for keyType
   key_type: string@key-type-completer # The access key to regenerate.
-]: any -> record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string> {
+]: any -> oneof<record<aliasPrimaryConnectionString: string, aliasSecondaryConnectionString: string, keyName: string, primaryConnectionString: string, primaryKey: string, secondaryConnectionString: string, secondaryKey: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2813,7 +2827,7 @@ export def "subscriptions-list-by-topic" [
   --api-version: string # Client API version. (required)
   --skip: int # Skip is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skip parameter that specifies a starting point to use for subsequent calls.
   --top: int # May be used to limit the number of results to the most recent N usageDetails.
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2908,7 +2922,7 @@ export def "subscriptions-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<properties: record<accessedAt: string, autoDeleteOnIdle: string, countDetails: record<activeMessageCount: int, deadLetterMessageCount: int, scheduledMessageCount: int, transferDeadLetterMessageCount: int, transferMessageCount: int>, createdAt: string, deadLetteringOnFilterEvaluationExceptions: bool, deadLetteringOnMessageExpiration: bool, defaultMessageTimeToLive: string, duplicateDetectionHistoryTimeWindow: string, enableBatchedOperations: bool, forwardDeadLetteredMessagesTo: string, forwardTo: string, lockDuration: string, maxDeliveryCount: int, messageCount: int, requiresSession: bool, status: string, updatedAt: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<accessedAt: string, autoDeleteOnIdle: string, countDetails: record<activeMessageCount: int, deadLetterMessageCount: int, scheduledMessageCount: int, transferDeadLetterMessageCount: int, transferMessageCount: int>, createdAt: string, deadLetteringOnFilterEvaluationExceptions: bool, deadLetteringOnMessageExpiration: bool, defaultMessageTimeToLive: string, duplicateDetectionHistoryTimeWindow: string, enableBatchedOperations: bool, forwardDeadLetteredMessagesTo: string, forwardTo: string, lockDuration: string, maxDeliveryCount: int, messageCount: int, requiresSession: bool, status: string, updatedAt: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2940,7 +2954,6 @@ export def "subscriptions-get" [
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}/subscriptions/{subscriptionName}
 # Docs: https://msdn.microsoft.com/en-us/library/azure/mt639385.aspx
 # operationId: Subscriptions_CreateOrUpdate
-# --properties shape: {autoDeleteOnIdle?: string, countDetails?: record, deadLetteringOnFilterEvaluationExceptions?: bool, deadLetteringOnMessageExpiration?: bool, defaultMessageTimeToLive?: string, duplicateDetectionHistoryTimeWindow?: string, enableBatchedOperations?: bool, forwardDeadLetteredMessagesTo?: string, forwardTo?: string, lockDuration?: string, maxDeliveryCount?: int, requiresSession?: bool, ... (1 more fields)}
 export def "subscriptions-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2958,7 +2971,7 @@ export def "subscriptions-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --properties: any # Description of Subscription Resource. — shape: {autoDeleteOnIdle?: string, countDetails?: record, deadLetteringOnFilterEvaluationExceptions?: bool, deadLetteringOnMessageExpiration?: bool, defaultMessageTimeToLive?: string, duplicateDetectionHistoryTimeWindow?: string, enableBatchedOperations?: bool, forwardDeadLetteredMessagesTo?: string, forwardTo?: string, lockDuration?: string, maxDeliveryCount?: int, requiresSession?: bool, ... (1 more fields)}
-]: any -> record<properties: record<accessedAt: string, autoDeleteOnIdle: string, countDetails: record<activeMessageCount: int, deadLetterMessageCount: int, scheduledMessageCount: int, transferDeadLetterMessageCount: int, transferMessageCount: int>, createdAt: string, deadLetteringOnFilterEvaluationExceptions: bool, deadLetteringOnMessageExpiration: bool, defaultMessageTimeToLive: string, duplicateDetectionHistoryTimeWindow: string, enableBatchedOperations: bool, forwardDeadLetteredMessagesTo: string, forwardTo: string, lockDuration: string, maxDeliveryCount: int, messageCount: int, requiresSession: bool, status: string, updatedAt: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<accessedAt: string, autoDeleteOnIdle: string, countDetails: record<activeMessageCount: int, deadLetterMessageCount: int, scheduledMessageCount: int, transferDeadLetterMessageCount: int, transferMessageCount: int>, createdAt: string, deadLetteringOnFilterEvaluationExceptions: bool, deadLetteringOnMessageExpiration: bool, defaultMessageTimeToLive: string, duplicateDetectionHistoryTimeWindow: string, enableBatchedOperations: bool, forwardDeadLetteredMessagesTo: string, forwardTo: string, lockDuration: string, maxDeliveryCount: int, messageCount: int, requiresSession: bool, status: string, updatedAt: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3010,7 +3023,7 @@ export def "rules-list-by-subscriptions" [
   --api-version: string # Client API version. (required)
   --skip: int # Skip is only used if a previous operation returned a partial result. If a previous response contains a nextLink element, the value of the nextLink element will include a skip parameter that specifies a starting point to use for subsequent calls.
   --top: int # May be used to limit the number of results to the most recent N usageDetails.
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3107,7 +3120,7 @@ export def "rules-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
-]: nothing -> record<properties: record<action: record<compatibilityLevel: int, requiresPreprocessing: bool, sqlExpression: string>, correlationFilter: record<contentType: string, correlationId: string, label: string, messageId: string, properties: record, replyTo: string, replyToSessionId: string, requiresPreprocessing: bool, sessionId: string, to: string>, filterType: string, sqlFilter: record<compatibilityLevel: int, requiresPreprocessing: bool, sqlExpression: string>>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<action: record<compatibilityLevel: int, requiresPreprocessing: bool, sqlExpression: string>, correlationFilter: record<contentType: string, correlationId: string, label: string, messageId: string, properties: record, replyTo: string, replyToSessionId: string, requiresPreprocessing: bool, sessionId: string, to: string>, filterType: string, sqlFilter: record<compatibilityLevel: int, requiresPreprocessing: bool, sqlExpression: string>>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3139,7 +3152,6 @@ export def "rules-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/topics/{topicName}/subscriptions/{subscriptionName}/rules/{ruleName}
 # operationId: Rules_CreateOrUpdate
-# --properties shape: {action?: record, correlationFilter?: record, filterType?: "SqlFilter"|"CorrelationFilter", sqlFilter?: record}
 export def "rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -3158,7 +3170,7 @@ export def "rules-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version. (required)
   --properties: any # Description of Rule Resource. — shape: {action?: record, correlationFilter?: record, filterType?: "SqlFilter"|"CorrelationFilter", sqlFilter?: record}
-]: any -> record<properties: record<action: record<compatibilityLevel: int, requiresPreprocessing: bool, sqlExpression: string>, correlationFilter: record<contentType: string, correlationId: string, label: string, messageId: string, properties: record, replyTo: string, replyToSessionId: string, requiresPreprocessing: bool, sessionId: string, to: string>, filterType: string, sqlFilter: record<compatibilityLevel: int, requiresPreprocessing: bool, sqlExpression: string>>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<action: record<compatibilityLevel: int, requiresPreprocessing: bool, sqlExpression: string>, correlationFilter: record<contentType: string, correlationId: string, label: string, messageId: string, properties: record, replyTo: string, replyToSessionId: string, requiresPreprocessing: bool, sessionId: string, to: string>, filterType: string, sqlFilter: record<compatibilityLevel: int, requiresPreprocessing: bool, sqlExpression: string>>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

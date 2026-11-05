@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -114,9 +137,9 @@ def x-amz-target-completer-12 [] { ["AWSHealth_20160804.EnableHealthServiceAcces
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "describe-affected-accounts-for-organization" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["describe-affected-accounts-for-organization" "describe-affected-entities" "describe-affected-entities-for-organization" "describe-entity-aggregates" "describe-event-aggregates" "describe-event-details" "describe-event-details-for-organization" "describe-event-types" "describe-events" "describe-events-for-organization" "describe-health-service-status-for-organization" "disable-health-service-access-for-organization" "enable-health-service-access-for-organization" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +184,7 @@ export def "describe-affected-accounts-for-organization" [
   event_arn: string # The unique identifier for the event. The event ARN has the arn:aws:health:event-region::event/SERVICE/EVENT_TYPE_CODE/EVENT_TYPE_PLUS_ID format. For example, an event ARN might look like the following: arn:aws:health:us-east-1::event/EC2/EC2_INSTANCE_RETIREMENT_SCHEDULED/EC2_INSTANCE_RETIREMENT_SCHEDULED_ABC123-DEF456
   --next-token-body: string # If the results of a search are large, only a portion of the results are returned, and a nextToken pagination token is returned in the response. To retrieve the next batch of results, reissue the search request and include the returned token. When all results have been returned, the response does not contain a pagination token value. (body field)
   --max-results-body: int # The maximum number of items to return in one batch, between 10 and 100, inclusive. (body field)
-]: any -> record<affectedAccounts: list<string>, eventScopeCode: string, nextToken: string> {
+]: any -> oneof<record<affectedAccounts: list<string>, eventScopeCode: string, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -192,7 +215,6 @@ export def "describe-affected-accounts-for-organization" [
 #
 # POST /
 # operationId: DescribeAffectedEntities
-# --filter shape: {eventArns: list<string>, entityArns?: list<string>, entityValues?: list<string>, lastUpdatedTimes?: list, tags?: list, statusCodes?: list<string>}
 export def "describe-affected-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,7 +239,7 @@ export def "describe-affected-entities" [
   --locale: string # The locale (language) to return information in. English (en) is the default and the only supported value at this time.
   --next-token-body: string # If the results of a search are large, only a portion of the results are returned, and a nextToken pagination token is returned in the response. To retrieve the next batch of results, reissue the search request and include the returned token. When all results have been returned, the response does not contain a pagination token value. (body field)
   --max-results-body: int # The maximum number of items to return in one batch, between 10 and 100, inclusive. (body field)
-]: any -> record<entities: table<entityArn: string, eventArn: string, entityValue: string, entityUrl: string, awsAccountId: string, lastUpdatedTime: string, statusCode: string, tags: record>, nextToken: string> {
+]: any -> oneof<record<entities: table<entityArn: string, eventArn: string, entityValue: string, entityUrl: string, awsAccountId: string, lastUpdatedTime: string, statusCode: string, tags: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -248,7 +270,6 @@ export def "describe-affected-entities" [
 #
 # POST /
 # operationId: DescribeAffectedEntitiesForOrganization
-# --organizationEntityFilters item shape: {eventArn: string, awsAccountId?: string}
 export def "describe-affected-entities-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,7 +294,7 @@ export def "describe-affected-entities-for-organization" [
   --locale: string # The locale (language) to return information in. English (en) is the default and the only supported value at this time.
   --next-token-body: string # If the results of a search are large, only a portion of the results are returned, and a nextToken pagination token is returned in the response. To retrieve the next batch of results, reissue the search request and include the returned token. When all results have been returned, the response does not contain a pagination token value. (body field)
   --max-results-body: int # The maximum number of items to return in one batch, between 10 and 100, inclusive. (body field)
-]: any -> record<entities: table<entityArn: string, eventArn: string, entityValue: string, entityUrl: string, awsAccountId: string, lastUpdatedTime: string, statusCode: string, tags: record>, failedSet: table<awsAccountId: string, eventArn: string, errorName: string, errorMessage: string>, nextToken: string> {
+]: any -> oneof<record<entities: table<entityArn: string, eventArn: string, entityValue: string, entityUrl: string, awsAccountId: string, lastUpdatedTime: string, statusCode: string, tags: record>, failedSet: table<awsAccountId: string, eventArn: string, errorName: string, errorMessage: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -323,7 +344,7 @@ export def "describe-entity-aggregates" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   --event-arns: list<string> # A list of event ARNs (unique identifiers). For example: "arn:aws:health:us-east-1::event/EC2/EC2_INSTANCE_RETIREMENT_SCHEDULED/EC2_INSTANCE_RETIREMENT_SCHEDULED_ABC123-CDE456", "arn:aws:health:us-west-1::event/EBS/AWS_EBS_LOST_VOLUME/AWS_EBS_LOST_VOLUME_CHI789_JKL101"
-]: any -> record<entityAggregates: table<eventArn: string, count: int>> {
+]: any -> oneof<record<entityAggregates: table<eventArn: string, count: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -353,7 +374,6 @@ export def "describe-entity-aggregates" [
 #
 # POST /
 # operationId: DescribeEventAggregates
-# --filter shape: {eventArns?: list<string>, eventTypeCodes?: list<string>, services?: list<string>, regions?: list<string>, availabilityZones?: list<string>, startTimes?: list, endTimes?: list, lastUpdatedTimes?: list, entityArns?: list<string>, entityValues?: list<string>, eventTypeCategories?: list<string>, tags?: list, eventStatusCodes?: list<string>}
 export def "describe-event-aggregates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -378,7 +398,7 @@ export def "describe-event-aggregates" [
   aggregate_field: string@aggregate-field-completer # The only currently supported value is eventTypeCategory.
   --max-results-body: int # The maximum number of items to return in one batch, between 10 and 100, inclusive. (body field)
   --next-token-body: string # If the results of a search are large, only a portion of the results are returned, and a nextToken pagination token is returned in the response. To retrieve the next batch of results, reissue the search request and include the returned token. When all results have been returned, the response does not contain a pagination token value. (body field)
-]: any -> record<eventAggregates: table<aggregateValue: string, count: int>, nextToken: string> {
+]: any -> oneof<record<eventAggregates: table<aggregateValue: string, count: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -429,7 +449,7 @@ export def "describe-event-details" [
   --x-amz-target: string@x-amz-target-completer-5 # required
   event_arns: list<string> # A list of event ARNs (unique identifiers). For example: "arn:aws:health:us-east-1::event/EC2/EC2_INSTANCE_RETIREMENT_SCHEDULED/EC2_INSTANCE_RETIREMENT_SCHEDULED_ABC123-CDE456", "arn:aws:health:us-west-1::event/EBS/AWS_EBS_LOST_VOLUME/AWS_EBS_LOST_VOLUME_CHI789_JKL101"
   --locale: string # The locale (language) to return information in. English (en) is the default and the only supported value at this time.
-]: any -> record<successfulSet: table<event: record, eventDescription: record, eventMetadata: record>, failedSet: table<eventArn: string, errorName: string, errorMessage: string>> {
+]: any -> oneof<record<successfulSet: table<event: record, eventDescription: record, eventMetadata: record>, failedSet: table<eventArn: string, errorName: string, errorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -459,7 +479,6 @@ export def "describe-event-details" [
 #
 # POST /
 # operationId: DescribeEventDetailsForOrganization
-# --organizationEventDetailFilters item shape: {eventArn: string, awsAccountId?: string}
 export def "describe-event-details-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -480,7 +499,7 @@ export def "describe-event-details-for-organization" [
   --x-amz-target: string@x-amz-target-completer-6 # required
   organization_event_detail_filters: list # A set of JSON elements that includes the awsAccountId and the eventArn. — item shape: {eventArn: string, awsAccountId?: string}
   --locale: string # The locale (language) to return information in. English (en) is the default and the only supported value at this time.
-]: any -> record<successfulSet: table<awsAccountId: string, event: record, eventDescription: record, eventMetadata: record>, failedSet: table<awsAccountId: string, eventArn: string, errorName: string, errorMessage: string>> {
+]: any -> oneof<record<successfulSet: table<awsAccountId: string, event: record, eventDescription: record, eventMetadata: record>, failedSet: table<awsAccountId: string, eventArn: string, errorName: string, errorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -510,7 +529,6 @@ export def "describe-event-details-for-organization" [
 #
 # POST /
 # operationId: DescribeEventTypes
-# --filter shape: {eventTypeCodes?: list<string>, services?: list<string>, eventTypeCategories?: list<string>}
 export def "describe-event-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -535,7 +553,7 @@ export def "describe-event-types" [
   --locale: string # The locale (language) to return information in. English (en) is the default and the only supported value at this time.
   --next-token-body: string # If the results of a search are large, only a portion of the results are returned, and a nextToken pagination token is returned in the response. To retrieve the next batch of results, reissue the search request and include the returned token. When all results have been returned, the response does not contain a pagination token value. (body field)
   --max-results-body: int # The maximum number of items to return in one batch, between 10 and 100, inclusive. (body field)
-]: any -> record<eventTypes: table<service: string, code: string, category: string>, nextToken: string> {
+]: any -> oneof<record<eventTypes: table<service: string, code: string, category: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -566,7 +584,6 @@ export def "describe-event-types" [
 #
 # POST /
 # operationId: DescribeEvents
-# --filter shape: {eventArns?: list<string>, eventTypeCodes?: list<string>, services?: list<string>, regions?: list<string>, availabilityZones?: list<string>, startTimes?: list, endTimes?: list, lastUpdatedTimes?: list, entityArns?: list<string>, entityValues?: list<string>, eventTypeCategories?: list<string>, tags?: list, eventStatusCodes?: list<string>}
 export def "describe-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -591,7 +608,7 @@ export def "describe-events" [
   --next-token-body: string # If the results of a search are large, only a portion of the results are returned, and a nextToken pagination token is returned in the response. To retrieve the next batch of results, reissue the search request and include the returned token. When all results have been returned, the response does not contain a pagination token value. (body field)
   --max-results-body: int # The maximum number of items to return in one batch, between 10 and 100, inclusive. (body field)
   --locale: string # The locale (language) to return information in. English (en) is the default and the only supported value at this time.
-]: any -> record<events: table<arn: string, service: string, eventTypeCode: string, eventTypeCategory: string, region: string, availabilityZone: string, startTime: string, endTime: string, lastUpdatedTime: string, statusCode: string, eventScopeCode: string>, nextToken: string> {
+]: any -> oneof<record<events: table<arn: string, service: string, eventTypeCode: string, eventTypeCategory: string, region: string, availabilityZone: string, startTime: string, endTime: string, lastUpdatedTime: string, statusCode: string, eventScopeCode: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -622,7 +639,6 @@ export def "describe-events" [
 #
 # POST /
 # operationId: DescribeEventsForOrganization
-# --filter shape: {eventTypeCodes?: list<string>, awsAccountIds?: list<string>, services?: list<string>, regions?: list<string>, startTime?: record, endTime?: record, lastUpdatedTime?: record, entityArns?: list<string>, entityValues?: list<string>, eventTypeCategories?: list<string>, eventStatusCodes?: list<string>}
 export def "describe-events-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -647,7 +663,7 @@ export def "describe-events-for-organization" [
   --next-token-body: string # If the results of a search are large, only a portion of the results are returned, and a nextToken pagination token is returned in the response. To retrieve the next batch of results, reissue the search request and include the returned token. When all results have been returned, the response does not contain a pagination token value. (body field)
   --max-results-body: int # The maximum number of items to return in one batch, between 10 and 100, inclusive. (body field)
   --locale: string # The locale (language) to return information in. English (en) is the default and the only supported value at this time.
-]: any -> record<events: table<arn: string, service: string, eventTypeCode: string, eventTypeCategory: string, eventScopeCode: string, region: string, startTime: string, endTime: string, lastUpdatedTime: string, statusCode: string>, nextToken: string> {
+]: any -> oneof<record<events: table<arn: string, service: string, eventTypeCode: string, eventTypeCategory: string, eventScopeCode: string, region: string, startTime: string, endTime: string, lastUpdatedTime: string, statusCode: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -696,7 +712,7 @@ export def "describe-health-service-status-for-organization" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
-]: nothing -> record<healthServiceAccessStatusForOrganization: string> {
+]: nothing -> oneof<record<healthServiceAccessStatusForOrganization: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let x_amz_target = ($x_amz_target | default "AWSHealth_20160804.DescribeHealthServiceStatusForOrganization")

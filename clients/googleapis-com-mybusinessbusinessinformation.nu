@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def view-completer [] { ["BASIC" "CATEGORY_VIEW_UNSPECIFIED" "FULL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mybusinessbusinessinformation-attributes-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["mybusinessbusinessinformation-attributes-list" "mybusinessbusinessinformation-categories-list" "mybusinessbusinessinformation-categories-batch-get" "mybusinessbusinessinformation-chains-search" "mybusinessbusinessinformation-google-locations-search" "mybusinessbusinessinformation-locations-delete" "mybusinessbusinessinformation-locations-get-attributes" "mybusinessbusinessinformation-locations-update-attributes" "mybusinessbusinessinformation-locations-associate" "mybusinessbusinessinformation-locations-clear-location-association" "mybusinessbusinessinformation-locations-attributes-get-google-updated" "mybusinessbusinessinformation-accounts-locations-list" "mybusinessbusinessinformation-accounts-locations-create" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -171,7 +195,7 @@ export def "mybusinessbusinessinformation-attributes-list" [
   --parent: string # Resource name of the location to look up available attributes. If this field is set, category_name, region_code, language_code and show_all are not required and must not be set.
   --region-code: string # The ISO 3166-1 alpha-2 country code to find available attributes.
   --show-all: oneof<nothing, bool> # Metadata for all available attributes are returned when this field is set to true, disregarding parent and category_name fields. language_code and region_code are required when show_all is set to true.
-]: nothing -> record<attributeMetadata: table<deprecated: bool, displayName: string, groupDisplayName: string, parent: string, repeatable: bool, valueMetadata: list, valueType: string>, nextPageToken: string> {
+]: nothing -> oneof<record<attributeMetadata: table<deprecated: bool, displayName: string, groupDisplayName: string, parent: string, repeatable: bool, valueMetadata: list, valueType: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "categoryName" $category_name "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "regionCode" $region_code "scalar") (serialize-qp "showAll" $show_all "scalar")] | flatten | str join "&"
@@ -223,7 +247,7 @@ export def "mybusinessbusinessinformation-categories-list" [
   --page-token: string # Optional. If specified, the next page of categories will be fetched.
   --region-code: string # Required. The ISO 3166-1 alpha-2 country code.
   --view: string@view-completer # Required. Specifies which parts to the Category resource should be returned in the response.
-]: nothing -> record<categories: table<displayName: string, moreHoursTypes: list, name: string, serviceTypes: list>, nextPageToken: string> {
+]: nothing -> oneof<record<categories: table<displayName: string, moreHoursTypes: list, name: string, serviceTypes: list>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "regionCode" $region_code "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -273,7 +297,7 @@ export def "mybusinessbusinessinformation-categories-batch-get" [
   --names: list<string> # Required. At least one name must be set. The GConcept ids the localized category names should be returned for. To return details for more than one category, repeat this parameter in the request.
   --region-code: string # Optional. The ISO 3166-1 alpha-2 country code used to infer non-standard language.
   --view: string@view-completer # Required. Specifies which parts to the Category resource should be returned in the response.
-]: nothing -> record<categories: table<displayName: string, moreHoursTypes: list, name: string, serviceTypes: list>> {
+]: nothing -> oneof<record<categories: table<displayName: string, moreHoursTypes: list, name: string, serviceTypes: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "names" $names "multi") (serialize-qp "regionCode" $region_code "scalar") (serialize-qp "view" $view "scalar")] | flatten | str join "&"
@@ -321,7 +345,7 @@ export def "mybusinessbusinessinformation-chains-search" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --chain-name: string # Required. Search for a chain by its name. Exact/partial/fuzzy/related queries are supported. Examples: "walmart", "wal-mart", "walmmmart", "沃尔玛"
   --page-size: int # The maximum number of matched chains to return from this query. The default is 10. The maximum possible value is 500.
-]: nothing -> record<chains: table<chainNames: list, locationCount: int, name: string, websites: list>> {
+]: nothing -> oneof<record<chains: table<chainNames: list, locationCount: int, name: string, websites: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "chainName" $chain_name "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -346,7 +370,6 @@ export def "mybusinessbusinessinformation-chains-search" [
 #
 # POST /v1/googleLocations:search
 # operationId: mybusinessbusinessinformation.googleLocations.search
-# --location shape: {adWordsLocationExtensions?: record, categories?: record, labels?: list<string>, languageCode?: string, latlng?: record, metadata?: record, moreHours?: list, name?: string, openInfo?: record, phoneNumbers?: record, profile?: record, regularHours?: record, relationshipData?: record, serviceArea?: record, serviceItems?: list, specialHours?: record, storeCode?: string, storefrontAddress?: record, title?: string, websiteUri?: string}
 export def "mybusinessbusinessinformation-google-locations-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -371,7 +394,7 @@ export def "mybusinessbusinessinformation-google-locations-search" [
   --location: record # A location. See the [help center article] (https://support.google.com/business/answer/3038177) for a detailed description of these fields, or the [category endpoint](/my-business/reference/rest/v4/categories) for a list of valid business categories. — shape: {adWordsLocationExtensions?: record, categories?: record, labels?: list<string>, languageCode?: string, latlng?: record, metadata?: record, moreHours?: list, name?: string, openInfo?: record, phoneNumbers?: record, profile?: record, regularHours?: record, relationshipData?: record, serviceArea?: record, serviceItems?: list, specialHours?: record, storeCode?: string, storefrontAddress?: record, title?: string, websiteUri?: string}
   --page-size: int # The number of matches to return. The default value is 3, with a maximum of 10. Note that latency may increase if more are requested. There is no pagination. (format: int32)
   --query: string # Text query to search for. The search results from a query string will be less accurate than if providing an exact location, but can provide more inexact matches.
-]: any -> record<googleLocations: table<location: record, name: string, requestAdminRightsUri: string>> {
+]: any -> oneof<record<googleLocations: table<location: record, name: string, requestAdminRightsUri: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -421,7 +444,7 @@ export def "mybusinessbusinessinformation-locations-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -469,7 +492,7 @@ export def "mybusinessbusinessinformation-locations-get-attributes" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<attributes: table<name: string, repeatedEnumValue: record, uriValues: list, valueType: string, values: list>, name: string> {
+]: nothing -> oneof<record<attributes: table<name: string, repeatedEnumValue: record, uriValues: list, valueType: string, values: list>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -495,7 +518,6 @@ export def "mybusinessbusinessinformation-locations-get-attributes" [
 #
 # PATCH /v1/{name}
 # operationId: mybusinessbusinessinformation.locations.updateAttributes
-# --attributes item shape: {name?: string, repeatedEnumValue?: record, uriValues?: list, values?: list}
 export def "mybusinessbusinessinformation-locations-update-attributes" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -521,7 +543,7 @@ export def "mybusinessbusinessinformation-locations-update-attributes" [
   --attribute-mask: string # Required. Attribute name of attributes that you'd like to update. Represented by `attributes/{attribute}`. Updates: All attributes provided in the attributes field that you would like to update must be set in the `attribute_mask`. Attributes set in the above list but not in the `attribute_mask` will be ignored. Deletes: If you'd like to delete certain attributes, they must be specified in the `attribute_mask` with no matching entry in the attributes list. If you'd like to delete all attributes set on a location, you should look up all the applicable attributes for the location and then add them to the `attribute_mask` with an empty attributes field.
   --attributes: list # A collection of attributes that need to be updated. — item shape: {name?: string, repeatedEnumValue?: record, uriValues?: list, values?: list}
   --body-name: string # Required. Google identifier for this location in the form of `locations/{location_id}/attributes`.
-]: any -> record<attributes: table<name: string, repeatedEnumValue: record, uriValues: list, valueType: string, values: list>, name: string> {
+]: any -> oneof<record<attributes: table<name: string, repeatedEnumValue: record, uriValues: list, valueType: string, values: list>, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -573,7 +595,7 @@ export def "mybusinessbusinessinformation-locations-associate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --place-id: string # The association to establish. If not set, it indicates no match.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -625,7 +647,7 @@ export def "mybusinessbusinessinformation-locations-clear-location-association" 
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -677,7 +699,7 @@ export def "mybusinessbusinessinformation-locations-attributes-get-google-update
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --read-mask: string # Required. Read mask to specify what fields will be returned in the response.
-]: nothing -> record<attributes: table<name: string, repeatedEnumValue: record, uriValues: list, valueType: string, values: list>, name: string> {
+]: nothing -> oneof<record<attributes: table<name: string, repeatedEnumValue: record, uriValues: list, valueType: string, values: list>, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -730,7 +752,7 @@ export def "mybusinessbusinessinformation-accounts-locations-list" [
   --page-size: int # Optional. How many locations to fetch per page. Default value is 10 if not set. Minimum is 1, and maximum page size is 100.
   --page-token: string # Optional. If specified, it fetches the next `page` of locations. The page token is returned by previous calls to `ListLocations` when there were more locations than could fit in the requested page size.
   --read-mask: string # Required. Read mask to specify what fields will be returned in the response.
-]: nothing -> record<locations: table<adWordsLocationExtensions: record, categories: record, labels: list, languageCode: string, latlng: record, metadata: record, moreHours: list, name: string, openInfo: record, phoneNumbers: record, profile: record, regularHours: record, relationshipData: record, serviceArea: record, serviceItems: list, specialHours: record, storeCode: string, storefrontAddress: record, title: string, websiteUri: string>, nextPageToken: string, totalSize: int> {
+]: nothing -> oneof<record<locations: table<adWordsLocationExtensions: record, categories: record, labels: list, languageCode: string, latlng: record, metadata: record, moreHours: list, name: string, openInfo: record, phoneNumbers: record, profile: record, regularHours: record, relationshipData: record, serviceArea: record, serviceItems: list, specialHours: record, storeCode: string, storefrontAddress: record, title: string, websiteUri: string>, nextPageToken: string, totalSize: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -756,19 +778,6 @@ export def "mybusinessbusinessinformation-accounts-locations-list" [
 #
 # POST /v1/{parent}/locations
 # operationId: mybusinessbusinessinformation.accounts.locations.create
-# --adWordsLocationExtensions shape: {adPhone?: string}
-# --categories shape: {additionalCategories?: list, primaryCategory?: record}
-# --latlng shape: {latitude?: float, longitude?: float}
-# --moreHours item shape: {hoursTypeId?: string, periods?: list}
-# --openInfo shape: {openingDate?: record, status?: "OPEN_FOR_BUSINESS_UNSPECIFIED"|"OPEN"|"CLOSED_PERMANENTLY"|"CLOSED_TEMPORARILY"}
-# --phoneNumbers shape: {additionalPhones?: list<string>, primaryPhone?: string}
-# --profile shape: {description?: string}
-# --regularHours shape: {periods?: list}
-# --relationshipData shape: {childrenLocations?: list, parentChain?: string, parentLocation?: record}
-# --serviceArea shape: {businessType?: "BUSINESS_TYPE_UNSPECIFIED"|"CUSTOMER_LOCATION_ONLY"|"CUSTOMER_AND_BUSINESS_LOCATION", places?: record, regionCode?: string}
-# --serviceItems item shape: {freeFormServiceItem?: record, price?: record, structuredServiceItem?: record}
-# --specialHours shape: {specialHourPeriods?: list}
-# --storefrontAddress shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, organization?: string, postalCode?: string, recipients?: list<string>, regionCode?: string, revision?: int, sortingCode?: string, sublocality?: string}
 export def "mybusinessbusinessinformation-accounts-locations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -813,7 +822,7 @@ export def "mybusinessbusinessinformation-accounts-locations-create" [
   --storefront-address: record # Represents a postal address, e.g. for postal delivery or payments addresses. Given a postal address, a postal service can deliver items to a premise, P.O. Box or similar. It is not intended to model geographical locations (roads, towns, mountains). In typical usage an address would be created via user input or from importing existing data, depending on the type of process. Advice on address input / editing: - Use an internationalization-ready address widget such as https://github.com/google/libaddressinput) - Users should not be presented with UI elements for input or editing of fields outside countries where that field is used. For more guidance on how to use this schema, please see: https://support.google.com/business/answer/6397478 — shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, organization?: string, postalCode?: string, recipients?: list<string>, regionCode?: string, revision?: int, sortingCode?: string, sublocality?: string}
   --title: string # Required. Location name should reflect your business's real-world name, as used consistently on your storefront, website, and stationery, and as known to customers. Any additional information, when relevant, can be included in other fields of the resource (for example, `Address`, `Categories`). Don't add unnecessary information to your name (for example, prefer "Google" over "Google Inc. - Mountain View Corporate Headquarters"). Don't include marketing taglines, store codes, special characters, hours or closed/open status, phone numbers, website URLs, service/product information, location/address or directions, or containment information (for example, "Chase ATM in Duane Reade").
   --website-uri: string # Optional. A URL for this business. If possible, use a URL that represents this individual business location instead of a generic website/URL that represents all locations, or the brand.
-]: any -> record<adWordsLocationExtensions: record<adPhone: string>, categories: record<additionalCategories: list<record>, primaryCategory: record<displayName: string, moreHoursTypes: list, name: string, serviceTypes: list>>, labels: list<string>, languageCode: string, latlng: record<latitude: float, longitude: float>, metadata: record<canDelete: bool, canHaveBusinessCalls: bool, canHaveFoodMenus: bool, canModifyServiceList: bool, canOperateHealthData: bool, canOperateLocalPost: bool, canOperateLodgingData: bool, duplicateLocation: string, hasGoogleUpdated: bool, hasPendingEdits: bool, hasVoiceOfMerchant: bool, mapsUri: string, newReviewUri: string, placeId: string>, moreHours: table<hoursTypeId: string, periods: list>, name: string, openInfo: record<canReopen: bool, openingDate: record<day: int, month: int, year: int>, status: string>, phoneNumbers: record<additionalPhones: list<string>, primaryPhone: string>, profile: record<description: string>, regularHours: record<periods: list<record>>, relationshipData: record<childrenLocations: list<record>, parentChain: string, parentLocation: record<placeId: string, relationType: string>>, serviceArea: record<businessType: string, places: record<placeInfos: list>, regionCode: string>, serviceItems: table<freeFormServiceItem: record, price: record, structuredServiceItem: record>, specialHours: record<specialHourPeriods: list<record>>, storeCode: string, storefrontAddress: record<addressLines: list<string>, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list<string>, regionCode: string, revision: int, sortingCode: string, sublocality: string>, title: string, websiteUri: string> {
+]: any -> oneof<record<adWordsLocationExtensions: record<adPhone: string>, categories: record<additionalCategories: list<record>, primaryCategory: record<displayName: string, moreHoursTypes: list, name: string, serviceTypes: list>>, labels: list<string>, languageCode: string, latlng: record<latitude: float, longitude: float>, metadata: record<canDelete: bool, canHaveBusinessCalls: bool, canHaveFoodMenus: bool, canModifyServiceList: bool, canOperateHealthData: bool, canOperateLocalPost: bool, canOperateLodgingData: bool, duplicateLocation: string, hasGoogleUpdated: bool, hasPendingEdits: bool, hasVoiceOfMerchant: bool, mapsUri: string, newReviewUri: string, placeId: string>, moreHours: table<hoursTypeId: string, periods: list>, name: string, openInfo: record<canReopen: bool, openingDate: record<day: int, month: int, year: int>, status: string>, phoneNumbers: record<additionalPhones: list<string>, primaryPhone: string>, profile: record<description: string>, regularHours: record<periods: list<record>>, relationshipData: record<childrenLocations: list<record>, parentChain: string, parentLocation: record<placeId: string, relationType: string>>, serviceArea: record<businessType: string, places: record<placeInfos: list>, regionCode: string>, serviceItems: table<freeFormServiceItem: record, price: record, structuredServiceItem: record>, specialHours: record<specialHourPeriods: list<record>>, storeCode: string, storefrontAddress: record<addressLines: list<string>, administrativeArea: string, languageCode: string, locality: string, organization: string, postalCode: string, recipients: list<string>, regionCode: string, revision: int, sortingCode: string, sublocality: string>, title: string, websiteUri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

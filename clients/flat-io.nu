@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -139,9 +163,9 @@ def state-completer-2 [] { ["completed" "deleted" "draft"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-classes" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["list-classes" "create-class" "enroll-class" "get-class" "update-class" "activate-class" "unarchive-class" "archive-class" "list-assignments" "create-assignment" "unarchive-assignment" "archive-assignment" "copy-assignment" "get-submissions" "create-submission" "export-submissions-reviews-as-csv" "export-submissions-reviews-as-excel" "delete-submission" "get-submission" "edit-submission" "get-submission-comments" "post-submission-comment" "delete-submission-comment" "update-submission-comment" "get-submission-history" "list-class-student-submissions" "delete-class-user" "add-class-user" "list-collections" "create-collection" "delete-collection" "get-collection" "edit-collection" "list-collection-scores" "delete-score-from-collection" "add-score-to-collection" "untrash-collection" "get-group-details" "get-group-scores" "list-group-users" "get-authenticated-user" "list-organization-invitations" "create-organization-invitation" "remove-organization-invitation" "list-lti-credentials" "create-lti-credentials" "revoke-lti-credentials" "list-organization-users" "create-organization-user" "count-orga-users" "remove-organization-user" "update-organization-user" "create-score" "delete-score" "get-score" "edit-score" "get-score-collaborators" "add-score-collaborator" "remove-score-collaborator" "get-score-collaborator" "get-score-comments" "post-score-comment" "delete-score-comment" "update-score-comment" "mark-score-comment-unresolved" "mark-score-comment-resolved" "fork-score" "get-score-revisions" "create-score-revision" "get-score-revision" "get-score-revision-data" "get-score-submissions" "list-score-tracks" "add-score-track" "delete-score-track" "get-score-track" "update-score-track" "untrash-score" "get-user" "ger-user-likes" "get-user-scores" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -174,7 +198,7 @@ export def "list-classes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --state: string@state-completer # Filter the classes by state (default: active)
-]: nothing -> table<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string> {
+]: nothing -> oneof<table<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar")] | flatten | str join "&"
@@ -211,7 +235,7 @@ export def "create-class" [
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the new class
   --section: string # The section of the new class
-]: any -> record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string> {
+]: any -> oneof<record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -249,7 +273,7 @@ export def "enroll-class" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string> {
+]: nothing -> oneof<record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enrollment_code | is-empty) { error make --unspanned { msg: "path parameter 'enrollmentCode' must be non-empty" } }
@@ -285,7 +309,7 @@ export def "get-class" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string> {
+]: nothing -> oneof<record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($class | is-empty) { error make --unspanned { msg: "path parameter 'class' must be non-empty" } }
@@ -323,7 +347,7 @@ export def "update-class" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the class
   --section: string # The section of the class
-]: any -> record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string> {
+]: any -> oneof<record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -362,7 +386,7 @@ export def "activate-class" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string> {
+]: nothing -> oneof<record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($class | is-empty) { error make --unspanned { msg: "path parameter 'class' must be non-empty" } }
@@ -398,7 +422,7 @@ export def "unarchive-class" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string> {
+]: nothing -> oneof<record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($class | is-empty) { error make --unspanned { msg: "path parameter 'class' must be non-empty" } }
@@ -434,7 +458,7 @@ export def "archive-class" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string> {
+]: nothing -> oneof<record<assignmentsCount: float, canvas: record<domain: string, id: string>, clever: record<creationDate: string, id: string, modificationDate: string, subject: string, termEndDate: string, termName: string, termStartDate: string>, creationDate: string, description: string, enrollmentCode: string, googleClassroom: record<alternateLink: string, id: string>, googleDrive: record<teacherFolderAlternateLink: string, teacherFolderId: string>, id: string, issues: record<sync: list<record>>, lti: record<contextId: string, contextLabel: string, contextTitle: string>, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<id: string>, name: string, organization: string, owner: string, section: string, state: string, studentsGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, teachersGroup: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, theme: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($class | is-empty) { error make --unspanned { msg: "path parameter 'class' must be non-empty" } }
@@ -470,7 +494,7 @@ export def "list-assignments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attachments: list<record>, canvas: record<alternateLink: string, id: string>, classroom: string, cover: string, coverFile: string, creationDate: string, creator: string, description: string, dueDate: string, googleClassroom: record<alternateLink: string, id: string, state: string, topicId: string>, lti: record<id: string>, maxPoints: float, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<alternateLink: string, categories: list, id: string, state: string>, scheduledDate: string, state: string, submissions: list<record>, title: string, type: string> {
+]: nothing -> oneof<table<attachments: list<record>, canvas: record<alternateLink: string, id: string>, classroom: string, cover: string, coverFile: string, creationDate: string, creator: string, description: string, dueDate: string, googleClassroom: record<alternateLink: string, id: string, state: string, topicId: string>, lti: record<id: string>, maxPoints: float, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<alternateLink: string, categories: list, id: string, state: string>, scheduledDate: string, state: string, submissions: list<record>, title: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($class | is-empty) { error make --unspanned { msg: "path parameter 'class' must be non-empty" } }
@@ -495,9 +519,6 @@ export def "list-assignments" [
 #
 # POST /classes/{class}/assignments
 # operationId: createAssignment
-# --attachments item shape: {googleDriveFileId?: string, lockScoreTemplate?: bool, score?: string, sharingMode?: "read"|"write"|"copy"|"performance", type?: "flat"|"link"|"googleDrive"|"worksheet", url?: string, worksheet?: string}
-# --googleClassroom shape: {topicId?: string}
-# --microsoftGraph shape: {categories?: list<string>}
 export def "create-assignment" [
   class: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -525,7 +546,7 @@ export def "create-assignment" [
   --title: string # Title of the assignment
   --toolset: string # The id of the associated toolset (nullable)
   --type: string@type-completer # Type of the assignment
-]: any -> record<attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, canvas: record<alternateLink: string, id: string>, classroom: string, cover: string, coverFile: string, creationDate: string, creator: string, description: string, dueDate: string, googleClassroom: record<alternateLink: string, id: string, state: string, topicId: string>, lti: record<id: string>, maxPoints: float, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<alternateLink: string, categories: list<string>, id: string, state: string>, scheduledDate: string, state: string, submissions: table<assignment: string, attachments: list, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record, grade: float, id: string, maxPoints: float, microsoftGraph: record, returnCreator: string, returnDate: string, state: string, submissionDate: string>, title: string, type: string> {
+]: any -> oneof<record<attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, canvas: record<alternateLink: string, id: string>, classroom: string, cover: string, coverFile: string, creationDate: string, creator: string, description: string, dueDate: string, googleClassroom: record<alternateLink: string, id: string, state: string, topicId: string>, lti: record<id: string>, maxPoints: float, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<alternateLink: string, categories: list<string>, id: string, state: string>, scheduledDate: string, state: string, submissions: table<assignment: string, attachments: list, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record, grade: float, id: string, maxPoints: float, microsoftGraph: record, returnCreator: string, returnDate: string, state: string, submissionDate: string>, title: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -565,7 +586,7 @@ export def "unarchive-assignment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, canvas: record<alternateLink: string, id: string>, classroom: string, cover: string, coverFile: string, creationDate: string, creator: string, description: string, dueDate: string, googleClassroom: record<alternateLink: string, id: string, state: string, topicId: string>, lti: record<id: string>, maxPoints: float, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<alternateLink: string, categories: list<string>, id: string, state: string>, scheduledDate: string, state: string, submissions: table<assignment: string, attachments: list, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record, grade: float, id: string, maxPoints: float, microsoftGraph: record, returnCreator: string, returnDate: string, state: string, submissionDate: string>, title: string, type: string> {
+]: nothing -> oneof<record<attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, canvas: record<alternateLink: string, id: string>, classroom: string, cover: string, coverFile: string, creationDate: string, creator: string, description: string, dueDate: string, googleClassroom: record<alternateLink: string, id: string, state: string, topicId: string>, lti: record<id: string>, maxPoints: float, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<alternateLink: string, categories: list<string>, id: string, state: string>, scheduledDate: string, state: string, submissions: table<assignment: string, attachments: list, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record, grade: float, id: string, maxPoints: float, microsoftGraph: record, returnCreator: string, returnDate: string, state: string, submissionDate: string>, title: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($class | is-empty) { error make --unspanned { msg: "path parameter 'class' must be non-empty" } }
@@ -603,7 +624,7 @@ export def "archive-assignment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, canvas: record<alternateLink: string, id: string>, classroom: string, cover: string, coverFile: string, creationDate: string, creator: string, description: string, dueDate: string, googleClassroom: record<alternateLink: string, id: string, state: string, topicId: string>, lti: record<id: string>, maxPoints: float, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<alternateLink: string, categories: list<string>, id: string, state: string>, scheduledDate: string, state: string, submissions: table<assignment: string, attachments: list, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record, grade: float, id: string, maxPoints: float, microsoftGraph: record, returnCreator: string, returnDate: string, state: string, submissionDate: string>, title: string, type: string> {
+]: nothing -> oneof<record<attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, canvas: record<alternateLink: string, id: string>, classroom: string, cover: string, coverFile: string, creationDate: string, creator: string, description: string, dueDate: string, googleClassroom: record<alternateLink: string, id: string, state: string, topicId: string>, lti: record<id: string>, maxPoints: float, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<alternateLink: string, categories: list<string>, id: string, state: string>, scheduledDate: string, state: string, submissions: table<assignment: string, attachments: list, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record, grade: float, id: string, maxPoints: float, microsoftGraph: record, returnCreator: string, returnDate: string, state: string, submissionDate: string>, title: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($class | is-empty) { error make --unspanned { msg: "path parameter 'class' must be non-empty" } }
@@ -644,7 +665,7 @@ export def "copy-assignment" [
   --body-assignment: string # An optional destination assignment where the original assignement will be copied. Must be a draft.
   --classroom: string # The destination classroom where the assignment will be copied
   --scheduled-date: string # The publication (scheduled) date of the assignment. If this one is specified, the assignment will only be listed to the teachers of the class. Alternatively the existing `scheduledDate` from the copied assignment will be used. (format: date-time)
-]: any -> record<attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, canvas: record<alternateLink: string, id: string>, classroom: string, cover: string, coverFile: string, creationDate: string, creator: string, description: string, dueDate: string, googleClassroom: record<alternateLink: string, id: string, state: string, topicId: string>, lti: record<id: string>, maxPoints: float, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<alternateLink: string, categories: list<string>, id: string, state: string>, scheduledDate: string, state: string, submissions: table<assignment: string, attachments: list, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record, grade: float, id: string, maxPoints: float, microsoftGraph: record, returnCreator: string, returnDate: string, state: string, submissionDate: string>, title: string, type: string> {
+]: any -> oneof<record<attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, canvas: record<alternateLink: string, id: string>, classroom: string, cover: string, coverFile: string, creationDate: string, creator: string, description: string, dueDate: string, googleClassroom: record<alternateLink: string, id: string, state: string, topicId: string>, lti: record<id: string>, maxPoints: float, mfc: record<alternateLink: string, id: string>, microsoftGraph: record<alternateLink: string, categories: list<string>, id: string, state: string>, scheduledDate: string, state: string, submissions: table<assignment: string, attachments: list, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record, grade: float, id: string, maxPoints: float, microsoftGraph: record, returnCreator: string, returnDate: string, state: string, submissionDate: string>, title: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -685,7 +706,7 @@ export def "get-submissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<assignment: string, attachments: list<record>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string> {
+]: nothing -> oneof<table<assignment: string, attachments: list<record>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($class | is-empty) { error make --unspanned { msg: "path parameter 'class' must be non-empty" } }
@@ -711,8 +732,6 @@ export def "get-submissions" [
 #
 # PUT /classes/{class}/assignments/{assignment}/submissions
 # operationId: createSubmission
-# --attachments item shape: {googleDriveFileId?: string, lockScoreTemplate?: bool, score?: string, sharingMode?: "read"|"write"|"copy"|"performance", type?: "flat"|"link"|"googleDrive"|"worksheet", url?: string, worksheet?: string}
-# --comments shape: {total?: float, unread?: float}
 export def "create-submission" [
   class: string
   assignment: string
@@ -731,7 +750,7 @@ export def "create-submission" [
   --grade: float # Optional grade. If unset, no grade was set. (nullable)
   --return: oneof<nothing, bool> # If `true`, the submission will be marked as done
   --submit: oneof<nothing, bool> # If `true`, the submission will be marked as done
-]: any -> record<assignment: string, attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string> {
+]: any -> oneof<record<assignment: string, attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -889,7 +908,7 @@ export def "get-submission" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assignment: string, attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string> {
+]: nothing -> oneof<record<assignment: string, attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($class | is-empty) { error make --unspanned { msg: "path parameter 'class' must be non-empty" } }
@@ -916,8 +935,6 @@ export def "get-submission" [
 #
 # PUT /classes/{class}/assignments/{assignment}/submissions/{submission}
 # operationId: editSubmission
-# --attachments item shape: {googleDriveFileId?: string, lockScoreTemplate?: bool, score?: string, sharingMode?: "read"|"write"|"copy"|"performance", type?: "flat"|"link"|"googleDrive"|"worksheet", url?: string, worksheet?: string}
-# --comments shape: {total?: float, unread?: float}
 export def "edit-submission" [
   class: string
   assignment: string
@@ -937,7 +954,7 @@ export def "edit-submission" [
   --grade: float # Optional grade. If unset, no grade was set. (nullable)
   --return: oneof<nothing, bool> # If `true`, the submission will be marked as done
   --submit: oneof<nothing, bool> # If `true`, the submission will be marked as done
-]: any -> record<assignment: string, attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string> {
+]: any -> oneof<record<assignment: string, attachments: table<authorName: string, authorUrl: string, description: string, googleDriveFileId: string, html: string, htmlHeight: string, htmlWidth: string, iconUrl: string, lockScoreTemplate: bool, mimeType: string, revision: string, score: string, sharingMode: string, thumbnailHeight: int, thumbnailUrl: string, thumbnailWidth: int, title: string, track: string, type: string, url: string, worksheet: string>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -980,7 +997,7 @@ export def "get-submission-comments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<comment: string, date: string, id: string, modificationDate: string, submission: string, unread: bool, user: string> {
+]: nothing -> oneof<table<comment: string, date: string, id: string, modificationDate: string, submission: string, unread: bool, user: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($class | is-empty) { error make --unspanned { msg: "path parameter 'class' must be non-empty" } }
@@ -1021,7 +1038,7 @@ export def "post-submission-comment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   comment: string # The comment text
-]: any -> record<comment: string, date: string, id: string, modificationDate: string, submission: string, unread: bool, user: string> {
+]: any -> oneof<record<comment: string, date: string, id: string, modificationDate: string, submission: string, unread: bool, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1108,7 +1125,7 @@ export def "update-submission-comment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body-comment: string # The comment text
-]: any -> record<comment: string, date: string, id: string, modificationDate: string, submission: string, unread: bool, user: string> {
+]: any -> oneof<record<comment: string, date: string, id: string, modificationDate: string, submission: string, unread: bool, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1153,7 +1170,7 @@ export def "get-submission-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<attachment: record<revision: string, score: string>, date: string, draftGrade: float, grade: float, maxPoints: float, state: string, users: list<string>> {
+]: nothing -> oneof<table<attachment: record<revision: string, score: string>, date: string, draftGrade: float, grade: float, maxPoints: float, state: string, users: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($class | is-empty) { error make --unspanned { msg: "path parameter 'class' must be non-empty" } }
@@ -1192,7 +1209,7 @@ export def "list-class-student-submissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<assignment: string, attachments: list<record>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string> {
+]: nothing -> oneof<table<assignment: string, attachments: list<record>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($class | is-empty) { error make --unspanned { msg: "path parameter 'class' must be non-empty" } }
@@ -1310,7 +1327,7 @@ export def "list-collections" [
   --limit: int # This is the maximum number of objects that may be returned (default: 25)
   --next: string # An opaque string cursor to fetch the next page of data. The paginated API URLs are returned in the `Link` header when requesting the API. These URLs will contain a `next` and `previous` cursor based on the available data.
   --previous: string # An opaque string cursor to fetch the previous page of data. The paginated API URLs are returned in the `Link` header when requesting the API. These URLs will contain a `next` and `previous` cursor based on the available data.
-]: nothing -> table<app: string, capabilities: record<canAddScores: bool, canDelete: bool, canDeleteScores: bool, canEdit: bool, canShare: bool>, collaborators: list<record>, collections: list<string>, creationDate: string, htmlUrl: string, id: string, privacy: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, sharingKey: string, title: string, type: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>> {
+]: nothing -> oneof<table<app: string, capabilities: record<canAddScores: bool, canDelete: bool, canDeleteScores: bool, canEdit: bool, canShare: bool>, collaborators: list<record>, collections: list<string>, creationDate: string, htmlUrl: string, id: string, privacy: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, sharingKey: string, title: string, type: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "parent" $parent "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "next" $next "scalar") (serialize-qp "previous" $previous "scalar")] | flatten | str join "&"
@@ -1347,7 +1364,7 @@ export def "create-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   privacy: string@privacy-completer # The collection main privacy mode. - `private`: The collection is private and can be only accessed, modified and administred by specified collaborators users.
   title: string # The title of the collection
-]: any -> record<app: string, capabilities: record<canAddScores: bool, canDelete: bool, canDeleteScores: bool, canEdit: bool, canShare: bool>, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, creationDate: string, htmlUrl: string, id: string, privacy: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, sharingKey: string, title: string, type: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>> {
+]: any -> oneof<record<app: string, capabilities: record<canAddScores: bool, canDelete: bool, canDeleteScores: bool, canEdit: bool, canShare: bool>, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, creationDate: string, htmlUrl: string, id: string, privacy: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, sharingKey: string, title: string, type: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1422,7 +1439,7 @@ export def "get-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sharing-key: string # This sharing key must be specified to access to a score or collection with a `privacy` mode set to `privateLink` and the current user is not a collaborator of the document.
-]: nothing -> record<app: string, capabilities: record<canAddScores: bool, canDelete: bool, canDeleteScores: bool, canEdit: bool, canShare: bool>, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, creationDate: string, htmlUrl: string, id: string, privacy: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, sharingKey: string, title: string, type: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>> {
+]: nothing -> oneof<record<app: string, capabilities: record<canAddScores: bool, canDelete: bool, canDeleteScores: bool, canEdit: bool, canShare: bool>, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, creationDate: string, htmlUrl: string, id: string, privacy: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, sharingKey: string, title: string, type: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection | is-empty) { error make --unspanned { msg: "path parameter 'collection' must be non-empty" } }
@@ -1461,7 +1478,7 @@ export def "edit-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --privacy: string@privacy-completer # The collection main privacy mode. - `private`: The collection is private and can be only accessed, modified and administred by specified collaborators users.
   --title: string # The title of the collection
-]: any -> record<app: string, capabilities: record<canAddScores: bool, canDelete: bool, canDeleteScores: bool, canEdit: bool, canShare: bool>, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, creationDate: string, htmlUrl: string, id: string, privacy: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, sharingKey: string, title: string, type: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>> {
+]: any -> oneof<record<app: string, capabilities: record<canAddScores: bool, canDelete: bool, canDeleteScores: bool, canEdit: bool, canShare: bool>, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, creationDate: string, htmlUrl: string, id: string, privacy: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, sharingKey: string, title: string, type: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1506,7 +1523,7 @@ export def "list-collection-scores" [
   --limit: int # This is the maximum number of objects that may be returned (default: 25)
   --next: string # An opaque string cursor to fetch the next page of data. The paginated API URLs are returned in the `Link` header when requesting the API. These URLs will contain a `next` and `previous` cursor based on the available data.
   --previous: string # An opaque string cursor to fetch the previous page of data. The paginated API URLs are returned in the `Link` header when requesting the API. These URLs will contain a `next` and `previous` cursor based on the available data.
-]: nothing -> table<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: list<record>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>> {
+]: nothing -> oneof<table<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: list<record>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection | is-empty) { error make --unspanned { msg: "path parameter 'collection' must be non-empty" } }
@@ -1585,7 +1602,7 @@ export def "add-score-to-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sharing-key: string # This sharing key must be specified to access to a score or collection with a `privacy` mode set to `privateLink` and the current user is not a collaborator of the document.
-]: nothing -> record<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>> {
+]: nothing -> oneof<record<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection | is-empty) { error make --unspanned { msg: "path parameter 'collection' must be non-empty" } }
@@ -1659,7 +1676,7 @@ export def "get-group-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float> {
+]: nothing -> oneof<record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
@@ -1696,7 +1713,7 @@ export def "get-group-scores" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --parent: string # Filter the score forked from the score id `parent`
-]: nothing -> table<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: list<record>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>> {
+]: nothing -> oneof<table<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: list<record>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
@@ -1734,7 +1751,7 @@ export def "list-group-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --source: string@source-completer # Filter the users by their source
-]: nothing -> table<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, bio: string, coverPicture: string, followersCount: int, followingCount: int, instruments: list<string>, likedScoresCount: int, ownedPublicScoresCount: int, profileTheme: string, registrationDate: string> {
+]: nothing -> oneof<table<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, bio: string, coverPicture: string, followersCount: int, followingCount: int, instruments: list<string>, likedScoresCount: int, ownedPublicScoresCount: int, profileTheme: string, registrationDate: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
@@ -1771,7 +1788,7 @@ export def "get-authenticated-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --only-id: oneof<nothing, bool> # Only return the user id (default: false)
-]: nothing -> record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, bio: string, coverPicture: string, followersCount: int, followingCount: int, instruments: list<string>, likedScoresCount: int, ownedPublicScoresCount: int, profileTheme: string, registrationDate: string, coverPictureFile: string, locale: string, pictureFile: string, privateProfile: bool> {
+]: nothing -> oneof<record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, bio: string, coverPicture: string, followersCount: int, followingCount: int, instruments: list<string>, likedScoresCount: int, ownedPublicScoresCount: int, profileTheme: string, registrationDate: string, coverPictureFile: string, locale: string, pictureFile: string, privateProfile: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "onlyId" $only_id "scalar")] | flatten | str join "&"
@@ -1810,7 +1827,7 @@ export def "list-organization-invitations" [
   --limit: int # This is the maximum number of objects that may be returned (default: 50)
   --next: string # An opaque string cursor to fetch the next page of data. The paginated API URLs are returned in the `Link` header when requesting the API. These URLs will contain a `next` and `previous` cursor based on the available data.
   --previous: string # An opaque string cursor to fetch the previous page of data. The paginated API URLs are returned in the `Link` header when requesting the API. These URLs will contain a `next` and `previous` cursor based on the available data.
-]: nothing -> table<customCode: string, email: string, id: string, invitedBy: string, organization: string, organizationRole: string, usedBy: string> {
+]: nothing -> oneof<table<customCode: string, email: string, id: string, invitedBy: string, organization: string, organizationRole: string, usedBy: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "role" $role "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "next" $next "scalar") (serialize-qp "previous" $previous "scalar")] | flatten | str join "&"
@@ -1847,7 +1864,7 @@ export def "create-organization-invitation" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # The email address you want to send the invitation to
   --organization-role: string@organization-role-completer # User's Organization Role (for Edu users only)
-]: any -> record<customCode: string, email: string, id: string, invitedBy: string, organization: string, organizationRole: string, usedBy: string> {
+]: any -> oneof<record<customCode: string, email: string, id: string, invitedBy: string, organization: string, organizationRole: string, usedBy: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1920,7 +1937,7 @@ export def "list-lti-credentials" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<consumerKey: string, consumerSecret: string, creationDate: string, creator: string, id: string, lastUsage: string, lms: string, name: string, organization: string> {
+]: nothing -> oneof<table<consumerKey: string, consumerSecret: string, creationDate: string, creator: string, id: string, lastUsage: string, lms: string, name: string, organization: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/organizations/lti/credentials" $auth.query)
@@ -1956,7 +1973,7 @@ export def "create-lti-credentials" [
   --dry-run(-n) # Return the request that would be sent without executing it
   lms: string@lms-completer # LMS name
   name: string # Name of the couple of credentials
-]: any -> record<consumerKey: string, consumerSecret: string, creationDate: string, creator: string, id: string, lastUsage: string, lms: string, name: string, organization: string> {
+]: any -> oneof<record<consumerKey: string, consumerSecret: string, creationDate: string, creator: string, id: string, lastUsage: string, lms: string, name: string, organization: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2040,7 +2057,7 @@ export def "list-organization-users" [
   --license-expiration-date: list<string> # Filter users by license expiration date or `active` / `notActive`
   --only-ids: oneof<nothing, bool> # Return only user ids
   --limit: int # This is the maximum number of objects that may be returned (default: 25)
-]: nothing -> table<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, email: string, lastActivityDate: string, license: record<active: bool, expirationDate: string, id: string, mode: string, source: string>> {
+]: nothing -> oneof<table<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, email: string, lastActivityDate: string, license: record<active: bool, expirationDate: string, id: string, mode: string, source: string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort" $sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "next" $next "scalar") (serialize-qp "previous" $previous "scalar") (serialize-qp "role" $role "multi") (serialize-qp "q" $q "scalar") (serialize-qp "group" $group "multi") (serialize-qp "noActiveLicense" $no_active_license "scalar") (serialize-qp "licenseExpirationDate" $license_expiration_date "multi") (serialize-qp "onlyIds" $only_ids "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -2081,7 +2098,7 @@ export def "create-organization-user" [
   --locale: string@locale-completer # The user language (default: en)
   password: string # Password of the new account (format: password)
   username: string # Username of the new account
-]: any -> record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, email: string, lastActivityDate: string, license: record<active: bool, expirationDate: string, id: string, mode: string, source: string>> {
+]: any -> oneof<record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, email: string, lastActivityDate: string, license: record<active: bool, expirationDate: string, id: string, mode: string, source: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2202,7 +2219,7 @@ export def "update-organization-user" [
   --organization-role: string@organization-role-completer # User's Organization Role (for Edu users only)
   --password: string # Password of the account (format: password)
   --username: string # Username of the account
-]: any -> record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, email: string, lastActivityDate: string, license: record<active: bool, expirationDate: string, id: string, mode: string, source: string>> {
+]: any -> oneof<record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, email: string, lastActivityDate: string, license: record<active: bool, expirationDate: string, id: string, mode: string, source: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2230,7 +2247,6 @@ export def "update-organization-user" [
 #
 # POST /scores
 # operationId: createScore
-# --source shape: {googleDrive?: string}
 export def "create-score" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2249,7 +2265,7 @@ export def "create-score" [
   privacy: string@privacy-completer-1 # The score main privacy mode. - `public`: The score is public on the Internet. This one can be accessible at the url `https://flat.io/score/{score}` and can be modified and administred by specified collaborators users. - `private`: The score is private and can be only accessed, modified and administred by specified collaborators users. - `privateLink`: The score is private but can be accessed using a private link `htmlUrl` or the private key in the property `sharingKey`. - `organizationPublic`: _Available only with [Flat for Education](https://flat.io/edu)._ The score is public in the organization: users of the same organization can access to this one. The score can be modified and administred by specified collaborators users. The score can also be individually shared to a set of users or groups using the different collaborators API methods. When a file is synchronized from an external source (e.g. Google Drive) and the sharing options are changed on the source, Flat will chose the best privacy mode for the file. When using a [Flat for Education](https://flat.io/edu) account, some of the modes may not be available if disabled by an administrator of the organization (e.g. by default the `public` mode is not available).
   --source: record # e.g. {googleDrive: 0B-0000000000000001} — shape: {googleDrive?: string}
   --title: string # The title of the new score. If the title is too long, the API may trim this one. If this title is not specified, the API will try to (in this order): - Use the title contained in the file (e.g. [`movement-title`](https://usermanuals.musicxml.com/MusicXML/Content/EL-MusicXML-movement-title.htm) or [`credit-words`](https://usermanuals.musicxml.com/MusicXML/Content/EL-MusicXML-credit-words.htm) for [MusicXML](http://www.musicxml.com/) files). - Use the name of the file for files from a specified `source` (e.g. Google Drive) or the one in the `filename` property - Set a default title (e.g. "New Music Score")
-]: any -> record<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>> {
+]: any -> oneof<record<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2326,7 +2342,7 @@ export def "get-score" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sharing-key: string # This sharing key must be specified to access to a score or collection with a `privacy` mode set to `privateLink` and the current user is not a collaborator of the document.
-]: nothing -> record<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>> {
+]: nothing -> oneof<record<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($score | is-empty) { error make --unspanned { msg: "path parameter 'score' must be non-empty" } }
@@ -2375,7 +2391,7 @@ export def "edit-score" [
   --subtitle: string # The subtitle of the score
   --tags: list<string> # Tags describing the score
   --title: string # The title of the score
-]: any -> record<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>> {
+]: any -> oneof<record<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2415,7 +2431,7 @@ export def "get-score-collaborators" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sharing-key: string # This sharing key must be specified to access to a score or collection with a `privacy` mode set to `privateLink` and the current user is not a collaborator of the document.
-]: nothing -> table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, id: string, invited: bool, score: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, bio: string, coverPicture: string, followersCount: int, followingCount: int, instruments: list, likedScoresCount: int, ownedPublicScoresCount: int, profileTheme: string, registrationDate: string>, userEmail: string> {
+]: nothing -> oneof<table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, id: string, invited: bool, score: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, bio: string, coverPicture: string, followersCount: int, followingCount: int, instruments: list, likedScoresCount: int, ownedPublicScoresCount: int, profileTheme: string, registrationDate: string>, userEmail: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($score | is-empty) { error make --unspanned { msg: "path parameter 'score' must be non-empty" } }
@@ -2459,7 +2475,7 @@ export def "add-score-collaborator" [
   --user: string # The unique identifier of a Flat user
   --user-email: string # Fill this field to invite an individual user by email.
   --user-token: string # Token received in an invitation to join the score.
-]: any -> record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, id: string, invited: bool, score: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, bio: string, coverPicture: string, followersCount: int, followingCount: int, instruments: list<string>, likedScoresCount: int, ownedPublicScoresCount: int, profileTheme: string, registrationDate: string>, userEmail: string> {
+]: any -> oneof<record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, id: string, invited: bool, score: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, bio: string, coverPicture: string, followersCount: int, followingCount: int, instruments: list<string>, likedScoresCount: int, ownedPublicScoresCount: int, profileTheme: string, registrationDate: string>, userEmail: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2538,7 +2554,7 @@ export def "get-score-collaborator" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sharing-key: string # This sharing key must be specified to access to a score or collection with a `privacy` mode set to `privateLink` and the current user is not a collaborator of the document.
-]: nothing -> record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, id: string, invited: bool, score: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, bio: string, coverPicture: string, followersCount: int, followingCount: int, instruments: list<string>, likedScoresCount: int, ownedPublicScoresCount: int, profileTheme: string, registrationDate: string>, userEmail: string> {
+]: nothing -> oneof<record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record<creationDate: string, id: string, name: string, organization: string, readOnly: bool, type: string, usersCount: float>, id: string, invited: bool, score: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, bio: string, coverPicture: string, followersCount: int, followingCount: int, instruments: list<string>, likedScoresCount: int, ownedPublicScoresCount: int, profileTheme: string, registrationDate: string>, userEmail: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($score | is-empty) { error make --unspanned { msg: "path parameter 'score' must be non-empty" } }
@@ -2580,7 +2596,7 @@ export def "get-score-comments" [
   --type: string@type-completer-1 # Filter the comments by type
   --sort: string@sort-completer-2 # Sort
   --direction: string@direction-completer # Sort direction
-]: nothing -> table<comment: string, context: record<measureUuids: list, partUuid: string, staffIdx: float, staffUuid: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float>, date: string, id: string, mentions: list<string>, modificationDate: string, rawComment: string, replyTo: string, resolved: bool, resolvedBy: string, revision: string, score: string, spam: bool, type: string, user: string> {
+]: nothing -> oneof<table<comment: string, context: record<measureUuids: list, partUuid: string, staffIdx: float, staffUuid: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float>, date: string, id: string, mentions: list<string>, modificationDate: string, rawComment: string, replyTo: string, resolved: bool, resolvedBy: string, revision: string, score: string, spam: bool, type: string, user: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($score | is-empty) { error make --unspanned { msg: "path parameter 'score' must be non-empty" } }
@@ -2606,7 +2622,6 @@ export def "get-score-comments" [
 #
 # POST /scores/{score}/comments
 # operationId: postScoreComment
-# --context shape: {measureUuids: list<string>, partUuid: string, staffIdx?: float, staffUuid?: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float}
 export def "post-score-comment" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2625,7 +2640,7 @@ export def "post-score-comment" [
   --raw-comment: string # A raw version of the comment, that can be displayed without the mentions. If you use mentions, this property must be set.
   --reply-to: string # When the comment is a reply to another comment, the unique identifier of the parent comment
   --revision: string # The unique indentifier of the revision of the score where the comment was added. If this property is unspecified or contains "last", the API will automatically take the last revision created.
-]: any -> record<comment: string, context: record<measureUuids: list<string>, partUuid: string, staffIdx: float, staffUuid: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float>, date: string, id: string, mentions: list<string>, modificationDate: string, rawComment: string, replyTo: string, resolved: bool, resolvedBy: string, revision: string, score: string, spam: bool, type: string, user: string> {
+]: any -> oneof<record<comment: string, context: record<measureUuids: list<string>, partUuid: string, staffIdx: float, staffUuid: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float>, date: string, id: string, mentions: list<string>, modificationDate: string, rawComment: string, replyTo: string, resolved: bool, resolvedBy: string, revision: string, score: string, spam: bool, type: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2694,7 +2709,6 @@ export def "delete-score-comment" [
 #
 # PUT /scores/{score}/comments/{comment}
 # operationId: updateScoreComment
-# --context shape: {measureUuids: list<string>, partUuid: string, staffIdx?: float, staffUuid?: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float}
 export def "update-score-comment" [
   score: string
   comment: string
@@ -2712,7 +2726,7 @@ export def "update-score-comment" [
   --context: record # The context of the comment (for inline/contextualized comments). A context will include all the information related to the location of the comment (i.e. score parts, range of measure, time position). (e.g. {measureUuids: [e6a6a60b-8710-f819-9a49-e907b19c6f1f, da83d93c-e3a6-3c73-1bbe-15e5131d6437, 056ec5eb-9213-df56-6ae8-d9b99673dc48], partUuid: 91982db7-2e6d-285e-7a19-76b4bd005b8b, staffUuid: 9395d8f3-f42b-47b6-8c5d-6ba704961ec0, startDpq: 1, startTimePos: 2, stopDpq: 1, stopTimePos: 3}) — shape: {measureUuids: list<string>, partUuid: string, staffIdx?: float, staffUuid?: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float}
   --raw-comment: string # A raw version of the comment, that can be displayed without the mentions. If you use mentions, this property must be set.
   --revision: string # The unique indentifier of the revision of the score where the comment was added. If this property is unspecified or contains "last", the API will automatically take the last revision created.
-]: any -> record<comment: string, context: record<measureUuids: list<string>, partUuid: string, staffIdx: float, staffUuid: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float>, date: string, id: string, mentions: list<string>, modificationDate: string, rawComment: string, replyTo: string, resolved: bool, resolvedBy: string, revision: string, score: string, spam: bool, type: string, user: string> {
+]: any -> oneof<record<comment: string, context: record<measureUuids: list<string>, partUuid: string, staffIdx: float, staffUuid: string, startDpq: float, startTimePos: float, stopDpq: float, stopTimePos: float>, date: string, id: string, mentions: list<string>, modificationDate: string, rawComment: string, replyTo: string, resolved: bool, resolvedBy: string, revision: string, score: string, spam: bool, type: string, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2835,7 +2849,7 @@ export def "fork-score" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --sharing-key: string # This sharing key must be specified to access to a score or collection with a `privacy` mode set to `privateLink` and the current user is not a collaborator of the document.
   --collection: string # Unique identifier of a collection where the score will be copied. If no collection identifier is provided, the score will be stored in the `root` directory. (default: root)
-]: any -> record<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>> {
+]: any -> oneof<record<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: table<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool, collection: string, group: record, id: string, invited: bool, score: string, user: record, userEmail: string>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2876,7 +2890,7 @@ export def "get-score-revisions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sharing-key: string # This sharing key must be specified to access to a score or collection with a `privacy` mode set to `privateLink` and the current user is not a collaborator of the document.
-]: nothing -> table<autosave: bool, collaborators: list<string>, creationDate: string, description: string, event: string, id: string, statistics: record<additions: float, deletions: float>, user: string> {
+]: nothing -> oneof<table<autosave: bool, collaborators: list<string>, creationDate: string, description: string, event: string, id: string, statistics: record<additions: float, deletions: float>, user: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($score | is-empty) { error make --unspanned { msg: "path parameter 'score' must be non-empty" } }
@@ -2917,7 +2931,7 @@ export def "create-score-revision" [
   data: string # The data of the score file. It must be a MusicXML 3 file (`vnd.recordare.musicxml` or `vnd.recordare.musicxml+xml`), a MIDI file (`audio/midi`) or a Flat.json (aka Adagio.json) file. Binary payloads (`vnd.recordare.musicxml` and `audio/midi`) can be encoded in Base64, in this case the `dataEncoding` property must match the encoding used for the API request. (e.g. <score-partwise version="3.0"></score-partwise>)
   --data-encoding: string@data-encoding-completer # The optional encoding of the score data. This property must match the encoding used for the `data` property.
   --description: string # A description associated to the revision
-]: any -> record<autosave: bool, collaborators: list<string>, creationDate: string, description: string, event: string, id: string, statistics: record<additions: float, deletions: float>, user: string> {
+]: any -> oneof<record<autosave: bool, collaborators: list<string>, creationDate: string, description: string, event: string, id: string, statistics: record<additions: float, deletions: float>, user: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2958,7 +2972,7 @@ export def "get-score-revision" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sharing-key: string # This sharing key must be specified to access to a score or collection with a `privacy` mode set to `privateLink` and the current user is not a collaborator of the document.
-]: nothing -> record<autosave: bool, collaborators: list<string>, creationDate: string, description: string, event: string, id: string, statistics: record<additions: float, deletions: float>, user: string> {
+]: nothing -> oneof<record<autosave: bool, collaborators: list<string>, creationDate: string, description: string, event: string, id: string, statistics: record<additions: float, deletions: float>, user: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($score | is-empty) { error make --unspanned { msg: "path parameter 'score' must be non-empty" } }
@@ -3042,7 +3056,7 @@ export def "get-score-submissions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<assignment: string, attachments: list<record>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string> {
+]: nothing -> oneof<table<assignment: string, attachments: list<record>, classroom: string, creationDate: string, creator: string, draftGrade: float, googleClassroom: record<alternateLink: string, id: string, state: string>, grade: float, id: string, maxPoints: float, microsoftGraph: record<alternateLink: string, id: string, state: string>, returnCreator: string, returnDate: string, state: string, submissionDate: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($score | is-empty) { error make --unspanned { msg: "path parameter 'score' must be non-empty" } }
@@ -3081,7 +3095,7 @@ export def "list-score-tracks" [
   --sharing-key: string # This sharing key must be specified to access to a score or collection with a `privacy` mode set to `privateLink` and the current user is not a collaborator of the document.
   --assignment: string # An assignment id with which all the tracks returned will be related to
   --list-auto-track: oneof<nothing, bool> # If true, and if available, return last automatically synchronized Flat's mp3 export as an additional track
-]: nothing -> table<creationDate: string, creator: string, default: bool, id: string, mediaId: string, modificationDate: string, score: string, state: string, synchronizationPoints: list<record>, title: string, type: string, url: string> {
+]: nothing -> oneof<table<creationDate: string, creator: string, default: bool, id: string, mediaId: string, modificationDate: string, score: string, state: string, synchronizationPoints: list<record>, title: string, type: string, url: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($score | is-empty) { error make --unspanned { msg: "path parameter 'score' must be non-empty" } }
@@ -3107,7 +3121,6 @@ export def "list-score-tracks" [
 #
 # POST /scores/{score}/tracks
 # operationId: addScoreTrack
-# --synchronizationPoints item shape: {measureUuid?: string, time: float, type: "measure"|"end"}
 export def "add-score-track" [
   score: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3124,7 +3137,7 @@ export def "add-score-track" [
   --synchronization-points: list # item shape: {measureUuid?: string, time: float, type: "measure"|"end"}
   --title: string # Title of the track
   --url: string # The URL of the track
-]: any -> record<creationDate: string, creator: string, default: bool, id: string, mediaId: string, modificationDate: string, score: string, state: string, synchronizationPoints: table<measureUuid: string, time: float, type: string>, title: string, type: string, url: string> {
+]: any -> oneof<record<creationDate: string, creator: string, default: bool, id: string, mediaId: string, modificationDate: string, score: string, state: string, synchronizationPoints: table<measureUuid: string, time: float, type: string>, title: string, type: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3203,7 +3216,7 @@ export def "get-score-track" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --sharing-key: string # This sharing key must be specified to access to a score or collection with a `privacy` mode set to `privateLink` and the current user is not a collaborator of the document.
-]: nothing -> record<creationDate: string, creator: string, default: bool, id: string, mediaId: string, modificationDate: string, score: string, state: string, synchronizationPoints: table<measureUuid: string, time: float, type: string>, title: string, type: string, url: string> {
+]: nothing -> oneof<record<creationDate: string, creator: string, default: bool, id: string, mediaId: string, modificationDate: string, score: string, state: string, synchronizationPoints: table<measureUuid: string, time: float, type: string>, title: string, type: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($score | is-empty) { error make --unspanned { msg: "path parameter 'score' must be non-empty" } }
@@ -3230,7 +3243,6 @@ export def "get-score-track" [
 #
 # PUT /scores/{score}/tracks/{track}
 # operationId: updateScoreTrack
-# --synchronizationPoints item shape: {measureUuid?: string, time: float, type: "measure"|"end"}
 export def "update-score-track" [
   score: string
   track: string
@@ -3247,7 +3259,7 @@ export def "update-score-track" [
   --state: string@state-completer-2 # State of the track (default: draft)
   --synchronization-points: list # item shape: {measureUuid?: string, time: float, type: "measure"|"end"}
   --title: string # Title of the track
-]: any -> record<creationDate: string, creator: string, default: bool, id: string, mediaId: string, modificationDate: string, score: string, state: string, synchronizationPoints: table<measureUuid: string, time: float, type: string>, title: string, type: string, url: string> {
+]: any -> oneof<record<creationDate: string, creator: string, default: bool, id: string, mediaId: string, modificationDate: string, score: string, state: string, synchronizationPoints: table<measureUuid: string, time: float, type: string>, title: string, type: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3323,7 +3335,7 @@ export def "get-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, bio: string, coverPicture: string, followersCount: int, followingCount: int, instruments: list<string>, likedScoresCount: int, ownedPublicScoresCount: int, profileTheme: string, registrationDate: string> {
+]: nothing -> oneof<record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string, bio: string, coverPicture: string, followersCount: int, followingCount: int, instruments: list<string>, likedScoresCount: int, ownedPublicScoresCount: int, profileTheme: string, registrationDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -3360,7 +3372,7 @@ export def "ger-user-likes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: oneof<nothing, bool> # Return only the identifiers of the scores
-]: nothing -> table<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: list<record>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>> {
+]: nothing -> oneof<table<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: list<record>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -3398,7 +3410,7 @@ export def "get-user-scores" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --parent: string # Filter the score forked from the score id `parent`
-]: nothing -> table<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: list<record>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>> {
+]: nothing -> oneof<table<htmlUrl: string, id: string, privacy: string, sharingKey: string, title: string, user: record<firstname: string, id: string, isFlatTeam: bool, isPowerUser: bool, lastname: string, name: string, picture: string, printableName: string, type: string, username: string, classRole: string, htmlUrl: string, organization: string, organizationRole: string>, arranger: string, collaborators: list<record>, collections: list<string>, comments: record<monthly: float, total: float, unique: float, weekly: float>, composer: string, creationDate: string, creationType: string, description: string, durationTime: float, googleDriveFileId: string, instruments: list<string>, license: string, licenseText: string, likes: record<monthly: float, total: float, weekly: float>, lyricist: string, mainTempoQpm: float, modificationDate: string, numberMeasures: int, organization: string, parentScore: string, plays: record<monthly: float, total: float, weekly: float>, publicationDate: string, rights: record<aclAdmin: bool, aclRead: bool, aclWrite: bool, isCollaborator: bool>, samples: list<string>, subtitle: string, tags: list<string>, views: record<monthly: float, total: float, weekly: float>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }

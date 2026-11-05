@@ -15,27 +15,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -43,8 +52,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -55,7 +69,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -90,7 +113,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -145,9 +169,9 @@ def status-completer [] { ["driver_at_address" "repreparing"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-acceptance-requested" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["post-acceptance-requested" "put-attempted-delivery-query-resolved" "get-checkout-tenant-checkout-id" "patch-checkout-tenant-checkout-id" "get-checkout-tenant-checkout-id-fulfilment-availabletimes" "get-consumers-tenant" "post-consumers-tenant" "get-consumers-tenant-me-communication-preferences" "get-consumers-tenant-me-communication-preferences-type" "put-consumers-tenant-me-communication-preferences-type" "delete-consumers-tenant-me-communication-preferences-type-subscribed-channels-channel" "post-consumers-tenant-me-communication-preferences-type-subscribed-channels-channel" "put-delivery-failed" "get-delivery-fees-tenant" "get-delivery-estimate" "get-delivery-pools" "post-delivery-pools" "delete-delivery-pools-delivery-pool-id" "get-delivery-pools-delivery-pool-id" "patch-delivery-pools-delivery-pool-id" "put-delivery-pools-delivery-pool-id" "get-delivery-pools-delivery-pool-id-availability-relative" "put-delivery-pools-delivery-pool-id-availability-relative" "put-delivery-pools-delivery-pool-id-hours" "delete-delivery-pools-delivery-pool-id-restaurants" "put-delivery-pools-delivery-pool-id-restaurants" "put-driver-assigned-to-delivery" "put-driver-at-delivery-address" "put-driver-at-restaurant" "put-driver-has-delivered-order" "put-driver-location" "put-driver-on-their-way-to-delivery-address" "post-late-order-compensation-query" "post-late-order-query" "post-menu-ingestion-complete" "post-order-accepted" "post-order-cancelled" "post-order-eligible-for-restaurant-compensation" "put-order-is-ready-for-pickup" "post-order-ready-for-preparation-async" "post-order-ready-for-preparation-sync" "post-order-rejected" "put-order-requires-delivery-acceptance" "post-order-time-updated" "post-orders" "put-orders-deliverystate-driverlocation" "put-orders-order-id-accept" "put-orders-order-id-cancel" "post-orders-order-id-complete" "put-orders-order-id-deliverystate-atdeliveryaddress" "put-orders-order-id-deliverystate-atrestaurant" "put-orders-order-id-deliverystate-atrestauranteta" "put-orders-order-id-deliverystate-delivered" "put-orders-order-id-deliverystate-driverassigned" "put-orders-order-id-deliverystate-driverlocation" "put-orders-order-id-deliverystate-driverunassigned" "put-orders-order-id-deliverystate-onitsway" "put-orders-order-id-duedate" "put-orders-order-id-ignore" "post-orders-order-id-readyforcollection" "put-orders-order-id-reject" "post-orders-tenant-order-id-consumerqueries-lateorder-restaurantresponse" "post-orders-tenant-order-id-consumerqueries-lateordercompensation-restaurantresponse" "post-orders-tenant-order-id-restaurantqueries-compensation" "put-redelivery-requested" "put-restaurant-offline-status" "put-restaurant-online-status" "search-by-location" "search-by-postcode" "put-restaurants-driver-eta" "get-restaurants-tenant-restaurant-id-catalogue" "get-restaurants-tenant-restaurant-id-catalogue-availabilities" "get-restaurants-tenant-restaurant-id-catalogue-categories" "get-restaurants-tenant-restaurant-id-catalogue-categories-category-id-items" "get-restaurants-tenant-restaurant-id-catalogue-items" "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-dealgroups" "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-dealgroups-deal-group-id-dealitemvariations" "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-modifiergroups" "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-variations" "get-restaurants-tenant-restaurant-id-customerclaims" "get-restaurants-tenant-restaurant-id-customerclaims-id" "post-restaurants-tenant-restaurant-id-customerclaims-id-restaurantresponse" "put-restaurants-tenant-restaurant-id-customerclaims-id-restaurantresponse-justification" "get-restaurants-tenant-restaurant-id-fees" "put-restaurants-tenant-restaurant-id-fees" "get-restaurants-tenant-restaurant-id-menu" "put-menu-for-ingestion" "get-order-times" "update-order-time" "get-restaurant-service-times" "put-restaurant-service-times" "get-search-autocomplete-tenant" "get-search-restaurants-tenant" "post-send-to-pos-failed" "post-v1-tenant-restaurants-event-offline" "delete-v1-tenant-restaurants-id-event-offline" "post-tenant-orders-order-id-queries-attempteddelivery" "post-tenant-orders-order-id-queries-attempteddelivery-resolution-redeliverorder" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -168,13 +192,6 @@ export def commands []: nothing -> table {
 # Acceptance requested
 #
 # POST /acceptance-requested
-# --Customer shape: {Id?: float, Name?: string, PreviousRestaurantOrderCount?: float, PreviousTotalOrderCount?: float}
-# --Fulfilment shape: {Address?: record, CustomerDueAsap?: bool, CustomerDueDate?: string, Method?: "Delivery"|"Collection", PhoneMaskingCode?: string, PhoneNumber?: string, PreparationTime?: string}
-# --Items item shape: {Items?: list, Name?: string, Quantity?: float, Reference?: string, TotalPrice?: float, UnitPrice?: float}
-# --Payment shape: {Lines?: list}
-# --PriceBreakdown shape: {Discount?: float, Fees?: record, Items?: float, Taxes?: float, Tips?: float}
-# --Restaurant shape: {Address?: record, Id?: string, Name?: string, PhoneNumber?: string, Reference?: string, TimeZone?: string}
-# --Restrictions item shape: {Type?: "Alcohol"}
 export def "post-acceptance-requested" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -225,7 +242,6 @@ export def "post-acceptance-requested" [
 # Attempted delivery query resolved
 #
 # PUT /attempted-delivery-query-resolved
-# --Resolution shape: {Cancellation?: record, Redelivery?: record, Type?: "order_cancelled"|"redeliver_order"}
 export def "put-attempted-delivery-query-resolved" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,7 +294,7 @@ export def "get-checkout-tenant-checkout-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-agent: string # Allows the server to identify the application making the request. (required)
-]: nothing -> record<customer: record<firstName: string, lastName: string, phoneNumber: string>, fulfilment: record<location: record<address: record, geolocation: record>, time: record<asap: bool, scheduled: record>>, isFulfillable: bool, issues: table<code: string>, restaurant: record<availabilityId: string, id: string>, serviceType: string> {
+]: nothing -> oneof<record<customer: record<firstName: string, lastName: string, phoneNumber: string>, fulfilment: record<location: record<address: record, geolocation: record>, time: record<asap: bool, scheduled: record>>, isFulfillable: bool, issues: table<code: string>, restaurant: record<availabilityId: string, id: string>, serviceType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -306,9 +322,6 @@ export def "get-checkout-tenant-checkout-id" [
 # Update Checkout
 #
 # PATCH /checkout/{tenant}/{checkoutId}
-# --customer shape: {dateOfBirth?: string, firstName?: string, lastName?: string, phoneNumber?: string}
-# --fulfilment shape: {location?: record, time?: record}
-# --notes item shape: {note: string, type: "delivery"}
 export def "patch-checkout-tenant-checkout-id" [
   tenant: string
   checkout_id: string
@@ -325,7 +338,7 @@ export def "patch-checkout-tenant-checkout-id" [
   --customer: record # Details of the customer making the purchase. (nullable) — shape: {dateOfBirth?: string, firstName?: string, lastName?: string, phoneNumber?: string}
   --fulfilment: record # How and when the items will be received by the customer. (nullable) — shape: {location?: record, time?: record}
   --notes: list # Instructions about the order that the customer wants to submit. (nullable) — item shape: {note: string, type: "delivery"}
-]: any -> record<isFulfillable: bool, issues: table<code: string>> {
+]: any -> oneof<record<isFulfillable: bool, issues: table<code: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -369,7 +382,7 @@ export def "get-checkout-tenant-checkout-id-fulfilment-availabletimes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-agent: string # Allows the server to identify the application making the request. (required)
-]: nothing -> record<asapAvailable: bool, times: table<from: string, to: string>> {
+]: nothing -> oneof<record<asapAvailable: bool, times: table<from: string, to: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -439,7 +452,6 @@ export def "get-consumers-tenant" [
 # Create consumer
 #
 # POST /consumers/{tenant}
-# --marketingPreferences item shape: {channelName?: "Email"|"Push"|"Sms", dateUpdated?: string, isSubscribed?: bool}
 export def "post-consumers-tenant" [
   tenant: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -457,7 +469,7 @@ export def "post-consumers-tenant" [
   --marketing-preferences: list # item shape: {channelName?: "Email"|"Push"|"Sms", dateUpdated?: string, isSubscribed?: bool}
   --password: string # The consumer's password
   --registration-source: string@registration-source-completer # The registration source of the consumer. Australia and New Zealand only support Guest (default: Native)
-]: any -> record<token: string, type: string> {
+]: any -> oneof<record<token: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -495,7 +507,7 @@ export def "get-consumers-tenant-me-communication-preferences" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<marketing: record<isDefault: bool, subscribedChannels: list<string>>> {
+]: nothing -> oneof<record<marketing: record<isDefault: bool, subscribedChannels: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -531,7 +543,7 @@ export def "get-consumers-tenant-me-communication-preferences-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<isDefault: bool, subscribedChannels: list<string>> {
+]: nothing -> oneof<record<isDefault: bool, subscribedChannels: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -738,7 +750,7 @@ export def "get-delivery-fees-tenant" [
   --delivery-time: string # Delivery date/time when fees are required (ISO8601 format). (required, format: date-time, e.g. 2019-09-05T12:43:48.431Z)
   --zone: string # Postcode or other location name identifying the location to which delivery is required. For use when precise location is not available. This will be removed in future in favour of location. (e.g. BS1)
   --latlong: list<float> # Point to which delivery is required (latitude, longitude). Supply this where possible as support for zone-only based lookups will be removed in future. (e.g. [51.3851513, -2.0841275])
-]: nothing -> record<restaurants: table<bands: list, minimumOrderValue: float, restaurantId: string>> {
+]: nothing -> oneof<record<restaurants: table<bands: list, minimumOrderValue: float, restaurantId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -781,7 +793,7 @@ export def "get-delivery-estimate" [
   --to-lat: string # The latitude of the position to estimate the delivery time to.
   --to-lon: string # The longitude of the position to estimate the delivery time to.
   --to-postcode: string # The postcode to estimate the delivery time to.
-]: nothing -> record<DurationInMinutes: string, RestaurantReference: string> {
+]: nothing -> oneof<record<DurationInMinutes: string, RestaurantReference: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($restaurant_reference == null) { error make --unspanned { msg: "required query parameter 'restaurantReference' missing: pass --restaurant-reference" } }
@@ -816,7 +828,7 @@ export def "get-delivery-pools" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<delivery_pool_id: record<name: string, restaurants: list<float>>> {
+]: nothing -> oneof<record<delivery_pool_id: record<name: string, restaurants: list<float>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/delivery/pools" $auth.query)
@@ -923,7 +935,7 @@ export def "get-delivery-pools-delivery-pool-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<name: string, restaurants: list<float>> {
+]: nothing -> oneof<record<name: string, restaurants: list<float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($delivery_pool_id | is-empty) { error make --unspanned { msg: "path parameter 'deliveryPoolId' must be non-empty" } }
@@ -960,7 +972,7 @@ export def "patch-delivery-pools-delivery-pool-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the pool, used by operations teams, in reports, etc.
   --restaurants: list<float> # A list of Just Eat restaurant ids served by the delivery pool.
-]: any -> record<name: string, restaurants: list<float>> {
+]: any -> oneof<record<name: string, restaurants: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1000,7 +1012,7 @@ export def "put-delivery-pools-delivery-pool-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the pool, used by operations teams, in reports, etc.
   --restaurants: list<float> # A list of Just Eat restaurant ids served by the delivery pool.
-]: any -> record<name: string, restaurants: list<float>> {
+]: any -> oneof<record<name: string, restaurants: list<float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1038,7 +1050,7 @@ export def "get-delivery-pools-delivery-pool-id-availability-relative" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<bestGuess: string> {
+]: nothing -> oneof<record<bestGuess: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($delivery_pool_id | is-empty) { error make --unspanned { msg: "path parameter 'deliveryPoolId' must be non-empty" } }
@@ -1101,13 +1113,6 @@ export def "put-delivery-pools-delivery-pool-id-availability-relative" [
 # Set the delivery pools daily start and end times
 #
 # PUT /delivery/pools/{deliveryPoolId}/hours
-# --friday shape: {closed?: bool, poolTimes: list}
-# --monday shape: {closed?: bool, poolTimes: list}
-# --saturday shape: {closed?: bool, poolTimes: list}
-# --sunday shape: {closed?: bool, poolTimes: list}
-# --thursday shape: {closed?: bool, poolTimes: list}
-# --tuesday shape: {closed?: bool, poolTimes: list}
-# --wednesday shape: {closed?: bool, poolTimes: list}
 export def "put-delivery-pools-delivery-pool-id-hours" [
   delivery_pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1203,7 +1208,7 @@ export def "put-delivery-pools-delivery-pool-id-restaurants" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<restaurants: list<float>> {
+]: nothing -> oneof<record<restaurants: list<float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($delivery_pool_id | is-empty) { error make --unspanned { msg: "path parameter 'deliveryPoolId' must be non-empty" } }
@@ -1399,7 +1404,6 @@ export def "put-driver-has-delivered-order" [
 # Driver Location
 #
 # PUT /driver-location
-# --Location shape: {Latitude: float, Longitude: float}
 export def "put-driver-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1482,7 +1486,6 @@ export def "put-driver-on-their-way-to-delivery-address" [
 # late order compensation query, restaurant response required
 #
 # POST /late-order-compensation-query
-# --compensationOptions item shape: {amount?: float, isRecommended?: bool}
 export def "post-late-order-compensation-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1562,7 +1565,6 @@ export def "post-late-order-query" [
 # Menu ingestion complete
 #
 # POST /menu-ingestion-complete
-# --fault shape: {errors?: list, id?: string}
 export def "post-menu-ingestion-complete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1759,12 +1761,6 @@ export def "put-order-is-ready-for-pickup" [
 # Order ready for preparation (async)
 #
 # POST /order-ready-for-preparation-async
-# --Customer shape: {Id?: string, Name?: string}
-# --Fulfilment shape: {Address?: record, CustomerDueAsap?: bool, CustomerDueDate?: string, Method?: "Delivery"|"Collection", PhoneNumber?: string, PreparationTime?: string, PrepareFor?: string}
-# --Items item shape: {Items?: list, Name?: string, Quantity?: int, Reference?: string, UnitPrice?: int}
-# --Payment shape: {Lines?: list}
-# --PriceBreakdown shape: {Discount?: float, Fees?: record, Items?: float, Taxes?: float, Tips?: float}
-# --Restaurant shape: {Address?: record, Id?: string, Name?: string, PhoneNumber?: string, Reference?: string}
 export def "post-order-ready-for-preparation-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1813,12 +1809,6 @@ export def "post-order-ready-for-preparation-async" [
 # Order ready for preparation (sync)
 #
 # POST /order-ready-for-preparation-sync
-# --Customer shape: {Id?: string, Name?: string}
-# --Fulfilment shape: {Address?: record, CustomerDueAsap?: bool, CustomerDueDate?: string, Method?: "Delivery"|"Collection", PhoneNumber?: string, PreparationTime?: string, PrepareFor?: string}
-# --Items item shape: {Items?: list, Name?: string, Quantity?: int, Reference?: string, UnitPrice?: int}
-# --Payment shape: {Lines?: list}
-# --PriceBreakdown shape: {Discount?: float, Fees?: record, Items?: float, Taxes?: float, Tips?: float}
-# --Restaurant shape: {Address?: record, Id?: string, Name?: string, PhoneNumber?: string, Reference?: string}
 export def "post-order-ready-for-preparation-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1985,11 +1975,6 @@ export def "post-order-time-updated" [
 # Create order
 #
 # POST /orders
-# --Customer shape: {Address: record, DisplayPhoneNumber?: string, Email?: string, Name: string, PhoneNumber: string}
-# --CustomerNotes shape: {NoteForDelivery?: string, NoteForRestaurant?: string}
-# --Fulfilment shape: {DueAsap?: bool, DueDate: string, Method: "Delivery"|"Collection"}
-# --Items item shape: {Items?: list, Name: string, Quantity: int, Reference: string, TotalPrice: float, UnitPrice?: int}
-# --Payment shape: {Fees?: list, Lines: list, PaidDate?: string, Taxes?: list, Tips?: list}
 export def "post-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2011,7 +1996,7 @@ export def "post-orders" [
   payment: record # e.g. {Fees: [{Type: card, Value: 0.25}, {Type: delivery, Value: 3.5}], Lines: [{LastCardDigits: 1234, Paid: true, ServiceFee: 0, Type: Card, Value: 19.95}], Tips: [{Type: driver, Value: 2.5}]} — shape: {Fees?: list, Lines: list, PaidDate?: string, Taxes?: list, Tips?: list}
   restaurant: any
   total_price: float # format: double
-]: any -> record<OrderId: string> {
+]: any -> oneof<record<OrderId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2189,7 +2174,6 @@ export def "post-orders-order-id-complete" [
 # Update order with driver at delivery address details
 #
 # PUT /orders/{orderId}/deliverystate/atdeliveryaddress
-# --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
 export def "put-orders-order-id-deliverystate-atdeliveryaddress" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2230,7 +2214,6 @@ export def "put-orders-order-id-deliverystate-atdeliveryaddress" [
 # Update order with driver at restaurant details
 #
 # PUT /orders/{orderId}/deliverystate/atrestaurant
-# --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
 export def "put-orders-order-id-deliverystate-atrestaurant" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2312,7 +2295,6 @@ export def "put-orders-order-id-deliverystate-atrestauranteta" [
 # Update order with delivered details
 #
 # PUT /orders/{orderId}/deliverystate/delivered
-# --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
 export def "put-orders-order-id-deliverystate-delivered" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2353,8 +2335,6 @@ export def "put-orders-order-id-deliverystate-delivered" [
 # Update order with driver assigned details
 #
 # PUT /orders/{orderId}/deliverystate/driverassigned
-# --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
-# --VehicleDetails shape: {Vehicle?: string, VehicleRegistration?: string}
 export def "put-orders-order-id-deliverystate-driverassigned" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2400,7 +2380,6 @@ export def "put-orders-order-id-deliverystate-driverassigned" [
 # Update the driver's current location
 #
 # PUT /orders/{orderId}/deliverystate/driverlocation
-# --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
 export def "put-orders-order-id-deliverystate-driverlocation" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2443,7 +2422,6 @@ export def "put-orders-order-id-deliverystate-driverlocation" [
 # Update order with driver unassigned details
 #
 # PUT /orders/{orderId}/deliverystate/driverunassigned
-# --Location: shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
 export def "put-orders-order-id-deliverystate-driverunassigned" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2491,7 +2469,6 @@ export def "put-orders-order-id-deliverystate-driverunassigned" [
 # Update order with driver on its way details
 #
 # PUT /orders/{orderId}/deliverystate/onitsway
-# --Location shape: {Accuracy?: float, Heading?: float, Latitude: float, Longitude: float, Speed?: float}
 export def "put-orders-order-id-deliverystate-onitsway" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3043,7 +3020,7 @@ export def "put-restaurants-driver-eta" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<ignoredRestaurantIds: list<string>> {
+]: any -> oneof<record<ignoredRestaurantIds: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3081,7 +3058,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<currency: string, description: string, name: string, restaurantId: string> {
+]: nothing -> oneof<record<currency: string, description: string, name: string, restaurantId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -3120,7 +3097,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-availabilities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of availabilities to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
-]: nothing -> record<paging: record<cursors: record<after: string>>, availabilities: table<description: string, id: string, name: string, serviceTypes: list, times: list>> {
+]: nothing -> oneof<record<paging: record<cursors: record<after: string>>, availabilities: table<description: string, id: string, name: string, serviceTypes: list, times: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -3161,7 +3138,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-categories" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of categories to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
-]: nothing -> record<paging: record<cursors: record<after: string>>, categories: table<description: string, id: string, name: string>> {
+]: nothing -> oneof<record<paging: record<cursors: record<after: string>>, categories: table<description: string, id: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -3203,7 +3180,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-categories-category-i
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of item IDs to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
-]: nothing -> record<paging: record<cursors: record<after: string>>, itemIds: list<string>> {
+]: nothing -> oneof<record<paging: record<cursors: record<after: string>>, itemIds: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -3245,7 +3222,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-items" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of menu items to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
-]: nothing -> record<paging: record<cursors: record<after: string>>, items: table<description: string, id: string, labels: list, name: string, requireOtherProducts: bool, type: string>> {
+]: nothing -> oneof<record<paging: record<cursors: record<after: string>>, items: table<description: string, id: string, labels: list, name: string, requireOtherProducts: bool, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -3287,7 +3264,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-dealgro
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of menu items to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
-]: nothing -> record<paging: record<cursors: record<after: string>>, dealGroups: table<id: string, name: string, numberOfChoices: int>> {
+]: nothing -> oneof<record<paging: record<cursors: record<after: string>>, dealGroups: table<id: string, name: string, numberOfChoices: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -3331,7 +3308,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-dealgro
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of menu items to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
-]: nothing -> record<paging: record<cursors: record<after: string>>, dealItemVariations: table<additionPrice: float, dealItemVariationId: string, maxChoices: int, minChoices: int>> {
+]: nothing -> oneof<record<paging: record<cursors: record<after: string>>, dealItemVariations: table<additionPrice: float, dealItemVariationId: string, maxChoices: int, minChoices: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -3375,7 +3352,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-modifie
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of menu items to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
-]: nothing -> record<paging: record<cursors: record<after: string>>, modifierGroups: table<id: string, maxChoices: int, minChoices: int, modifiers: list, name: string>> {
+]: nothing -> oneof<record<paging: record<cursors: record<after: string>>, modifierGroups: table<id: string, maxChoices: int, minChoices: int, modifiers: list, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -3418,7 +3395,7 @@ export def "get-restaurants-tenant-restaurant-id-catalogue-items-item-id-variati
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of menu items to fetch. (required, format: int32)
   --after: string # Value representing a cursor - position to use when retrieving the next page of data. If provided, the value of this parameter must be URL encoded.
-]: nothing -> record<paging: record<cursors: record<after: string>>, variations: table<availabilityIds: list, basePrice: float, dealGroupsIds: list, dealOnly: bool, id: string, kitchenNumber: string, modifierGroupsIds: list, name: string, type: string>> {
+]: nothing -> oneof<record<paging: record<cursors: record<after: string>>, variations: table<availabilityIds: list, basePrice: float, dealGroupsIds: list, dealOnly: bool, id: string, kitchenNumber: string, modifierGroupsIds: list, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -3463,7 +3440,7 @@ export def "get-restaurants-tenant-restaurant-id-customerclaims" [
   --limit: int # Pagination limit (nullable, format: int32, default: 20)
   --offset: int # Pagination offset (nullable, format: int32)
   --hdr-accept: string # Indicates what type of response client understands and is also used for content type negotiation (if version is specified), otherwise tells the server to return the latest version (e.g. application/json;v=1)
-]: nothing -> record<claims: table<affectedItems: list, currency: string, expirationDate: string, friendlyOrderReference: string, id: string, issueType: string, orderId: string, resolution: record, restaurantResponse: record, state: string, submittedDate: string, totalClaimed: float>> {
+]: nothing -> oneof<record<claims: table<affectedItems: list, currency: string, expirationDate: string, friendlyOrderReference: string, id: string, issueType: string, orderId: string, resolution: record, restaurantResponse: record, state: string, submittedDate: string, totalClaimed: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -3505,7 +3482,7 @@ export def "get-restaurants-tenant-restaurant-id-customerclaims-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # Indicates what type of response client understands and is also used for content type negotiation (if version is specified), otherwise tells the server to return the latest version (e.g. application/json;v=1)
-]: nothing -> record<affectedItems: table<additionalContext: string, decision: string, id: string, name: string, quantity: float, totalClaimed: float, unitPrice: float>, currency: string, expirationDate: string, friendlyOrderReference: string, id: string, issueType: string, orderId: string, resolution: record<decision: string, resolvedChannel: string, resolvedDate: string, totalClaimedAccepted: float>, restaurantResponse: record<decision: string, items: list<record>, justification: record<comments: string, reason: string>>, state: string, submittedDate: string, totalClaimed: float> {
+]: nothing -> oneof<record<affectedItems: table<additionalContext: string, decision: string, id: string, name: string, quantity: float, totalClaimed: float, unitPrice: float>, currency: string, expirationDate: string, friendlyOrderReference: string, id: string, issueType: string, orderId: string, resolution: record<decision: string, resolvedChannel: string, resolvedDate: string, totalClaimedAccepted: float>, restaurantResponse: record<decision: string, items: list<record>, justification: record<comments: string, reason: string>>, state: string, submittedDate: string, totalClaimed: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -3533,8 +3510,6 @@ export def "get-restaurants-tenant-restaurant-id-customerclaims-id" [
 # Submit a restaurant response for the claim
 #
 # POST /restaurants/{tenant}/{restaurantId}/customerclaims/{id}/restaurantresponse
-# --items item shape: {decision?: "Accepted"|"Rejected", id?: string}
-# --justification shape: {comments?: string, reason?: "AlreadyRefunded"|"ItemReplaced"|"PartialRefundRequired"|"WasNotMissing"|"WillRedeliver"|"OrderWasHot"|"OrderWasOnTime"|"OrderWasPacked"|"FoodWasIntact"|"AddExtraItem"|"Other"}
 export def "post-restaurants-tenant-restaurant-id-customerclaims-id-restaurantresponse" [
   tenant: string
   restaurant_id: string
@@ -3567,7 +3542,7 @@ export def "post-restaurants-tenant-restaurant-id-customerclaims-id-restaurantre
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "post"
     url: $full_url
@@ -3616,7 +3591,7 @@ export def "put-restaurants-tenant-restaurant-id-customerclaims-id-restaurantres
   let extra_headers = {"Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -3647,7 +3622,7 @@ export def "get-restaurants-tenant-restaurant-id-fees" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-agent: string # Request header string that allows the server to identify the application making the request.
-]: nothing -> record<bagFee: record<description: string, serviceTypes: record<collection: record, default: record, delivery: record>>> {
+]: nothing -> oneof<record<bagFee: record<description: string, serviceTypes: record<collection: record, default: record, delivery: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -3674,7 +3649,6 @@ export def "get-restaurants-tenant-restaurant-id-fees" [
 # Create or Update Restaurant Fees
 #
 # PUT /restaurants/{tenant}/{restaurantId}/fees
-# --bagFee shape: {description?: string, serviceTypes?: record}
 export def "put-restaurants-tenant-restaurant-id-fees" [
   tenant: string
   restaurant_id: string
@@ -3689,7 +3663,7 @@ export def "put-restaurants-tenant-restaurant-id-fees" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-agent: string # Request header string that allows the server to identify the application making the request.
   --bag-fee: record # The object which encapsulates a Fee (e.g. {description: A charge for bags in delivery, serviceTypes: {collection: {amount: 5}, default: {amount: 0}, delivery: {amount: 10}}}) — shape: {description?: string, serviceTypes?: record}
-]: any -> record<bagFee: record<description: string, serviceTypes: record<collection: record, default: record, delivery: record>>> {
+]: any -> oneof<record<bagFee: record<description: string, serviceTypes: record<collection: record, default: record, delivery: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3761,9 +3735,6 @@ export def "get-restaurants-tenant-restaurant-id-menu" [
 #
 # PUT /restaurants/{tenant}/{restaurantId}/menu
 # operationId: putMenuForIngestion
-# --availabilities item shape: {description?: string, id?: string, name?: string, serviceTypes?: list<string>, times?: list}
-# --categories item shape: {description?: string, id?: string, name?: string, itemIds?: list<string>}
-# --items item shape: {description?: string, id?: string, labels?: list<string>, name?: string, requireOtherProducts?: bool, type?: "menuItem"|"deal", dealGroups?: list, imageUrl?: string, modifierGroups?: list, variations?: list}
 export def "put-menu-for-ingestion" [
   tenant: string
   restaurant_id: string
@@ -3785,7 +3756,7 @@ export def "put-menu-for-ingestion" [
   --availabilities: list # A set of availabilities that can later be referenced by individual menu items. — item shape: {description?: string, id?: string, name?: string, serviceTypes?: list<string>, times?: list}
   --categories: list # A set of categories that appear on the menu. — item shape: {description?: string, id?: string, name?: string, itemIds?: list<string>}
   --items: list # All of the menu items within the menu. — item shape: {description?: string, id?: string, labels?: list<string>, name?: string, requireOtherProducts?: bool, type?: "menuItem"|"deal", dealGroups?: list, imageUrl?: string, modifierGroups?: list, variations?: list}
-]: any -> record<correlationId: string> {
+]: any -> oneof<record<correlationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3800,7 +3771,7 @@ export def "put-menu-for-ingestion" [
   let extra_headers = {"Authorization": $authorization, "Content-Type": $content_type} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/json")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   let req = {
     method: "put"
     url: $full_url
@@ -3832,7 +3803,7 @@ export def "get-order-times" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # OAuth2 token issued for logged in restaurant (required)
-]: nothing -> table<dayOfWeek: string, lowerBoundMinutes: int, serviceType: string, upperBoundMinutes: int> {
+]: nothing -> oneof<table<dayOfWeek: string, lowerBoundMinutes: int, serviceType: string, upperBoundMinutes: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -3924,7 +3895,7 @@ export def "get-restaurant-service-times" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<serviceTimes: record<friday: record<collection: list, delivery: list>, monday: record<collection: list, delivery: list>, saturday: record<collection: list, delivery: list>, sunday: record<collection: list, delivery: list>, thursday: record<collection: list, delivery: list>, tuesday: record<collection: list, delivery: list>, wednesday: record<collection: list, delivery: list>>> {
+]: nothing -> oneof<record<serviceTimes: record<friday: record<collection: list, delivery: list>, monday: record<collection: list, delivery: list>, saturday: record<collection: list, delivery: list>, sunday: record<collection: list, delivery: list>, thursday: record<collection: list, delivery: list>, tuesday: record<collection: list, delivery: list>, wednesday: record<collection: list, delivery: list>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -3950,7 +3921,6 @@ export def "get-restaurant-service-times" [
 #
 # PUT /restaurants/{tenant}/{restaurantId}/servicetimes
 # operationId: putRestaurantServiceTimes
-# --serviceTimes shape: {friday?: record, monday?: record, saturday?: record, sunday?: record, thursday?: record, tuesday?: record, wednesday?: record}
 export def "put-restaurant-service-times" [
   tenant: string
   restaurant_id: string
@@ -3964,7 +3934,7 @@ export def "put-restaurant-service-times" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --service-times: record # The desired times at which a restaurant is in service — shape: {friday?: record, monday?: record, saturday?: record, sunday?: record, thursday?: record, tuesday?: record, wednesday?: record}
-]: any -> record<serviceTimes: record<friday: record<collection: list, delivery: list>, monday: record<collection: list, delivery: list>, saturday: record<collection: list, delivery: list>, sunday: record<collection: list, delivery: list>, thursday: record<collection: list, delivery: list>, tuesday: record<collection: list, delivery: list>, wednesday: record<collection: list, delivery: list>>> {
+]: any -> oneof<record<serviceTimes: record<friday: record<collection: list, delivery: list>, monday: record<collection: list, delivery: list>, saturday: record<collection: list, delivery: list>, sunday: record<collection: list, delivery: list>, thursday: record<collection: list, delivery: list>, tuesday: record<collection: list, delivery: list>, wednesday: record<collection: list, delivery: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4006,7 +3976,7 @@ export def "get-search-autocomplete-tenant" [
   --search-term: string # User's search term - at least one character required (required)
   --latlong: list<float> # The latitude and longitude coordinates of the location in which to search. Specify the coordinates as latitude,longitude. (required, e.g. [51.501285, -0.1424422])
   --limit: float # Limit the number of auto-completed terms returned by the API. Defaults to 7. Valid values 1 - 10 (format: integer)
-]: nothing -> record<terms: table<classification: string, term: string>> {
+]: nothing -> oneof<record<terms: table<classification: string, term: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -4047,7 +4017,7 @@ export def "get-search-restaurants-tenant" [
   --search-term: string # User's search term. (required)
   --latlong: list<float> # The latitude and longitude coordinates of the location in which to search. Specify the coordinates as latitude,longitude. (required, e.g. [51.501285, -0.1424422])
   --limit: float # Limit the number of restaurants returned by the API. Valid values are numbers between 1 and 500. If not provided, the limit defaults to 300. (format: integer)
-]: nothing -> record<restaurants: table<isSponsored: bool, products: list, restaurantId: string>> {
+]: nothing -> oneof<record<restaurants: table<isSponsored: bool, products: list, restaurantId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }
@@ -4134,7 +4104,7 @@ export def "post-v1-tenant-restaurants-event-offline" [
   reason: string # The reason for creating the offline event.
   restaurant_ids: string # A comma separated list of the IDs of the restaurants to include in the offline event. No limit to the number accepted by the endpoint, but unexpected behaviour mat occur at more than 500 IDs.
   start_date: string # ISO 8601 format of the start datetime of the offline event. (format: date-time)
-]: any -> record<restaurantEventId: string, restaurantIds: string> {
+]: any -> oneof<record<restaurantEventId: string, restaurantIds: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

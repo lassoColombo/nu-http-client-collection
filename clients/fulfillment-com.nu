@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-api-key" => { {scheme: $scheme, headers: {"x-api-key": $token_val}, query: "", location: "header"} }
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -114,14 +138,16 @@ def base-url-completer [] { ["https://api.fulfillment.com/v2"] }
 def auth-scheme-completer [] { ["x-api-key" "bearer"] }
 
 # Completers for enum parameters
+def grant-type-completer [] { ["password" "refresh_token"] }
+def scope-completer [] { ["oms"] }
 def integrator-completer [] { ["1ShoppingCart" "3dCart" "AdobeBC" "AmazonAU" "AmazonEU" "AmazonNA" "BigCommerce" "BrandBoom" "BrightPearl" "BuyGoods" "Celery" "ChannelAdvisor" "Clickbank" "CommerceHub" "Custom" "Demandware" "Ebay" "Ecwid" "Etsy" "FoxyCart" "Goodsie" "Infusionsoft" "Konnektive" "LimeLight" "Linio" "Linnworks" "Magento" "Netsuite" "NewEgg" "Nexternal" "NuOrder" "Opencart" "OrderWave" "Overstock" "PayPal" "PrestaShop" "Pricefalls" "Quickbooks" "Rakuten" "Sears" "Sellbrite" "SellerCloud" "Shipstation" "Shopify" "Skubana" "SolidCommerce" "SparkPay" "SpreeCommerce" "StitchLabs" "StoneEdge" "TradeGecko" "UltraCart" "VTEX" "Volusion" "Walmart" "WooCommerce" "Yahoo" "osCommerce1" "spsCommerce"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-accounting" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-accounting" "get-inventory" "post-oauth-access-token" "get-orders" "post-orders" "delete-orders-id" "get-order" "put-orders-id-ship" "put-orders-id-status" "get-returns" "put-returns" "get-track" "get-users-me" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -160,7 +186,7 @@ export def "get-accounting" [
   --warehouse-ids: list<int> # A CSV of warehouse id, '123' or '1,2,3'
   --order-ids: list<int> # A CSV of FDC order id, '123' or '1,2,3'
   --hydrate: list<string> # Adds additional information to the response, uses a CSV format for multiple values. (required, e.g. items)
-]: nothing -> record<data: table<fees: record, itemCount: int, items: list, merchant: record, order: record, warehouse: record>, meta: record<pagination: record<count: int, currentPage: int, total: int, totalPages: int>>> {
+]: nothing -> oneof<record<data: table<fees: record, itemCount: int, items: list, merchant: record, order: record, warehouse: record>, meta: record<pagination: record<count: int, currentPage: int, total: int, totalPages: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from_date == null) { error make --unspanned { msg: "required query parameter 'fromDate' missing: pass --from-date" } }
@@ -203,7 +229,7 @@ export def "get-inventory" [
   --merchant-ids: list<int> # A CSV of merchant id, '123' or '1,2,3'
   --warehouse-ids: list<int> # A CSV of warehouse id, '123' or '1,2,3'
   --external-sku-names: list<string> # A CSV of sku reference names, 'skuName1' or 'skuName1,skuName2,skuName3'
-]: nothing -> record<data: table<item: record, merchant: record, quantity: record>, meta: record<pagination: record<count: int, currentPage: int, total: int, totalPages: int>>> {
+]: nothing -> oneof<record<data: table<item: record, merchant: record, quantity: record>, meta: record<pagination: record<count: int, currentPage: int, total: int, totalPages: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "merchantIds" $merchant_ids "csv") (serialize-qp "warehouseIds" $warehouse_ids "csv") (serialize-qp "externalSkuNames" $external_sku_names "csv")] | flatten | str join "&"
@@ -239,13 +265,19 @@ export def "post-oauth-access-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --body: record
-]: any -> record<access_token: string, expires_in: int, refresh_token: string, token_type: string> {
+  --password: string
+  --username: string
+  client_id: string # Id and secret provided by FDC
+  client_secret: string
+  grant_type: string@grant-type-completer # Indicates how you're authenticating your request
+  scope: string@scope-completer # Currently limited to Order Management System (default: oms)
+  --refresh-token: string # You may request future tokens with the `refresh_token` from your previous `/oauth/access_token` request
+]: any -> oneof<record<access_token: string, expires_in: int, refresh_token: string, token_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/access_token" $auth.query)
-  let req_body = $body
+  let req_body = {"password": $password, "username": $username, "client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type, "scope": $scope, "refresh_token": $refresh_token} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -311,9 +343,6 @@ export def "get-orders" [
 #
 # POST /orders
 # operationId: post-orders
-# --items item shape: {declaredValue: string, quantity: int, sku: string}
-# --recipient shape: {address1: string, address2?: string, addressLocality: string, addressRegion: string, companyName?: string, country: string, email: string, firstName: string, lastName: string, phone: string, postalCode?: string}
-# --warehouse shape: {id?: int}
 export def "post-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -332,7 +361,7 @@ export def "post-orders" [
   recipient: record # shape: {address1: string, address2?: string, addressLocality: string, addressRegion: string, companyName?: string, country: string, email: string, firstName: string, lastName: string, phone: string, postalCode?: string}
   shipping_method: string # Custom for you, it will be mapped to an actual method within the OMS UI (e.g. Ground)
   --warehouse: record # We automatically select a warehouse based on inventory availability, requested carrier and delivery schedule, and carrier cost. You may however override this process. Because this is not recommended please inform your AE prior to using so they may enable this feature. — shape: {id?: int}
-]: any -> record<currentStatus: record<createdBy: record<id: int>, date: string, id: int, reason: string, status: record<actionRequiredBy: record, code: string, detail: string, detailCode: string, id: int, isClosed: bool, name: string, reason: string, stage: record, state: record>>, departDate: string, dispatchDate: string, id: int, merchant: record<id: int, name: string>, merchantOrderId: string, merchantShippingMethod: string, originalConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, parentOrder: record<id: int>, purchaseOrderNum: string, recordedOn: string, trackingNumbers: table<barcodeScanValue: string, carrier: record, value: string>, validatedConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, warehouse: record<id: int>> {
+]: any -> oneof<record<currentStatus: record<createdBy: record<id: int>, date: string, id: int, reason: string, status: record<actionRequiredBy: record, code: string, detail: string, detailCode: string, id: int, isClosed: bool, name: string, reason: string, stage: record, state: record>>, departDate: string, dispatchDate: string, id: int, merchant: record<id: int, name: string>, merchantOrderId: string, merchantShippingMethod: string, originalConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, parentOrder: record<id: int>, purchaseOrderNum: string, recordedOn: string, trackingNumbers: table<barcodeScanValue: string, carrier: record, value: string>, validatedConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, warehouse: record<id: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -370,7 +399,7 @@ export def "delete-orders-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<currentStatus: record<createdBy: record<id: int>, date: string, id: int, reason: string, status: record<actionRequiredBy: record, code: string, detail: string, detailCode: string, id: int, isClosed: bool, name: string, reason: string, stage: record, state: record>>, departDate: string, dispatchDate: string, id: int, merchant: record<id: int, name: string>, merchantOrderId: string, merchantShippingMethod: string, originalConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, parentOrder: record<id: int>, purchaseOrderNum: string, recordedOn: string, trackingNumbers: table<barcodeScanValue: string, carrier: record, value: string>, validatedConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, warehouse: record<id: int>> {
+]: nothing -> oneof<record<currentStatus: record<createdBy: record<id: int>, date: string, id: int, reason: string, status: record<actionRequiredBy: record, code: string, detail: string, detailCode: string, id: int, isClosed: bool, name: string, reason: string, stage: record, state: record>>, departDate: string, dispatchDate: string, id: int, merchant: record<id: int, name: string>, merchantOrderId: string, merchantShippingMethod: string, originalConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, parentOrder: record<id: int>, purchaseOrderNum: string, recordedOn: string, trackingNumbers: table<barcodeScanValue: string, carrier: record, value: string>, validatedConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, warehouse: record<id: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -447,7 +476,7 @@ export def "put-orders-id-ship" [
   --dry-run(-n) # Return the request that would be sent without executing it
   tracking_number: string # Tracking number of package
   --weight-override: float # Override predicted weight of package (format: float)
-]: any -> record<currentStatus: record<createdBy: record<id: int>, date: string, id: int, reason: string, status: record<actionRequiredBy: record, code: string, detail: string, detailCode: string, id: int, isClosed: bool, name: string, reason: string, stage: record, state: record>>, departDate: string, dispatchDate: string, id: int, merchant: record<id: int, name: string>, merchantOrderId: string, merchantShippingMethod: string, originalConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, parentOrder: record<id: int>, purchaseOrderNum: string, recordedOn: string, trackingNumbers: table<barcodeScanValue: string, carrier: record, value: string>, validatedConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, warehouse: record<id: int>> {
+]: any -> oneof<record<currentStatus: record<createdBy: record<id: int>, date: string, id: int, reason: string, status: record<actionRequiredBy: record, code: string, detail: string, detailCode: string, id: int, isClosed: bool, name: string, reason: string, stage: record, state: record>>, departDate: string, dispatchDate: string, id: int, merchant: record<id: int, name: string>, merchantOrderId: string, merchantShippingMethod: string, originalConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, parentOrder: record<id: int>, purchaseOrderNum: string, recordedOn: string, trackingNumbers: table<barcodeScanValue: string, carrier: record, value: string>, validatedConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, warehouse: record<id: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -475,7 +504,6 @@ export def "put-orders-id-ship" [
 #
 # PUT /orders/{id}/status
 # operationId: put-orders-id-status
-# --status shape: {code: string}
 export def "put-orders-id-status" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -489,7 +517,7 @@ export def "put-orders-id-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   reason: string # Human-readable description
   status: record # shape: {code: string}
-]: any -> record<currentStatus: record<createdBy: record<id: int>, date: string, id: int, reason: string, status: record<actionRequiredBy: record, code: string, detail: string, detailCode: string, id: int, isClosed: bool, name: string, reason: string, stage: record, state: record>>, departDate: string, dispatchDate: string, id: int, merchant: record<id: int, name: string>, merchantOrderId: string, merchantShippingMethod: string, originalConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, parentOrder: record<id: int>, purchaseOrderNum: string, recordedOn: string, trackingNumbers: table<barcodeScanValue: string, carrier: record, value: string>, validatedConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, warehouse: record<id: int>> {
+]: any -> oneof<record<currentStatus: record<createdBy: record<id: int>, date: string, id: int, reason: string, status: record<actionRequiredBy: record, code: string, detail: string, detailCode: string, id: int, isClosed: bool, name: string, reason: string, stage: record, state: record>>, departDate: string, dispatchDate: string, id: int, merchant: record<id: int, name: string>, merchantOrderId: string, merchantShippingMethod: string, originalConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, parentOrder: record<id: int>, purchaseOrderNum: string, recordedOn: string, trackingNumbers: table<barcodeScanValue: string, carrier: record, value: string>, validatedConsignee: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, warehouse: record<id: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -531,7 +559,7 @@ export def "get-returns" [
   --to-date: string # Date-time in ISO 8601 format for selecting orders before, or at, the specified time (required)
   --page: int # A multiplier of the number of items (limit parameter) to skip before returning results (default: 1)
   --limit: int # The numbers of items to return (default: 80)
-]: nothing -> record<data: table<comments: string, createdAt: string, createdBy: record, id: int, order: record, reason: record, returnedBy: string, rmaItems: list, rmaNumber: string, status: record, updatedAt: string, updatedBy: record>, meta: record<pagination: record<count: int, currentPage: int, total: int, totalPages: int>>> {
+]: nothing -> oneof<record<data: table<comments: string, createdAt: string, createdBy: record, id: int, order: record, reason: record, returnedBy: string, rmaItems: list, rmaNumber: string, status: record, updatedAt: string, updatedBy: record>, meta: record<pagination: record<count: int, currentPage: int, total: int, totalPages: int>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($from_date == null) { error make --unspanned { msg: "required query parameter 'fromDate' missing: pass --from-date" } }
@@ -558,8 +586,6 @@ export def "get-returns" [
 #
 # PUT /returns
 # operationId: put-returns
-# --items item shape: {quantityExpected: int, sku: string}
-# --recipient shape: {address1: string, address2?: string, addressLocality: string, addressRegion: string, companyName?: string, country: string, email: string, firstName: string, lastName: string, phone: string, postalCode?: string}
 export def "put-returns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -574,7 +600,7 @@ export def "put-returns" [
   --merchant-order-id: string
   recipient: record # shape: {address1: string, address2?: string, addressLocality: string, addressRegion: string, companyName?: string, country: string, email: string, firstName: string, lastName: string, phone: string, postalCode?: string}
   rma_number: string
-]: any -> record<items: table<quantityExpected: int, sku: string>, merchantOrderId: string, recipient: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, rmaNumber: string> {
+]: any -> oneof<record<items: table<quantityExpected: int, sku: string>, merchantOrderId: string, recipient: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record<id: int, iso2: string, name: string>, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record<id: int>>, rmaNumber: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -612,7 +638,7 @@ export def "get-track" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --tracking-number: string
-]: nothing -> record<destination: record<bbox: list<any>, centerline: record<coordinates: any, type: string>, geometry: record<coordinates: any, type: string>, id: int, properties: record<name: string>, title: string, type: string>, fdcOrderId: int, firstCheckedDateTime: string, firstTransitEvent: string, lastCheckedDateTime: string, lastUpdatedDateTime: string, origin: record<bbox: list<any>, centerline: record<coordinates: any, type: string>, geometry: record<coordinates: any, type: string>, id: int, properties: record<name: string>, title: string, type: string>, status: string, statusCategoryCode: int, statusDateTime: string, statusMessage: string, trackedEvents: table<eventCategory: string, eventCategoryCode: int, eventDateTime: string, eventLocation: record, eventSource: string, eventStatus: string>, trackingNumber: record<barcodeScanValue: string, carrier: record<id: int>, value: string>> {
+]: nothing -> oneof<record<destination: record<bbox: list<any>, centerline: record<coordinates: any, type: string>, geometry: record<coordinates: any, type: string>, id: int, properties: record<name: string>, title: string, type: string>, fdcOrderId: int, firstCheckedDateTime: string, firstTransitEvent: string, lastCheckedDateTime: string, lastUpdatedDateTime: string, origin: record<bbox: list<any>, centerline: record<coordinates: any, type: string>, geometry: record<coordinates: any, type: string>, id: int, properties: record<name: string>, title: string, type: string>, status: string, statusCategoryCode: int, statusDateTime: string, statusMessage: string, trackedEvents: table<eventCategory: string, eventCategoryCode: int, eventDateTime: string, eventLocation: record, eventSource: string, eventStatus: string>, trackingNumber: record<barcodeScanValue: string, carrier: record<id: int>, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "trackingNumber" $tracking_number "scalar")] | flatten | str join "&"
@@ -647,7 +673,7 @@ export def "get-users-me" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<apiKey: string, contactInfo: record<apiKey: string, contactInfo: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record>, createDate: string, deptLeader: bool, id: int, merchant: record<id: int>, name: string, status: bool, updatedAt: string, updatedBy: string, username: string>, createDate: string, deptLeader: bool, id: int, merchant: record<id: int>, name: string, status: bool, updatedAt: string, updatedBy: string, username: string> {
+]: nothing -> oneof<record<apiKey: string, contactInfo: record<apiKey: string, contactInfo: record<address1: string, address2: string, addressLocality: string, addressRegion: string, companyName: string, country: string, email: string, firstName: string, id: int, iso: record, lastName: string, phone: string, postalCode: string, updatedAt: string, updatedBy: record>, createDate: string, deptLeader: bool, id: int, merchant: record<id: int>, name: string, status: bool, updatedAt: string, updatedBy: string, username: string>, createDate: string, deptLeader: bool, id: int, merchant: record<id: int>, name: string, status: bool, updatedAt: string, updatedBy: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/me" $auth.query)

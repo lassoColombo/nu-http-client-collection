@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -151,9 +175,9 @@ def provider-completer [] { ["db" "ldap"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-annotation-layer" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["delete-annotation-layer" "get-annotation-layer" "post-annotation-layer" "get-annotation-layer-info" "get-annotation-layer-related-column-name" "delete-annotation-layer-pk" "get-annotation-layer-pk" "put-annotation-layer-pk" "delete-annotation-layer-pk-annotation" "get-annotation-layer-pk-annotation" "post-annotation-layer-pk-annotation" "delete-annotation-layer-pk-annotation-annotation-id" "get-annotation-layer-pk-annotation-annotation-id" "put-annotation-layer-pk-annotation-annotation-id" "get-async-event" "post-cachekey-invalidate" "delete-chart" "get-chart" "post-chart" "get-chart-info" "post-chart-data" "get-chart-data-cache-key" "get-chart-export" "get-chart-favorite-status" "post-chart-import" "get-chart-related-column-name" "delete-chart-pk" "get-chart-pk" "put-chart-pk" "get-chart-pk-cache-screenshot" "get-chart-pk-data" "get-chart-pk-screenshot-digest" "get-chart-pk-thumbnail-digest" "delete-css-template" "get-css-template" "post-css-template" "get-css-template-info" "get-css-template-related-column-name" "delete-css-template-pk" "get-css-template-pk" "put-css-template-pk" "delete-dashboard" "get-dashboard" "post-dashboard" "get-dashboard-info" "get-dashboard-export" "get-dashboard-favorite-status" "post-dashboard-import" "get-dashboard-related-column-name" "get-dashboard-id-or-slug" "get-dashboard-id-or-slug-charts" "get-dashboard-id-or-slug-datasets" "delete-dashboard-pk" "put-dashboard-pk" "get-dashboard-pk-thumbnail-digest" "get-database" "post-database" "get-database-info" "get-database-available" "get-database-export" "post-database-import" "post-database-test-connection" "post-database-validate-parameters" "delete-database-pk" "get-database-pk" "put-database-pk" "get-database-pk-function-names" "get-database-pk-related-objects" "get-database-pk-schemas" "get-database-pk-select-star-table-name" "get-database-pk-select-star-table-name-schema-name" "get-database-pk-table-table-name-schema-name" "delete-dataset" "get-dataset" "post-dataset" "get-dataset-info" "get-dataset-distinct-column-name" "get-dataset-export" "post-dataset-import" "get-dataset-related-column-name" "delete-dataset-pk" "get-dataset-pk" "put-dataset-pk" "delete-dataset-pk-column-column-id" "delete-dataset-pk-metric-metric-id" "put-dataset-pk-refresh" "get-dataset-pk-related-objects" "get-log" "post-log" "get-log-pk" "get-menu" "get-openapi-version-openapi" "get-query" "get-query-distinct-column-name" "get-query-related-column-name" "get-query-pk" "delete-report" "get-report" "post-report" "get-report-info" "get-report-related-column-name" "delete-report-pk" "get-report-pk" "put-report-pk" "get-report-pk-log" "get-report-pk-log-log-id" "delete-saved-query" "get-saved-query" "post-saved-query" "get-saved-query-info" "get-saved-query-distinct-column-name" "get-saved-query-export" "post-saved-query-import" "get-saved-query-related-column-name" "delete-saved-query-pk" "get-saved-query-pk" "put-saved-query-pk" "get-security-csrf-token" "post-security-login" "post-security-refresh" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -185,7 +209,7 @@ export def "delete-annotation-layer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -220,7 +244,7 @@ export def "get-annotation-layer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<changed_by: record, changed_on: string, changed_on_delta_humanized: any, created_by: record, created_on: string, descr: string, id: int, name: string>> {
+]: nothing -> oneof<record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<changed_by: record, changed_on: string, changed_on_delta_humanized: any, created_by: record, created_on: string, descr: string, id: int, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -256,7 +280,7 @@ export def "post-annotation-layer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --descr: string # Give a description for this annotation layer (nullable)
   --name: string # The annotation layer name
-]: any -> record<id: float, result: record<descr: string, name: string>> {
+]: any -> oneof<record<id: float, result: record<descr: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -293,7 +317,7 @@ export def "get-annotation-layer-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>> {
+]: nothing -> oneof<record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -327,7 +351,7 @@ export def "get-annotation-layer-related-column-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: int, result: table<text: string, value: int>> {
+]: nothing -> oneof<record<count: int, result: table<text: string, value: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'column_name' must be non-empty" } }
@@ -363,7 +387,7 @@ export def "delete-annotation-layer-pk" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -399,7 +423,7 @@ export def "get-annotation-layer-pk" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<descr: string, id: int, name: string>, show_columns: list<string>, show_title: string> {
+]: nothing -> oneof<record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<descr: string, id: int, name: string>, show_columns: list<string>, show_title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -437,7 +461,7 @@ export def "put-annotation-layer-pk" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --descr: string # Give a description for this annotation layer
   --name: string # The annotation layer name
-]: any -> record<id: float, result: record<descr: string, name: string>> {
+]: any -> oneof<record<id: float, result: record<descr: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -476,7 +500,7 @@ export def "delete-annotation-layer-pk-annotation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -513,7 +537,7 @@ export def "get-annotation-layer-pk-annotation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: float, ids: list<string>, result: table<changed_by: record, changed_on_delta_humanized: any, created_by: record, end_dttm: string, id: int, long_descr: string, short_descr: string, start_dttm: string>> {
+]: nothing -> oneof<record<count: float, ids: list<string>, result: table<changed_by: record, changed_on_delta_humanized: any, created_by: record, end_dttm: string, id: int, long_descr: string, short_descr: string, start_dttm: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -554,7 +578,7 @@ export def "post-annotation-layer-pk-annotation" [
   --long-descr: string # A long description (nullable)
   --short-descr: string # A short description
   --start-dttm: string # The annotation start date time (format: date-time)
-]: any -> record<id: float, result: record<end_dttm: string, json_metadata: string, long_descr: string, short_descr: string, start_dttm: string>> {
+]: any -> oneof<record<id: float, result: record<end_dttm: string, json_metadata: string, long_descr: string, short_descr: string, start_dttm: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -593,7 +617,7 @@ export def "delete-annotation-layer-pk-annotation-annotation-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -631,7 +655,7 @@ export def "get-annotation-layer-pk-annotation-annotation-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<id: string, result: record<end_dttm: string, id: int, json_metadata: string, layer: record<id: int, name: string>, long_descr: string, short_descr: string, start_dttm: string>> {
+]: nothing -> oneof<record<id: string, result: record<end_dttm: string, id: int, json_metadata: string, layer: record<id: int, name: string>, long_descr: string, short_descr: string, start_dttm: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -674,7 +698,7 @@ export def "put-annotation-layer-pk-annotation-annotation-id" [
   --long-descr: string # A long description
   --short-descr: string # A short description
   --start-dttm: string # The annotation start date time (format: date-time)
-]: any -> record<id: float, result: record<end_dttm: string, json_metadata: string, long_descr: string, short_descr: string, start_dttm: string>> {
+]: any -> oneof<record<id: float, result: record<end_dttm: string, json_metadata: string, long_descr: string, short_descr: string, start_dttm: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -713,7 +737,7 @@ export def "get-async-event" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --last-id: string # Last ID received by the client
-]: nothing -> record<result: table<channel_id: string, errors: list, id: string, job_id: string, result_url: string, status: string, user_id: int>> {
+]: nothing -> oneof<record<result: table<channel_id: string, errors: list, id: string, job_id: string, result_url: string, status: string, user_id: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "last_id" $last_id "scalar")] | flatten | str join "&"
@@ -737,7 +761,6 @@ export def "get-async-event" [
 # Takes a list of datasources, finds the associated cache records and invalidates them and removes the database records
 #
 # POST /cachekey/invalidate
-# --datasources item shape: {database_name?: string, datasource_name?: string, datasource_type: "druid"|"table"|"view", schema?: string}
 export def "post-cachekey-invalidate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -787,7 +810,7 @@ export def "delete-chart" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -822,7 +845,7 @@ export def "get-chart" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<cache_timeout: int, changed_by: record, changed_by_name: any, changed_by_url: any, changed_on_delta_humanized: any, changed_on_utc: any, created_by: record, datasource_id: int, datasource_name_text: any, datasource_type: string, datasource_url: any, description: string, description_markeddown: any, edit_url: any, id: int, owners: record, params: string, slice_name: string, table: record, thumbnail_url: any, url: any, viz_type: string>> {
+]: nothing -> oneof<record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<cache_timeout: int, changed_by: record, changed_by_name: any, changed_by_url: any, changed_on_delta_humanized: any, changed_on_utc: any, created_by: record, datasource_id: int, datasource_name_text: any, datasource_type: string, datasource_url: any, description: string, description_markeddown: any, edit_url: any, id: int, owners: record, params: string, slice_name: string, table: record, thumbnail_url: any, url: any, viz_type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -867,7 +890,7 @@ export def "post-chart" [
   --query-context: string # The query context represents the queries that need to run in order to generate the data the visualization, and in what format the data should be returned. (nullable)
   slice_name: string # The name of the chart.
   --viz-type: string # The type of chart visualization used. (e.g. [bar, line_multi, area, table])
-]: any -> record<id: float, result: record<cache_timeout: int, dashboards: list<int>, datasource_id: int, datasource_name: string, datasource_type: string, description: string, owners: list<int>, params: string, query_context: string, slice_name: string, viz_type: string>> {
+]: any -> oneof<record<id: float, result: record<cache_timeout: int, dashboards: list<int>, datasource_id: int, datasource_name: string, datasource_type: string, description: string, owners: list<int>, params: string, query_context: string, slice_name: string, viz_type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -904,7 +927,7 @@ export def "get-chart-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>> {
+]: nothing -> oneof<record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -928,8 +951,6 @@ export def "get-chart-info" [
 # Takes a query context constructed in the client and returns payload data response for the given query.
 #
 # POST /chart/data
-# --datasource shape: {id: int, type?: "druid"|"table"}
-# --queries item shape: {annotation_layers?: list, applied_time_extras?: record, apply_fetch_values_predicate?: bool, columns?: list<string>, datasource?: record, druid_time_origin?: string, extras?: record, filters?: list, granularity?: string, granularity_sqla?: string, groupby?: list<string>, having?: string, having_filters?: list, is_rowcount?: bool, is_timeseries?: bool, metrics?: list, order_desc?: bool, orderby?: list, post_processing?: list, result_type?: any, row_limit?: int, row_offset?: int, ... (7 more fields)}
 export def "post-chart-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -945,7 +966,7 @@ export def "post-chart-data" [
   --queries: list # item shape: {annotation_layers?: list, applied_time_extras?: record, apply_fetch_values_predicate?: bool, columns?: list<string>, datasource?: record, druid_time_origin?: string, extras?: record, filters?: list, granularity?: string, granularity_sqla?: string, groupby?: list<string>, having?: string, having_filters?: list, is_rowcount?: bool, is_timeseries?: bool, metrics?: list, order_desc?: bool, orderby?: list, post_processing?: list, result_type?: any, row_limit?: int, row_offset?: int, ... (7 more fields)}
   --result-format: any
   --result-type: any
-]: any -> record<result: table<annotation_data: list, applied_filters: list, cache_key: string, cache_timeout: int, cached_dttm: string, data: list, error: string, is_cached: bool, query: string, rejected_filters: list, rowcount: int, stacktrace: string, status: string>> {
+]: any -> oneof<record<result: table<annotation_data: list, applied_filters: list, cache_key: string, cache_timeout: int, cached_dttm: string, data: list, error: string, is_cached: bool, query: string, rejected_filters: list, rowcount: int, stacktrace: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -982,7 +1003,7 @@ export def "get-chart-data-cache-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: table<annotation_data: list, applied_filters: list, cache_key: string, cache_timeout: int, cached_dttm: string, data: list, error: string, is_cached: bool, query: string, rejected_filters: list, rowcount: int, stacktrace: string, status: string>> {
+]: nothing -> oneof<record<result: table<annotation_data: list, applied_filters: list, cache_key: string, cache_timeout: int, cached_dttm: string, data: list, error: string, is_cached: bool, query: string, rejected_filters: list, rowcount: int, stacktrace: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cache_key | is-empty) { error make --unspanned { msg: "path parameter 'cache_key' must be non-empty" } }
@@ -1052,7 +1073,7 @@ export def "get-chart-favorite-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<result: table<id: int, value: bool>> {
+]: nothing -> oneof<record<result: table<id: int, value: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -1087,7 +1108,7 @@ export def "post-chart-import" [
   --form-data: string # upload file (ZIP) (format: binary)
   --overwrite: oneof<nothing, bool> # overwrite existing databases?
   --passwords: string # JSON map of passwords for each file
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1127,7 +1148,7 @@ export def "get-chart-related-column-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: int, result: table<text: string, value: int>> {
+]: nothing -> oneof<record<count: int, result: table<text: string, value: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'column_name' must be non-empty" } }
@@ -1163,7 +1184,7 @@ export def "delete-chart-pk" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -1199,7 +1220,7 @@ export def "get-chart-pk" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<cache_timeout: int, dashboards: record<dashboard_title: string, id: int>, description: string, owners: record<first_name: string, id: int, last_name: string, username: string>, params: string, query_context: string, slice_name: string, viz_type: string>, show_columns: list<string>, show_title: string> {
+]: nothing -> oneof<record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<cache_timeout: int, dashboards: record<dashboard_title: string, id: int>, description: string, owners: record<first_name: string, id: int, last_name: string, username: string>, params: string, query_context: string, slice_name: string, viz_type: string>, show_columns: list<string>, show_title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -1245,7 +1266,7 @@ export def "put-chart-pk" [
   --query-context: string # The query context represents the queries that need to run in order to generate the data the visualization, and in what format the data should be returned. (nullable)
   --slice-name: string # The name of the chart. (nullable)
   --viz-type: string # The type of chart visualization used. (nullable, e.g. [bar, line_multi, area, table])
-]: any -> record<id: float, result: record<cache_timeout: int, dashboards: list<int>, datasource_id: int, datasource_type: string, description: string, owners: list<int>, params: string, query_context: string, slice_name: string, viz_type: string>> {
+]: any -> oneof<record<id: float, result: record<cache_timeout: int, dashboards: list<int>, datasource_id: int, datasource_type: string, description: string, owners: list<int>, params: string, query_context: string, slice_name: string, viz_type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1284,7 +1305,7 @@ export def "get-chart-pk-cache-screenshot" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<cache_key: string, chart_url: string, image_url: string> {
+]: nothing -> oneof<record<cache_key: string, chart_url: string, image_url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -1322,7 +1343,7 @@ export def "get-chart-pk-data" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --format: string # The format in which the data should be returned
   --type: string # The type in which the data should be returned
-]: nothing -> record<result: table<annotation_data: list, applied_filters: list, cache_key: string, cache_timeout: int, cached_dttm: string, data: list, error: string, is_cached: bool, query: string, rejected_filters: list, rowcount: int, stacktrace: string, status: string>> {
+]: nothing -> oneof<record<result: table<annotation_data: list, applied_filters: list, cache_key: string, cache_timeout: int, cached_dttm: string, data: list, error: string, is_cached: bool, query: string, rejected_filters: list, rowcount: int, stacktrace: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -1432,7 +1453,7 @@ export def "delete-css-template" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -1467,7 +1488,7 @@ export def "get-css-template" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<changed_by: record, changed_on_delta_humanized: any, created_by: record, created_on: string, css: string, id: int, template_name: string>> {
+]: nothing -> oneof<record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<changed_by: record, changed_on_delta_humanized: any, created_by: record, created_on: string, css: string, id: int, template_name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -1503,7 +1524,7 @@ export def "post-css-template" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --css: string # nullable
   --template-name: string # nullable
-]: any -> record<id: string, result: record<css: string, template_name: string>> {
+]: any -> oneof<record<id: string, result: record<css: string, template_name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1540,7 +1561,7 @@ export def "get-css-template-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>> {
+]: nothing -> oneof<record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -1574,7 +1595,7 @@ export def "get-css-template-related-column-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: int, result: table<text: string, value: int>> {
+]: nothing -> oneof<record<count: int, result: table<text: string, value: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'column_name' must be non-empty" } }
@@ -1610,7 +1631,7 @@ export def "delete-css-template-pk" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -1646,7 +1667,7 @@ export def "get-css-template-pk" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<created_by: record<first_name: string, id: int, last_name: string>, css: string, id: int, template_name: string>, show_columns: list<string>, show_title: string> {
+]: nothing -> oneof<record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<created_by: record<first_name: string, id: int, last_name: string>, css: string, id: int, template_name: string>, show_columns: list<string>, show_title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -1684,7 +1705,7 @@ export def "put-css-template-pk" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --css: string # nullable
   --template-name: string # nullable
-]: any -> record<result: record<css: string, template_name: string>> {
+]: any -> oneof<record<result: record<css: string, template_name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1722,7 +1743,7 @@ export def "delete-dashboard" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -1757,7 +1778,7 @@ export def "get-dashboard" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<changed_by: record, changed_by_name: any, changed_by_url: any, changed_on_delta_humanized: any, changed_on_utc: any, created_by: record, css: string, dashboard_title: string, id: int, json_metadata: string, owners: record, position_json: string, published: bool, roles: record, slug: string, status: any, thumbnail_url: any, url: any>> {
+]: nothing -> oneof<record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<changed_by: record, changed_by_name: any, changed_by_url: any, changed_on_delta_humanized: any, changed_on_utc: any, created_by: record, css: string, dashboard_title: string, id: int, json_metadata: string, owners: record, position_json: string, published: bool, roles: record, slug: string, status: any, thumbnail_url: any, url: any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -1799,7 +1820,7 @@ export def "post-dashboard" [
   --published: oneof<nothing, bool> # Determines whether or not this dashboard is visible in the list of all dashboards.
   --roles: list<int>
   --slug: string # Unique identifying part for the web address of the dashboard. (nullable)
-]: any -> record<id: float, result: record<css: string, dashboard_title: string, json_metadata: string, owners: list<int>, position_json: string, published: bool, roles: list<int>, slug: string>> {
+]: any -> oneof<record<id: float, result: record<css: string, dashboard_title: string, json_metadata: string, owners: list<int>, position_json: string, published: bool, roles: list<int>, slug: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1836,7 +1857,7 @@ export def "get-dashboard-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>> {
+]: nothing -> oneof<record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -1906,7 +1927,7 @@ export def "get-dashboard-favorite-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<result: table<id: int, value: bool>> {
+]: nothing -> oneof<record<result: table<id: int, value: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -1941,7 +1962,7 @@ export def "post-dashboard-import" [
   --form-data: string # upload file (ZIP or JSON) (format: binary)
   --overwrite: oneof<nothing, bool> # overwrite existing databases?
   --passwords: string # JSON map of passwords for each file
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1981,7 +2002,7 @@ export def "get-dashboard-related-column-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: int, result: table<text: string, value: int>> {
+]: nothing -> oneof<record<count: int, result: table<text: string, value: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'column_name' must be non-empty" } }
@@ -2017,7 +2038,7 @@ export def "get-dashboard-id-or-slug" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: record<changed_by: record<first_name: string, id: int, last_name: string, username: string>, changed_by_name: string, changed_by_url: string, changed_on: string, changed_on_delta_humanized: string, charts: list<string>, css: string, dashboard_title: string, id: int, json_metadata: string, owners: list<record>, position_json: string, published: bool, roles: list<record>, slug: string, table_names: string, thumbnail_url: string, url: string>> {
+]: nothing -> oneof<record<result: record<changed_by: record<first_name: string, id: int, last_name: string, username: string>, changed_by_name: string, changed_by_url: string, changed_on: string, changed_on_delta_humanized: string, charts: list<string>, css: string, dashboard_title: string, id: int, json_metadata: string, owners: list<record>, position_json: string, published: bool, roles: list<record>, slug: string, table_names: string, thumbnail_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'id_or_slug' must be non-empty" } }
@@ -2052,7 +2073,7 @@ export def "get-dashboard-id-or-slug-charts" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: table<cache_timeout: int, changed_on: string, datasource: string, description: string, description_markeddown: string, form_data: record, modified: string, slice_id: int, slice_name: string, slice_url: string>> {
+]: nothing -> oneof<record<result: table<cache_timeout: int, changed_on: string, datasource: string, description: string, description_markeddown: string, form_data: record, modified: string, slice_id: int, slice_name: string, slice_url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'id_or_slug' must be non-empty" } }
@@ -2087,7 +2108,7 @@ export def "get-dashboard-id-or-slug-datasets" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: table<cache_timeout: int, column_formats: record, column_types: list, columns: list, database: record, datasource_name: string, default_endpoint: string, edit_url: string, fetch_values_predicate: string, filter_select: bool, filter_select_enabled: bool, granularity_sqla: list, health_check_message: string, id: int, is_sqllab_view: bool, main_dttm_col: string, metrics: list, name: string, offset: int, order_by_choices: list, owners: list, params: string, perm: string, schema: string, select_star: string, sql: string, table_name: string, template_params: string, time_grain_sqla: list, type: string, uid: string, verbose_map: record>> {
+]: nothing -> oneof<record<result: table<cache_timeout: int, column_formats: record, column_types: list, columns: list, database: record, datasource_name: string, default_endpoint: string, edit_url: string, fetch_values_predicate: string, filter_select: bool, filter_select_enabled: bool, granularity_sqla: list, health_check_message: string, id: int, is_sqllab_view: bool, main_dttm_col: string, metrics: list, name: string, offset: int, order_by_choices: list, owners: list, params: string, perm: string, schema: string, select_star: string, sql: string, table_name: string, template_params: string, time_grain_sqla: list, type: string, uid: string, verbose_map: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_or_slug | is-empty) { error make --unspanned { msg: "path parameter 'id_or_slug' must be non-empty" } }
@@ -2122,7 +2143,7 @@ export def "delete-dashboard-pk" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -2165,7 +2186,7 @@ export def "put-dashboard-pk" [
   --published: oneof<nothing, bool> # Determines whether or not this dashboard is visible in the list of all dashboards. (nullable)
   --roles: list<int>
   --slug: string # Unique identifying part for the web address of the dashboard. (nullable)
-]: any -> record<id: float, result: record<css: string, dashboard_title: string, json_metadata: string, owners: list<int>, position_json: string, published: bool, roles: list<int>, slug: string>> {
+]: any -> oneof<record<id: float, result: record<css: string, dashboard_title: string, json_metadata: string, owners: list<int>, position_json: string, published: bool, roles: list<int>, slug: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2243,7 +2264,7 @@ export def "get-database" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<allow_csv_upload: bool, allow_ctas: bool, allow_cvas: bool, allow_dml: bool, allow_multi_schema_metadata_fetch: bool, allow_run_async: bool, allows_cost_estimate: any, allows_subquery: any, allows_virtual_table_explore: any, backend: any, changed_on: string, changed_on_delta_humanized: any, created_by: record, database_name: string, explore_database_id: any, expose_in_sqllab: bool, extra: string, force_ctas_schema: string, id: int>> {
+]: nothing -> oneof<record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<allow_csv_upload: bool, allow_ctas: bool, allow_cvas: bool, allow_dml: bool, allow_multi_schema_metadata_fetch: bool, allow_run_async: bool, allows_cost_estimate: any, allows_subquery: any, allows_virtual_table_explore: any, backend: any, changed_on: string, changed_on_delta_humanized: any, created_by: record, database_name: string, explore_database_id: any, expose_in_sqllab: bool, extra: string, force_ctas_schema: string, id: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -2295,7 +2316,7 @@ export def "post-database" [
   --parameters: record # DB-specific parameters for configuration
   --server-cert: string # Optional CA_BUNDLE contents to validate HTTPS requests. Only available on certain database engines. (nullable)
   --sqlalchemy-uri: string # Refer to the SqlAlchemy docs (https://docs.sqlalchemy.org/en/rel_1_2/core/engines.html#database-urls) for more information on how to structure your URI.
-]: any -> record<id: float, result: record<allow_csv_upload: bool, allow_ctas: bool, allow_cvas: bool, allow_dml: bool, allow_multi_schema_metadata_fetch: bool, allow_run_async: bool, cache_timeout: int, configuration_method: any, database_name: string, encrypted_extra: string, engine: string, expose_in_sqllab: bool, extra: string, force_ctas_schema: string, impersonate_user: bool, parameters: record, server_cert: string, sqlalchemy_uri: string>> {
+]: any -> oneof<record<id: float, result: record<allow_csv_upload: bool, allow_ctas: bool, allow_cvas: bool, allow_dml: bool, allow_multi_schema_metadata_fetch: bool, allow_run_async: bool, cache_timeout: int, configuration_method: any, database_name: string, encrypted_extra: string, engine: string, expose_in_sqllab: bool, extra: string, force_ctas_schema: string, impersonate_user: bool, parameters: record, server_cert: string, sqlalchemy_uri: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2332,7 +2353,7 @@ export def "get-database-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>> {
+]: nothing -> oneof<record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -2366,7 +2387,7 @@ export def "get-database-available" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<available_drivers: list<string>, default_driver: string, engine: string, name: string, parameters: record, preferred: bool, sqlalchemy_uri_placeholder: string> {
+]: nothing -> oneof<table<available_drivers: list<string>, default_driver: string, engine: string, name: string, parameters: record, preferred: bool, sqlalchemy_uri_placeholder: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/database/available/" $auth.query)
@@ -2435,7 +2456,7 @@ export def "post-database-import" [
   --form-data: string # upload file (ZIP) (format: binary)
   --overwrite: oneof<nothing, bool> # overwrite existing databases?
   --passwords: string # JSON map of passwords for each file
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2482,7 +2503,7 @@ export def "post-database-test-connection" [
   --parameters: record # DB-specific parameters for configuration
   --server-cert: string # Optional CA_BUNDLE contents to validate HTTPS requests. Only available on certain database engines. (nullable)
   --sqlalchemy-uri: string # Refer to the SqlAlchemy docs (https://docs.sqlalchemy.org/en/rel_1_2/core/engines.html#database-urls) for more information on how to structure your URI.
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2526,7 +2547,7 @@ export def "post-database-validate-parameters" [
   --impersonate-user: oneof<nothing, bool> # If Presto, all the queries in SQL Lab are going to be executed as the currently logged on user who must have permission to run them.If Hive and hive.server2.enable.doAs is enabled, will run the queries as service account, but impersonate the currently logged on user via hive.server2.proxy.user property.
   --parameters: record # DB-specific parameters for configuration
   --server-cert: string # Optional CA_BUNDLE contents to validate HTTPS requests. Only available on certain database engines. (nullable)
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2563,7 +2584,7 @@ export def "delete-database-pk" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -2599,7 +2620,7 @@ export def "get-database-pk" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<allow_csv_upload: bool, allow_ctas: bool, allow_cvas: bool, allow_dml: bool, allow_multi_schema_metadata_fetch: bool, allow_run_async: bool, backend: any, cache_timeout: int, configuration_method: string, database_name: string, encrypted_extra: string, expose_in_sqllab: bool, extra: string, force_ctas_schema: string, id: int, impersonate_user: bool, parameters: any, server_cert: string, sqlalchemy_uri: string>, show_columns: list<string>, show_title: string> {
+]: nothing -> oneof<record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<allow_csv_upload: bool, allow_ctas: bool, allow_cvas: bool, allow_dml: bool, allow_multi_schema_metadata_fetch: bool, allow_run_async: bool, backend: any, cache_timeout: int, configuration_method: string, database_name: string, encrypted_extra: string, expose_in_sqllab: bool, extra: string, force_ctas_schema: string, id: int, impersonate_user: bool, parameters: any, server_cert: string, sqlalchemy_uri: string>, show_columns: list<string>, show_title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -2653,7 +2674,7 @@ export def "put-database-pk" [
   --parameters: record # DB-specific parameters for configuration
   --server-cert: string # Optional CA_BUNDLE contents to validate HTTPS requests. Only available on certain database engines. (nullable)
   --sqlalchemy-uri: string # Refer to the SqlAlchemy docs (https://docs.sqlalchemy.org/en/rel_1_2/core/engines.html#database-urls) for more information on how to structure your URI.
-]: any -> record<id: float, result: record<allow_csv_upload: bool, allow_ctas: bool, allow_cvas: bool, allow_dml: bool, allow_multi_schema_metadata_fetch: bool, allow_run_async: bool, cache_timeout: int, configuration_method: any, database_name: string, encrypted_extra: string, engine: string, expose_in_sqllab: bool, extra: string, force_ctas_schema: string, impersonate_user: bool, parameters: record, server_cert: string, sqlalchemy_uri: string>> {
+]: any -> oneof<record<id: float, result: record<allow_csv_upload: bool, allow_ctas: bool, allow_cvas: bool, allow_dml: bool, allow_multi_schema_metadata_fetch: bool, allow_run_async: bool, cache_timeout: int, configuration_method: any, database_name: string, encrypted_extra: string, engine: string, expose_in_sqllab: bool, extra: string, force_ctas_schema: string, impersonate_user: bool, parameters: record, server_cert: string, sqlalchemy_uri: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2691,7 +2712,7 @@ export def "get-database-pk-function-names" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<function_names: list<string>> {
+]: nothing -> oneof<record<function_names: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -2726,7 +2747,7 @@ export def "get-database-pk-related-objects" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<charts: record<count: int, result: list<record>>, dashboards: record<count: int, result: list<record>>> {
+]: nothing -> oneof<record<charts: record<count: int, result: list<record>>, dashboards: record<count: int, result: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -2762,7 +2783,7 @@ export def "get-database-pk-schemas" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<result: list<string>> {
+]: nothing -> oneof<record<result: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -2800,7 +2821,7 @@ export def "get-database-pk-select-star-table-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --schema-name: string # Table schema (required)
-]: nothing -> record<result: string> {
+]: nothing -> oneof<record<result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -2840,7 +2861,7 @@ export def "get-database-pk-select-star-table-name-schema-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: string> {
+]: nothing -> oneof<record<result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -2879,7 +2900,7 @@ export def "get-database-pk-table-table-name-schema-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<columns: table<duplicates_constraint: string, keys: list, longType: string, name: string, type: string>, foreignKeys: table<column_names: list, name: string, options: record, referred_columns: list, referred_schema: string, referred_table: string, type: string>, indexes: table<column_names: list, name: string, options: record, referred_columns: list, referred_schema: string, referred_table: string, type: string>, name: string, primaryKey: record<column_names: list<string>, name: string, type: string>, selectStar: string> {
+]: nothing -> oneof<record<columns: table<duplicates_constraint: string, keys: list, longType: string, name: string, type: string>, foreignKeys: table<column_names: list, name: string, options: record, referred_columns: list, referred_schema: string, referred_table: string, type: string>, indexes: table<column_names: list, name: string, options: record, referred_columns: list, referred_schema: string, referred_table: string, type: string>, name: string, primaryKey: record<column_names: list<string>, name: string, type: string>, selectStar: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -2916,7 +2937,7 @@ export def "delete-dataset" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -2951,7 +2972,7 @@ export def "get-dataset" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<changed_by: record, changed_by_name: any, changed_by_url: any, changed_on_delta_humanized: any, changed_on_utc: any, database: record, default_endpoint: string, explore_url: any, extra: string, id: int, kind: any, owners: record, schema: string, sql: string, table_name: string>> {
+]: nothing -> oneof<record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<changed_by: record, changed_by_name: any, changed_by_url: any, changed_on_delta_humanized: any, changed_on_utc: any, database: record, default_endpoint: string, explore_url: any, extra: string, id: int, kind: any, owners: record, schema: string, sql: string, table_name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -2989,7 +3010,7 @@ export def "post-dataset" [
   --owners: list<int>
   --schema: string
   table_name: string
-]: any -> record<id: float, result: record<database: int, owners: list<int>, schema: string, table_name: string>> {
+]: any -> oneof<record<id: float, result: record<database: int, owners: list<int>, schema: string, table_name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3026,7 +3047,7 @@ export def "get-dataset-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>> {
+]: nothing -> oneof<record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -3060,7 +3081,7 @@ export def "get-dataset-distinct-column-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: int, result: table<text: string>> {
+]: nothing -> oneof<record<count: int, result: table<text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'column_name' must be non-empty" } }
@@ -3131,7 +3152,7 @@ export def "post-dataset-import" [
   --form-data: string # upload file (ZIP or YAML) (format: binary)
   --overwrite: oneof<nothing, bool> # overwrite existing datasets?
   --passwords: string # JSON map of passwords for each file
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3169,7 +3190,7 @@ export def "get-dataset-related-column-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: int, result: table<text: string, value: int>> {
+]: nothing -> oneof<record<count: int, result: table<text: string, value: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'column_name' must be non-empty" } }
@@ -3205,7 +3226,7 @@ export def "delete-dataset-pk" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -3241,7 +3262,7 @@ export def "get-dataset-pk" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<cache_timeout: int, columns: record<changed_on: string, column_name: string, created_on: string, description: string, expression: string, filterable: bool, groupby: bool, id: int, is_active: bool, is_dttm: bool, python_date_format: string, type: string, type_generic: any, uuid: string, verbose_name: string>, database: record<database_name: string, id: int>, datasource_type: any, default_endpoint: string, description: string, extra: string, fetch_values_predicate: string, filter_select_enabled: bool, id: int, is_sqllab_view: bool, main_dttm_col: string, metrics: record<changed_on: string, created_on: string, d3format: string, description: string, expression: string, extra: string, id: int, metric_name: string, metric_type: string, uuid: string, verbose_name: string, warning_text: string>, offset: int, owners: record<first_name: string, id: int, last_name: string, username: string>, schema: string, sql: string, table_name: string, template_params: string, url: any>, show_columns: list<string>, show_title: string> {
+]: nothing -> oneof<record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<cache_timeout: int, columns: record<changed_on: string, column_name: string, created_on: string, description: string, expression: string, filterable: bool, groupby: bool, id: int, is_active: bool, is_dttm: bool, python_date_format: string, type: string, type_generic: any, uuid: string, verbose_name: string>, database: record<database_name: string, id: int>, datasource_type: any, default_endpoint: string, description: string, extra: string, fetch_values_predicate: string, filter_select_enabled: bool, id: int, is_sqllab_view: bool, main_dttm_col: string, metrics: record<changed_on: string, created_on: string, d3format: string, description: string, expression: string, extra: string, id: int, metric_name: string, metric_type: string, uuid: string, verbose_name: string, warning_text: string>, offset: int, owners: record<first_name: string, id: int, last_name: string, username: string>, schema: string, sql: string, table_name: string, template_params: string, url: any>, show_columns: list<string>, show_title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -3266,8 +3287,6 @@ export def "get-dataset-pk" [
 # Changes a Dataset
 #
 # PUT /dataset/{pk}
-# --columns item shape: {column_name: string, description?: string, expression?: string, filterable?: bool, groupby?: bool, id?: int, is_active?: bool, is_dttm?: bool, python_date_format?: string, type?: string, uuid?: string, verbose_name?: string}
-# --metrics item shape: {d3format?: string, description?: string, expression: string, id?: int, metric_name: string, metric_type?: string, warning_text?: string}
 export def "put-dataset-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3297,7 +3316,7 @@ export def "put-dataset-pk" [
   --sql: string # nullable
   --table-name: string # nullable
   --template-params: string # nullable
-]: any -> record<id: float, result: record<cache_timeout: int, columns: list<record>, database_id: int, default_endpoint: string, description: string, extra: string, fetch_values_predicate: string, filter_select_enabled: bool, is_sqllab_view: bool, main_dttm_col: string, metrics: list<record>, offset: int, owners: list<int>, schema: string, sql: string, table_name: string, template_params: string>> {
+]: any -> oneof<record<id: float, result: record<cache_timeout: int, columns: list<record>, database_id: int, default_endpoint: string, description: string, extra: string, fetch_values_predicate: string, filter_select_enabled: bool, is_sqllab_view: bool, main_dttm_col: string, metrics: list<record>, offset: int, owners: list<int>, schema: string, sql: string, table_name: string, template_params: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3337,7 +3356,7 @@ export def "delete-dataset-pk-column-column-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -3374,7 +3393,7 @@ export def "delete-dataset-pk-metric-metric-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -3410,7 +3429,7 @@ export def "put-dataset-pk-refresh" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -3445,7 +3464,7 @@ export def "get-dataset-pk-related-objects" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<charts: record<count: int, result: list<record>>, dashboards: record<count: int, result: list<record>>> {
+]: nothing -> oneof<record<charts: record<count: int, result: list<record>>, dashboards: record<count: int, result: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -3480,7 +3499,7 @@ export def "get-log" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<action: string, dashboard_id: int, dttm: string, duration_ms: int, json: string, referrer: string, slice_id: int, user: record, user_id: int>> {
+]: nothing -> oneof<record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<action: string, dashboard_id: int, dttm: string, duration_ms: int, json: string, referrer: string, slice_id: int, user: record, user_id: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -3513,7 +3532,7 @@ export def "post-log" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # format: int32
-]: any -> record<id: string, result: record<id: int>> {
+]: any -> oneof<record<id: string, result: record<id: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3551,7 +3570,7 @@ export def "get-log-pk" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<action: string, dashboard_id: int, dttm: string, duration_ms: int, json: string, referrer: string, slice_id: int, user: record<username: string>, user_id: int>, show_columns: list<string>, show_title: string> {
+]: nothing -> oneof<record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<action: string, dashboard_id: int, dttm: string, duration_ms: int, json: string, referrer: string, slice_id: int, user: record<username: string>, user_id: int>, show_columns: list<string>, show_title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -3586,7 +3605,7 @@ export def "get-menu" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: table<childs: list, icon: string, label: string, name: string, url: string>> {
+]: nothing -> oneof<record<result: table<childs: list, icon: string, label: string, name: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/menu/" $auth.query)
@@ -3620,7 +3639,7 @@ export def "get-openapi-version-openapi" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($version | is-empty) { error make --unspanned { msg: "path parameter 'version' must be non-empty" } }
@@ -3655,7 +3674,7 @@ export def "get-query" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<changed_on: string, database: record, end_time: float, executed_sql: string, id: int, rows: int, schema: string, sql: string, sql_tables: any, start_time: float, status: string, tab_name: string, tmp_table_name: string, tracking_url: string, user: record>> {
+]: nothing -> oneof<record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<changed_on: string, database: record, end_time: float, executed_sql: string, id: int, rows: int, schema: string, sql: string, sql_tables: any, start_time: float, status: string, tab_name: string, tmp_table_name: string, tracking_url: string, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -3689,7 +3708,7 @@ export def "get-query-distinct-column-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: int, result: table<text: string>> {
+]: nothing -> oneof<record<count: int, result: table<text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'column_name' must be non-empty" } }
@@ -3724,7 +3743,7 @@ export def "get-query-related-column-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: int, result: table<text: string, value: int>> {
+]: nothing -> oneof<record<count: int, result: table<text: string, value: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'column_name' must be non-empty" } }
@@ -3761,7 +3780,7 @@ export def "get-query-pk" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<changed_on: string, client_id: string, database: record<id: int>, end_result_backend_time: float, end_time: float, error_message: string, executed_sql: string, id: int, limit: int, progress: int, results_key: string, rows: int, schema: string, select_as_cta: bool, select_as_cta_used: bool, select_sql: string, sql: string, sql_editor_id: string, start_running_time: float, start_time: float, status: string, tab_name: string, tmp_schema_name: string, tmp_table_name: string, tracking_url: string>, show_columns: list<string>, show_title: string> {
+]: nothing -> oneof<record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<changed_on: string, client_id: string, database: record<id: int>, end_result_backend_time: float, end_time: float, error_message: string, executed_sql: string, id: int, limit: int, progress: int, results_key: string, rows: int, schema: string, select_as_cta: bool, select_as_cta_used: bool, select_sql: string, sql: string, sql_editor_id: string, start_running_time: float, start_time: float, status: string, tab_name: string, tmp_schema_name: string, tmp_table_name: string, tracking_url: string>, show_columns: list<string>, show_title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -3797,7 +3816,7 @@ export def "delete-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -3832,7 +3851,7 @@ export def "get-report" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<active: bool, changed_by: record, changed_on: string, changed_on_delta_humanized: any, created_by: record, created_on: string, creation_method: string, crontab: string, crontab_humanized: any, description: string, id: int, last_eval_dttm: string, last_state: string, name: string, owners: record, recipients: record, timezone: string, type: string>> {
+]: nothing -> oneof<record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<active: bool, changed_by: record, changed_on: string, changed_on_delta_humanized: any, created_by: record, created_on: string, creation_method: string, crontab: string, crontab_humanized: any, description: string, id: int, last_eval_dttm: string, last_state: string, name: string, owners: record, recipients: record, timezone: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -3856,8 +3875,6 @@ export def "get-report" [
 # Create a report schedule
 #
 # POST /report/
-# --recipients item shape: {recipient_config_json?: record, type: "Email"|"Slack"}
-# --validator_config_json shape: {op?: "<"|"<="|">"|">="|"=="|"!=", threshold?: int}
 export def "post-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3888,7 +3905,7 @@ export def "post-report" [
   --validator-config-json: record # shape: {op?: "<"|"<="|">"|">="|"=="|"!=", threshold?: int}
   --validator-type: string@validator-type-completer # Determines when to trigger alert based off value from alert query. Alerts will be triggered with these validator types: - Not Null - When the return value is Not NULL, Empty, or 0 - Operator - When `sql_return_value comparison_operator threshold` is True e.g. `50 <= 75`Supports the comparison operators <, <=, >, >=, ==, and !=
   --working-timeout: int # If an alert is staled at a working state, how long until it's state is reseted to error (format: int32, e.g. 3600)
-]: any -> record<id: float, result: record<active: bool, chart: int, context_markdown: string, creation_method: any, crontab: string, dashboard: int, database: int, description: string, grace_period: int, log_retention: int, name: string, owners: list<int>, recipients: list<record>, report_format: string, sql: string, timezone: string, type: string, validator_config_json: record<op: string, threshold: int>, validator_type: string, working_timeout: int>> {
+]: any -> oneof<record<id: float, result: record<active: bool, chart: int, context_markdown: string, creation_method: any, crontab: string, dashboard: int, database: int, description: string, grace_period: int, log_retention: int, name: string, owners: list<int>, recipients: list<record>, report_format: string, sql: string, timezone: string, type: string, validator_config_json: record<op: string, threshold: int>, validator_type: string, working_timeout: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3925,7 +3942,7 @@ export def "get-report-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>> {
+]: nothing -> oneof<record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -3959,7 +3976,7 @@ export def "get-report-related-column-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: int, result: table<text: string, value: int>> {
+]: nothing -> oneof<record<count: int, result: table<text: string, value: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'column_name' must be non-empty" } }
@@ -3995,7 +4012,7 @@ export def "delete-report-pk" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -4031,7 +4048,7 @@ export def "get-report-pk" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<active: bool, chart: record<id: int, slice_name: string, viz_type: string>, context_markdown: string, creation_method: string, crontab: string, dashboard: record<dashboard_title: string, id: int>, database: record<database_name: string, id: int>, description: string, grace_period: int, id: int, last_eval_dttm: string, last_state: string, last_value: float, last_value_row_json: string, log_retention: int, name: string, owners: record<first_name: string, id: int, last_name: string>, recipients: record<id: int, recipient_config_json: string, type: string>, report_format: string, sql: string, timezone: string, type: string, validator_config_json: string, validator_type: string, working_timeout: int>, show_columns: list<string>, show_title: string> {
+]: nothing -> oneof<record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<active: bool, chart: record<id: int, slice_name: string, viz_type: string>, context_markdown: string, creation_method: string, crontab: string, dashboard: record<dashboard_title: string, id: int>, database: record<database_name: string, id: int>, description: string, grace_period: int, id: int, last_eval_dttm: string, last_state: string, last_value: float, last_value_row_json: string, log_retention: int, name: string, owners: record<first_name: string, id: int, last_name: string>, recipients: record<id: int, recipient_config_json: string, type: string>, report_format: string, sql: string, timezone: string, type: string, validator_config_json: string, validator_type: string, working_timeout: int>, show_columns: list<string>, show_title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -4056,8 +4073,6 @@ export def "get-report-pk" [
 # Update a report schedule
 #
 # PUT /report/{pk}
-# --recipients item shape: {recipient_config_json?: record, type: "Email"|"Slack"}
-# --validator_config_json shape: {op?: "<"|"<="|">"|">="|"=="|"!=", threshold?: int}
 export def "put-report-pk" [
   pk: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4089,7 +4104,7 @@ export def "put-report-pk" [
   --validator-config-json: record # shape: {op?: "<"|"<="|">"|">="|"=="|"!=", threshold?: int}
   --validator-type: string@validator-type-completer # Determines when to trigger alert based off value from alert query. Alerts will be triggered with these validator types: - Not Null - When the return value is Not NULL, Empty, or 0 - Operator - When `sql_return_value comparison_operator threshold` is True e.g. `50 <= 75`Supports the comparison operators <, <=, >, >=, ==, and != (nullable)
   --working-timeout: int # If an alert is staled at a working state, how long until it's state is reseted to error (nullable, format: int32, e.g. 3600)
-]: any -> record<id: float, result: record<active: bool, chart: int, context_markdown: string, creation_method: any, crontab: string, dashboard: int, database: int, description: string, grace_period: int, log_retention: int, name: string, owners: list<int>, recipients: list<record>, report_format: string, sql: string, timezone: string, type: string, validator_config_json: record<op: string, threshold: int>, validator_type: string, working_timeout: int>> {
+]: any -> oneof<record<id: float, result: record<active: bool, chart: int, context_markdown: string, creation_method: any, crontab: string, dashboard: int, database: int, description: string, grace_period: int, log_retention: int, name: string, owners: list<int>, recipients: list<record>, report_format: string, sql: string, timezone: string, type: string, validator_config_json: record<op: string, threshold: int>, validator_type: string, working_timeout: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4128,7 +4143,7 @@ export def "get-report-pk-log" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: float, ids: list<string>, result: table<end_dttm: string, error_message: string, id: int, scheduled_dttm: string, start_dttm: string, state: string, uuid: string, value: float, value_row_json: string>> {
+]: nothing -> oneof<record<count: float, ids: list<string>, result: table<end_dttm: string, error_message: string, id: int, scheduled_dttm: string, start_dttm: string, state: string, uuid: string, value: float, value_row_json: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -4166,7 +4181,7 @@ export def "get-report-pk-log-log-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<id: string, result: record<end_dttm: string, error_message: string, id: int, scheduled_dttm: string, start_dttm: string, state: string, uuid: string, value: float, value_row_json: string>> {
+]: nothing -> oneof<record<id: string, result: record<end_dttm: string, error_message: string, id: int, scheduled_dttm: string, start_dttm: string, state: string, uuid: string, value: float, value_row_json: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -4203,7 +4218,7 @@ export def "delete-saved-query" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -4238,7 +4253,7 @@ export def "get-saved-query" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<changed_on_delta_humanized: any, created_by: record, created_on: string, database: record, db_id: int, description: string, extra: any, id: int, label: string, last_run_delta_humanized: any, rows: int, schema: string, sql: string, sql_tables: any>> {
+]: nothing -> oneof<record<count: float, description_columns: record<column_name: string>, ids: list<string>, label_columns: record<column_name: string>, list_columns: list<string>, list_title: string, order_columns: list<string>, result: table<changed_on_delta_humanized: any, created_by: record, created_on: string, database: record, db_id: int, description: string, extra: any, id: int, label: string, last_run_delta_humanized: any, rows: int, schema: string, sql: string, sql_tables: any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -4277,7 +4292,7 @@ export def "post-saved-query" [
   --label: string # nullable
   --schema: string # nullable
   --sql: string # nullable
-]: any -> record<id: string, result: record<db_id: int, description: string, label: string, schema: string, sql: string>> {
+]: any -> oneof<record<id: string, result: record<db_id: int, description: string, label: string, schema: string, sql: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4314,7 +4329,7 @@ export def "get-saved-query-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>> {
+]: nothing -> oneof<record<add_columns: record, edit_columns: record, filters: record<column_name: list<record>>, permissions: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -4348,7 +4363,7 @@ export def "get-saved-query-distinct-column-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: int, result: table<text: string>> {
+]: nothing -> oneof<record<count: int, result: table<text: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'column_name' must be non-empty" } }
@@ -4419,7 +4434,7 @@ export def "post-saved-query-import" [
   --form-data: string # upload file (ZIP) (format: binary)
   --overwrite: oneof<nothing, bool> # overwrite existing saved queries?
   --passwords: string # JSON map of passwords for each file
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4457,7 +4472,7 @@ export def "get-saved-query-related-column-name" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<count: int, result: table<text: string, value: int>> {
+]: nothing -> oneof<record<count: int, result: table<text: string, value: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($column_name | is-empty) { error make --unspanned { msg: "path parameter 'column_name' must be non-empty" } }
@@ -4493,7 +4508,7 @@ export def "delete-saved-query-pk" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string> {
+]: nothing -> oneof<record<message: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -4529,7 +4544,7 @@ export def "get-saved-query-pk" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<created_by: record<first_name: string, id: int, last_name: string>, database: record<database_name: string, id: int>, description: string, id: int, label: string, schema: string, sql: string, sql_tables: any>, show_columns: list<string>, show_title: string> {
+]: nothing -> oneof<record<description_columns: record<column_name: string>, id: string, label_columns: record<column_name: string>, result: record<created_by: record<first_name: string, id: int, last_name: string>, database: record<database_name: string, id: int>, description: string, id: int, label: string, schema: string, sql: string, sql_tables: any>, show_columns: list<string>, show_title: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pk | is-empty) { error make --unspanned { msg: "path parameter 'pk' must be non-empty" } }
@@ -4570,7 +4585,7 @@ export def "put-saved-query-pk" [
   --label: string # nullable
   --schema: string # nullable
   --sql: string # nullable
-]: any -> record<result: record<db_id: int, description: string, label: string, schema: string, sql: string>> {
+]: any -> oneof<record<result: record<db_id: int, description: string, label: string, schema: string, sql: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4607,7 +4622,7 @@ export def "get-security-csrf-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<result: string> {
+]: nothing -> oneof<record<result: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/security/csrf_token/" $auth.query)
@@ -4644,7 +4659,7 @@ export def "post-security-login" [
   --provider: string@provider-completer # Choose an authentication provider (e.g. db)
   --refresh: oneof<nothing, bool> # If true a refresh token is provided also (e.g. true)
   --username: string # The username for authentication (e.g. admin)
-]: any -> record<access_token: string, refresh_token: string> {
+]: any -> oneof<record<access_token: string, refresh_token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4680,7 +4695,7 @@ export def "post-security-refresh" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<access_token: string> {
+]: nothing -> oneof<record<access_token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/security/refresh" $auth.query)

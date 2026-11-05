@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -148,9 +172,9 @@ def sort-by-completer-1 [] { ["createdAt" "ttl"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-account" "get-analytics-live-streams-live-stream-id" "get-analytics-sessions-session-id-events" "get-analytics-videos-video-id" "post-auth-api-key" "post-auth-refresh" "get-live-streams" "post-live-streams" "delete-live-streams-live-stream-id" "get-live-streams-live-stream-id" "patch-live-streams-live-stream-id" "delete-live-streams-live-stream-id-thumbnail" "post-live-streams-live-stream-id-thumbnail" "get-players" "post-players" "delete-players-player-id" "get-players-player-id" "patch-players-player-id" "delete-players-player-id-logo" "post-players-player-id-logo" "post-upload" "get-upload-tokens" "post-upload-tokens" "delete-upload-tokens-upload-token" "get-upload-tokens-upload-token" "list-videos" "post-video" "delete-video" "get-video" "patch-video" "get-videos-video-id-captions" "delete-videos-video-id-captions-language" "get-videos-video-id-captions-language" "patch-videos-video-id-captions-language" "post-videos-video-id-captions-language" "get-videos-video-id-chapters" "delete-videos-video-id-chapters-language" "get-videos-video-id-chapters-language" "post-videos-video-id-chapters-language" "post-videos-video-id-source" "get-video-status" "patch-videos-video-id-thumbnail" "post-videos-video-id-thumbnail" "list-webhooks" "post-webhooks" "delete-webhook" "get-webhook" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -184,7 +208,7 @@ export def "get-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<environment: string, features: list<string>, quota: record<quotaRemaining: float, quotaTotal: float, quotaUsed: float>> {
+]: nothing -> oneof<record<environment: string, features: list<string>, quota: record<quotaRemaining: float, quotaTotal: float, quotaUsed: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account" $auth.query)
@@ -222,7 +246,7 @@ export def "get-analytics-live-streams-live-stream-id" [
   --period: string # Period must have one of the following formats: - For a day : "2018-01-01", - For a week: "2018-W01", - For a month: "2018-01" - For a year: "2018" For a range period: - Date range: "2018-01-01/2018-01-15" (format: period, e.g. 2019-01-01)
   --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
   --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
-]: nothing -> record<data: table<client: record, device: record, location: record, os: record, referrer: record, session: record>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
+]: nothing -> oneof<record<data: table<client: record, device: record, location: record, os: record, referrer: record, session: record>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($live_stream_id | is-empty) { error make --unspanned { msg: "path parameter 'liveStreamId' must be non-empty" } }
@@ -261,7 +285,7 @@ export def "get-analytics-sessions-session-id-events" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
   --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
-]: nothing -> record<data: table<at: int, emittedAt: string, from: int, to: int, type: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
+]: nothing -> oneof<record<data: table<at: int, emittedAt: string, from: int, to: int, type: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
@@ -302,7 +326,7 @@ export def "get-analytics-videos-video-id" [
   --metadata: list<string> # Metadata and [Dynamic Metadata](https://api.video/blog/endpoints/dynamic-metadata) filter. Send an array of key value pairs you want to filter sessios with. (e.g. [{"key": "Author", "value": "John Doe"}, {"key": "Format", "value": "Tutorial"}])
   --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
   --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
-]: nothing -> record<data: table<client: record, device: record, location: record, os: record, referrer: record, session: record>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
+]: nothing -> oneof<record<data: table<client: record, device: record, location: record, os: record, referrer: record, session: record>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'videoId' must be non-empty" } }
@@ -339,7 +363,7 @@ export def "post-auth-api-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   api_key: string # Your account API key. You can use your sandbox API key, or you can use your production API key.
-]: any -> record<access_token: string, expires_in: int, refresh_token: string, token_type: string> {
+]: any -> oneof<record<access_token: string, expires_in: int, refresh_token: string, token_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -377,7 +401,7 @@ export def "post-auth-refresh" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   refresh_token: string # The refresh token is either the first refresh token you received when you authenticated with the auth/api-key endpoint, or it's the refresh token from the last time you used the auth/refresh endpoint. Place this in the body of your request to obtain a new access token (which is valid for an hour) and a new refresh token.
-]: any -> record<access_token: string, expires_in: int, refresh_token: string, token_type: string> {
+]: any -> oneof<record<access_token: string, expires_in: int, refresh_token: string, token_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -420,7 +444,7 @@ export def "get-live-streams" [
   --sort-order: string@sort-order-completer # Allowed: asc, desc. Ascending for date and time means that earlier values precede later ones. Descending means that later values preced earlier ones. For title, it is 0-9 and A-Z ascending and Z-A, 9-0 descending. (e.g. desc)
   --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
   --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
-]: nothing -> record<data: table<assets: record, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
+]: nothing -> oneof<record<data: table<assets: record, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "streamKey" $stream_key "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "currentPage" $current_page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -459,7 +483,7 @@ export def "post-live-streams" [
   --player-id: string # The unique identifier for the player. (e.g. pl4f4ferf5erfr5zed4fsdd)
   --public: oneof<nothing, bool> # BETA FEATURE Please limit all public = false ("private") livestreams to 3,000 users. Whether your video can be viewed by everyone, or requires authentication to see it. A setting of false will require a unique token for each view.
   --record: oneof<nothing, bool> # Whether you are recording or not. True for record, false for not record. (default: false, e.g. true)
-]: any -> record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string> {
+]: any -> oneof<record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -533,7 +557,7 @@ export def "get-live-streams-live-stream-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string> {
+]: nothing -> oneof<record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($live_stream_id | is-empty) { error make --unspanned { msg: "path parameter 'liveStreamId' must be non-empty" } }
@@ -573,7 +597,7 @@ export def "patch-live-streams-live-stream-id" [
   --player-id: string # The unique ID for the player associated with a live stream that you want to update. (e.g. pl45KFKdlddgk654dspkze)
   --public: oneof<nothing, bool> # BETA FEATURE Please limit all public = false ("private") livestreams to 3,000 users. Whether your video can be viewed by everyone, or requires authentication to see it. A setting of false will require a unique token for each view.
   --record: oneof<nothing, bool> # Use this to indicate whether you want the recording on or off. On is true, off is false. (e.g. true)
-]: any -> record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string> {
+]: any -> oneof<record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -612,7 +636,7 @@ export def "delete-live-streams-live-stream-id-thumbnail" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string> {
+]: nothing -> oneof<record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($live_stream_id | is-empty) { error make --unspanned { msg: "path parameter 'liveStreamId' must be non-empty" } }
@@ -649,7 +673,7 @@ export def "post-live-streams-live-stream-id-thumbnail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # The image to be added as a thumbnail. (format: binary)
-]: any -> record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string> {
+]: any -> oneof<record<assets: record<hls: string, iframe: string, player: string, thumbnail: string>, broadcasting: bool, liveStreamId: string, name: string, playerId: string, public: bool, record: bool, streamKey: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -693,7 +717,7 @@ export def "get-players" [
   --sort-order: string@sort-order-completer # Allowed: asc, desc. Ascending for date and time means that earlier values precede later ones. Descending means that later values preced earlier ones. (e.g. asc)
   --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
   --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
-]: nothing -> record<data: table<backgroundBottom: string, backgroundText: string, backgroundTop: string, enableApi: bool, enableControls: bool, forceAutoplay: bool, forceLoop: bool, hideTitle: bool, link: string, linkHover: string, text: string, trackBackground: string, trackPlayed: string, trackUnplayed: string, assets: record, createdAt: string, linkActive: string, playerId: string, shapeAspect: string, shapeBackgroundBottom: string, shapeBackgroundTop: string, shapeMargin: int, shapeRadius: int, updatedAt: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
+]: nothing -> oneof<record<data: table<backgroundBottom: string, backgroundText: string, backgroundTop: string, enableApi: bool, enableControls: bool, forceAutoplay: bool, forceLoop: bool, hideTitle: bool, link: string, linkHover: string, text: string, trackBackground: string, trackPlayed: string, trackUnplayed: string, assets: record, createdAt: string, linkActive: string, playerId: string, shapeAspect: string, shapeBackgroundBottom: string, shapeBackgroundTop: string, shapeMargin: int, shapeRadius: int, updatedAt: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "currentPage" $current_page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -742,7 +766,7 @@ export def "post-players" [
   --track-background: string # RGBA color playback bar: background. Default: rgba(255, 255, 255, .2)
   --track-played: string # RGBA color playback bar: played content. Default: rgba(88, 131, 255, .95)
   --track-unplayed: string # RGBA color playback bar: downloaded but unplayed (buffered) content. Default: rgba(255, 255, 255, .35)
-]: any -> record<backgroundBottom: string, backgroundText: string, backgroundTop: string, enableApi: bool, enableControls: bool, forceAutoplay: bool, forceLoop: bool, hideTitle: bool, link: string, linkHover: string, text: string, trackBackground: string, trackPlayed: string, trackUnplayed: string, assets: record<link: string, logo: string>, createdAt: string, linkActive: string, playerId: string, shapeAspect: string, shapeBackgroundBottom: string, shapeBackgroundTop: string, shapeMargin: int, shapeRadius: int, updatedAt: string> {
+]: any -> oneof<record<backgroundBottom: string, backgroundText: string, backgroundTop: string, enableApi: bool, enableControls: bool, forceAutoplay: bool, forceLoop: bool, hideTitle: bool, link: string, linkHover: string, text: string, trackBackground: string, trackPlayed: string, trackUnplayed: string, assets: record<link: string, logo: string>, createdAt: string, linkActive: string, playerId: string, shapeAspect: string, shapeBackgroundBottom: string, shapeBackgroundTop: string, shapeMargin: int, shapeRadius: int, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -816,7 +840,7 @@ export def "get-players-player-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<backgroundBottom: string, backgroundText: string, backgroundTop: string, enableApi: bool, enableControls: bool, forceAutoplay: bool, forceLoop: bool, hideTitle: bool, link: string, linkHover: string, text: string, trackBackground: string, trackPlayed: string, trackUnplayed: string, assets: record<link: string, logo: string>, createdAt: string, linkActive: string, playerId: string, shapeAspect: string, shapeBackgroundBottom: string, shapeBackgroundTop: string, shapeMargin: int, shapeRadius: int, updatedAt: string> {
+]: nothing -> oneof<record<backgroundBottom: string, backgroundText: string, backgroundTop: string, enableApi: bool, enableControls: bool, forceAutoplay: bool, forceLoop: bool, hideTitle: bool, link: string, linkHover: string, text: string, trackBackground: string, trackPlayed: string, trackUnplayed: string, assets: record<link: string, logo: string>, createdAt: string, linkActive: string, playerId: string, shapeAspect: string, shapeBackgroundBottom: string, shapeBackgroundTop: string, shapeMargin: int, shapeRadius: int, updatedAt: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($player_id | is-empty) { error make --unspanned { msg: "path parameter 'playerId' must be non-empty" } }
@@ -866,7 +890,7 @@ export def "patch-players-player-id" [
   --track-background: string # RGBA color playback bar: background. Default: rgba(255, 255, 255, .2)
   --track-played: string # RGBA color playback bar: played content. Default: rgba(88, 131, 255, .95)
   --track-unplayed: string # RGBA color playback bar: downloaded but unplayed (buffered) content. Default: rgba(255, 255, 255, .35)
-]: any -> record<backgroundBottom: string, backgroundText: string, backgroundTop: string, enableApi: bool, enableControls: bool, forceAutoplay: bool, forceLoop: bool, hideTitle: bool, link: string, linkHover: string, text: string, trackBackground: string, trackPlayed: string, trackUnplayed: string, assets: record<link: string, logo: string>, createdAt: string, linkActive: string, playerId: string, shapeAspect: string, shapeBackgroundBottom: string, shapeBackgroundTop: string, shapeMargin: int, shapeRadius: int, updatedAt: string> {
+]: any -> oneof<record<backgroundBottom: string, backgroundText: string, backgroundTop: string, enableApi: bool, enableControls: bool, forceAutoplay: bool, forceLoop: bool, hideTitle: bool, link: string, linkHover: string, text: string, trackBackground: string, trackPlayed: string, trackUnplayed: string, assets: record<link: string, logo: string>, createdAt: string, linkActive: string, playerId: string, shapeAspect: string, shapeBackgroundBottom: string, shapeBackgroundTop: string, shapeMargin: int, shapeRadius: int, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -905,7 +929,7 @@ export def "delete-players-player-id-logo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($player_id | is-empty) { error make --unspanned { msg: "path parameter 'playerId' must be non-empty" } }
@@ -943,7 +967,7 @@ export def "post-players-player-id-logo" [
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # The name of the file you want to use for your logo. (format: binary, e.g. mylogo.jpg)
   link: string # The path to the file you want to upload and use as a logo. (format: string, e.g. path/to/my/logo/mylogo.jpg)
-]: any -> record<backgroundBottom: string, backgroundText: string, backgroundTop: string, enableApi: bool, enableControls: bool, forceAutoplay: bool, forceLoop: bool, hideTitle: bool, link: string, linkHover: string, text: string, trackBackground: string, trackPlayed: string, trackUnplayed: string, assets: record<link: string, logo: string>, createdAt: string, linkActive: string, playerId: string, shapeAspect: string, shapeBackgroundBottom: string, shapeBackgroundTop: string, shapeMargin: int, shapeRadius: int, updatedAt: string> {
+]: any -> oneof<record<backgroundBottom: string, backgroundText: string, backgroundTop: string, enableApi: bool, enableControls: bool, forceAutoplay: bool, forceLoop: bool, hideTitle: bool, link: string, linkHover: string, text: string, trackBackground: string, trackPlayed: string, trackUnplayed: string, assets: record<link: string, logo: string>, createdAt: string, linkActive: string, playerId: string, shapeAspect: string, shapeBackgroundBottom: string, shapeBackgroundTop: string, shapeMargin: int, shapeRadius: int, updatedAt: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -987,7 +1011,7 @@ export def "post-upload" [
   --content-range: string # Content-Range represents the range of bytes that will be returned as a result of the request. Byte ranges are inclusive, meaning that bytes 0-999 represents the first 1000 bytes in a file or object. (e.g. Content-Range: bytes 200-100/5000)
   file: string # The path to the video you want to upload. (format: binary, e.g. path/to/video/video.mp4)
   --video-id: string # The video id returned by the first call to this endpoint in a large video upload scenario.
-]: any -> record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string> {
+]: any -> oneof<record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
@@ -1034,7 +1058,7 @@ export def "get-upload-tokens" [
   --sort-order: string@sort-order-completer # Allowed: asc, desc. Ascending is 0-9 or A-Z. Descending is 9-0 or Z-A. (e.g. asc)
   --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
   --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
-]: nothing -> record<data: table<createdAt: string, expiresAt: string, token: string, ttl: int>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
+]: nothing -> oneof<record<data: table<createdAt: string, expiresAt: string, token: string, ttl: int>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "currentPage" $current_page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -1070,7 +1094,7 @@ export def "post-upload-tokens" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ttl: int # Time in seconds that the token will be active. A value of 0 means that the token has no exipration date. The default is to have no expiration. (default: 0)
-]: any -> record<createdAt: string, expiresAt: string, token: string, ttl: int> {
+]: any -> oneof<record<createdAt: string, expiresAt: string, token: string, ttl: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1144,7 +1168,7 @@ export def "get-upload-tokens-upload-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdAt: string, expiresAt: string, token: string, ttl: int> {
+]: nothing -> oneof<record<createdAt: string, expiresAt: string, token: string, ttl: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($upload_token | is-empty) { error make --unspanned { msg: "path parameter 'uploadToken' must be non-empty" } }
@@ -1188,7 +1212,7 @@ export def "list-videos" [
   --sort-order: string # Allowed: asc, desc. asc is ascending and sorts from A to Z. desc is descending and sorts from Z to A. (e.g. asc)
   --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
   --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
-]: nothing -> record<data: table<assets: record, description: string, metadata: list, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record, tags: list, title: string, updatedAt: string, videoId: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
+]: nothing -> oneof<record<data: table<assets: record, description: string, metadata: list, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record, tags: list, title: string, updatedAt: string, videoId: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "title" $title "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "description" $description "scalar") (serialize-qp "liveStreamId" $live_stream_id "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "currentPage" $current_page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -1213,7 +1237,6 @@ export def "list-videos" [
 #
 # POST /videos
 # operationId: POST-video
-# --metadata item shape: {key?: string, value?: string}
 export def "post-video" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1234,7 +1257,7 @@ export def "post-video" [
   --source: string # If you add a video already on the web, this is where you enter the url for the video. (e.g. https://www.myvideo.url.com/video.mp4)
   --tags: list<string> # A list of tags you want to use to describe your video. (e.g. ["maths", "string theory", "video"])
   title: string # The title of your new video. (e.g. Maths video)
-]: any -> record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string> {
+]: any -> oneof<record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1308,7 +1331,7 @@ export def "get-video" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string> {
+]: nothing -> oneof<record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'videoId' must be non-empty" } }
@@ -1333,7 +1356,6 @@ export def "get-video" [
 #
 # PATCH /videos/{videoId}
 # operationId: PATCH-video
-# --metadata item shape: {key?: string, value?: string}
 export def "patch-video" [
   video_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1353,7 +1375,7 @@ export def "patch-video" [
   --public: oneof<nothing, bool> # Whether the video is publicly available or not. False means it is set to private. Default is true. Tutorials on [private videos](https://api.video/blog/endpoints/private-videos). (e.g. true)
   --tags: list<string> # A list of terms or words you want to tag the video with. Make sure the list includes all the tags you want as whatever you send in this list will overwrite the existing list for the video. (e.g. ["maths", "string theory", "video"])
   --title: string # The title you want to use for your video.
-]: any -> record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string> {
+]: any -> oneof<record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1394,7 +1416,7 @@ export def "get-videos-video-id-captions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
   --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
-]: nothing -> record<data: table<default: bool, src: string, srclang: string, uri: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
+]: nothing -> oneof<record<data: table<default: bool, src: string, srclang: string, uri: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'videoId' must be non-empty" } }
@@ -1470,7 +1492,7 @@ export def "get-videos-video-id-captions-language" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<default: bool, src: string, srclang: string, uri: string> {
+]: nothing -> oneof<record<default: bool, src: string, srclang: string, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'videoId' must be non-empty" } }
@@ -1509,7 +1531,7 @@ export def "patch-videos-video-id-captions-language" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --default: oneof<nothing, bool>
-]: any -> record<default: bool, src: string, srclang: string, uri: string> {
+]: any -> oneof<record<default: bool, src: string, srclang: string, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1551,7 +1573,7 @@ export def "post-videos-video-id-captions-language" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # The video text track (VTT) you want to upload. (format: binary, e.g. https://cdn.api.video/vod/vi3N6cDinStg3oBbN79GklWS/captions/en.vtt)
-]: any -> record<default: bool, src: string, srclang: string, uri: string> {
+]: any -> oneof<record<default: bool, src: string, srclang: string, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1595,7 +1617,7 @@ export def "get-videos-video-id-chapters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
   --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
-]: nothing -> record<data: table<language: string, src: string, uri: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
+]: nothing -> oneof<record<data: table<language: string, src: string, uri: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'videoId' must be non-empty" } }
@@ -1671,7 +1693,7 @@ export def "get-videos-video-id-chapters-language" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<language: string, src: string, uri: string> {
+]: nothing -> oneof<record<language: string, src: string, uri: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'videoId' must be non-empty" } }
@@ -1710,7 +1732,7 @@ export def "post-videos-video-id-chapters-language" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # The VTT file describing the chapters you want to upload. (format: binary)
-]: any -> record<language: string, src: string, uri: string> {
+]: any -> oneof<record<language: string, src: string, uri: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1754,7 +1776,7 @@ export def "post-videos-video-id-source" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-range: string # Content-Range represents the range of bytes that will be returned as a result of the request. Byte ranges are inclusive, meaning that bytes 0-999 represents the first 1000 bytes in a file or object. (e.g. Content-Range: bytes 200-100/5000)
   file: string # The path to the video you would like to upload. The path must be local. If you want to use a video from an online source, you must use the "/videos" endpoint and add the "source" parameter when you create a new video. (format: binary, e.g. @/path/to/video.mp4)
-]: any -> record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string> {
+]: any -> oneof<record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1797,7 +1819,7 @@ export def "get-video-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<encoding: record<metadata: record<aspectRatio: string, audioCodec: string, bitrate: float, duration: int, framerate: int, height: int, samplerate: int, videoCodec: string, width: int>, playable: bool, qualities: list<record>>, ingest: record<filesize: int, receivedBytes: list<record>, status: string>> {
+]: nothing -> oneof<record<encoding: record<metadata: record<aspectRatio: string, audioCodec: string, bitrate: float, duration: int, framerate: int, height: int, samplerate: int, videoCodec: string, width: int>, playable: bool, qualities: list<record>>, ingest: record<filesize: int, receivedBytes: list<record>, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'videoId' must be non-empty" } }
@@ -1834,7 +1856,7 @@ export def "patch-videos-video-id-thumbnail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   timecode: string # Frame in video to be used as a placeholder before the video plays. Example: '"00:01:00.000" for 1 minute into the video.' Valid Patterns: "hh:mm:ss.ms" "hh:mm:ss:frameNumber" "124" (integer value is reported as seconds) If selection is out of range, "00:00:00.00" will be chosen.
-]: any -> record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string> {
+]: any -> oneof<record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1874,7 +1896,7 @@ export def "post-videos-video-id-thumbnail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # The image to be added as a thumbnail. (format: binary)
-]: any -> record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string> {
+]: any -> oneof<record<assets: record<hls: string, iframe: string, mp4: string, player: string, thumbnail: string>, description: string, metadata: table<key: string, value: string>, mp4Support: bool, panoramic: bool, playerId: string, public: bool, publishedAt: string, source: record<liveStream: record<links: list, liveStreamId: string>, type: string, uri: string>, tags: list<any>, title: string, updatedAt: string, videoId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1917,7 +1939,7 @@ export def "list-webhooks" [
   --events: string # The webhook event that you wish to filter on. (e.g. video.encoding.quality.completed)
   --current-page: int # Choose the number of search results to return per page. Minimum value: 1 (default: 1, e.g. 2)
   --page-size: int # Results per page. Allowed values 1-100, default is 25. (default: 25, e.g. 30)
-]: nothing -> record<data: table<createdAt: string, events: list, url: string, webhookId: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>> {
+]: nothing -> oneof<record<data: table<createdAt: string, events: list, url: string, webhookId: string>, pagination: record<currentPage: int, currentPageItems: int, itemsTotal: int, links: list<record>, pageSize: int, pagesTotal: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "events" $events "scalar") (serialize-qp "currentPage" $current_page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -1954,7 +1976,7 @@ export def "post-webhooks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   events: list<string> # A list of the webhooks that you are subscribing to. There are Currently four webhook options: * ```video.encoding.quality.completed``` When a new video is uploaded into your account, it will be encoded into several different HLS sizes/bitrates. When each version is encoded, your webhook will get a notification. It will look like ```{ \"type\": \"video.encoding.quality.completed\", \"emittedAt\": \"2021-01-29T16:46:25.217+01:00\", \"videoId\": \"viXXXXXXXX\", \"encoding\": \"hls\", \"quality\": \"720p\"} ```. This request says that the 720p HLS encoding was completed. * ```live-stream.broadcast.started``` When a livestream begins broadcasting, the broadcasting parameter changes from false to true, and this webhook fires. * ```live-stream.broadcast.ended``` This event fores when the livestream has finished broadcasting, and the broadcasting parameter flips from false to true. * ```video.source.recorded``` This event is similar to ```video.encoding.quality.completed```, but tells you if a livestream has been recorded as a VOD. (e.g. video.encoding.quality.completed)
   url: string # The the url to which HTTP notifications are sent. It could be any http or https URL. (e.g. https://example.com/webhooks)
-]: any -> record<createdAt: string, events: list<string>, url: string, webhookId: string> {
+]: any -> oneof<record<createdAt: string, events: list<string>, url: string, webhookId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2028,7 +2050,7 @@ export def "get-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<createdAt: string, events: list<string>, url: string, webhookId: string> {
+]: nothing -> oneof<record<createdAt: string, events: list<string>, url: string, webhookId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhookId' must be non-empty" } }

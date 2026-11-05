@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -123,9 +147,9 @@ def user-type-completer [] { ["Guest" "Member"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "applications-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["applications-list" "applications-create" "applications-delete" "applications-get" "applications-patch" "applications-add-owner" "applications-remove-owner" "applications-list-key-credentials" "applications-update-key-credentials" "applications-list-owners" "applications-list-password-credentials" "applications-update-password-credentials" "deleted-applications-list" "deleted-applications-hard-delete" "deleted-applications-restore" "domains-list" "domains-get" "objects-get-objects-by-object-ids" "groups-list" "groups-create" "groups-add-member" "groups-remove-member" "groups-delete" "groups-get" "groups-add-owner" "groups-remove-owner" "groups-get-member-groups" "groups-get-group-members" "groups-list-owners" "groups-is-member-of" "signed-in-user-get" "signed-in-user-list-owned-objects" "o-auth2-permission-grant-list" "o-auth2-permission-grant-create" "o-auth2-permission-grant-delete" "service-principals-list" "service-principals-create" "service-principals-delete" "service-principals-get" "service-principals-update" "service-principals-add-owner" "service-principals-remove-owner" "service-principals-list-app-role-assigned-to" "service-principals-list-app-role-assignments" "service-principals-list-key-credentials" "service-principals-update-key-credentials" "service-principals-list-owners" "service-principals-list-password-credentials" "service-principals-update-password-credentials" "applications-get-service-principals-id-by-app-id" "users-list" "users-create" "users-get-member-groups" "users-delete" "users-get" "users-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -161,7 +185,7 @@ export def "applications-list" [
   --accept: string@accept-completer # Response content type
   --filter: string # The filters to apply to the operation.
   --api-version: string # Client API version. (required)
-]: nothing -> record<odata_nextLink: string, value: table<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list, appRoles: list, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list, informationalUrls: record, isDeviceOnlyAuthSupported: bool, keyCredentials: list, knownClientApplications: list, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: list, oauth2RequirePostResponse: bool, optionalClaims: record, orgRestrictions: list, passwordCredentials: list, preAuthorizedApplications: list, publicClient: bool, publisherDomain: string, replyUrls: list, requiredResourceAccess: list, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string, deletionTimestamp: string, objectId: string, objectType: string>> {
+]: nothing -> oneof<record<odata_nextLink: string, value: table<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list, appRoles: list, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list, informationalUrls: record, isDeviceOnlyAuthSupported: bool, keyCredentials: list, knownClientApplications: list, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: list, oauth2RequirePostResponse: bool, optionalClaims: record, orgRestrictions: list, passwordCredentials: list, preAuthorizedApplications: list, publicClient: bool, publisherDomain: string, replyUrls: list, requiredResourceAccess: list, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string, deletionTimestamp: string, objectId: string, objectType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -188,14 +212,6 @@ export def "applications-list" [
 #
 # POST /{tenantID}/applications
 # operationId: Applications_Create
-# --appRoles item shape: {allowedMemberTypes?: list<string>, description?: string, displayName?: string, id?: string, isEnabled?: bool, value?: string}
-# --informationalUrls shape: {marketing?: string, privacy?: string, support?: string, termsOfService?: string}
-# --keyCredentials item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
-# --oauth2Permissions item shape: {adminConsentDescription?: string, adminConsentDisplayName?: string, id?: string, isEnabled?: bool, type?: string, userConsentDescription?: string, userConsentDisplayName?: string, value?: string}
-# --optionalClaims shape: {accessToken?: list, idToken?: list, samlToken?: list}
-# --passwordCredentials item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
-# --preAuthorizedApplications item shape: {appId?: string, extensions?: list, permissions?: list}
-# --requiredResourceAccess item shape: {resourceAccess: list, resourceAppId?: string}
 export def "applications-create" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -240,7 +256,7 @@ export def "applications-create" [
   --saml-metadata-url: string # The URL to the SAML metadata for the application.
   --sign-in-audience: string # Audience for signing in to the application (AzureADMyOrganization, AzureADAllOrganizations, AzureADAndMicrosoftAccounts).
   --www-homepage: string # The primary Web page.
-]: any -> record<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list<string>, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list<string>, informationalUrls: record<marketing: string, privacy: string, support: string, termsOfService: string>, isDeviceOnlyAuthSupported: bool, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, knownClientApplications: list<string>, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, oauth2RequirePostResponse: bool, optionalClaims: record<accessToken: list<record>, idToken: list<record>, samlToken: list<record>>, orgRestrictions: list<string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preAuthorizedApplications: table<appId: string, extensions: list, permissions: list>, publicClient: bool, publisherDomain: string, replyUrls: list<string>, requiredResourceAccess: table<resourceAccess: list, resourceAppId: string>, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string, deletionTimestamp: string, objectId: string, objectType: string> {
+]: any -> oneof<record<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list<string>, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list<string>, informationalUrls: record<marketing: string, privacy: string, support: string, termsOfService: string>, isDeviceOnlyAuthSupported: bool, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, knownClientApplications: list<string>, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, oauth2RequirePostResponse: bool, optionalClaims: record<accessToken: list<record>, idToken: list<record>, samlToken: list<record>>, orgRestrictions: list<string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preAuthorizedApplications: table<appId: string, extensions: list, permissions: list>, publicClient: bool, publisherDomain: string, replyUrls: list<string>, requiredResourceAccess: table<resourceAccess: list, resourceAppId: string>, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string, deletionTimestamp: string, objectId: string, objectType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -326,7 +342,7 @@ export def "applications-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list<string>, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list<string>, informationalUrls: record<marketing: string, privacy: string, support: string, termsOfService: string>, isDeviceOnlyAuthSupported: bool, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, knownClientApplications: list<string>, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, oauth2RequirePostResponse: bool, optionalClaims: record<accessToken: list<record>, idToken: list<record>, samlToken: list<record>>, orgRestrictions: list<string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preAuthorizedApplications: table<appId: string, extensions: list, permissions: list>, publicClient: bool, publisherDomain: string, replyUrls: list<string>, requiredResourceAccess: table<resourceAccess: list, resourceAppId: string>, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string, deletionTimestamp: string, objectId: string, objectType: string> {
+]: nothing -> oneof<record<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list<string>, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list<string>, informationalUrls: record<marketing: string, privacy: string, support: string, termsOfService: string>, isDeviceOnlyAuthSupported: bool, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, knownClientApplications: list<string>, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, oauth2RequirePostResponse: bool, optionalClaims: record<accessToken: list<record>, idToken: list<record>, samlToken: list<record>>, orgRestrictions: list<string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preAuthorizedApplications: table<appId: string, extensions: list, permissions: list>, publicClient: bool, publisherDomain: string, replyUrls: list<string>, requiredResourceAccess: table<resourceAccess: list, resourceAppId: string>, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string, deletionTimestamp: string, objectId: string, objectType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -354,14 +370,6 @@ export def "applications-get" [
 #
 # PATCH /{tenantID}/applications/{applicationObjectId}
 # operationId: Applications_Patch
-# --appRoles item shape: {allowedMemberTypes?: list<string>, description?: string, displayName?: string, id?: string, isEnabled?: bool, value?: string}
-# --informationalUrls shape: {marketing?: string, privacy?: string, support?: string, termsOfService?: string}
-# --keyCredentials item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
-# --oauth2Permissions item shape: {adminConsentDescription?: string, adminConsentDisplayName?: string, id?: string, isEnabled?: bool, type?: string, userConsentDescription?: string, userConsentDisplayName?: string, value?: string}
-# --optionalClaims shape: {accessToken?: list, idToken?: list, samlToken?: list}
-# --passwordCredentials item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
-# --preAuthorizedApplications item shape: {appId?: string, extensions?: list, permissions?: list}
-# --requiredResourceAccess item shape: {resourceAccess: list, resourceAppId?: string}
 export def "applications-patch" [
   tenant_id: string
   application_object_id: string
@@ -542,7 +550,7 @@ export def "applications-list-key-credentials" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<value: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>> {
+]: nothing -> oneof<record<value: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -570,7 +578,6 @@ export def "applications-list-key-credentials" [
 #
 # PATCH /{tenantID}/applications/{applicationObjectId}/keyCredentials
 # operationId: Applications_UpdateKeyCredentials
-# --value item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
 export def "applications-update-key-credentials" [
   tenant_id: string
   application_object_id: string
@@ -631,7 +638,7 @@ export def "applications-list-owners" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>> {
+]: nothing -> oneof<record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -673,7 +680,7 @@ export def "applications-list-password-credentials" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<value: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>> {
+]: nothing -> oneof<record<value: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -701,7 +708,6 @@ export def "applications-list-password-credentials" [
 #
 # PATCH /{tenantID}/applications/{applicationObjectId}/passwordCredentials
 # operationId: Applications_UpdatePasswordCredentials
-# --value item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
 export def "applications-update-password-credentials" [
   tenant_id: string
   application_object_id: string
@@ -762,7 +768,7 @@ export def "deleted-applications-list" [
   --accept: string@accept-completer # Response content type
   --filter: string # The filter to apply to the operation.
   --api-version: string # Client API version. (required)
-]: nothing -> record<odata_nextLink: string, value: table<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list, appRoles: list, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list, informationalUrls: record, isDeviceOnlyAuthSupported: bool, keyCredentials: list, knownClientApplications: list, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: list, oauth2RequirePostResponse: bool, optionalClaims: record, orgRestrictions: list, passwordCredentials: list, preAuthorizedApplications: list, publicClient: bool, publisherDomain: string, replyUrls: list, requiredResourceAccess: list, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string, deletionTimestamp: string, objectId: string, objectType: string>> {
+]: nothing -> oneof<record<odata_nextLink: string, value: table<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list, appRoles: list, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list, informationalUrls: record, isDeviceOnlyAuthSupported: bool, keyCredentials: list, knownClientApplications: list, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: list, oauth2RequirePostResponse: bool, optionalClaims: record, orgRestrictions: list, passwordCredentials: list, preAuthorizedApplications: list, publicClient: bool, publisherDomain: string, replyUrls: list, requiredResourceAccess: list, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string, deletionTimestamp: string, objectId: string, objectType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -845,7 +851,7 @@ export def "deleted-applications-restore" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list<string>, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list<string>, informationalUrls: record<marketing: string, privacy: string, support: string, termsOfService: string>, isDeviceOnlyAuthSupported: bool, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, knownClientApplications: list<string>, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, oauth2RequirePostResponse: bool, optionalClaims: record<accessToken: list<record>, idToken: list<record>, samlToken: list<record>>, orgRestrictions: list<string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preAuthorizedApplications: table<appId: string, extensions: list, permissions: list>, publicClient: bool, publisherDomain: string, replyUrls: list<string>, requiredResourceAccess: table<resourceAccess: list, resourceAppId: string>, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string, deletionTimestamp: string, objectId: string, objectType: string> {
+]: nothing -> oneof<record<allowGuestsSignIn: bool, allowPassthroughUsers: bool, appId: string, appLogoUrl: string, appPermissions: list<string>, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, availableToOtherTenants: bool, displayName: string, errorUrl: string, groupMembershipClaims: string, homepage: string, identifierUris: list<string>, informationalUrls: record<marketing: string, privacy: string, support: string, termsOfService: string>, isDeviceOnlyAuthSupported: bool, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, knownClientApplications: list<string>, logoutUrl: string, oauth2AllowImplicitFlow: bool, oauth2AllowUrlPathMatching: bool, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, oauth2RequirePostResponse: bool, optionalClaims: record<accessToken: list<record>, idToken: list<record>, samlToken: list<record>>, orgRestrictions: list<string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preAuthorizedApplications: table<appId: string, extensions: list, permissions: list>, publicClient: bool, publisherDomain: string, replyUrls: list<string>, requiredResourceAccess: table<resourceAccess: list, resourceAppId: string>, samlMetadataUrl: string, signInAudience: string, wwwHomepage: string, deletionTimestamp: string, objectId: string, objectType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -887,7 +893,7 @@ export def "domains-list" [
   --accept: string@accept-completer # Response content type
   --filter: string # The filter to apply to the operation.
   --api-version: string # Client API version. (required)
-]: nothing -> record<value: table<authenticationType: string, isDefault: bool, isVerified: bool, name: string>> {
+]: nothing -> oneof<record<value: table<authenticationType: string, isDefault: bool, isVerified: bool, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -928,7 +934,7 @@ export def "domains-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<authenticationType: string, isDefault: bool, isVerified: bool, name: string> {
+]: nothing -> oneof<record<authenticationType: string, isDefault: bool, isVerified: bool, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -972,7 +978,7 @@ export def "objects-get-objects-by-object-ids" [
   --include-directory-object-references: oneof<nothing, bool> # If true, also searches for object IDs in the partner tenant.
   --object-ids: list<string> # The requested object IDs.
   --types: list<string> # The requested object types.
-]: any -> record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>> {
+]: any -> oneof<record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1016,7 +1022,7 @@ export def "groups-list" [
   --accept: string@accept-completer # Response content type
   --filter: string # The filter to apply to the operation.
   --api-version: string # Client API version. (required)
-]: nothing -> record<odata_nextLink: string, value: table<displayName: string, mail: string, mailEnabled: bool, mailNickname: string, securityEnabled: bool, deletionTimestamp: string, objectId: string, objectType: string>> {
+]: nothing -> oneof<record<odata_nextLink: string, value: table<displayName: string, mail: string, mailEnabled: bool, mailNickname: string, securityEnabled: bool, deletionTimestamp: string, objectId: string, objectType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -1060,7 +1066,7 @@ export def "groups-create" [
   --mail-enabled: oneof<nothing, bool> # Whether the group is mail-enabled. Must be false. This is because only pure security groups can be created using the Graph API.
   mail_nickname: string # Mail nickname
   --security-enabled: oneof<nothing, bool> # Whether the group is a security group. Must be true. This is because only pure security groups can be created using the Graph API.
-]: any -> record<displayName: string, mail: string, mailEnabled: bool, mailNickname: string, securityEnabled: bool, deletionTimestamp: string, objectId: string, objectType: string> {
+]: any -> oneof<record<displayName: string, mail: string, mailEnabled: bool, mailNickname: string, securityEnabled: bool, deletionTimestamp: string, objectId: string, objectType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1238,7 +1244,7 @@ export def "groups-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<displayName: string, mail: string, mailEnabled: bool, mailNickname: string, securityEnabled: bool, deletionTimestamp: string, objectId: string, objectType: string> {
+]: nothing -> oneof<record<displayName: string, mail: string, mailEnabled: bool, mailNickname: string, securityEnabled: bool, deletionTimestamp: string, objectId: string, objectType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -1371,7 +1377,7 @@ export def "groups-get-member-groups" [
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
   --security-enabled-only: oneof<nothing, bool> # If true, only membership in security-enabled groups should be checked. Otherwise, membership in all groups should be checked.
-]: any -> record<value: list<string>> {
+]: any -> oneof<record<value: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1417,7 +1423,7 @@ export def "groups-get-group-members" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>> {
+]: nothing -> oneof<record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -1459,7 +1465,7 @@ export def "groups-list-owners" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>> {
+]: nothing -> oneof<record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -1502,7 +1508,7 @@ export def "groups-is-member-of" [
   --api-version: string # Client API version. (required)
   group_id: string # The object ID of the group to check.
   member_id: string # The object ID of the contact, group, user, or service principal to check for membership in the specified group.
-]: any -> record<value: bool> {
+]: any -> oneof<record<value: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1545,7 +1551,7 @@ export def "signed-in-user-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: table<type: string, value: string>, surname: string, usageLocation: string, userPrincipalName: string, userType: string, deletionTimestamp: string, objectId: string, objectType: string> {
+]: nothing -> oneof<record<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: table<type: string, value: string>, surname: string, usageLocation: string, userPrincipalName: string, userType: string, deletionTimestamp: string, objectId: string, objectType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -1585,7 +1591,7 @@ export def "signed-in-user-list-owned-objects" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>> {
+]: nothing -> oneof<record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -1625,7 +1631,7 @@ export def "o-auth2-permission-grant-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # This is the Service Principal ObjectId associated with the app (e.g. clientId+eq+'61ed44c3-5a1d-4639-a215-07f25129c6c3)
   --api-version: string # Client API version. (required)
-]: nothing -> record<odata_nextLink: string, value: table<clientId: string, consentType: string, expiryTime: string, objectId: string, odata_type: string, principalId: string, resourceId: string, scope: string, startTime: string>> {
+]: nothing -> oneof<record<odata_nextLink: string, value: table<clientId: string, consentType: string, expiryTime: string, objectId: string, odata_type: string, principalId: string, resourceId: string, scope: string, startTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -1673,7 +1679,7 @@ export def "o-auth2-permission-grant-create" [
   --resource-id: string # Object Id of the resource you want to grant
   --scope: string # Specifies the value of the scope claim that the resource application should expect in the OAuth 2.0 access token. For example, User.Read
   --start-time: string # Start time for TTL
-]: any -> record<clientId: string, consentType: string, expiryTime: string, objectId: string, odata_type: string, principalId: string, resourceId: string, scope: string, startTime: string> {
+]: any -> oneof<record<clientId: string, consentType: string, expiryTime: string, objectId: string, odata_type: string, principalId: string, resourceId: string, scope: string, startTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1759,7 +1765,7 @@ export def "service-principals-list" [
   --accept: string@accept-completer # Response content type
   --filter: string # The filter to apply to the operation.
   --api-version: string # Client API version. (required)
-]: nothing -> record<odata_nextLink: string, value: table<accountEnabled: bool, alternativeNames: list, appDisplayName: string, appId: string, appOwnerTenantId: string, appRoleAssignmentRequired: bool, appRoles: list, displayName: string, errorUrl: string, homepage: string, keyCredentials: list, logoutUrl: string, oauth2Permissions: list, passwordCredentials: list, preferredTokenSigningKeyThumbprint: string, publisherName: string, replyUrls: list, samlMetadataUrl: string, servicePrincipalNames: list, servicePrincipalType: string, tags: list, deletionTimestamp: string, objectId: string, objectType: string>> {
+]: nothing -> oneof<record<odata_nextLink: string, value: table<accountEnabled: bool, alternativeNames: list, appDisplayName: string, appId: string, appOwnerTenantId: string, appRoleAssignmentRequired: bool, appRoles: list, displayName: string, errorUrl: string, homepage: string, keyCredentials: list, logoutUrl: string, oauth2Permissions: list, passwordCredentials: list, preferredTokenSigningKeyThumbprint: string, publisherName: string, replyUrls: list, samlMetadataUrl: string, servicePrincipalNames: list, servicePrincipalType: string, tags: list, deletionTimestamp: string, objectId: string, objectType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -1786,8 +1792,6 @@ export def "service-principals-list" [
 #
 # POST /{tenantID}/servicePrincipals
 # operationId: ServicePrincipals_Create
-# --keyCredentials item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
-# --passwordCredentials item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
 export def "service-principals-create" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1808,7 +1812,7 @@ export def "service-principals-create" [
   --password-credentials: list # The collection of password credentials associated with the service principal. — item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
   --service-principal-type: string # the type of the service principal
   --tags: list<string> # Optional list of tags that you can apply to your service principals. Not nullable.
-]: any -> record<accountEnabled: bool, alternativeNames: list<string>, appDisplayName: string, appId: string, appOwnerTenantId: string, appRoleAssignmentRequired: bool, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, displayName: string, errorUrl: string, homepage: string, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, logoutUrl: string, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preferredTokenSigningKeyThumbprint: string, publisherName: string, replyUrls: list<string>, samlMetadataUrl: string, servicePrincipalNames: list<string>, servicePrincipalType: string, tags: list<string>, deletionTimestamp: string, objectId: string, objectType: string> {
+]: any -> oneof<record<accountEnabled: bool, alternativeNames: list<string>, appDisplayName: string, appId: string, appOwnerTenantId: string, appRoleAssignmentRequired: bool, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, displayName: string, errorUrl: string, homepage: string, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, logoutUrl: string, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preferredTokenSigningKeyThumbprint: string, publisherName: string, replyUrls: list<string>, samlMetadataUrl: string, servicePrincipalNames: list<string>, servicePrincipalType: string, tags: list<string>, deletionTimestamp: string, objectId: string, objectType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1894,7 +1898,7 @@ export def "service-principals-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<accountEnabled: bool, alternativeNames: list<string>, appDisplayName: string, appId: string, appOwnerTenantId: string, appRoleAssignmentRequired: bool, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, displayName: string, errorUrl: string, homepage: string, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, logoutUrl: string, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preferredTokenSigningKeyThumbprint: string, publisherName: string, replyUrls: list<string>, samlMetadataUrl: string, servicePrincipalNames: list<string>, servicePrincipalType: string, tags: list<string>, deletionTimestamp: string, objectId: string, objectType: string> {
+]: nothing -> oneof<record<accountEnabled: bool, alternativeNames: list<string>, appDisplayName: string, appId: string, appOwnerTenantId: string, appRoleAssignmentRequired: bool, appRoles: table<allowedMemberTypes: list, description: string, displayName: string, id: string, isEnabled: bool, value: string>, displayName: string, errorUrl: string, homepage: string, keyCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>, logoutUrl: string, oauth2Permissions: table<adminConsentDescription: string, adminConsentDisplayName: string, id: string, isEnabled: bool, type: string, userConsentDescription: string, userConsentDisplayName: string, value: string>, passwordCredentials: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>, preferredTokenSigningKeyThumbprint: string, publisherName: string, replyUrls: list<string>, samlMetadataUrl: string, servicePrincipalNames: list<string>, servicePrincipalType: string, tags: list<string>, deletionTimestamp: string, objectId: string, objectType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -1922,8 +1926,6 @@ export def "service-principals-get" [
 #
 # PATCH /{tenantID}/servicePrincipals/{objectId}
 # operationId: ServicePrincipals_Update
-# --keyCredentials item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
-# --passwordCredentials item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
 export def "service-principals-update" [
   tenant_id: string
   object_id: string
@@ -2079,7 +2081,7 @@ export def "service-principals-list-app-role-assigned-to" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<odata_nextLink: string, value: table<id: string, principalDisplayName: string, principalId: string, principalType: string, resourceDisplayName: string, resourceId: string, deletionTimestamp: string, objectId: string, objectType: string>> {
+]: nothing -> oneof<record<odata_nextLink: string, value: table<id: string, principalDisplayName: string, principalId: string, principalType: string, resourceDisplayName: string, resourceId: string, deletionTimestamp: string, objectId: string, objectType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -2121,7 +2123,7 @@ export def "service-principals-list-app-role-assignments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<odata_nextLink: string, value: table<id: string, principalDisplayName: string, principalId: string, principalType: string, resourceDisplayName: string, resourceId: string, deletionTimestamp: string, objectId: string, objectType: string>> {
+]: nothing -> oneof<record<odata_nextLink: string, value: table<id: string, principalDisplayName: string, principalId: string, principalType: string, resourceDisplayName: string, resourceId: string, deletionTimestamp: string, objectId: string, objectType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -2163,7 +2165,7 @@ export def "service-principals-list-key-credentials" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<value: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>> {
+]: nothing -> oneof<record<value: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, type: string, usage: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -2191,7 +2193,6 @@ export def "service-principals-list-key-credentials" [
 #
 # PATCH /{tenantID}/servicePrincipals/{objectId}/keyCredentials
 # operationId: ServicePrincipals_UpdateKeyCredentials
-# --value item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, type?: string, usage?: string, value?: string}
 export def "service-principals-update-key-credentials" [
   tenant_id: string
   object_id: string
@@ -2252,7 +2253,7 @@ export def "service-principals-list-owners" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>> {
+]: nothing -> oneof<record<odata_nextLink: string, value: table<deletionTimestamp: string, objectId: string, objectType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -2294,7 +2295,7 @@ export def "service-principals-list-password-credentials" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<value: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>> {
+]: nothing -> oneof<record<value: table<customKeyIdentifier: string, endDate: string, keyId: string, startDate: string, value: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -2322,7 +2323,6 @@ export def "service-principals-list-password-credentials" [
 #
 # PATCH /{tenantID}/servicePrincipals/{objectId}/passwordCredentials
 # operationId: ServicePrincipals_UpdatePasswordCredentials
-# --value item shape: {customKeyIdentifier?: string, endDate?: string, keyId?: string, startDate?: string, value?: string}
 export def "service-principals-update-password-credentials" [
   tenant_id: string
   object_id: string
@@ -2383,7 +2383,7 @@ export def "applications-get-service-principals-id-by-app-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<odata_metadata: string, value: string> {
+]: nothing -> oneof<record<odata_metadata: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -2427,7 +2427,7 @@ export def "users-list" [
   --expand: string # The expand value for the operation result.
   --top: int # (Optional) Set the maximum number of results per response. (default: 100)
   --api-version: string # Client API version. (required)
-]: nothing -> record<odata_nextLink: string, value: table<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: list, surname: string, usageLocation: string, userPrincipalName: string, userType: string, deletionTimestamp: string, objectId: string, objectType: string>> {
+]: nothing -> oneof<record<odata_nextLink: string, value: table<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: list, surname: string, usageLocation: string, userPrincipalName: string, userType: string, deletionTimestamp: string, objectId: string, objectType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -2454,7 +2454,6 @@ export def "users-list" [
 #
 # POST /{tenantID}/users
 # operationId: Users_Create
-# --passwordProfile shape: {forceChangePasswordNextLogin?: bool, password: string}
 export def "users-create" [
   tenant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2479,7 +2478,7 @@ export def "users-create" [
   --surname: string # The user's surname (family name or last name).
   --usage-location: string # A two letter country code (ISO standard 3166). Required for users that will be assigned licenses due to legal requirement to check for availability of services in countries. Examples include: "US", "JP", and "GB".
   --user-type: string@user-type-completer # A string value that can be used to classify user types in your directory, such as 'Member' and 'Guest'.
-]: any -> record<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: table<type: string, value: string>, surname: string, usageLocation: string, userPrincipalName: string, userType: string, deletionTimestamp: string, objectId: string, objectType: string> {
+]: any -> oneof<record<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: table<type: string, value: string>, surname: string, usageLocation: string, userPrincipalName: string, userType: string, deletionTimestamp: string, objectId: string, objectType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2525,7 +2524,7 @@ export def "users-get-member-groups" [
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
   --security-enabled-only: oneof<nothing, bool> # If true, only membership in security-enabled groups should be checked. Otherwise, membership in all groups should be checked.
-]: any -> record<value: list<string>> {
+]: any -> oneof<record<value: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2613,7 +2612,7 @@ export def "users-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # Client API version. (required)
-]: nothing -> record<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: table<type: string, value: string>, surname: string, usageLocation: string, userPrincipalName: string, userType: string, deletionTimestamp: string, objectId: string, objectType: string> {
+]: nothing -> oneof<record<accountEnabled: bool, displayName: string, givenName: string, immutableId: string, mail: string, mailNickname: string, signInNames: table<type: string, value: string>, surname: string, usageLocation: string, userPrincipalName: string, userType: string, deletionTimestamp: string, objectId: string, objectType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant_id | is-empty) { error make --unspanned { msg: "path parameter 'tenantID' must be non-empty" } }
@@ -2641,7 +2640,6 @@ export def "users-get" [
 #
 # PATCH /{tenantID}/users/{upnOrObjectId}
 # operationId: Users_Update
-# --passwordProfile shape: {forceChangePasswordNextLogin?: bool, password: string}
 export def "users-update" [
   tenant_id: string
   upn_or_object_id: string

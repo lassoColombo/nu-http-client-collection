@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -137,9 +161,9 @@ def state-completer-4 [] { ["COMPLETE" "GUARDIAN_INVITATION_STATE_UNSPECIFIED" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "classroom-courses-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["classroom-courses-list" "classroom-courses-create" "classroom-courses-aliases-list" "classroom-courses-aliases-create" "classroom-courses-aliases-delete" "classroom-courses-announcements-list" "classroom-courses-announcements-create" "classroom-courses-announcements-delete" "classroom-courses-announcements-get" "classroom-courses-announcements-patch" "classroom-courses-announcements-modify-assignees" "classroom-courses-course-work-list" "classroom-courses-course-work-create" "classroom-courses-course-work-student-submissions-list" "classroom-courses-course-work-student-submissions-get" "classroom-courses-course-work-student-submissions-patch" "classroom-courses-course-work-student-submissions-modify-attachments" "classroom-courses-course-work-student-submissions-reclaim" "classroom-courses-course-work-student-submissions-return" "classroom-courses-course-work-student-submissions-turn-in" "classroom-courses-course-work-delete" "classroom-courses-course-work-get" "classroom-courses-course-work-patch" "classroom-courses-course-work-modify-assignees" "classroom-courses-course-work-materials-list" "classroom-courses-course-work-materials-create" "classroom-courses-course-work-materials-delete" "classroom-courses-course-work-materials-get" "classroom-courses-course-work-materials-patch" "classroom-courses-students-list" "classroom-courses-students-create" "classroom-courses-students-delete" "classroom-courses-students-get" "classroom-courses-teachers-list" "classroom-courses-teachers-create" "classroom-courses-teachers-delete" "classroom-courses-teachers-get" "classroom-courses-topics-list" "classroom-courses-topics-create" "classroom-courses-topics-delete" "classroom-courses-topics-get" "classroom-courses-topics-patch" "classroom-courses-delete" "classroom-courses-get" "classroom-courses-patch" "classroom-courses-update" "classroom-invitations-list" "classroom-invitations-create" "classroom-invitations-delete" "classroom-invitations-get" "classroom-invitations-accept" "classroom-registrations-create" "classroom-registrations-delete" "classroom-user-profiles-guardian-invitations-list" "classroom-user-profiles-guardian-invitations-create" "classroom-user-profiles-guardian-invitations-get" "classroom-user-profiles-guardian-invitations-patch" "classroom-user-profiles-guardians-list" "classroom-user-profiles-guardians-delete" "classroom-user-profiles-guardians-get" "classroom-user-profiles-get" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -187,7 +211,7 @@ export def "classroom-courses-list" [
   --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
   --student-id: string # Restricts returned courses to those having a student with the specified identifier. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
   --teacher-id: string # Restricts returned courses to those having a teacher with the specified identifier. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
-]: nothing -> record<courses: table<alternateLink: string, calendarId: string, courseGroupEmail: string, courseMaterialSets: list, courseState: string, creationTime: string, description: string, descriptionHeading: string, enrollmentCode: string, gradebookSettings: record, guardiansEnabled: bool, id: string, name: string, ownerId: string, room: string, section: string, teacherFolder: record, teacherGroupEmail: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<courses: table<alternateLink: string, calendarId: string, courseGroupEmail: string, courseMaterialSets: list, courseState: string, creationTime: string, description: string, descriptionHeading: string, enrollmentCode: string, gradebookSettings: record, guardiansEnabled: bool, id: string, name: string, ownerId: string, room: string, section: string, teacherFolder: record, teacherGroupEmail: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "courseStates" $course_states "multi") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "studentId" $student_id "scalar") (serialize-qp "teacherId" $teacher_id "scalar")] | flatten | str join "&"
@@ -212,9 +236,6 @@ export def "classroom-courses-list" [
 #
 # POST /v1/courses
 # operationId: classroom.courses.create
-# --courseMaterialSets item shape: {materials?: list, title?: string}
-# --gradebookSettings shape: {calculationType?: "CALCULATION_TYPE_UNSPECIFIED"|"TOTAL_POINTS"|"WEIGHTED_CATEGORIES", displaySetting?: "DISPLAY_SETTING_UNSPECIFIED"|"SHOW_OVERALL_GRADE"|"HIDE_OVERALL_GRADE"|"SHOW_TEACHERS_ONLY", gradeCategories?: list}
-# --teacherFolder shape: {alternateLink?: string, id?: string, title?: string}
 export def "classroom-courses-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -255,7 +276,7 @@ export def "classroom-courses-create" [
   --teacher-folder: record # Representation of a Google Drive folder. — shape: {alternateLink?: string, id?: string, title?: string}
   --teacher-group-email: string # The email address of a Google group containing all teachers of the course. This group does not accept email and can only be used for permissions. Read-only.
   --update-time: string # Time of the most recent update to this course. Specifying this field in a course update mask results in an error. Read-only. (format: google-datetime)
-]: any -> record<alternateLink: string, calendarId: string, courseGroupEmail: string, courseMaterialSets: table<materials: list, title: string>, courseState: string, creationTime: string, description: string, descriptionHeading: string, enrollmentCode: string, gradebookSettings: record<calculationType: string, displaySetting: string, gradeCategories: list<record>>, guardiansEnabled: bool, id: string, name: string, ownerId: string, room: string, section: string, teacherFolder: record<alternateLink: string, id: string, title: string>, teacherGroupEmail: string, updateTime: string> {
+]: any -> oneof<record<alternateLink: string, calendarId: string, courseGroupEmail: string, courseMaterialSets: table<materials: list, title: string>, courseState: string, creationTime: string, description: string, descriptionHeading: string, enrollmentCode: string, gradebookSettings: record<calculationType: string, displaySetting: string, gradeCategories: list<record>>, guardiansEnabled: bool, id: string, name: string, ownerId: string, room: string, section: string, teacherFolder: record<alternateLink: string, id: string, title: string>, teacherGroupEmail: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -307,7 +328,7 @@ export def "classroom-courses-aliases-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
   --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
-]: nothing -> record<aliases: table<alias: string>, nextPageToken: string> {
+]: nothing -> oneof<record<aliases: table<alias: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -356,7 +377,7 @@ export def "classroom-courses-aliases-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --alias: string # Alias string. The format of the string indicates the desired alias scoping. * `d:` indicates a domain-scoped alias. Example: `d:math_101` * `p:` indicates a project-scoped alias. Example: `p:abc123` This field has a maximum length of 256 characters.
-]: any -> record<alias: string> {
+]: any -> oneof<record<alias: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -408,7 +429,7 @@ export def "classroom-courses-aliases-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -461,7 +482,7 @@ export def "classroom-courses-announcements-list" [
   --order-by: string # Optional sort ordering for results. A comma-separated list of fields with an optional sort direction keyword. Supported field is `updateTime`. Supported direction keywords are `asc` and `desc`. If not specified, `updateTime desc` is the default behavior. Examples: `updateTime asc`, `updateTime`
   --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
   --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
-]: nothing -> record<announcements: table<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, id: string, individualStudentsOptions: record, materials: list, scheduledTime: string, state: string, text: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<announcements: table<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, id: string, individualStudentsOptions: record, materials: list, scheduledTime: string, state: string, text: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -487,8 +508,6 @@ export def "classroom-courses-announcements-list" [
 #
 # POST /v1/courses/{courseId}/announcements
 # operationId: classroom.courses.announcements.create
-# --individualStudentsOptions shape: {studentIds?: list<string>}
-# --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
 export def "classroom-courses-announcements-create" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -523,7 +542,7 @@ export def "classroom-courses-announcements-create" [
   --state: string@state-completer # Status of this announcement. If unspecified, the default state is `DRAFT`.
   --text: string # Description of this announcement. The text must be a valid UTF-8 string containing no more than 30,000 characters.
   --update-time: string # Timestamp of the most recent change to this announcement. Read-only. (format: google-datetime)
-]: any -> record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, text: string, updateTime: string> {
+]: any -> oneof<record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, text: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -575,7 +594,7 @@ export def "classroom-courses-announcements-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -625,7 +644,7 @@ export def "classroom-courses-announcements-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, text: string, updateTime: string> {
+]: nothing -> oneof<record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, text: string, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -652,8 +671,6 @@ export def "classroom-courses-announcements-get" [
 #
 # PATCH /v1/courses/{courseId}/announcements/{id}
 # operationId: classroom.courses.announcements.patch
-# --individualStudentsOptions shape: {studentIds?: list<string>}
-# --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
 export def "classroom-courses-announcements-patch" [
   course_id: string
   id: string
@@ -690,7 +707,7 @@ export def "classroom-courses-announcements-patch" [
   --state: string@state-completer # Status of this announcement. If unspecified, the default state is `DRAFT`.
   --text: string # Description of this announcement. The text must be a valid UTF-8 string containing no more than 30,000 characters.
   --update-time: string # Timestamp of the most recent change to this announcement. Read-only. (format: google-datetime)
-]: any -> record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, text: string, updateTime: string> {
+]: any -> oneof<record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, text: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -720,7 +737,6 @@ export def "classroom-courses-announcements-patch" [
 #
 # POST /v1/courses/{courseId}/announcements/{id}:modifyAssignees
 # operationId: classroom.courses.announcements.modifyAssignees
-# --modifyIndividualStudentsOptions shape: {addStudentIds?: list<string>, removeStudentIds?: list<string>}
 export def "classroom-courses-announcements-modify-assignees" [
   course_id: string
   id: string
@@ -746,7 +762,7 @@ export def "classroom-courses-announcements-modify-assignees" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --assignee-mode: string@assignee-mode-completer # Mode of the announcement describing whether it is accessible by all students or specified individual students.
   --modify-individual-students-options: record # Contains fields to add or remove students from a course work or announcement where the `assigneeMode` is set to `INDIVIDUAL_STUDENTS`. — shape: {addStudentIds?: list<string>, removeStudentIds?: list<string>}
-]: any -> record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, text: string, updateTime: string> {
+]: any -> oneof<record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, text: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -802,7 +818,7 @@ export def "classroom-courses-course-work-list" [
   --order-by: string # Optional sort ordering for results. A comma-separated list of fields with an optional sort direction keyword. Supported fields are `updateTime` and `dueDate`. Supported direction keywords are `asc` and `desc`. If not specified, `updateTime desc` is the default behavior. Examples: `dueDate asc,updateTime desc`, `updateTime,dueDate desc`
   --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
   --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
-]: nothing -> record<courseWork: table<alternateLink: string, assigneeMode: string, assignment: record, associatedWithDeveloper: bool, courseId: string, creationTime: string, creatorUserId: string, description: string, dueDate: record, dueTime: record, gradeCategory: record, id: string, individualStudentsOptions: record, materials: list, maxPoints: float, multipleChoiceQuestion: record, scheduledTime: string, state: string, submissionModificationMode: string, title: string, topicId: string, updateTime: string, workType: string>, nextPageToken: string> {
+]: nothing -> oneof<record<courseWork: table<alternateLink: string, assigneeMode: string, assignment: record, associatedWithDeveloper: bool, courseId: string, creationTime: string, creatorUserId: string, description: string, dueDate: record, dueTime: record, gradeCategory: record, id: string, individualStudentsOptions: record, materials: list, maxPoints: float, multipleChoiceQuestion: record, scheduledTime: string, state: string, submissionModificationMode: string, title: string, topicId: string, updateTime: string, workType: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -828,13 +844,6 @@ export def "classroom-courses-course-work-list" [
 #
 # POST /v1/courses/{courseId}/courseWork
 # operationId: classroom.courses.courseWork.create
-# --assignment shape: {studentWorkFolder?: record}
-# --dueDate shape: {day?: int, month?: int, year?: int}
-# --dueTime shape: {hours?: int, minutes?: int, nanos?: int, seconds?: int}
-# --gradeCategory shape: {defaultGradeDenominator?: int, id?: string, name?: string, weight?: int}
-# --individualStudentsOptions shape: {studentIds?: list<string>}
-# --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
-# --multipleChoiceQuestion shape: {choices?: list<string>}
 export def "classroom-courses-course-work-create" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -880,7 +889,7 @@ export def "classroom-courses-course-work-create" [
   --topic-id: string # Identifier for the topic that this coursework is associated with. Must match an existing topic in the course.
   --update-time: string # Timestamp of the most recent change to this course work. Read-only. (format: google-datetime)
   --work-type: string@work-type-completer # Type of this course work. The type is set when the course work is created and cannot be changed.
-]: any -> record<alternateLink: string, assigneeMode: string, assignment: record<studentWorkFolder: record<alternateLink: string, id: string, title: string>>, associatedWithDeveloper: bool, courseId: string, creationTime: string, creatorUserId: string, description: string, dueDate: record<day: int, month: int, year: int>, dueTime: record<hours: int, minutes: int, nanos: int, seconds: int>, gradeCategory: record<defaultGradeDenominator: int, id: string, name: string, weight: int>, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, maxPoints: float, multipleChoiceQuestion: record<choices: list<string>>, scheduledTime: string, state: string, submissionModificationMode: string, title: string, topicId: string, updateTime: string, workType: string> {
+]: any -> oneof<record<alternateLink: string, assigneeMode: string, assignment: record<studentWorkFolder: record<alternateLink: string, id: string, title: string>>, associatedWithDeveloper: bool, courseId: string, creationTime: string, creatorUserId: string, description: string, dueDate: record<day: int, month: int, year: int>, dueTime: record<hours: int, minutes: int, nanos: int, seconds: int>, gradeCategory: record<defaultGradeDenominator: int, id: string, name: string, weight: int>, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, maxPoints: float, multipleChoiceQuestion: record<choices: list<string>>, scheduledTime: string, state: string, submissionModificationMode: string, title: string, topicId: string, updateTime: string, workType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -937,7 +946,7 @@ export def "classroom-courses-course-work-student-submissions-list" [
   --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
   --states: list<string> # Requested submission states. If specified, returned student submissions match one of the specified submission states.
   --user-id: string # Optional argument to restrict returned student work to those owned by the student with the specified identifier. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
-]: nothing -> record<nextPageToken: string, studentSubmissions: table<alternateLink: string, assignedGrade: float, assignmentSubmission: record, associatedWithDeveloper: bool, courseId: string, courseWorkId: string, courseWorkType: string, creationTime: string, draftGrade: float, id: string, late: bool, multipleChoiceSubmission: record, shortAnswerSubmission: record, state: string, submissionHistory: list, updateTime: string, userId: string>> {
+]: nothing -> oneof<record<nextPageToken: string, studentSubmissions: table<alternateLink: string, assignedGrade: float, assignmentSubmission: record, associatedWithDeveloper: bool, courseId: string, courseWorkId: string, courseWorkType: string, creationTime: string, draftGrade: float, id: string, late: bool, multipleChoiceSubmission: record, shortAnswerSubmission: record, state: string, submissionHistory: list, updateTime: string, userId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -988,7 +997,7 @@ export def "classroom-courses-course-work-student-submissions-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<alternateLink: string, assignedGrade: float, assignmentSubmission: record<attachments: list<record>>, associatedWithDeveloper: bool, courseId: string, courseWorkId: string, courseWorkType: string, creationTime: string, draftGrade: float, id: string, late: bool, multipleChoiceSubmission: record<answer: string>, shortAnswerSubmission: record<answer: string>, state: string, submissionHistory: table<gradeHistory: record, stateHistory: record>, updateTime: string, userId: string> {
+]: nothing -> oneof<record<alternateLink: string, assignedGrade: float, assignmentSubmission: record<attachments: list<record>>, associatedWithDeveloper: bool, courseId: string, courseWorkId: string, courseWorkType: string, creationTime: string, draftGrade: float, id: string, late: bool, multipleChoiceSubmission: record<answer: string>, shortAnswerSubmission: record<answer: string>, state: string, submissionHistory: table<gradeHistory: record, stateHistory: record>, updateTime: string, userId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -1016,10 +1025,6 @@ export def "classroom-courses-course-work-student-submissions-get" [
 #
 # PATCH /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}
 # operationId: classroom.courses.courseWork.studentSubmissions.patch
-# --assignmentSubmission shape: {attachments?: list}
-# --multipleChoiceSubmission shape: {answer?: string}
-# --shortAnswerSubmission shape: {answer?: string}
-# --submissionHistory item shape: {gradeHistory?: record, stateHistory?: record}
 export def "classroom-courses-course-work-student-submissions-patch" [
   course_id: string
   course_work_id: string
@@ -1062,7 +1067,7 @@ export def "classroom-courses-course-work-student-submissions-patch" [
   --submission-history: list # The history of the submission (includes state and grade histories). Read-only. — item shape: {gradeHistory?: record, stateHistory?: record}
   --update-time: string # Last update time of this submission. This may be unset if the student has not accessed this item. Read-only. (format: google-datetime)
   --user-id: string # Identifier for the student that owns this submission. Read-only.
-]: any -> record<alternateLink: string, assignedGrade: float, assignmentSubmission: record<attachments: list<record>>, associatedWithDeveloper: bool, courseId: string, courseWorkId: string, courseWorkType: string, creationTime: string, draftGrade: float, id: string, late: bool, multipleChoiceSubmission: record<answer: string>, shortAnswerSubmission: record<answer: string>, state: string, submissionHistory: table<gradeHistory: record, stateHistory: record>, updateTime: string, userId: string> {
+]: any -> oneof<record<alternateLink: string, assignedGrade: float, assignmentSubmission: record<attachments: list<record>>, associatedWithDeveloper: bool, courseId: string, courseWorkId: string, courseWorkType: string, creationTime: string, draftGrade: float, id: string, late: bool, multipleChoiceSubmission: record<answer: string>, shortAnswerSubmission: record<answer: string>, state: string, submissionHistory: table<gradeHistory: record, stateHistory: record>, updateTime: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1093,7 +1098,6 @@ export def "classroom-courses-course-work-student-submissions-patch" [
 #
 # POST /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}:modifyAttachments
 # operationId: classroom.courses.courseWork.studentSubmissions.modifyAttachments
-# --addAttachments item shape: {driveFile?: record, form?: record, link?: record, youTubeVideo?: record}
 export def "classroom-courses-course-work-student-submissions-modify-attachments" [
   course_id: string
   course_work_id: string
@@ -1119,7 +1123,7 @@ export def "classroom-courses-course-work-student-submissions-modify-attachments
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --add-attachments: list # Attachments to add. A student submission may not have more than 20 attachments. Form attachments are not supported. — item shape: {driveFile?: record, form?: record, link?: record, youTubeVideo?: record}
-]: any -> record<alternateLink: string, assignedGrade: float, assignmentSubmission: record<attachments: list<record>>, associatedWithDeveloper: bool, courseId: string, courseWorkId: string, courseWorkType: string, creationTime: string, draftGrade: float, id: string, late: bool, multipleChoiceSubmission: record<answer: string>, shortAnswerSubmission: record<answer: string>, state: string, submissionHistory: table<gradeHistory: record, stateHistory: record>, updateTime: string, userId: string> {
+]: any -> oneof<record<alternateLink: string, assignedGrade: float, assignmentSubmission: record<attachments: list<record>>, associatedWithDeveloper: bool, courseId: string, courseWorkId: string, courseWorkType: string, creationTime: string, draftGrade: float, id: string, late: bool, multipleChoiceSubmission: record<answer: string>, shortAnswerSubmission: record<answer: string>, state: string, submissionHistory: table<gradeHistory: record, stateHistory: record>, updateTime: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1175,7 +1179,7 @@ export def "classroom-courses-course-work-student-submissions-reclaim" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1231,7 +1235,7 @@ export def "classroom-courses-course-work-student-submissions-return" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1287,7 +1291,7 @@ export def "classroom-courses-course-work-student-submissions-turn-in" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1341,7 +1345,7 @@ export def "classroom-courses-course-work-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -1391,7 +1395,7 @@ export def "classroom-courses-course-work-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<alternateLink: string, assigneeMode: string, assignment: record<studentWorkFolder: record<alternateLink: string, id: string, title: string>>, associatedWithDeveloper: bool, courseId: string, creationTime: string, creatorUserId: string, description: string, dueDate: record<day: int, month: int, year: int>, dueTime: record<hours: int, minutes: int, nanos: int, seconds: int>, gradeCategory: record<defaultGradeDenominator: int, id: string, name: string, weight: int>, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, maxPoints: float, multipleChoiceQuestion: record<choices: list<string>>, scheduledTime: string, state: string, submissionModificationMode: string, title: string, topicId: string, updateTime: string, workType: string> {
+]: nothing -> oneof<record<alternateLink: string, assigneeMode: string, assignment: record<studentWorkFolder: record<alternateLink: string, id: string, title: string>>, associatedWithDeveloper: bool, courseId: string, creationTime: string, creatorUserId: string, description: string, dueDate: record<day: int, month: int, year: int>, dueTime: record<hours: int, minutes: int, nanos: int, seconds: int>, gradeCategory: record<defaultGradeDenominator: int, id: string, name: string, weight: int>, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, maxPoints: float, multipleChoiceQuestion: record<choices: list<string>>, scheduledTime: string, state: string, submissionModificationMode: string, title: string, topicId: string, updateTime: string, workType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -1418,13 +1422,6 @@ export def "classroom-courses-course-work-get" [
 #
 # PATCH /v1/courses/{courseId}/courseWork/{id}
 # operationId: classroom.courses.courseWork.patch
-# --assignment shape: {studentWorkFolder?: record}
-# --dueDate shape: {day?: int, month?: int, year?: int}
-# --dueTime shape: {hours?: int, minutes?: int, nanos?: int, seconds?: int}
-# --gradeCategory shape: {defaultGradeDenominator?: int, id?: string, name?: string, weight?: int}
-# --individualStudentsOptions shape: {studentIds?: list<string>}
-# --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
-# --multipleChoiceQuestion shape: {choices?: list<string>}
 export def "classroom-courses-course-work-patch" [
   course_id: string
   id: string
@@ -1472,7 +1469,7 @@ export def "classroom-courses-course-work-patch" [
   --topic-id: string # Identifier for the topic that this coursework is associated with. Must match an existing topic in the course.
   --update-time: string # Timestamp of the most recent change to this course work. Read-only. (format: google-datetime)
   --work-type: string@work-type-completer # Type of this course work. The type is set when the course work is created and cannot be changed.
-]: any -> record<alternateLink: string, assigneeMode: string, assignment: record<studentWorkFolder: record<alternateLink: string, id: string, title: string>>, associatedWithDeveloper: bool, courseId: string, creationTime: string, creatorUserId: string, description: string, dueDate: record<day: int, month: int, year: int>, dueTime: record<hours: int, minutes: int, nanos: int, seconds: int>, gradeCategory: record<defaultGradeDenominator: int, id: string, name: string, weight: int>, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, maxPoints: float, multipleChoiceQuestion: record<choices: list<string>>, scheduledTime: string, state: string, submissionModificationMode: string, title: string, topicId: string, updateTime: string, workType: string> {
+]: any -> oneof<record<alternateLink: string, assigneeMode: string, assignment: record<studentWorkFolder: record<alternateLink: string, id: string, title: string>>, associatedWithDeveloper: bool, courseId: string, creationTime: string, creatorUserId: string, description: string, dueDate: record<day: int, month: int, year: int>, dueTime: record<hours: int, minutes: int, nanos: int, seconds: int>, gradeCategory: record<defaultGradeDenominator: int, id: string, name: string, weight: int>, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, maxPoints: float, multipleChoiceQuestion: record<choices: list<string>>, scheduledTime: string, state: string, submissionModificationMode: string, title: string, topicId: string, updateTime: string, workType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1502,7 +1499,6 @@ export def "classroom-courses-course-work-patch" [
 #
 # POST /v1/courses/{courseId}/courseWork/{id}:modifyAssignees
 # operationId: classroom.courses.courseWork.modifyAssignees
-# --modifyIndividualStudentsOptions shape: {addStudentIds?: list<string>, removeStudentIds?: list<string>}
 export def "classroom-courses-course-work-modify-assignees" [
   course_id: string
   id: string
@@ -1528,7 +1524,7 @@ export def "classroom-courses-course-work-modify-assignees" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --assignee-mode: string@assignee-mode-completer # Mode of the coursework describing whether it will be assigned to all students or specified individual students.
   --modify-individual-students-options: record # Contains fields to add or remove students from a course work or announcement where the `assigneeMode` is set to `INDIVIDUAL_STUDENTS`. — shape: {addStudentIds?: list<string>, removeStudentIds?: list<string>}
-]: any -> record<alternateLink: string, assigneeMode: string, assignment: record<studentWorkFolder: record<alternateLink: string, id: string, title: string>>, associatedWithDeveloper: bool, courseId: string, creationTime: string, creatorUserId: string, description: string, dueDate: record<day: int, month: int, year: int>, dueTime: record<hours: int, minutes: int, nanos: int, seconds: int>, gradeCategory: record<defaultGradeDenominator: int, id: string, name: string, weight: int>, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, maxPoints: float, multipleChoiceQuestion: record<choices: list<string>>, scheduledTime: string, state: string, submissionModificationMode: string, title: string, topicId: string, updateTime: string, workType: string> {
+]: any -> oneof<record<alternateLink: string, assigneeMode: string, assignment: record<studentWorkFolder: record<alternateLink: string, id: string, title: string>>, associatedWithDeveloper: bool, courseId: string, creationTime: string, creatorUserId: string, description: string, dueDate: record<day: int, month: int, year: int>, dueTime: record<hours: int, minutes: int, nanos: int, seconds: int>, gradeCategory: record<defaultGradeDenominator: int, id: string, name: string, weight: int>, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, maxPoints: float, multipleChoiceQuestion: record<choices: list<string>>, scheduledTime: string, state: string, submissionModificationMode: string, title: string, topicId: string, updateTime: string, workType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1586,7 +1582,7 @@ export def "classroom-courses-course-work-materials-list" [
   --order-by: string # Optional sort ordering for results. A comma-separated list of fields with an optional sort direction keyword. Supported field is `updateTime`. Supported direction keywords are `asc` and `desc`. If not specified, `updateTime desc` is the default behavior. Examples: `updateTime asc`, `updateTime`
   --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
   --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
-]: nothing -> record<courseWorkMaterial: table<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, description: string, id: string, individualStudentsOptions: record, materials: list, scheduledTime: string, state: string, title: string, topicId: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<courseWorkMaterial: table<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, description: string, id: string, individualStudentsOptions: record, materials: list, scheduledTime: string, state: string, title: string, topicId: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -1612,8 +1608,6 @@ export def "classroom-courses-course-work-materials-list" [
 #
 # POST /v1/courses/{courseId}/courseWorkMaterials
 # operationId: classroom.courses.courseWorkMaterials.create
-# --individualStudentsOptions shape: {studentIds?: list<string>}
-# --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
 export def "classroom-courses-course-work-materials-create" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1650,7 +1644,7 @@ export def "classroom-courses-course-work-materials-create" [
   --title: string # Title of this course work material. The title must be a valid UTF-8 string containing between 1 and 3000 characters.
   --topic-id: string # Identifier for the topic that this course work material is associated with. Must match an existing topic in the course.
   --update-time: string # Timestamp of the most recent change to this course work material. Read-only. (format: google-datetime)
-]: any -> record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, description: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, title: string, topicId: string, updateTime: string> {
+]: any -> oneof<record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, description: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, title: string, topicId: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1702,7 +1696,7 @@ export def "classroom-courses-course-work-materials-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -1752,7 +1746,7 @@ export def "classroom-courses-course-work-materials-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, description: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, title: string, topicId: string, updateTime: string> {
+]: nothing -> oneof<record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, description: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, title: string, topicId: string, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -1779,8 +1773,6 @@ export def "classroom-courses-course-work-materials-get" [
 #
 # PATCH /v1/courses/{courseId}/courseWorkMaterials/{id}
 # operationId: classroom.courses.courseWorkMaterials.patch
-# --individualStudentsOptions shape: {studentIds?: list<string>}
-# --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
 export def "classroom-courses-course-work-materials-patch" [
   course_id: string
   id: string
@@ -1819,7 +1811,7 @@ export def "classroom-courses-course-work-materials-patch" [
   --title: string # Title of this course work material. The title must be a valid UTF-8 string containing between 1 and 3000 characters.
   --topic-id: string # Identifier for the topic that this course work material is associated with. Must match an existing topic in the course.
   --update-time: string # Timestamp of the most recent change to this course work material. Read-only. (format: google-datetime)
-]: any -> record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, description: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, title: string, topicId: string, updateTime: string> {
+]: any -> oneof<record<alternateLink: string, assigneeMode: string, courseId: string, creationTime: string, creatorUserId: string, description: string, id: string, individualStudentsOptions: record<studentIds: list<string>>, materials: table<driveFile: record, form: record, link: record, youtubeVideo: record>, scheduledTime: string, state: string, title: string, topicId: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1873,7 +1865,7 @@ export def "classroom-courses-students-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of items to return. The default is 30 if unspecified or `0`. The server may return fewer than the specified number of results.
   --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
-]: nothing -> record<nextPageToken: string, students: table<courseId: string, profile: record, studentWorkFolder: record, userId: string>> {
+]: nothing -> oneof<record<nextPageToken: string, students: table<courseId: string, profile: record, studentWorkFolder: record, userId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -1899,8 +1891,6 @@ export def "classroom-courses-students-list" [
 #
 # POST /v1/courses/{courseId}/students
 # operationId: classroom.courses.students.create
-# --profile shape: {emailAddress?: string, id?: string, name?: record, permissions?: list, photoUrl?: string, verifiedTeacher?: bool}
-# --studentWorkFolder shape: {alternateLink?: string, id?: string, title?: string}
 export def "classroom-courses-students-create" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1928,7 +1918,7 @@ export def "classroom-courses-students-create" [
   --profile: record # Global information for a user. — shape: {emailAddress?: string, id?: string, name?: record, permissions?: list, photoUrl?: string, verifiedTeacher?: bool}
   --student-work-folder: record # Representation of a Google Drive folder. — shape: {alternateLink?: string, id?: string, title?: string}
   --user-id: string # Identifier of the user. When specified as a parameter of a request, this identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
-]: any -> record<courseId: string, profile: record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: list<record>, photoUrl: string, verifiedTeacher: bool>, studentWorkFolder: record<alternateLink: string, id: string, title: string>, userId: string> {
+]: any -> oneof<record<courseId: string, profile: record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: list<record>, photoUrl: string, verifiedTeacher: bool>, studentWorkFolder: record<alternateLink: string, id: string, title: string>, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1980,7 +1970,7 @@ export def "classroom-courses-students-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -2030,7 +2020,7 @@ export def "classroom-courses-students-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<courseId: string, profile: record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: list<record>, photoUrl: string, verifiedTeacher: bool>, studentWorkFolder: record<alternateLink: string, id: string, title: string>, userId: string> {
+]: nothing -> oneof<record<courseId: string, profile: record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: list<record>, photoUrl: string, verifiedTeacher: bool>, studentWorkFolder: record<alternateLink: string, id: string, title: string>, userId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -2081,7 +2071,7 @@ export def "classroom-courses-teachers-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of items to return. The default is 30 if unspecified or `0`. The server may return fewer than the specified number of results.
   --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
-]: nothing -> record<nextPageToken: string, teachers: table<courseId: string, profile: record, userId: string>> {
+]: nothing -> oneof<record<nextPageToken: string, teachers: table<courseId: string, profile: record, userId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -2107,7 +2097,6 @@ export def "classroom-courses-teachers-list" [
 #
 # POST /v1/courses/{courseId}/teachers
 # operationId: classroom.courses.teachers.create
-# --profile shape: {emailAddress?: string, id?: string, name?: record, permissions?: list, photoUrl?: string, verifiedTeacher?: bool}
 export def "classroom-courses-teachers-create" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2133,7 +2122,7 @@ export def "classroom-courses-teachers-create" [
   --body-course-id: string # Identifier of the course. Read-only.
   --profile: record # Global information for a user. — shape: {emailAddress?: string, id?: string, name?: record, permissions?: list, photoUrl?: string, verifiedTeacher?: bool}
   --user-id: string # Identifier of the user. When specified as a parameter of a request, this identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
-]: any -> record<courseId: string, profile: record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: list<record>, photoUrl: string, verifiedTeacher: bool>, userId: string> {
+]: any -> oneof<record<courseId: string, profile: record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: list<record>, photoUrl: string, verifiedTeacher: bool>, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2185,7 +2174,7 @@ export def "classroom-courses-teachers-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -2235,7 +2224,7 @@ export def "classroom-courses-teachers-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<courseId: string, profile: record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: list<record>, photoUrl: string, verifiedTeacher: bool>, userId: string> {
+]: nothing -> oneof<record<courseId: string, profile: record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: list<record>, photoUrl: string, verifiedTeacher: bool>, userId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -2286,7 +2275,7 @@ export def "classroom-courses-topics-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
   --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
-]: nothing -> record<nextPageToken: string, topic: table<courseId: string, name: string, topicId: string, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, topic: table<courseId: string, name: string, topicId: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -2338,7 +2327,7 @@ export def "classroom-courses-topics-create" [
   --name: string # The name of the topic, generated by the user. Leading and trailing whitespaces, if any, are trimmed. Also, multiple consecutive whitespaces are collapsed into one inside the name. The result must be a non-empty string. Topic names are case sensitive, and must be no longer than 100 characters.
   --topic-id: string # Unique identifier for the topic. Read-only.
   --update-time: string # The time the topic was last updated by the system. Read-only. (format: google-datetime)
-]: any -> record<courseId: string, name: string, topicId: string, updateTime: string> {
+]: any -> oneof<record<courseId: string, name: string, topicId: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2390,7 +2379,7 @@ export def "classroom-courses-topics-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -2440,7 +2429,7 @@ export def "classroom-courses-topics-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<courseId: string, name: string, topicId: string, updateTime: string> {
+]: nothing -> oneof<record<courseId: string, name: string, topicId: string, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($course_id | is-empty) { error make --unspanned { msg: "path parameter 'courseId' must be non-empty" } }
@@ -2495,7 +2484,7 @@ export def "classroom-courses-topics-patch" [
   --name: string # The name of the topic, generated by the user. Leading and trailing whitespaces, if any, are trimmed. Also, multiple consecutive whitespaces are collapsed into one inside the name. The result must be a non-empty string. Topic names are case sensitive, and must be no longer than 100 characters.
   --topic-id: string # Unique identifier for the topic. Read-only.
   --update-time: string # The time the topic was last updated by the system. Read-only. (format: google-datetime)
-]: any -> record<courseId: string, name: string, topicId: string, updateTime: string> {
+]: any -> oneof<record<courseId: string, name: string, topicId: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2547,7 +2536,7 @@ export def "classroom-courses-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2595,7 +2584,7 @@ export def "classroom-courses-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<alternateLink: string, calendarId: string, courseGroupEmail: string, courseMaterialSets: table<materials: list, title: string>, courseState: string, creationTime: string, description: string, descriptionHeading: string, enrollmentCode: string, gradebookSettings: record<calculationType: string, displaySetting: string, gradeCategories: list<record>>, guardiansEnabled: bool, id: string, name: string, ownerId: string, room: string, section: string, teacherFolder: record<alternateLink: string, id: string, title: string>, teacherGroupEmail: string, updateTime: string> {
+]: nothing -> oneof<record<alternateLink: string, calendarId: string, courseGroupEmail: string, courseMaterialSets: table<materials: list, title: string>, courseState: string, creationTime: string, description: string, descriptionHeading: string, enrollmentCode: string, gradebookSettings: record<calculationType: string, displaySetting: string, gradeCategories: list<record>>, guardiansEnabled: bool, id: string, name: string, ownerId: string, room: string, section: string, teacherFolder: record<alternateLink: string, id: string, title: string>, teacherGroupEmail: string, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2621,9 +2610,6 @@ export def "classroom-courses-get" [
 #
 # PATCH /v1/courses/{id}
 # operationId: classroom.courses.patch
-# --courseMaterialSets item shape: {materials?: list, title?: string}
-# --gradebookSettings shape: {calculationType?: "CALCULATION_TYPE_UNSPECIFIED"|"TOTAL_POINTS"|"WEIGHTED_CATEGORIES", displaySetting?: "DISPLAY_SETTING_UNSPECIFIED"|"SHOW_OVERALL_GRADE"|"HIDE_OVERALL_GRADE"|"SHOW_TEACHERS_ONLY", gradeCategories?: list}
-# --teacherFolder shape: {alternateLink?: string, id?: string, title?: string}
 export def "classroom-courses-patch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2666,7 +2652,7 @@ export def "classroom-courses-patch" [
   --teacher-folder: record # Representation of a Google Drive folder. — shape: {alternateLink?: string, id?: string, title?: string}
   --teacher-group-email: string # The email address of a Google group containing all teachers of the course. This group does not accept email and can only be used for permissions. Read-only.
   --update-time: string # Time of the most recent update to this course. Specifying this field in a course update mask results in an error. Read-only. (format: google-datetime)
-]: any -> record<alternateLink: string, calendarId: string, courseGroupEmail: string, courseMaterialSets: table<materials: list, title: string>, courseState: string, creationTime: string, description: string, descriptionHeading: string, enrollmentCode: string, gradebookSettings: record<calculationType: string, displaySetting: string, gradeCategories: list<record>>, guardiansEnabled: bool, id: string, name: string, ownerId: string, room: string, section: string, teacherFolder: record<alternateLink: string, id: string, title: string>, teacherGroupEmail: string, updateTime: string> {
+]: any -> oneof<record<alternateLink: string, calendarId: string, courseGroupEmail: string, courseMaterialSets: table<materials: list, title: string>, courseState: string, creationTime: string, description: string, descriptionHeading: string, enrollmentCode: string, gradebookSettings: record<calculationType: string, displaySetting: string, gradeCategories: list<record>>, guardiansEnabled: bool, id: string, name: string, ownerId: string, room: string, section: string, teacherFolder: record<alternateLink: string, id: string, title: string>, teacherGroupEmail: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2695,9 +2681,6 @@ export def "classroom-courses-patch" [
 #
 # PUT /v1/courses/{id}
 # operationId: classroom.courses.update
-# --courseMaterialSets item shape: {materials?: list, title?: string}
-# --gradebookSettings shape: {calculationType?: "CALCULATION_TYPE_UNSPECIFIED"|"TOTAL_POINTS"|"WEIGHTED_CATEGORIES", displaySetting?: "DISPLAY_SETTING_UNSPECIFIED"|"SHOW_OVERALL_GRADE"|"HIDE_OVERALL_GRADE"|"SHOW_TEACHERS_ONLY", gradeCategories?: list}
-# --teacherFolder shape: {alternateLink?: string, id?: string, title?: string}
 export def "classroom-courses-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2739,7 +2722,7 @@ export def "classroom-courses-update" [
   --teacher-folder: record # Representation of a Google Drive folder. — shape: {alternateLink?: string, id?: string, title?: string}
   --teacher-group-email: string # The email address of a Google group containing all teachers of the course. This group does not accept email and can only be used for permissions. Read-only.
   --update-time: string # Time of the most recent update to this course. Specifying this field in a course update mask results in an error. Read-only. (format: google-datetime)
-]: any -> record<alternateLink: string, calendarId: string, courseGroupEmail: string, courseMaterialSets: table<materials: list, title: string>, courseState: string, creationTime: string, description: string, descriptionHeading: string, enrollmentCode: string, gradebookSettings: record<calculationType: string, displaySetting: string, gradeCategories: list<record>>, guardiansEnabled: bool, id: string, name: string, ownerId: string, room: string, section: string, teacherFolder: record<alternateLink: string, id: string, title: string>, teacherGroupEmail: string, updateTime: string> {
+]: any -> oneof<record<alternateLink: string, calendarId: string, courseGroupEmail: string, courseMaterialSets: table<materials: list, title: string>, courseState: string, creationTime: string, description: string, descriptionHeading: string, enrollmentCode: string, gradebookSettings: record<calculationType: string, displaySetting: string, gradeCategories: list<record>>, guardiansEnabled: bool, id: string, name: string, ownerId: string, room: string, section: string, teacherFolder: record<alternateLink: string, id: string, title: string>, teacherGroupEmail: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2793,7 +2776,7 @@ export def "classroom-invitations-list" [
   --page-size: int # Maximum number of items to return. The default is 500 if unspecified or `0`. The server may return fewer than the specified number of results.
   --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
   --user-id: string # Restricts returned invitations to those for a specific user. The identifier can be one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
-]: nothing -> record<invitations: table<courseId: string, id: string, role: string, userId: string>, nextPageToken: string> {
+]: nothing -> oneof<record<invitations: table<courseId: string, id: string, role: string, userId: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "courseId" $course_id "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "userId" $user_id "scalar")] | flatten | str join "&"
@@ -2843,7 +2826,7 @@ export def "classroom-invitations-create" [
   --id: string # Identifier assigned by Classroom. Read-only.
   --role: string@role-completer # Role to invite the user to have. Must not be `COURSE_ROLE_UNSPECIFIED`.
   --user-id: string # Identifier of the invited user. When specified as a parameter of a request, this identifier can be set to one of the following: * the numeric identifier for the user * the email address of the user * the string literal `"me"`, indicating the requesting user
-]: any -> record<courseId: string, id: string, role: string, userId: string> {
+]: any -> oneof<record<courseId: string, id: string, role: string, userId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2893,7 +2876,7 @@ export def "classroom-invitations-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2941,7 +2924,7 @@ export def "classroom-invitations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<courseId: string, id: string, role: string, userId: string> {
+]: nothing -> oneof<record<courseId: string, id: string, role: string, userId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2989,7 +2972,7 @@ export def "classroom-invitations-accept" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3015,8 +2998,6 @@ export def "classroom-invitations-accept" [
 #
 # POST /v1/registrations
 # operationId: classroom.registrations.create
-# --cloudPubsubTopic shape: {topicName?: string}
-# --feed shape: {courseRosterChangesInfo?: record, courseWorkChangesInfo?: record, feedType?: "FEED_TYPE_UNSPECIFIED"|"DOMAIN_ROSTER_CHANGES"|"COURSE_ROSTER_CHANGES"|"COURSE_WORK_CHANGES"}
 export def "classroom-registrations-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3042,7 +3023,7 @@ export def "classroom-registrations-create" [
   --expiry-time: string # The time until which the `Registration` is effective. This is a read-only field assigned by the server. (format: google-datetime)
   --feed: record # A class of notifications that an application can register to receive. For example: "all roster changes for a domain". — shape: {courseRosterChangesInfo?: record, courseWorkChangesInfo?: record, feedType?: "FEED_TYPE_UNSPECIFIED"|"DOMAIN_ROSTER_CHANGES"|"COURSE_ROSTER_CHANGES"|"COURSE_WORK_CHANGES"}
   --registration-id: string # A server-generated unique identifier for this `Registration`. Read-only.
-]: any -> record<cloudPubsubTopic: record<topicName: string>, expiryTime: string, feed: record<courseRosterChangesInfo: record<courseId: string>, courseWorkChangesInfo: record<courseId: string>, feedType: string>, registrationId: string> {
+]: any -> oneof<record<cloudPubsubTopic: record<topicName: string>, expiryTime: string, feed: record<courseRosterChangesInfo: record<courseId: string>, courseWorkChangesInfo: record<courseId: string>, feedType: string>, registrationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3092,7 +3073,7 @@ export def "classroom-registrations-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registrationId' must be non-empty" } }
@@ -3144,7 +3125,7 @@ export def "classroom-user-profiles-guardian-invitations-list" [
   --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
   --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
   --states: list<string> # If specified, only results with the specified `state` values are returned. Otherwise, results with a `state` of `PENDING` are returned.
-]: nothing -> record<guardianInvitations: table<creationTime: string, invitationId: string, invitedEmailAddress: string, state: string, studentId: string>, nextPageToken: string> {
+]: nothing -> oneof<record<guardianInvitations: table<creationTime: string, invitationId: string, invitedEmailAddress: string, state: string, studentId: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($student_id | is-empty) { error make --unspanned { msg: "path parameter 'studentId' must be non-empty" } }
@@ -3197,7 +3178,7 @@ export def "classroom-user-profiles-guardian-invitations-create" [
   --invited-email-address: string # Email address that the invitation was sent to. This field is only visible to domain administrators.
   --state: string@state-completer-4 # The state that this invitation is in.
   --body-student-id: string # ID of the student (in standard format)
-]: any -> record<creationTime: string, invitationId: string, invitedEmailAddress: string, state: string, studentId: string> {
+]: any -> oneof<record<creationTime: string, invitationId: string, invitedEmailAddress: string, state: string, studentId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3249,7 +3230,7 @@ export def "classroom-user-profiles-guardian-invitations-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<creationTime: string, invitationId: string, invitedEmailAddress: string, state: string, studentId: string> {
+]: nothing -> oneof<record<creationTime: string, invitationId: string, invitedEmailAddress: string, state: string, studentId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($student_id | is-empty) { error make --unspanned { msg: "path parameter 'studentId' must be non-empty" } }
@@ -3305,7 +3286,7 @@ export def "classroom-user-profiles-guardian-invitations-patch" [
   --invited-email-address: string # Email address that the invitation was sent to. This field is only visible to domain administrators.
   --state: string@state-completer-4 # The state that this invitation is in.
   --body-student-id: string # ID of the student (in standard format)
-]: any -> record<creationTime: string, invitationId: string, invitedEmailAddress: string, state: string, studentId: string> {
+]: any -> oneof<record<creationTime: string, invitationId: string, invitedEmailAddress: string, state: string, studentId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3360,7 +3341,7 @@ export def "classroom-user-profiles-guardians-list" [
   --invited-email-address: string # Filter results by the email address that the original invitation was sent to, resulting in this guardian link. This filter can only be used by domain administrators.
   --page-size: int # Maximum number of items to return. Zero or unspecified indicates that the server may assign a maximum. The server may return fewer than the specified number of results.
   --page-token: string # nextPageToken value returned from a previous list call, indicating that the subsequent page of results should be returned. The list request must be otherwise identical to the one that resulted in this token.
-]: nothing -> record<guardians: table<guardianId: string, guardianProfile: record, invitedEmailAddress: string, studentId: string>, nextPageToken: string> {
+]: nothing -> oneof<record<guardians: table<guardianId: string, guardianProfile: record, invitedEmailAddress: string, studentId: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($student_id | is-empty) { error make --unspanned { msg: "path parameter 'studentId' must be non-empty" } }
@@ -3409,7 +3390,7 @@ export def "classroom-user-profiles-guardians-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($student_id | is-empty) { error make --unspanned { msg: "path parameter 'studentId' must be non-empty" } }
@@ -3459,7 +3440,7 @@ export def "classroom-user-profiles-guardians-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<guardianId: string, guardianProfile: record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: list<record>, photoUrl: string, verifiedTeacher: bool>, invitedEmailAddress: string, studentId: string> {
+]: nothing -> oneof<record<guardianId: string, guardianProfile: record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: list<record>, photoUrl: string, verifiedTeacher: bool>, invitedEmailAddress: string, studentId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($student_id | is-empty) { error make --unspanned { msg: "path parameter 'studentId' must be non-empty" } }
@@ -3508,7 +3489,7 @@ export def "classroom-user-profiles-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: table<permission: string>, photoUrl: string, verifiedTeacher: bool> {
+]: nothing -> oneof<record<emailAddress: string, id: string, name: record<familyName: string, fullName: string, givenName: string>, permissions: table<permission: string>, photoUrl: string, verifiedTeacher: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }

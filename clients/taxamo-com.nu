@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "token" => { {scheme: $scheme, headers: {"Token": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -116,9 +140,9 @@ def auth-scheme-completer [] { ["token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-countries-dict" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-countries-dict" "get-currencies-dict" "get-product-types-dict" "locate-my-ip" "locate-given-ip" "get-domestic-summary-report" "get-eu-vies-report" "get-detailed-refunds" "get-refunds" "get-settlement-summary" "get-settlement" "get-settlement-stats-by-country" "get-settlement-stats-by-taxation-type" "get-daily-settlement-stats" "get-transactions-stats" "get-transactions-stats-by-country" "calculate-simple-tax" "calculate-tax" "calculate-tax-location" "validate-tax-number" "list-transactions" "create-transaction" "cancel-transaction" "get-transaction" "update-transaction" "confirm-transaction" "email-refund" "email-invoice" "list-payments" "create-payment" "capture-payment" "list-refunds" "create-refund" "unconfirm-transaction" "create-sms-token" "verify-sms-token" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -151,7 +175,7 @@ export def "get-countries-dict" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --tax-supported: oneof<nothing, bool> # Should only countries with tax supported be listed?
-]: nothing -> record<dictionary: table<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>> {
+]: nothing -> oneof<record<dictionary: table<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tax_supported" $tax_supported "scalar")] | flatten | str join "&"
@@ -186,7 +210,7 @@ export def "get-currencies-dict" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<dictionary: table<code: string, description: string, isocode: string, isonum: int, minorunits: int>> {
+]: nothing -> oneof<record<dictionary: table<code: string, description: string, isocode: string, isonum: int, minorunits: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/dictionaries/currencies" $auth.query)
@@ -220,7 +244,7 @@ export def "get-product-types-dict" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<dictionary: table<code: string>> {
+]: nothing -> oneof<record<dictionary: table<code: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/dictionaries/product_types" $auth.query)
@@ -254,7 +278,7 @@ export def "locate-my-ip" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<country: record<callingCode: list<string>, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list<string>, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, country_code: string, remote_addr: string> {
+]: nothing -> oneof<record<country: record<callingCode: list<string>, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list<string>, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, country_code: string, remote_addr: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/geoip" $auth.query)
@@ -289,7 +313,7 @@ export def "locate-given-ip" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<country: record<callingCode: list<string>, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list<string>, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, country_code: string, remote_addr: string> {
+]: nothing -> oneof<record<country: record<callingCode: list<string>, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list<string>, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, country_code: string, remote_addr: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($ip | is-empty) { error make --unspanned { msg: "path parameter 'ip' must be non-empty" } }
@@ -330,7 +354,7 @@ export def "get-domestic-summary-report" [
   --start-month: string # Period start month in yyyy-MM format. (required)
   --end-month: string # Period end month in yyyy-MM format. (required)
   --fx-date-type: string # Which date should be used for FX.
-]: nothing -> record<currency_code: string, domestic_refunds_amount: float, domestic_refunds_tax_amount: float, domestic_sales_amount: float, domestic_tax_amount: float, end_date: string, eu_tax_deducted_refunds: float, eu_tax_deducted_sales: float, global_refunds_amount: float, global_refunds_tax_amount: float, global_sales_amount: float, global_sales_tax_amount: float, start_date: string> {
+]: nothing -> oneof<record<currency_code: string, domestic_refunds_amount: float, domestic_refunds_tax_amount: float, domestic_sales_amount: float, domestic_tax_amount: float, end_date: string, eu_tax_deducted_refunds: float, eu_tax_deducted_sales: float, global_refunds_amount: float, global_refunds_tax_amount: float, global_sales_amount: float, global_sales_tax_amount: float, start_date: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($country_code == null) { error make --unspanned { msg: "required query parameter 'country_code' missing: pass --country-code" } }
@@ -378,7 +402,7 @@ export def "get-eu-vies-report" [
   --eu-country-code: string # ISO 2-letter country code which will be used for determining which country is domestic. (required)
   --fx-date-type: string # Which date should be used for FX.
   --format: string # Output format. 'xml', 'csv' and 'lff' (only for Ireland) values are accepted as well
-]: nothing -> record<currency_code: string, end_date: string, report: table<amount: float, country_code: string, country_name: string, country_subdivision: string, currency_code: string, skip_moss: bool, tax_amount: float, tax_rate: float, tax_region: string>, start_date: string> {
+]: nothing -> oneof<record<currency_code: string, end_date: string, report: table<amount: float, country_code: string, country_name: string, country_subdivision: string, currency_code: string, skip_moss: bool, tax_amount: float, tax_rate: float, tax_region: string>, start_date: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($end_month == null) { error make --unspanned { msg: "required query parameter 'end_month' missing: pass --end-month" } }
@@ -422,7 +446,7 @@ export def "get-detailed-refunds" [
   --date-to: string # Take only refunds issued at or before the date. Format: yyyy-MM-dd
   --limit: float # Limit (no more than 1000, defaults to 100).
   --offset: float # Offset. Defaults to 0
-]: nothing -> record<report: table<amount: float, country_code: string, country_name: string, country_subdivision: string, currency_code: string, skip_moss: bool, tax_amount: float, tax_rate: float, tax_region: string>> {
+]: nothing -> oneof<record<report: table<amount: float, country_code: string, country_name: string, country_subdivision: string, currency_code: string, skip_moss: bool, tax_amount: float, tax_rate: float, tax_region: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "country_codes" $country_codes "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -461,7 +485,7 @@ export def "get-refunds" [
   --moss-country-code: string # MOSS country code, used to determine currency. If ommited, merchant default setting is used.
   --tax-region: string # Tax region key, defaults to EU for backwards compatibility.
   --date-from: string # Take only refunds issued at or after the date. Format: yyyy-MM-dd (required)
-]: nothing -> record<report: table<amount: float, country_code: string, country_name: string, country_subdivision: string, currency_code: string, skip_moss: bool, tax_amount: float, tax_rate: float, tax_region: string>> {
+]: nothing -> oneof<record<report: table<amount: float, country_code: string, country_name: string, country_subdivision: string, currency_code: string, skip_moss: bool, tax_amount: float, tax_rate: float, tax_region: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($date_from == null) { error make --unspanned { msg: "required query parameter 'date_from' missing: pass --date-from" } }
@@ -502,7 +526,7 @@ export def "get-settlement-summary" [
   --tax-region: string # Tax region key
   --start-month: string # Period start month in yyyy-MM format. Either quarter or start-month and end-month have to be provided.
   --end-month: string # Period end month in yyyy-MM format. Either quarter or start-month and end-month have to be provided.
-]: nothing -> record<summary: record<currency_code: string, end_date: string, fx_rate_date: string, indicative: bool, quarter: string, start_date: string, tax_amount: float, tax_entity_name: string>> {
+]: nothing -> oneof<record<summary: record<currency_code: string, end_date: string, fx_rate_date: string, indicative: bool, quarter: string, start_date: string, tax_amount: float, tax_entity_name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($quarter | is-empty) { error make --unspanned { msg: "path parameter 'quarter' must be non-empty" } }
@@ -548,7 +572,7 @@ export def "get-settlement" [
   --moss-country-code: string # MOSS country code, used to determine currency/region. If ommited, merchant default setting is used. Deprecated: please use tax-country-code.
   --format: string # Output format. 'csv' value is accepted as well
   --tax-country-code: string # Tax entity country code, used to determine currency/region.
-]: nothing -> record<end_date: string, fx_rate_date: string, indicative: bool, report: table<amount: float, country_code: string, country_name: string, country_subdivision: string, currency_code: string, skip_moss: bool, tax_amount: float, tax_rate: float, tax_region: string>, start_date: string> {
+]: nothing -> oneof<record<end_date: string, fx_rate_date: string, indicative: bool, report: table<amount: float, country_code: string, country_name: string, country_subdivision: string, currency_code: string, skip_moss: bool, tax_amount: float, tax_rate: float, tax_region: string>, start_date: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($quarter | is-empty) { error make --unspanned { msg: "path parameter 'quarter' must be non-empty" } }
@@ -586,7 +610,7 @@ export def "get-settlement-stats-by-country" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date-from: string # Date from in yyyy-MM format. (required)
   --date-to: string # Date to in yyyy-MM format. (required)
-]: nothing -> record<by_country: table<currency_code: string, tax_country_code: string, tax_country_name: string, value: float>> {
+]: nothing -> oneof<record<by_country: table<currency_code: string, tax_country_code: string, tax_country_name: string, value: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($date_from == null) { error make --unspanned { msg: "required query parameter 'date_from' missing: pass --date-from" } }
@@ -625,7 +649,7 @@ export def "get-settlement-stats-by-taxation-type" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date-from: string # Date from in yyyy-MM format. (required)
   --date-to: string # Date to in yyyy-MM format. (required)
-]: nothing -> record<by_taxation_type: record<deducted_count: float, eu_b2b: int, eu_taxed: int, taxed_count: float, transactions_count: float>> {
+]: nothing -> oneof<record<by_taxation_type: record<deducted_count: float, eu_b2b: int, eu_taxed: int, taxed_count: float, transactions_count: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($date_from == null) { error make --unspanned { msg: "required query parameter 'date_from' missing: pass --date-from" } }
@@ -665,7 +689,7 @@ export def "get-daily-settlement-stats" [
   --interval: string # Interval type - day, week, month. (required)
   --date-from: string # Date from in yyyy-MM format. (required)
   --date-to: string # Date to in yyyy-MM format. (required)
-]: nothing -> record<settlement_daily: table<b2b: int, b2c: int, count: int, day: string, day_raw: string, eu_b2b: int, eu_taxed: int, eu_total: int, untaxed: int>> {
+]: nothing -> oneof<record<settlement_daily: table<b2b: int, b2c: int, count: int, day: string, day_raw: string, eu_b2b: int, eu_taxed: int, eu_total: int, untaxed: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($interval == null) { error make --unspanned { msg: "required query parameter 'interval' missing: pass --interval" } }
@@ -706,7 +730,7 @@ export def "get-transactions-stats" [
   --date-from: string # Date from in yyyy-MM format. (required)
   --date-to: string # Date to in yyyy-MM format. (required)
   --interval: string # Interval. Accepted values are 'day', 'week' and 'month'.
-]: nothing -> record<by_status: record<C: list<record>, N: list<record>>> {
+]: nothing -> oneof<record<by_status: record<C: list<record>, N: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($date_from == null) { error make --unspanned { msg: "required query parameter 'date_from' missing: pass --date-from" } }
@@ -746,7 +770,7 @@ export def "get-transactions-stats-by-country" [
   --global-currency-code: string # Global currency code to use for conversion - in addition to country's currency if rate is available. Conversion is indicative and based on most-recent rate from ECB.
   --date-from: string # Date from in yyyy-MM format. (required)
   --date-to: string # Date to in yyyy-MM format. (required)
-]: nothing -> record<by_country: table<currency_code: string, tax_country_code: string, tax_country_name: string, value: float>> {
+]: nothing -> oneof<record<by_country: table<currency_code: string, tax_country_code: string, tax_country_name: string, value: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($date_from == null) { error make --unspanned { msg: "required query parameter 'date_from' missing: pass --date-from" } }
@@ -798,7 +822,7 @@ export def "calculate-simple-tax" [
   --invoice-address-postal-code: string # Invoice address/postal_code
   --total-amount: float # Total amount. Required if amount or both unit price and quantity are not provided.
   --tax-deducted: oneof<nothing, bool> # If the transaction is in a country supported by Taxamo, but the tax is not calculated due to merchant settings or EU B2B transaction for example.
-]: nothing -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
+]: nothing -> oneof<record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($currency_code == null) { error make --unspanned { msg: "required query parameter 'currency_code' missing: pass --currency-code" } }
@@ -824,7 +848,6 @@ export def "calculate-simple-tax" [
 #
 # POST /api/v1/tax/calculate
 # operationId: calculateTax
-# --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
 export def "calculate-tax" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -836,7 +859,7 @@ export def "calculate-tax" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   transaction: record # shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
-]: any -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
+]: any -> oneof<record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
@@ -875,7 +898,7 @@ export def "calculate-tax-location" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --billing-country-code: string # Billing two letter ISO country code.
   --buyer-credit-card-prefix: string # First 6 digits of buyer's credit card prefix.
-]: nothing -> record<billing_country_code: string, buyer_credit_card_prefix: string, buyer_ip: string, countries: record<by_2003_rules: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, by_billing: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, by_cc: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, by_ip: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, by_tax_number: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, by_token: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, detected: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, forced: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, guessed_from_ip: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, other_commercially_relevant_info: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, self_declaration: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>>, evidence: record<by_2003_rules: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, by_billing: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, by_cc: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, by_ip: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, by_payment_method: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, by_tax_number: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, by_token: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, forced: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, guessed_from_ip: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, other_commercially_relevant_info: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, self_declaration: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>>, tax_country_code: string, tax_deducted: bool, tax_supported: bool> {
+]: nothing -> oneof<record<billing_country_code: string, buyer_credit_card_prefix: string, buyer_ip: string, countries: record<by_2003_rules: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, by_billing: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, by_cc: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, by_ip: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, by_tax_number: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, by_token: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, detected: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, forced: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, guessed_from_ip: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, other_commercially_relevant_info: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>, self_declaration: record<callingCode: list, cca2: string, cca3: string, ccn3: string, code: string, code_long: string, codenum: string, currency: list, name: string, tax_number_country_code: string, tax_region: string, tax_supported: bool>>, evidence: record<by_2003_rules: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, by_billing: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, by_cc: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, by_ip: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, by_payment_method: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, by_tax_number: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, by_token: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, forced: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, guessed_from_ip: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, other_commercially_relevant_info: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>, self_declaration: record<evidence_type: string, evidence_value: string, resolved_country_code: string, used: bool>>, tax_country_code: string, tax_deducted: bool, tax_supported: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "billing_country_code" $billing_country_code "scalar") (serialize-qp "buyer_credit_card_prefix" $buyer_credit_card_prefix "scalar")] | flatten | str join "&"
@@ -912,7 +935,7 @@ export def "validate-tax-number" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --country-code: string # Two-letter ISO country code.
-]: nothing -> record<billing_country_code: string, buyer_tax_number: string, buyer_tax_number_valid: bool, tax_deducted: bool> {
+]: nothing -> oneof<record<billing_country_code: string, buyer_tax_number: string, buyer_tax_number_valid: bool, tax_deducted: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($tax_number | is-empty) { error make --unspanned { msg: "path parameter 'tax_number' must be non-empty" } }
@@ -965,7 +988,7 @@ export def "list-transactions" [
   --format: string # Output format - supports 'csv' value for this operation.
   --total-amount-less-than: string # Return only transactions with total amount less than a given number. Transactions with total amount equal to a given number (e.g. 1) are not returned.
   --tax-country-code: string # Two letter ISO tax country code.
-]: nothing -> record<transactions: table<additional_currencies: record, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list, verification_token: string>> {
+]: nothing -> oneof<record<transactions: table<additional_currencies: record, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list, verification_token: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter_text" $filter_text "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "has_note" $has_note "scalar") (serialize-qp "key_or_custom_id" $key_or_custom_id "scalar") (serialize-qp "currency_code" $currency_code "scalar") (serialize-qp "order_date_to" $order_date_to "scalar") (serialize-qp "sort_reverse" $sort_reverse "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "invoice_number" $invoice_number "scalar") (serialize-qp "tax_country_codes" $tax_country_codes "scalar") (serialize-qp "statuses" $statuses "scalar") (serialize-qp "original_transaction_key" $original_transaction_key "scalar") (serialize-qp "order_date_from" $order_date_from "scalar") (serialize-qp "total_amount_greater_than" $total_amount_greater_than "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "total_amount_less_than" $total_amount_less_than "scalar") (serialize-qp "tax_country_code" $tax_country_code "scalar")] | flatten | str join "&"
@@ -990,7 +1013,6 @@ export def "list-transactions" [
 #
 # POST /api/v1/transactions
 # operationId: createTransaction
-# --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
 export def "create-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1003,7 +1025,7 @@ export def "create-transaction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --manual-mode: oneof<nothing, bool> # Use manual mode, bypassing country detection. Only allowed with private token. This flag allows to use original_transaction_key field
   transaction: record # shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
-]: any -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
+]: any -> oneof<record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
@@ -1041,7 +1063,7 @@ export def "cancel-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -1077,7 +1099,7 @@ export def "get-transaction" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
+]: nothing -> oneof<record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -1102,7 +1124,6 @@ export def "get-transaction" [
 #
 # PUT /api/v1/transactions/{key}
 # operationId: updateTransaction
-# --transaction shape: {additional_currencies?: record, amount?: float, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, buyer_tax_number_valid?: bool, comments?: string, confirm_timestamp?: string, countries?: record, create_timestamp?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, deducted_tax_amount?: float, description?: string, ... (33 more fields)}
 export def "update-transaction" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1115,7 +1136,7 @@ export def "update-transaction" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --transaction: record # shape: {additional_currencies?: record, amount?: float, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, buyer_tax_number_valid?: bool, comments?: string, confirm_timestamp?: string, countries?: record, create_timestamp?: string, currency_code: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, deducted_tax_amount?: float, description?: string, ... (33 more fields)}
-]: any -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
+]: any -> oneof<record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
@@ -1143,7 +1164,6 @@ export def "update-transaction" [
 #
 # POST /api/v1/transactions/{key}/confirm
 # operationId: confirmTransaction
-# --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code?: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
 export def "confirm-transaction" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1156,7 +1176,7 @@ export def "confirm-transaction" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --transaction: record # shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code?: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
-]: any -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
+]: any -> oneof<record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
@@ -1197,7 +1217,7 @@ export def "email-refund" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --buyer-email: string # Email to send the credit note/refund note. If not provided, transaction.buyer_email will be used.
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
@@ -1238,7 +1258,7 @@ export def "email-invoice" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --buyer-email: string # Email to send the invoice. If not provided, transaction.buyer_email will be used.
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
@@ -1279,7 +1299,7 @@ export def "list-payments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # Max record count (no more than 100, defaults to 10).
   --offset: string # How many records need to be skipped, defaults to 0.
-]: nothing -> record<payments: table<amount: float, payment_information: string, payment_timestamp: string>> {
+]: nothing -> oneof<record<payments: table<amount: float, payment_information: string, payment_timestamp: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -1319,7 +1339,7 @@ export def "create-payment" [
   amount: float # Amount that has been paid. Use negative value to register refunds.
   --payment-information: string # Additional payment information.
   --payment-timestamp: string # When the payment was received in yyyy-MM-dd'T'HH:mm:ss(.SSS)'Z' format (24 hour, UTC timezone). Defaults to current date and time.
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
@@ -1358,7 +1378,7 @@ export def "capture-payment" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -1394,7 +1414,7 @@ export def "list-refunds" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<refunds: table<amount: float, informative: bool, line_key: string, refund_note_number: string, refund_note_url: string, refund_reason: string, refund_timestamp: string, tax_amount: float, tax_rate: float, total_amount: float>> {
+]: nothing -> oneof<record<refunds: table<amount: float, informative: bool, line_key: string, refund_note_number: string, refund_note_url: string, refund_reason: string, refund_timestamp: string, tax_amount: float, tax_rate: float, total_amount: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -1435,7 +1455,7 @@ export def "create-refund" [
   --line-key: string # Line identifier. If neither line key or custom id is provided, the refund amount will be assigned to lines in order.
   --refund-reason: string # Refund reason, displayed on the credit note.
   --total-amount: float # Total amount, including tax, to be refunded. Either amount or total amount is required. In case of line key and custom id missing, only total_amount can be used.
-]: any -> record<refunded_tax_amount: float, refunded_total_amount: float, tax_amount: float, total_amount: float> {
+]: any -> oneof<record<refunded_tax_amount: float, refunded_total_amount: float, tax_amount: float, total_amount: float>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
@@ -1463,7 +1483,6 @@ export def "create-refund" [
 #
 # POST /api/v1/transactions/{key}/unconfirm
 # operationId: unconfirmTransaction
-# --transaction shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code?: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
 export def "unconfirm-transaction" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1476,7 +1495,7 @@ export def "unconfirm-transaction" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --transaction: record # shape: {additional_currencies?: record, billing_country_code?: string, buyer_credit_card_prefix?: string, buyer_email?: string, buyer_ip?: string, buyer_name?: string, buyer_tax_number?: string, comments?: string, currency_code?: string, custom_data?: string, custom_fields?: list, custom_id?: string, customer_id?: string, description?: string, evidence?: record, force_country_code?: string, invoice_address?: record, invoice_date?: string, invoice_number?: string, invoice_place?: string, note?: string, ... (10 more fields)}
-]: any -> record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>> {
+]: any -> oneof<record<storage_required_fields: table<field_name: string>, tax_required_fields: table<field_name: string>, transaction: record<additional_currencies: record<invoice: record>, amount: float, billing_country_code: string, buyer_credit_card_prefix: string, buyer_email: string, buyer_ip: string, buyer_name: string, buyer_tax_number: string, buyer_tax_number_valid: bool, comments: string, confirm_timestamp: string, countries: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_tax_number: record, by_token: record, detected: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, create_timestamp: string, currency_code: string, custom_data: string, custom_fields: list<record>, custom_id: string, customer_id: string, deducted_tax_amount: float, description: string, evidence: record<by_2003_rules: record, by_billing: record, by_cc: record, by_ip: record, by_payment_method: record, by_tax_number: record, by_token: record, forced: record, guessed_from_ip: record, other_commercially_relevant_info: record, self_declaration: record>, external_key: string, force_country_code: string, fully_informative: bool, invoice_address: record<address_detail: string, building_number: string, city: string, country: string, freeform_address: string, postal_code: string, region: string, street_name: string>, invoice_date: string, invoice_image_url: string, invoice_number: string, invoice_place: string, key: string, kind: string, manual: bool, note: string, order_date: string, original_transaction_key: string, refunded_tax_amount: float, refunded_total_amount: float, source: string, status: string, sub_account_id: string, supply_date: string, tax_amount: float, tax_country_code: string, tax_data: record<us_tax_exemption_certificate: record>, tax_deducted: bool, tax_entity_name: string, tax_number_service: string, tax_supported: bool, tax_timezone: string, test: bool, total_amount: float, transaction_lines: list<record>, verification_token: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
@@ -1516,7 +1535,7 @@ export def "create-sms-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   country_code: string # Two letter ISO country code.
   recipient: string # Recipient phone number.
-]: any -> record<success: bool> {
+]: any -> oneof<record<success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
@@ -1554,7 +1573,7 @@ export def "verify-sms-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<country_code: string> {
+]: nothing -> oneof<record<country_code: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "token"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }

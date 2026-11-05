@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -120,9 +144,9 @@ def state-completer [] { ["CREATING" "DELETING" "DOWN" "PERFORMING_MAINTENANCE" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "managedidentities-projects-locations-global-domains-check-migration-permission" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["managedidentities-projects-locations-global-domains-check-migration-permission" "managedidentities-projects-locations-global-domains-disable-migration" "managedidentities-projects-locations-global-domains-domain-join-machine" "managedidentities-projects-locations-global-domains-enable-migration" "managedidentities-projects-locations-global-domains-extend-schema" "managedidentities-projects-locations-global-peerings-delete" "managedidentities-projects-locations-global-peerings-get" "managedidentities-projects-locations-global-peerings-patch" "managedidentities-projects-locations-global-domains-get-ldapssettings" "managedidentities-projects-locations-global-domains-update-ldapssettings" "managedidentities-projects-locations-list" "managedidentities-projects-locations-global-operations-list" "managedidentities-projects-locations-global-domains-attach-trust" "managedidentities-projects-locations-global-operations-cancel" "managedidentities-projects-locations-global-domains-detach-trust" "managedidentities-projects-locations-global-domains-reconfigure-trust" "managedidentities-projects-locations-global-domains-reset-admin-password" "managedidentities-projects-locations-global-domains-restore" "managedidentities-projects-locations-global-domains-validate-trust" "managedidentities-projects-locations-global-domains-backups-list" "managedidentities-projects-locations-global-domains-backups-create" "managedidentities-projects-locations-global-domains-list" "managedidentities-projects-locations-global-domains-create" "managedidentities-projects-locations-global-peerings-list" "managedidentities-projects-locations-global-peerings-create" "managedidentities-projects-locations-global-domains-sql-integrations-list" "managedidentities-projects-locations-global-peerings-get-iam-policy" "managedidentities-projects-locations-global-peerings-set-iam-policy" "managedidentities-projects-locations-global-peerings-test-iam-permissions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "managedidentities-projects-locations-global-domains-check-migration-
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<onpremDomains: table<name: string, sidFilteringState: string>, state: string> {
+]: any -> oneof<record<onpremDomains: table<name: string, sidFilteringState: string>, state: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -219,7 +243,7 @@ export def "managedidentities-projects-locations-global-domains-disable-migratio
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -273,7 +297,7 @@ export def "managedidentities-projects-locations-global-domains-domain-join-mach
   --force: oneof<nothing, bool> # Optional. force if True, forces domain join even if the computer account already exists.
   --ou-name: string # Optional. OU name where the VM needs to be domain joined
   --vm-id-token: string # Required. Full instance id token of compute engine VM to verify instance identity. More about this: https://cloud.google.com/compute/docs/instances/verifying-instance-identity#request_signature
-]: any -> record<domainJoinBlob: string> {
+]: any -> oneof<record<domainJoinBlob: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -302,7 +326,6 @@ export def "managedidentities-projects-locations-global-domains-domain-join-mach
 #
 # POST /v1alpha1/{domain}:enableMigration
 # operationId: managedidentities.projects.locations.global.domains.enableMigration
-# --migratingDomains item shape: {disableSidFiltering?: bool, domainName?: string}
 export def "managedidentities-projects-locations-global-domains-enable-migration" [
   domain: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -326,7 +349,7 @@ export def "managedidentities-projects-locations-global-domains-enable-migration
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --migrating-domains: list # Required. List of the on-prem domains to be migrated. — item shape: {disableSidFiltering?: bool, domainName?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -380,7 +403,7 @@ export def "managedidentities-projects-locations-global-domains-extend-schema" [
   --description: string # Required. Description for Schema Change.
   --file-contents: string # File uploaded as a byte stream input. (format: byte)
   --gcs-path: string # File stored in Cloud Storage bucket and represented in the form projects/{project_id}/buckets/{bucket_name}/objects/{object_name} File should be in the same project as the domain.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -431,7 +454,7 @@ export def "managedidentities-projects-locations-global-peerings-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: nothing -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -479,7 +502,7 @@ export def "managedidentities-projects-locations-global-peerings-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<authorizedNetwork: string, createTime: string, domainResource: string, labels: record, name: string, state: string, statusMessage: string, updateTime: string> {
+]: nothing -> oneof<record<authorizedNetwork: string, createTime: string, domainResource: string, labels: record, name: string, state: string, statusMessage: string, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -531,7 +554,7 @@ export def "managedidentities-projects-locations-global-peerings-patch" [
   --authorized-network: string # Required. The full names of the Google Compute Engine [networks](/compute/docs/networks-and-firewalls#networks) to which the instance is connected. Caller needs to make sure that CIDR subnets do not overlap between networks, else peering creation will fail.
   --domain-resource: string # Required. Full domain resource path for the Managed AD Domain involved in peering. The resource path should be in the form: `projects/{project_id}/locations/global/domains/{domain_name}`
   --labels: record # Optional. Resource labels to represent user provided metadata.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -582,7 +605,7 @@ export def "managedidentities-projects-locations-global-domains-get-ldapssetting
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<certificate: record<expireTime: string, issuingCertificate: any, subject: string, subjectAlternativeName: list<string>, thumbprint: string>, certificatePassword: string, certificatePfx: string, name: string, state: string, updateTime: string> {
+]: nothing -> oneof<record<certificate: record<expireTime: string, issuingCertificate: any, subject: string, subjectAlternativeName: list<string>, thumbprint: string>, certificatePassword: string, certificatePfx: string, name: string, state: string, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -608,7 +631,6 @@ export def "managedidentities-projects-locations-global-domains-get-ldapssetting
 #
 # PATCH /v1alpha1/{name}/ldapssettings
 # operationId: managedidentities.projects.locations.global.domains.updateLdapssettings
-# --certificate shape: {expireTime?: string, issuingCertificate?: record, subject?: string, subjectAlternativeName?: list<string>, thumbprint?: string}
 export def "managedidentities-projects-locations-global-domains-update-ldapssettings" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -636,7 +658,7 @@ export def "managedidentities-projects-locations-global-domains-update-ldapssett
   --certificate-password: string # Input only. The password used to encrypt the uploaded pfx certificate.
   --certificate-pfx: string # Input only. The uploaded PKCS12-formatted certificate to configure LDAPS with. It will enable the domain controllers in this domain to accept LDAPS connections (either LDAP over SSL/TLS or the StartTLS operation). A valid certificate chain must form a valid x.509 certificate chain (or be comprised of a single self-signed certificate. It must be encrypted with either: 1) PBES2 + PBKDF2 + AES256 encryption and SHA256 PRF; or 2) pbeWithSHA1And3-KeyTripleDES-CBC Private key must be included for the leaf / single self-signed certificate. Note: For a fqdn your-example-domain.com, the wildcard fqdn is *.your-example-domain.com. Specifically the leaf certificate must have: - Either a blank subject or a subject with CN matching the wildcard fqdn. - Exactly two SANs - the fqdn and wildcard fqdn. - Encipherment and digital key signature key usages. - Server authentication extended key usage (OID=1.3.6.1.5.5.7.3.1) - Private key must be in one of the following formats: RSA, ECDSA, ED25519. - Private key must have appropriate key length: 2048 for RSA, 256 for ECDSA - Signature algorithm of the leaf certificate cannot be MD2, MD5 or SHA1. (format: byte)
   --body-name: string # The resource name of the LDAPS settings. Uses the form: `projects/{project}/locations/{location}/domains/{domain}`.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -690,7 +712,7 @@ export def "managedidentities-projects-locations-list" [
   --filter: string # A filter to narrow down results to a preferred subset. The filtering language accepts strings like `"displayName=tokyo"`, and is documented in more detail in [AIP-160](https://google.aip.dev/160).
   --page-size: int # The maximum number of results to return. If not set, the service selects a default.
   --page-token: string # A page token received from the `next_page_token` field in the response. Send that page token to receive the subsequent page.
-]: nothing -> record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<locations: table<displayName: string, labels: record, locationId: string, metadata: record, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -741,7 +763,7 @@ export def "managedidentities-projects-locations-global-operations-list" [
   --filter: string # The standard list filter.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -767,7 +789,6 @@ export def "managedidentities-projects-locations-global-operations-list" [
 #
 # POST /v1alpha1/{name}:attachTrust
 # operationId: managedidentities.projects.locations.global.domains.attachTrust
-# --trust shape: {createTime?: string, lastKnownTrustConnectedHeartbeatTime?: string, selectiveAuthentication?: bool, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"DELETING"|"CONNECTED"|"DISCONNECTED", stateDescription?: string, targetDnsIpAddresses?: list<string>, targetDomainName?: string, trustDirection?: "TRUST_DIRECTION_UNSPECIFIED"|"INBOUND"|"OUTBOUND"|"BIDIRECTIONAL", trustHandshakeSecret?: string, trustType?: "TRUST_TYPE_UNSPECIFIED"|"FOREST"|"EXTERNAL", updateTime?: string}
 export def "managedidentities-projects-locations-global-domains-attach-trust" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -791,7 +812,7 @@ export def "managedidentities-projects-locations-global-domains-attach-trust" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --trust: record # Represents a relationship between two domains which makes it possible for users in one domain to be authenticated by a dc in another domain. Refer https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-R2-and-2008/cc731335(v%3dws.10) If the trust is being changed, it will be placed into the UPDATING state, which indicates that the resource is being reconciled. At this point, Get will reflect an intermediate state. — shape: {createTime?: string, lastKnownTrustConnectedHeartbeatTime?: string, selectiveAuthentication?: bool, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"DELETING"|"CONNECTED"|"DISCONNECTED", stateDescription?: string, targetDnsIpAddresses?: list<string>, targetDomainName?: string, trustDirection?: "TRUST_DIRECTION_UNSPECIFIED"|"INBOUND"|"OUTBOUND"|"BIDIRECTIONAL", trustHandshakeSecret?: string, trustType?: "TRUST_TYPE_UNSPECIFIED"|"FOREST"|"EXTERNAL", updateTime?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -843,7 +864,7 @@ export def "managedidentities-projects-locations-global-operations-cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -872,7 +893,6 @@ export def "managedidentities-projects-locations-global-operations-cancel" [
 #
 # POST /v1alpha1/{name}:detachTrust
 # operationId: managedidentities.projects.locations.global.domains.detachTrust
-# --trust shape: {createTime?: string, lastKnownTrustConnectedHeartbeatTime?: string, selectiveAuthentication?: bool, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"DELETING"|"CONNECTED"|"DISCONNECTED", stateDescription?: string, targetDnsIpAddresses?: list<string>, targetDomainName?: string, trustDirection?: "TRUST_DIRECTION_UNSPECIFIED"|"INBOUND"|"OUTBOUND"|"BIDIRECTIONAL", trustHandshakeSecret?: string, trustType?: "TRUST_TYPE_UNSPECIFIED"|"FOREST"|"EXTERNAL", updateTime?: string}
 export def "managedidentities-projects-locations-global-domains-detach-trust" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -896,7 +916,7 @@ export def "managedidentities-projects-locations-global-domains-detach-trust" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --trust: record # Represents a relationship between two domains which makes it possible for users in one domain to be authenticated by a dc in another domain. Refer https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-R2-and-2008/cc731335(v%3dws.10) If the trust is being changed, it will be placed into the UPDATING state, which indicates that the resource is being reconciled. At this point, Get will reflect an intermediate state. — shape: {createTime?: string, lastKnownTrustConnectedHeartbeatTime?: string, selectiveAuthentication?: bool, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"DELETING"|"CONNECTED"|"DISCONNECTED", stateDescription?: string, targetDnsIpAddresses?: list<string>, targetDomainName?: string, trustDirection?: "TRUST_DIRECTION_UNSPECIFIED"|"INBOUND"|"OUTBOUND"|"BIDIRECTIONAL", trustHandshakeSecret?: string, trustType?: "TRUST_TYPE_UNSPECIFIED"|"FOREST"|"EXTERNAL", updateTime?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -925,7 +945,6 @@ export def "managedidentities-projects-locations-global-domains-detach-trust" [
 #
 # POST /v1alpha1/{name}:reconfigureTrust
 # operationId: managedidentities.projects.locations.global.domains.reconfigureTrust
-# --trust shape: {createTime?: string, lastKnownTrustConnectedHeartbeatTime?: string, selectiveAuthentication?: bool, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"DELETING"|"CONNECTED"|"DISCONNECTED", stateDescription?: string, targetDnsIpAddresses?: list<string>, targetDomainName?: string, trustDirection?: "TRUST_DIRECTION_UNSPECIFIED"|"INBOUND"|"OUTBOUND"|"BIDIRECTIONAL", trustHandshakeSecret?: string, trustType?: "TRUST_TYPE_UNSPECIFIED"|"FOREST"|"EXTERNAL", updateTime?: string}
 export def "managedidentities-projects-locations-global-domains-reconfigure-trust" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -949,7 +968,7 @@ export def "managedidentities-projects-locations-global-domains-reconfigure-trus
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --trust: record # Represents a relationship between two domains which makes it possible for users in one domain to be authenticated by a dc in another domain. Refer https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-R2-and-2008/cc731335(v%3dws.10) If the trust is being changed, it will be placed into the UPDATING state, which indicates that the resource is being reconciled. At this point, Get will reflect an intermediate state. — shape: {createTime?: string, lastKnownTrustConnectedHeartbeatTime?: string, selectiveAuthentication?: bool, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"DELETING"|"CONNECTED"|"DISCONNECTED", stateDescription?: string, targetDnsIpAddresses?: list<string>, targetDomainName?: string, trustDirection?: "TRUST_DIRECTION_UNSPECIFIED"|"INBOUND"|"OUTBOUND"|"BIDIRECTIONAL", trustHandshakeSecret?: string, trustType?: "TRUST_TYPE_UNSPECIFIED"|"FOREST"|"EXTERNAL", updateTime?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1001,7 +1020,7 @@ export def "managedidentities-projects-locations-global-domains-reset-admin-pass
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --body: record
-]: any -> record<password: string> {
+]: any -> oneof<record<password: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1053,7 +1072,7 @@ export def "managedidentities-projects-locations-global-domains-restore" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --backup-id: string # Required. ID of the backup to be restored
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1082,7 +1101,6 @@ export def "managedidentities-projects-locations-global-domains-restore" [
 #
 # POST /v1alpha1/{name}:validateTrust
 # operationId: managedidentities.projects.locations.global.domains.validateTrust
-# --trust shape: {createTime?: string, lastKnownTrustConnectedHeartbeatTime?: string, selectiveAuthentication?: bool, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"DELETING"|"CONNECTED"|"DISCONNECTED", stateDescription?: string, targetDnsIpAddresses?: list<string>, targetDomainName?: string, trustDirection?: "TRUST_DIRECTION_UNSPECIFIED"|"INBOUND"|"OUTBOUND"|"BIDIRECTIONAL", trustHandshakeSecret?: string, trustType?: "TRUST_TYPE_UNSPECIFIED"|"FOREST"|"EXTERNAL", updateTime?: string}
 export def "managedidentities-projects-locations-global-domains-validate-trust" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1106,7 +1124,7 @@ export def "managedidentities-projects-locations-global-domains-validate-trust" 
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --trust: record # Represents a relationship between two domains which makes it possible for users in one domain to be authenticated by a dc in another domain. Refer https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2008-R2-and-2008/cc731335(v%3dws.10) If the trust is being changed, it will be placed into the UPDATING state, which indicates that the resource is being reconciled. At this point, Get will reflect an intermediate state. — shape: {createTime?: string, lastKnownTrustConnectedHeartbeatTime?: string, selectiveAuthentication?: bool, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"DELETING"|"CONNECTED"|"DISCONNECTED", stateDescription?: string, targetDnsIpAddresses?: list<string>, targetDomainName?: string, trustDirection?: "TRUST_DIRECTION_UNSPECIFIED"|"INBOUND"|"OUTBOUND"|"BIDIRECTIONAL", trustHandshakeSecret?: string, trustType?: "TRUST_TYPE_UNSPECIFIED"|"FOREST"|"EXTERNAL", updateTime?: string}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1161,7 +1179,7 @@ export def "managedidentities-projects-locations-global-domains-backups-list" [
   --order-by: string # Optional. Specifies the ordering of results following syntax at https://cloud.google.com/apis/design/design_patterns#sorting_order.
   --page-size: int # Optional. The maximum number of items to return. If not specified, a default value of 1000 will be used by the service. Regardless of the page_size value, the response may include a partial list and a caller should only rely on response's next_page_token to determine if there are more instances left to be queried.
   --page-token: string # Optional. The next_page_token value returned from a previous List request, if any.
-]: nothing -> record<backups: table<createTime: string, description: string, labels: record, name: string, state: string, statusMessage: string, type: string, updateTime: string>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<backups: table<createTime: string, description: string, labels: record, name: string, state: string, statusMessage: string, type: string, updateTime: string>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1212,7 +1230,7 @@ export def "managedidentities-projects-locations-global-domains-backups-create" 
   --backup-id: string # Required. Backup Id, unique name to identify the backups with the following restrictions: * Must be lowercase letters, numbers, and hyphens * Must start with a letter. * Must contain between 1-63 characters. * Must end with a number or a letter. * Must be unique within the domain.
   --description: string # Optional. A short description of the backup.
   --labels: record # Optional. Resource labels to represent user provided metadata.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1267,7 +1285,7 @@ export def "managedidentities-projects-locations-global-domains-list" [
   --order-by: string # Optional. Specifies the ordering of results following syntax at https://cloud.google.com/apis/design/design_patterns#sorting_order.
   --page-size: int # If not specified, a default value of 1000 will be used by the service. Regardless of the page_size value, the response may include a partial list and a caller should only rely on response's next_page_token to determine if there are more instances left to be queried.
   --page-token: string # The next_page_token value returned from a previous List request, if any.
-]: nothing -> record<domains: table<auditLogsEnabled: bool, authorizedNetworks: list, createTime: string, fqdn: string, labels: record, locations: list, managedIdentitiesAdminName: string, name: string, reservedIpRange: string, state: string, statusMessage: string, trusts: list, updateTime: string>, nextPageToken: string, unreachable: list<string>> {
+]: nothing -> oneof<record<domains: table<auditLogsEnabled: bool, authorizedNetworks: list, createTime: string, fqdn: string, labels: record, locations: list, managedIdentitiesAdminName: string, name: string, reservedIpRange: string, state: string, statusMessage: string, trusts: list, updateTime: string>, nextPageToken: string, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1293,7 +1311,6 @@ export def "managedidentities-projects-locations-global-domains-list" [
 #
 # POST /v1alpha1/{parent}/domains
 # operationId: managedidentities.projects.locations.global.domains.create
-# --trusts item shape: {createTime?: string, lastKnownTrustConnectedHeartbeatTime?: string, selectiveAuthentication?: bool, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"DELETING"|"CONNECTED"|"DISCONNECTED", stateDescription?: string, targetDnsIpAddresses?: list<string>, targetDomainName?: string, trustDirection?: "TRUST_DIRECTION_UNSPECIFIED"|"INBOUND"|"OUTBOUND"|"BIDIRECTIONAL", trustHandshakeSecret?: string, trustType?: "TRUST_TYPE_UNSPECIFIED"|"FOREST"|"EXTERNAL", updateTime?: string}
 export def "managedidentities-projects-locations-global-domains-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1330,7 +1347,7 @@ export def "managedidentities-projects-locations-global-domains-create" [
   --status-message: string # Output only. Additional information about the current status of this domain, if available.
   --trusts: list # Output only. The current trusts associated with the domain. — item shape: {createTime?: string, lastKnownTrustConnectedHeartbeatTime?: string, selectiveAuthentication?: bool, state?: "STATE_UNSPECIFIED"|"CREATING"|"UPDATING"|"DELETING"|"CONNECTED"|"DISCONNECTED", stateDescription?: string, targetDnsIpAddresses?: list<string>, targetDomainName?: string, trustDirection?: "TRUST_DIRECTION_UNSPECIFIED"|"INBOUND"|"OUTBOUND"|"BIDIRECTIONAL", trustHandshakeSecret?: string, trustType?: "TRUST_TYPE_UNSPECIFIED"|"FOREST"|"EXTERNAL", updateTime?: string}
   --update-time: string # Output only. Last update time. Synthetic field is populated automatically by CCFE. (format: google-datetime)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1385,7 +1402,7 @@ export def "managedidentities-projects-locations-global-peerings-list" [
   --order-by: string # Optional. Specifies the ordering of results following syntax at https://cloud.google.com/apis/design/design_patterns#sorting_order.
   --page-size: int # Optional. The maximum number of items to return. If not specified, a default value of 1000 will be used by the service. Regardless of the page_size value, the response may include a partial list and a caller should only rely on response's next_page_token to determine if there are more instances left to be queried.
   --page-token: string # Optional. The next_page_token value returned from a previous List request, if any.
-]: nothing -> record<nextPageToken: string, peerings: table<authorizedNetwork: string, createTime: string, domainResource: string, labels: record, name: string, state: string, statusMessage: string, updateTime: string>, unreachable: list<string>> {
+]: nothing -> oneof<record<nextPageToken: string, peerings: table<authorizedNetwork: string, createTime: string, domainResource: string, labels: record, name: string, state: string, statusMessage: string, updateTime: string>, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1437,7 +1454,7 @@ export def "managedidentities-projects-locations-global-peerings-create" [
   --authorized-network: string # Required. The full names of the Google Compute Engine [networks](/compute/docs/networks-and-firewalls#networks) to which the instance is connected. Caller needs to make sure that CIDR subnets do not overlap between networks, else peering creation will fail.
   --domain-resource: string # Required. Full domain resource path for the Managed AD Domain involved in peering. The resource path should be in the form: `projects/{project_id}/locations/global/domains/{domain_name}`
   --labels: record # Optional. Resource labels to represent user provided metadata.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1492,7 +1509,7 @@ export def "managedidentities-projects-locations-global-domains-sql-integrations
   --order-by: string # Optional. Specifies the ordering of results following syntax at https://cloud.google.com/apis/design/design_patterns#sorting_order.
   --page-size: int # Optional. The maximum number of items to return. If not specified, a default value of 1000 will be used by the service. Regardless of the page_size value, the response may include a partial list and a caller should only rely on response'ANIZATIONs next_page_token to determine if there are more instances left to be queried.
   --page-token: string # Optional. The next_page_token value returned from a previous List request, if any.
-]: nothing -> record<nextPageToken: string, sqlIntegrations: table<createTime: string, name: string, sqlInstance: string, state: string, updateTime: string>, unreachable: list<string>> {
+]: nothing -> oneof<record<nextPageToken: string, sqlIntegrations: table<createTime: string, name: string, sqlInstance: string, state: string, updateTime: string>, unreachable: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1541,7 +1558,7 @@ export def "managedidentities-projects-locations-global-peerings-get-iam-policy"
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options-requested-policy-version: int # Optional. The maximum policy version that will be used to format the policy. Valid values are 0, 1, and 3. Requests specifying an invalid value will be rejected. Requests for policies with any conditional role bindings must specify version 3. Policies with no conditional role bindings may specify any valid value or leave the field unset. The policy in the response might use the policy version that you specified, or it might use a lower policy version. For example, if you specify version 3, but the policy has no conditional role bindings, the response uses version 1. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies).
-]: nothing -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: nothing -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
@@ -1567,7 +1584,6 @@ export def "managedidentities-projects-locations-global-peerings-get-iam-policy"
 #
 # POST /v1alpha1/{resource}:setIamPolicy
 # operationId: managedidentities.projects.locations.global.peerings.setIamPolicy
-# --policy shape: {bindings?: list, etag?: string, version?: int}
 export def "managedidentities-projects-locations-global-peerings-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1591,7 +1607,7 @@ export def "managedidentities-projects-locations-global-peerings-set-iam-policy"
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {bindings?: list, etag?: string, version?: int}
-]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1643,7 +1659,7 @@ export def "managedidentities-projects-locations-global-peerings-test-iam-permis
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

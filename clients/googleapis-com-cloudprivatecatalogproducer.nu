@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def xgafv-completer [] { ["1" "2"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudprivatecatalogproducer-catalogs-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["cloudprivatecatalogproducer-catalogs-list" "cloudprivatecatalogproducer-catalogs-create" "cloudprivatecatalogproducer-operations-list" "cloudprivatecatalogproducer-catalogs-products-versions-delete" "cloudprivatecatalogproducer-catalogs-products-versions-get" "cloudprivatecatalogproducer-catalogs-products-versions-patch" "cloudprivatecatalogproducer-operations-cancel" "cloudprivatecatalogproducer-catalogs-products-copy" "cloudprivatecatalogproducer-catalogs-undelete" "cloudprivatecatalogproducer-catalogs-associations-list" "cloudprivatecatalogproducer-catalogs-associations-create" "cloudprivatecatalogproducer-catalogs-products-list" "cloudprivatecatalogproducer-catalogs-products-create" "cloudprivatecatalogproducer-catalogs-products-versions-list" "cloudprivatecatalogproducer-catalogs-products-versions-create" "cloudprivatecatalogproducer-catalogs-products-icons-upload" "cloudprivatecatalogproducer-catalogs-get-iam-policy" "cloudprivatecatalogproducer-catalogs-set-iam-policy" "cloudprivatecatalogproducer-catalogs-test-iam-permissions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -167,7 +191,7 @@ export def "cloudprivatecatalogproducer-catalogs-list" [
   --page-size: int # The maximum number of catalogs to return.
   --page-token: string # A pagination token returned from a previous call to ListCatalogs that indicates where this listing should continue from. This field is optional.
   --parent: string # The resource name of the parent resource.
-]: nothing -> record<catalogs: table<createTime: string, description: string, displayName: string, name: string, parent: string, updateTime: string>, nextPageToken: string> {
+]: nothing -> oneof<record<catalogs: table<createTime: string, description: string, displayName: string, name: string, parent: string, updateTime: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "parent" $parent "scalar")] | flatten | str join "&"
@@ -219,7 +243,7 @@ export def "cloudprivatecatalogproducer-catalogs-create" [
   --name: string # Output only. The resource name of the catalog, in the format `catalogs/{catalog_id}'. A unique identifier for the catalog, which is generated by catalog service.
   --parent: string # Required. The parent resource name of the catalog, which can't be changed after a catalog is created. It can only be an organization. Values are of the form `//cloudresourcemanager.googleapis.com/organizations/`. Maximum 256 characters in length.
   --update-time: string # Output only. The time when the catalog was last updated. (format: google-datetime)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -272,7 +296,7 @@ export def "cloudprivatecatalogproducer-operations-list" [
   --name: string # The name of the operation's parent resource.
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
-]: nothing -> record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>> {
+]: nothing -> oneof<record<nextPageToken: string, operations: table<done: bool, error: record, metadata: record, name: string, response: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -320,7 +344,7 @@ export def "cloudprivatecatalogproducer-catalogs-products-versions-delete" [
   --oauth-token: string # OAuth 2.0 token for the current user.
   --callback: string # JSONP
   --force: oneof<nothing, bool> # Forces deletion of the `Catalog` and its `Association` resources. If the `Catalog` is still associated with other resources and force is not set to true, then the operation fails.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -368,7 +392,7 @@ export def "cloudprivatecatalogproducer-catalogs-products-versions-get" [
   --xgafv: string@xgafv-completer # V1 error format.
   --oauth-token: string # OAuth 2.0 token for the current user.
   --callback: string # JSONP
-]: nothing -> record<asset: record, createTime: string, description: string, name: string, originalAsset: record, updateTime: string> {
+]: nothing -> oneof<record<asset: record, createTime: string, description: string, name: string, originalAsset: record, updateTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -423,7 +447,7 @@ export def "cloudprivatecatalogproducer-catalogs-products-versions-patch" [
   --body-name: string # Required. The resource name of the version, in the format `catalogs/{catalog_id}/products/{product_id}/versions/a-z*[a-z0-9]'. A unique identifier for the version under a product, which can't be changed after the version is created. The final segment of the name must between 1 and 63 characters in length.
   --original-asset: record # The user-supplied asset payload. The maximum size of the payload is 2MB. The JSON schema of the payload is defined as: ``` type: object properties: mainTemplate: type: string description: The file name of the main template and name prefix of schema file. The content of the main template should be set in the imports list. The schema file name is expected to be .schema in the imports list. required: true imports: type: array description: Import template and schema file contents. Required to have both and .schema files. required: true minItems: 2 items: type: object properties: name: type: string content: type: string ```
   --update-time: string # Output only. The time when the version was last updated. (format: google-datetime)
-]: any -> record<asset: record, createTime: string, description: string, name: string, originalAsset: record, updateTime: string> {
+]: any -> oneof<record<asset: record, createTime: string, description: string, name: string, originalAsset: record, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -475,7 +499,7 @@ export def "cloudprivatecatalogproducer-operations-cancel" [
   --oauth-token: string # OAuth 2.0 token for the current user.
   --callback: string # JSONP
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -527,7 +551,7 @@ export def "cloudprivatecatalogproducer-catalogs-products-copy" [
   --oauth-token: string # OAuth 2.0 token for the current user.
   --callback: string # JSONP
   --destination-product-name: string # The resource name of the destination product that is copied to.
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -579,7 +603,7 @@ export def "cloudprivatecatalogproducer-catalogs-undelete" [
   --oauth-token: string # OAuth 2.0 token for the current user.
   --callback: string # JSONP
   --body: record
-]: any -> record<createTime: string, description: string, displayName: string, name: string, parent: string, updateTime: string> {
+]: any -> oneof<record<createTime: string, description: string, displayName: string, name: string, parent: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -632,7 +656,7 @@ export def "cloudprivatecatalogproducer-catalogs-associations-list" [
   --callback: string # JSONP
   --page-size: int # The maximum number of catalog associations to return.
   --page-token: string # A pagination token returned from the previous call to `ListAssociations`.
-]: nothing -> record<associations: table<createTime: string, name: string, resource: string>, nextPageToken: string> {
+]: nothing -> oneof<record<associations: table<createTime: string, name: string, resource: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -658,7 +682,6 @@ export def "cloudprivatecatalogproducer-catalogs-associations-list" [
 #
 # POST /v1beta1/{parent}/associations
 # operationId: cloudprivatecatalogproducer.catalogs.associations.create
-# --association shape: {createTime?: string, name?: string, resource?: string}
 export def "cloudprivatecatalogproducer-catalogs-associations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -682,7 +705,7 @@ export def "cloudprivatecatalogproducer-catalogs-associations-create" [
   --oauth-token: string # OAuth 2.0 token for the current user.
   --callback: string # JSONP
   --association: record # An association tuple that pairs a `Catalog` to a resource that can use the `Catalog`. After association, a google.cloud.privatecatalog.v1beta1.Catalog becomes available to consumers under specified Association.resource and all of its child nodes. Users who have the `cloudprivatecatalog.targets.get` permission on any of the resource nodes can access the catalog and child products under the node. For example, suppose the cloud resource hierarchy is as follows: * organizations/example.com * folders/team * projects/test After creating an association with `organizations/example.com`, the catalog `catalogs/1` is accessible from the following paths: * organizations/example.com * folders/team * projects/test Users can access them by google.cloud.v1beta1.PrivateCatalog.SearchCatalogs action. — shape: {createTime?: string, name?: string, resource?: string}
-]: any -> record<createTime: string, name: string, resource: string> {
+]: any -> oneof<record<createTime: string, name: string, resource: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -736,7 +759,7 @@ export def "cloudprivatecatalogproducer-catalogs-products-list" [
   --filter: string # A filter expression used to restrict the returned results based upon properties of the product.
   --page-size: int # The maximum number of products to return.
   --page-token: string # A pagination token returned from a previous call to ListProducts that indicates where this listing should continue from. This field is optional.
-]: nothing -> record<nextPageToken: string, products: table<assetType: string, createTime: string, displayMetadata: record, iconUri: string, name: string, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, products: table<assetType: string, createTime: string, displayMetadata: record, iconUri: string, name: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -790,7 +813,7 @@ export def "cloudprivatecatalogproducer-catalogs-products-create" [
   --icon-uri: string # Output only. The public accessible URI of the icon uploaded by PrivateCatalogProducer.UploadIcon. If no icon is uploaded, it will be the default icon's URI.
   --name: string # Required. The resource name of the product in the format `catalogs/{catalog_id}/products/a-z*[a-z0-9]'. A unique identifier for the product under a catalog, which cannot be changed after the product is created. The final segment of the name must between 1 and 256 characters in length.
   --update-time: string # Output only. The time when the product was last updated. (format: google-datetime)
-]: any -> record<assetType: string, createTime: string, displayMetadata: record, iconUri: string, name: string, updateTime: string> {
+]: any -> oneof<record<assetType: string, createTime: string, displayMetadata: record, iconUri: string, name: string, updateTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -843,7 +866,7 @@ export def "cloudprivatecatalogproducer-catalogs-products-versions-list" [
   --callback: string # JSONP
   --page-size: int # The maximum number of versions to return.
   --page-token: string # A pagination token returned from a previous call to ListVersions that indicates where this listing should continue from. This field is optional.
-]: nothing -> record<nextPageToken: string, versions: table<asset: record, createTime: string, description: string, name: string, originalAsset: record, updateTime: string>> {
+]: nothing -> oneof<record<nextPageToken: string, versions: table<asset: record, createTime: string, description: string, name: string, originalAsset: record, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -897,7 +920,7 @@ export def "cloudprivatecatalogproducer-catalogs-products-versions-create" [
   --name: string # Required. The resource name of the version, in the format `catalogs/{catalog_id}/products/{product_id}/versions/a-z*[a-z0-9]'. A unique identifier for the version under a product, which can't be changed after the version is created. The final segment of the name must between 1 and 63 characters in length.
   --original-asset: record # The user-supplied asset payload. The maximum size of the payload is 2MB. The JSON schema of the payload is defined as: ``` type: object properties: mainTemplate: type: string description: The file name of the main template and name prefix of schema file. The content of the main template should be set in the imports list. The schema file name is expected to be .schema in the imports list. required: true imports: type: array description: Import template and schema file contents. Required to have both and .schema files. required: true minItems: 2 items: type: object properties: name: type: string content: type: string ```
   --update-time: string # Output only. The time when the version was last updated. (format: google-datetime)
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -949,7 +972,7 @@ export def "cloudprivatecatalogproducer-catalogs-products-icons-upload" [
   --oauth-token: string # OAuth 2.0 token for the current user.
   --callback: string # JSONP
   --icon: string # The raw icon bytes user-supplied to be uploaded to the product. The format of the icon can only be PNG or JPEG. The minimum allowed dimensions are 130x130 pixels and the maximum dimensions are 10000x10000 pixels. Required. (format: byte)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1001,7 +1024,7 @@ export def "cloudprivatecatalogproducer-catalogs-get-iam-policy" [
   --oauth-token: string # OAuth 2.0 token for the current user.
   --callback: string # JSONP
   --options-requested-policy-version: int # Optional. The policy format version to be returned. Valid values are 0, 1, and 3. Requests specifying an invalid value will be rejected. Requests for policies with any conditional bindings must specify version 3. Policies without any conditional bindings may specify any valid value or leave the field unset.
-]: nothing -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: nothing -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
@@ -1027,7 +1050,6 @@ export def "cloudprivatecatalogproducer-catalogs-get-iam-policy" [
 #
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: cloudprivatecatalogproducer.catalogs.setIamPolicy
-# --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
 export def "cloudprivatecatalogproducer-catalogs-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1052,7 +1074,7 @@ export def "cloudprivatecatalogproducer-catalogs-set-iam-policy" [
   --callback: string # JSONP
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members` to a single `role`. Members can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. Optionally, a `binding` can specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": ["user:eve@example.com"], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') - etag: BwWWja0YfJA= - version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
   --update-mask: string # OPTIONAL: A FieldMask specifying which fields of the policy to modify. Only the fields in the mask will be modified. If no mask is provided, the following default mask is used: paths: "bindings, etag" This field is only used by Cloud IAM. (format: google-fieldmask)
-]: any -> record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<auditConfigs: table<auditLogConfigs: list, service: string>, bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1104,7 +1126,7 @@ export def "cloudprivatecatalogproducer-catalogs-test-iam-permissions" [
   --oauth-token: string # OAuth 2.0 token for the current user.
   --callback: string # JSONP
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as '*' or 'storage.*') are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

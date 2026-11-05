@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -120,9 +144,9 @@ def type-completer [] { ["DATA_STREAM" "ENTRY_TYPE_UNSPECIFIED" "FILESET" "MODEL
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datacatalog-catalog-search" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["datacatalog-catalog-search" "datacatalog-entries-lookup" "datacatalog-projects-locations-taxonomies-policy-tags-delete" "datacatalog-projects-locations-taxonomies-policy-tags-get" "datacatalog-projects-locations-taxonomies-policy-tags-patch" "datacatalog-projects-locations-tag-templates-fields-enum-values-rename" "datacatalog-projects-locations-entry-groups-entries-list" "datacatalog-projects-locations-entry-groups-entries-create" "datacatalog-projects-locations-entry-groups-list" "datacatalog-projects-locations-entry-groups-create" "datacatalog-projects-locations-tag-templates-fields-create" "datacatalog-projects-locations-taxonomies-policy-tags-list" "datacatalog-projects-locations-taxonomies-policy-tags-create" "datacatalog-projects-locations-tag-templates-create" "datacatalog-projects-locations-entry-groups-tags-list" "datacatalog-projects-locations-entry-groups-tags-create" "datacatalog-projects-locations-taxonomies-list" "datacatalog-projects-locations-taxonomies-create" "datacatalog-projects-locations-taxonomies-export" "datacatalog-projects-locations-taxonomies-import" "datacatalog-projects-locations-taxonomies-policy-tags-get-iam-policy" "datacatalog-projects-locations-taxonomies-policy-tags-set-iam-policy" "datacatalog-projects-locations-taxonomies-policy-tags-test-iam-permissions" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -144,7 +168,6 @@ export def commands []: nothing -> table {
 #
 # POST /v1beta1/catalog:search
 # operationId: datacatalog.catalog.search
-# --scope shape: {includeGcpPublicDatasets?: bool, includeOrgIds?: list<string>, includeProjectIds?: list<string>, restrictedLocations?: list<string>}
 export def "datacatalog-catalog-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -171,7 +194,7 @@ export def "datacatalog-catalog-search" [
   --page-token: string # Optional. Pagination token returned in an earlier SearchCatalogResponse.next_page_token, which indicates that this is a continuation of a prior SearchCatalogRequest call, and that the system should return the next page of data. If empty, the first page is returned.
   --query: string # Optional. The query string in search query syntax. An empty query string will result in all data assets (in the specified scope) that the user has access to. Query strings can be simple as "x" or more qualified as: * name:x * column:x * description:y Note: Query tokens need to have a minimum of 3 characters for substring matching to work correctly. See [Data Catalog Search Syntax](https://cloud.google.com/data-catalog/docs/how-to/search-reference) for more information.
   --scope: record # The criteria that select the subspace used for query matching. — shape: {includeGcpPublicDatasets?: bool, includeOrgIds?: list<string>, includeProjectIds?: list<string>, restrictedLocations?: list<string>}
-]: any -> record<nextPageToken: string, results: table<linkedResource: string, modifyTime: string, relativeResourceName: string, searchResultSubtype: string, searchResultType: string>, totalSize: int, unreachable: list<string>> {
+]: any -> oneof<record<nextPageToken: string, results: table<linkedResource: string, modifyTime: string, relativeResourceName: string, searchResultSubtype: string, searchResultType: string>, totalSize: int, unreachable: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -222,7 +245,7 @@ export def "datacatalog-entries-lookup" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --linked-resource: string # The full name of the Google Cloud Platform resource the Data Catalog entry represents. See: https://cloud.google.com/apis/design/resource_names#full_resource_name. Full names are case-sensitive. Examples: * //bigquery.googleapis.com/projects/projectId/datasets/datasetId/tables/tableId * //pubsub.googleapis.com/projects/projectId/topics/topicId
   --sql-resource: string # The SQL name of the entry. SQL names are case-sensitive. Examples: * `pubsub.project_id.topic_id` * ``pubsub.project_id.`topic.id.with.dots` `` * `bigquery.table.project_id.dataset_id.table_id` * `bigquery.dataset.project_id.dataset_id` * `datacatalog.entry.project_id.location_id.entry_group_id.entry_id` `*_id`s should satisfy the standard SQL rules for identifiers. https://cloud.google.com/bigquery/docs/reference/standard-sql/lexical.
-]: nothing -> record<bigqueryDateShardedSpec: record<dataset: string, shardCount: string, tablePrefix: string>, bigqueryTableSpec: record<tableSourceType: string, tableSpec: record<groupedEntry: string>, viewSpec: record<viewQuery: string>>, description: string, displayName: string, gcsFilesetSpec: record<filePatterns: list<string>, sampleGcsFileSpecs: list<record>>, integratedSystem: string, linkedResource: string, name: string, schema: record<columns: list<record>>, sourceSystemTimestamps: record<createTime: string, expireTime: string, updateTime: string>, type: string, usageSignal: record<updateTime: string, usageWithinTimeRange: record>, userSpecifiedSystem: string, userSpecifiedType: string> {
+]: nothing -> oneof<record<bigqueryDateShardedSpec: record<dataset: string, shardCount: string, tablePrefix: string>, bigqueryTableSpec: record<tableSourceType: string, tableSpec: record<groupedEntry: string>, viewSpec: record<viewQuery: string>>, description: string, displayName: string, gcsFilesetSpec: record<filePatterns: list<string>, sampleGcsFileSpecs: list<record>>, integratedSystem: string, linkedResource: string, name: string, schema: record<columns: list<record>>, sourceSystemTimestamps: record<createTime: string, expireTime: string, updateTime: string>, type: string, usageSignal: record<updateTime: string, usageWithinTimeRange: record>, userSpecifiedSystem: string, userSpecifiedType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "linkedResource" $linked_resource "scalar") (serialize-qp "sqlResource" $sql_resource "scalar")] | flatten | str join "&"
@@ -270,7 +293,7 @@ export def "datacatalog-projects-locations-taxonomies-policy-tags-delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --force: oneof<nothing, bool> # Required. Currently, this field must always be set to `true`. This confirms the deletion of this field from any tags using this field. `force = false` will be supported in the future.
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -319,7 +342,7 @@ export def "datacatalog-projects-locations-taxonomies-policy-tags-get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --read-mask: string # The fields to return. If not set or empty, all fields are returned.
-]: nothing -> record<childPolicyTags: list<string>, description: string, displayName: string, name: string, parentPolicyTag: string> {
+]: nothing -> oneof<record<childPolicyTags: list<string>, description: string, displayName: string, name: string, parentPolicyTag: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -371,7 +394,7 @@ export def "datacatalog-projects-locations-taxonomies-policy-tags-patch" [
   --description: string # Description of this policy tag. It must: contain only unicode characters, tabs, newlines, carriage returns and page breaks; and be at most 2000 bytes long when encoded in UTF-8. If not set, defaults to an empty description. If not set, defaults to an empty description.
   --display-name: string # Required. User defined name of this policy tag. It must: be unique within the parent taxonomy; contain only unicode letters, numbers, underscores, dashes and spaces; not start or end with spaces; and be at most 200 bytes long when encoded in UTF-8.
   --parent-policy-tag: string # Resource name of this policy tag's parent policy tag (e.g. for the "LatLong" policy tag in the example above, this field contains the resource name of the "Geolocation" policy tag). If empty, it means this policy tag is a top level policy tag (e.g. this field is empty for the "Geolocation" policy tag in the example above). If not set, defaults to an empty string.
-]: any -> record<childPolicyTags: list<string>, description: string, displayName: string, name: string, parentPolicyTag: string> {
+]: any -> oneof<record<childPolicyTags: list<string>, description: string, displayName: string, name: string, parentPolicyTag: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -423,7 +446,7 @@ export def "datacatalog-projects-locations-tag-templates-fields-enum-values-rena
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --new-enum-value-display-name: string # Required. The new display name of the enum value. For example, `my_new_enum_value`.
-]: any -> record<description: string, displayName: string, isRequired: bool, name: string, order: int, type: record<enumType: record<allowedValues: list>, primitiveType: string>> {
+]: any -> oneof<record<description: string, displayName: string, isRequired: bool, name: string, order: int, type: record<enumType: record<allowedValues: list>, primitiveType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -477,7 +500,7 @@ export def "datacatalog-projects-locations-entry-groups-entries-list" [
   --page-size: int # The maximum number of items to return. Default is 10. Max limit is 1000. Throws an invalid argument for `page_size > 1000`.
   --page-token: string # Token that specifies which page is requested. If empty, the first page is returned.
   --read-mask: string # The fields to return for each Entry. If not set or empty, all fields are returned. For example, setting read_mask to contain only one path "name" will cause ListEntries to return a list of Entries with only "name" field.
-]: nothing -> record<entries: table<bigqueryDateShardedSpec: record, bigqueryTableSpec: record, description: string, displayName: string, gcsFilesetSpec: record, integratedSystem: string, linkedResource: string, name: string, schema: record, sourceSystemTimestamps: record, type: string, usageSignal: record, userSpecifiedSystem: string, userSpecifiedType: string>, nextPageToken: string> {
+]: nothing -> oneof<record<entries: table<bigqueryDateShardedSpec: record, bigqueryTableSpec: record, description: string, displayName: string, gcsFilesetSpec: record, integratedSystem: string, linkedResource: string, name: string, schema: record, sourceSystemTimestamps: record, type: string, usageSignal: record, userSpecifiedSystem: string, userSpecifiedType: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -503,11 +526,6 @@ export def "datacatalog-projects-locations-entry-groups-entries-list" [
 #
 # POST /v1beta1/{parent}/entries
 # operationId: datacatalog.projects.locations.entryGroups.entries.create
-# --bigqueryTableSpec shape: {tableSpec?: record, viewSpec?: record}
-# --gcsFilesetSpec shape: {filePatterns?: list<string>}
-# --schema shape: {columns?: list}
-# --sourceSystemTimestamps shape: {createTime?: string, updateTime?: string}
-# --usageSignal shape: {updateTime?: string, usageWithinTimeRange?: record}
 export def "datacatalog-projects-locations-entry-groups-entries-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -543,7 +561,7 @@ export def "datacatalog-projects-locations-entry-groups-entries-create" [
   --usage-signal: record # The set of all usage signals that we store in Data Catalog. — shape: {updateTime?: string, usageWithinTimeRange?: record}
   --user-specified-system: string # This field indicates the entry's source system that Data Catalog does not integrate with. `user_specified_system` strings must begin with a letter or underscore and can only contain letters, numbers, and underscores; are case insensitive; must be at least 1 character and at most 64 characters long.
   --user-specified-type: string # Entry type if it does not fit any of the input-allowed values listed in `EntryType` enum above. When creating an entry, users should check the enum values first, if nothing matches the entry to be created, then provide a custom value, for example "my_special_type". `user_specified_type` strings must begin with a letter or underscore and can only contain letters, numbers, and underscores; are case insensitive; must be at least 1 character and at most 64 characters long. Currently, only FILESET enum value is allowed. All other entries created through Data Catalog must use `user_specified_type`.
-]: any -> record<bigqueryDateShardedSpec: record<dataset: string, shardCount: string, tablePrefix: string>, bigqueryTableSpec: record<tableSourceType: string, tableSpec: record<groupedEntry: string>, viewSpec: record<viewQuery: string>>, description: string, displayName: string, gcsFilesetSpec: record<filePatterns: list<string>, sampleGcsFileSpecs: list<record>>, integratedSystem: string, linkedResource: string, name: string, schema: record<columns: list<record>>, sourceSystemTimestamps: record<createTime: string, expireTime: string, updateTime: string>, type: string, usageSignal: record<updateTime: string, usageWithinTimeRange: record>, userSpecifiedSystem: string, userSpecifiedType: string> {
+]: any -> oneof<record<bigqueryDateShardedSpec: record<dataset: string, shardCount: string, tablePrefix: string>, bigqueryTableSpec: record<tableSourceType: string, tableSpec: record<groupedEntry: string>, viewSpec: record<viewQuery: string>>, description: string, displayName: string, gcsFilesetSpec: record<filePatterns: list<string>, sampleGcsFileSpecs: list<record>>, integratedSystem: string, linkedResource: string, name: string, schema: record<columns: list<record>>, sourceSystemTimestamps: record<createTime: string, expireTime: string, updateTime: string>, type: string, usageSignal: record<updateTime: string, usageWithinTimeRange: record>, userSpecifiedSystem: string, userSpecifiedType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -596,7 +614,7 @@ export def "datacatalog-projects-locations-entry-groups-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # Optional. The maximum number of items to return. Default is 10. Max limit is 1000. Throws an invalid argument for `page_size > 1000`.
   --page-token: string # Optional. Token that specifies which page is requested. If empty, the first page is returned.
-]: nothing -> record<entryGroups: table<dataCatalogTimestamps: record, description: string, displayName: string, name: string>, nextPageToken: string> {
+]: nothing -> oneof<record<entryGroups: table<dataCatalogTimestamps: record, description: string, displayName: string, name: string>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -622,7 +640,6 @@ export def "datacatalog-projects-locations-entry-groups-list" [
 #
 # POST /v1beta1/{parent}/entryGroups
 # operationId: datacatalog.projects.locations.entryGroups.create
-# --dataCatalogTimestamps shape: {createTime?: string, updateTime?: string}
 export def "datacatalog-projects-locations-entry-groups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -650,7 +667,7 @@ export def "datacatalog-projects-locations-entry-groups-create" [
   --description: string # Entry group description, which can consist of several sentences or paragraphs that describe entry group contents. Default value is an empty string.
   --display-name: string # A short name to identify the entry group, for example, "analytics data - jan 2011". Default value is an empty string.
   --name: string # The resource name of the entry group in URL format. Example: * projects/{project_id}/locations/{location}/entryGroups/{entry_group_id} Note that this EntryGroup and its child resources may not actually be stored in the location in this name.
-]: any -> record<dataCatalogTimestamps: record<createTime: string, expireTime: string, updateTime: string>, description: string, displayName: string, name: string> {
+]: any -> oneof<record<dataCatalogTimestamps: record<createTime: string, expireTime: string, updateTime: string>, description: string, displayName: string, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -679,7 +696,6 @@ export def "datacatalog-projects-locations-entry-groups-create" [
 #
 # POST /v1beta1/{parent}/fields
 # operationId: datacatalog.projects.locations.tagTemplates.fields.create
-# --type shape: {enumType?: record, primitiveType?: "PRIMITIVE_TYPE_UNSPECIFIED"|"DOUBLE"|"STRING"|"BOOL"|"TIMESTAMP"}
 export def "datacatalog-projects-locations-tag-templates-fields-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -708,7 +724,7 @@ export def "datacatalog-projects-locations-tag-templates-fields-create" [
   --is-required: oneof<nothing, bool> # Whether this is a required field. Defaults to false.
   --order: int # The order of this field with respect to other fields in this tag template. A higher value indicates a more important field. The value can be negative. Multiple fields can have the same order, and field orders within a tag do not have to be sequential. (format: int32)
   --type: record # shape: {enumType?: record, primitiveType?: "PRIMITIVE_TYPE_UNSPECIFIED"|"DOUBLE"|"STRING"|"BOOL"|"TIMESTAMP"}
-]: any -> record<description: string, displayName: string, isRequired: bool, name: string, order: int, type: record<enumType: record<allowedValues: list>, primitiveType: string>> {
+]: any -> oneof<record<description: string, displayName: string, isRequired: bool, name: string, order: int, type: record<enumType: record<allowedValues: list>, primitiveType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -761,7 +777,7 @@ export def "datacatalog-projects-locations-taxonomies-policy-tags-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of items to return. Must be a value between 1 and 1000. If not set, defaults to 50.
   --page-token: string # The next_page_token value returned from a previous List request, if any. If not set, defaults to an empty string.
-]: nothing -> record<nextPageToken: string, policyTags: table<childPolicyTags: list, description: string, displayName: string, name: string, parentPolicyTag: string>> {
+]: nothing -> oneof<record<nextPageToken: string, policyTags: table<childPolicyTags: list, description: string, displayName: string, name: string, parentPolicyTag: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -812,7 +828,7 @@ export def "datacatalog-projects-locations-taxonomies-policy-tags-create" [
   --description: string # Description of this policy tag. It must: contain only unicode characters, tabs, newlines, carriage returns and page breaks; and be at most 2000 bytes long when encoded in UTF-8. If not set, defaults to an empty description. If not set, defaults to an empty description.
   --display-name: string # Required. User defined name of this policy tag. It must: be unique within the parent taxonomy; contain only unicode letters, numbers, underscores, dashes and spaces; not start or end with spaces; and be at most 200 bytes long when encoded in UTF-8.
   --parent-policy-tag: string # Resource name of this policy tag's parent policy tag (e.g. for the "LatLong" policy tag in the example above, this field contains the resource name of the "Geolocation" policy tag). If empty, it means this policy tag is a top level policy tag (e.g. this field is empty for the "Geolocation" policy tag in the example above). If not set, defaults to an empty string.
-]: any -> record<childPolicyTags: list<string>, description: string, displayName: string, name: string, parentPolicyTag: string> {
+]: any -> oneof<record<childPolicyTags: list<string>, description: string, displayName: string, name: string, parentPolicyTag: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -867,7 +883,7 @@ export def "datacatalog-projects-locations-tag-templates-create" [
   --display-name: string # The display name for this template. Defaults to an empty string.
   --fields-body: record # Required. Map of tag template field IDs to the settings for the field. This map is an exhaustive list of the allowed fields. This map must contain at least one field and at most 500 fields. The keys to this map are tag template field IDs. Field IDs can contain letters (both uppercase and lowercase), numbers (0-9) and underscores (_). Field IDs must be at least 1 character long and at most 64 characters long. Field IDs must start with a letter or underscore. (body field)
   --name: string # The resource name of the tag template in URL format. Example: * projects/{project_id}/locations/{location}/tagTemplates/{tag_template_id} Note that this TagTemplate and its child resources may not actually be stored in the location in this name.
-]: any -> record<displayName: string, fields: record, name: string> {
+]: any -> oneof<record<displayName: string, fields: record, name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -920,7 +936,7 @@ export def "datacatalog-projects-locations-entry-groups-tags-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # The maximum number of tags to return. Default is 10. Max limit is 1000.
   --page-token: string # Token that specifies which page is requested. If empty, the first page is returned.
-]: nothing -> record<nextPageToken: string, tags: table<column: string, fields: record, name: string, template: string, templateDisplayName: string>> {
+]: nothing -> oneof<record<nextPageToken: string, tags: table<column: string, fields: record, name: string, template: string, templateDisplayName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -972,7 +988,7 @@ export def "datacatalog-projects-locations-entry-groups-tags-create" [
   --fields-body: record # Required. This maps the ID of a tag field to the value of and additional information about that field. Valid field IDs are defined by the tag's template. A tag must have at least 1 field and at most 500 fields. (body field)
   --name: string # The resource name of the tag in URL format. Example: * projects/{project_id}/locations/{location}/entrygroups/{entry_group_id}/entries/{entry_id}/tags/{tag_id} where `tag_id` is a system-generated identifier. Note that this Tag may not actually be stored in the location in this name.
   --template: string # Required. The resource name of the tag template that this tag uses. Example: * projects/{project_id}/locations/{location}/tagTemplates/{tag_template_id} This field cannot be modified after creation.
-]: any -> record<column: string, fields: record, name: string, template: string, templateDisplayName: string> {
+]: any -> oneof<record<column: string, fields: record, name: string, template: string, templateDisplayName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1026,7 +1042,7 @@ export def "datacatalog-projects-locations-taxonomies-list" [
   --filter: string # Supported field for filter is 'service' and value is 'dataplex'. Eg: service=dataplex.
   --page-size: int # The maximum number of items to return. Must be a value between 1 and 1000. If not set, defaults to 50.
   --page-token: string # The next_page_token value returned from a previous list request, if any. If not set, defaults to an empty string.
-]: nothing -> record<nextPageToken: string, taxonomies: table<activatedPolicyTypes: list, description: string, displayName: string, name: string, policyTagCount: int, service: record, taxonomyTimestamps: record>> {
+]: nothing -> oneof<record<nextPageToken: string, taxonomies: table<activatedPolicyTypes: list, description: string, displayName: string, name: string, policyTagCount: int, service: record, taxonomyTimestamps: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1052,8 +1068,6 @@ export def "datacatalog-projects-locations-taxonomies-list" [
 #
 # POST /v1beta1/{parent}/taxonomies
 # operationId: datacatalog.projects.locations.taxonomies.create
-# --service shape: {identity?: string, name?: "MANAGING_SYSTEM_UNSPECIFIED"|"MANAGING_SYSTEM_DATAPLEX"|"MANAGING_SYSTEM_OTHER"}
-# --taxonomyTimestamps shape: {createTime?: string, updateTime?: string}
 export def "datacatalog-projects-locations-taxonomies-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1081,7 +1095,7 @@ export def "datacatalog-projects-locations-taxonomies-create" [
   --display-name: string # Required. User defined name of this taxonomy. It must: contain only unicode letters, numbers, underscores, dashes and spaces; not start or end with spaces; and be at most 200 bytes long when encoded in UTF-8. The taxonomy display name must be unique within an organization.
   --service: record # The source system of the Taxonomy. — shape: {identity?: string, name?: "MANAGING_SYSTEM_UNSPECIFIED"|"MANAGING_SYSTEM_DATAPLEX"|"MANAGING_SYSTEM_OTHER"}
   --taxonomy-timestamps: record # Timestamps about this resource according to a particular system. — shape: {createTime?: string, updateTime?: string}
-]: any -> record<activatedPolicyTypes: list<string>, description: string, displayName: string, name: string, policyTagCount: int, service: record<identity: string, name: string>, taxonomyTimestamps: record<createTime: string, expireTime: string, updateTime: string>> {
+]: any -> oneof<record<activatedPolicyTypes: list<string>, description: string, displayName: string, name: string, policyTagCount: int, service: record<identity: string, name: string>, taxonomyTimestamps: record<createTime: string, expireTime: string, updateTime: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1134,7 +1148,7 @@ export def "datacatalog-projects-locations-taxonomies-export" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --serialized-taxonomies: oneof<nothing, bool> # Export taxonomies as serialized taxonomies.
   --taxonomies: list<string> # Required. Resource names of the taxonomies to be exported.
-]: nothing -> record<taxonomies: table<activatedPolicyTypes: list, description: string, displayName: string, policyTags: list>> {
+]: nothing -> oneof<record<taxonomies: table<activatedPolicyTypes: list, description: string, displayName: string, policyTags: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -1160,7 +1174,6 @@ export def "datacatalog-projects-locations-taxonomies-export" [
 #
 # POST /v1beta1/{parent}/taxonomies:import
 # operationId: datacatalog.projects.locations.taxonomies.import
-# --inlineSource shape: {taxonomies?: list}
 export def "datacatalog-projects-locations-taxonomies-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1184,7 +1197,7 @@ export def "datacatalog-projects-locations-taxonomies-import" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --inline-source: record # Inline source used for taxonomies import. — shape: {taxonomies?: list}
-]: any -> record<taxonomies: table<activatedPolicyTypes: list, description: string, displayName: string, name: string, policyTagCount: int, service: record, taxonomyTimestamps: record>> {
+]: any -> oneof<record<taxonomies: table<activatedPolicyTypes: list, description: string, displayName: string, name: string, policyTagCount: int, service: record, taxonomyTimestamps: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1213,7 +1226,6 @@ export def "datacatalog-projects-locations-taxonomies-import" [
 #
 # POST /v1beta1/{resource}:getIamPolicy
 # operationId: datacatalog.projects.locations.taxonomies.policyTags.getIamPolicy
-# --options shape: {requestedPolicyVersion?: int}
 export def "datacatalog-projects-locations-taxonomies-policy-tags-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1237,7 +1249,7 @@ export def "datacatalog-projects-locations-taxonomies-policy-tags-get-iam-policy
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --options: record # Encapsulates settings provided to GetIamPolicy. — shape: {requestedPolicyVersion?: int}
-]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1266,7 +1278,6 @@ export def "datacatalog-projects-locations-taxonomies-policy-tags-get-iam-policy
 #
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: datacatalog.projects.locations.taxonomies.policyTags.setIamPolicy
-# --policy shape: {bindings?: list, etag?: string, version?: int}
 export def "datacatalog-projects-locations-taxonomies-policy-tags-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1290,7 +1301,7 @@ export def "datacatalog-projects-locations-taxonomies-policy-tags-set-iam-policy
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources. A `Policy` is a collection of `bindings`. A `binding` binds one or more `members`, or principals, to a single `role`. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A `role` is a named list of permissions; each `role` can be an IAM predefined role or a user-created custom role. For some types of Google Cloud resources, a `binding` can also specify a `condition`, which is a logical expression that allows access to a resource only if the expression evaluates to `true`. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the [IAM documentation](https://cloud.google.com/iam/help/conditions/resource-policies). **JSON example:** { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } **YAML example:** bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the [IAM documentation](https://cloud.google.com/iam/docs/). — shape: {bindings?: list, etag?: string, version?: int}
-]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
+]: any -> oneof<record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1342,7 +1353,7 @@ export def "datacatalog-projects-locations-taxonomies-policy-tags-test-iam-permi
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --permissions: list<string> # The set of permissions to check for the `resource`. Permissions with wildcards (such as `*` or `storage.*`) are not allowed. For more information see [IAM Overview](https://cloud.google.com/iam/docs/overview#permissions).
-]: any -> record<permissions: list<string>> {
+]: any -> oneof<record<permissions: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

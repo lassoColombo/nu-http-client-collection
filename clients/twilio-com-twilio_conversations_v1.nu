@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "basic" => { {scheme: $scheme, headers: {"Authorization": $"Basic ($token_val)"}, query: "", location: "header"} }
     "basic-credentials" => { {scheme: $scheme, headers: {Authorization: $"Basic ($token_val | encode base64)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -124,9 +148,9 @@ def notification-level-completer [] { ["default" "muted"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "fetch-configuration" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["fetch-configuration" "update-configuration" "list-configuration-address" "create-configuration-address" "delete-configuration-address" "fetch-configuration-address" "update-configuration-address" "fetch-configuration-webhook" "update-configuration-webhook" "list-conversation" "create-conversation" "list-conversation-message" "create-conversation-message" "list-conversation-message-receipt" "fetch-conversation-message-receipt" "delete-conversation-message" "fetch-conversation-message" "update-conversation-message" "list-conversation-participant" "create-conversation-participant" "delete-conversation-participant" "fetch-conversation-participant" "update-conversation-participant" "list-conversation-scoped-webhook" "create-conversation-scoped-webhook" "delete-conversation-scoped-webhook" "fetch-conversation-scoped-webhook" "update-conversation-scoped-webhook" "delete-conversation" "fetch-conversation" "update-conversation" "list-credential" "create-credential" "delete-credential" "fetch-credential" "update-credential" "list-participant-conversation" "list-role" "create-role" "delete-role" "fetch-role" "update-role" "list-service" "create-service" "list-service-binding" "delete-service-binding" "fetch-service-binding" "fetch-service-configuration" "update-service-configuration" "fetch-service-notification" "update-service-notification" "fetch-service-webhook-configuration" "update-service-webhook-configuration" "list-service-conversation" "create-service-conversation" "list-service-conversation-message" "create-service-conversation-message" "list-service-conversation-message-receipt" "fetch-service-conversation-message-receipt" "delete-service-conversation-message" "fetch-service-conversation-message" "update-service-conversation-message" "list-service-conversation-participant" "create-service-conversation-participant" "delete-service-conversation-participant" "fetch-service-conversation-participant" "update-service-conversation-participant" "list-service-conversation-scoped-webhook" "create-service-conversation-scoped-webhook" "delete-service-conversation-scoped-webhook" "fetch-service-conversation-scoped-webhook" "update-service-conversation-scoped-webhook" "delete-service-conversation" "fetch-service-conversation" "update-service-conversation" "list-service-participant-conversation" "list-service-role" "create-service-role" "delete-service-role" "fetch-service-role" "update-service-role" "list-service-user" "create-service-user" "delete-service-user" "fetch-service-user" "update-service-user" "list-service-user-conversation" "delete-service-user-conversation" "fetch-service-user-conversation" "update-service-user-conversation" "delete-service" "fetch-service" "list-user" "create-user" "delete-user" "fetch-user" "update-user" "list-user-conversation" "delete-user-conversation" "fetch-user-conversation" "update-user-conversation" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -158,7 +182,7 @@ export def "fetch-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, default_chat_service_sid: string, default_closed_timer: string, default_inactive_timer: string, default_messaging_service_sid: string, links: record, url: string> {
+]: nothing -> oneof<record<account_sid: string, default_chat_service_sid: string, default_closed_timer: string, default_inactive_timer: string, default_messaging_service_sid: string, links: record, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   let full_url = (build-url $base "/v1/Configuration" $auth.query)
@@ -196,7 +220,7 @@ export def "update-configuration" [
   --default-closed-timer: string # Default ISO8601 duration when conversation will be switched to `closed` state. Minimum value for this timer is 10 minutes.
   --default-inactive-timer: string # Default ISO8601 duration when conversation will be switched to `inactive` state. Minimum value for this timer is 1 minute.
   --default-messaging-service-sid: string # The SID of the default [Messaging Service](https://www.twilio.com/docs/sms/services/api) to use when creating a conversation.
-]: any -> record<account_sid: string, default_chat_service_sid: string, default_closed_timer: string, default_inactive_timer: string, default_messaging_service_sid: string, links: record, url: string> {
+]: any -> oneof<record<account_sid: string, default_chat_service_sid: string, default_closed_timer: string, default_inactive_timer: string, default_messaging_service_sid: string, links: record, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -205,7 +229,7 @@ export def "update-configuration" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -238,7 +262,7 @@ export def "list-configuration-address" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<address_configurations: table<account_sid: string, address: string, auto_creation: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<address_configurations: table<account_sid: string, address: string, auto_creation: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   let qp = [(serialize-qp "Type" $type "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
@@ -284,7 +308,7 @@ export def "create-configuration-address" [
   --auto-creation-webhook-url: string # For type `webhook`, the url for the webhook request.
   --friendly-name: string # The human-readable name of this configuration, limited to 256 characters. Optional.
   type: string@type-completer
-]: any -> record<account_sid: string, address: string, auto_creation: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string> {
+]: any -> oneof<record<account_sid: string, address: string, auto_creation: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -293,7 +317,7 @@ export def "create-configuration-address" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -359,7 +383,7 @@ export def "fetch-configuration-address" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, address: string, auto_creation: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, address: string, auto_creation: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
@@ -404,7 +428,7 @@ export def "update-configuration-address" [
   --auto-creation-webhook-method: string@auto-creation-webhook-method-completer
   --auto-creation-webhook-url: string # For type `webhook`, the url for the webhook request.
   --friendly-name: string # The human-readable name of this configuration, limited to 256 characters. Optional.
-]: any -> record<account_sid: string, address: string, auto_creation: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string> {
+]: any -> oneof<record<account_sid: string, address: string, auto_creation: any, date_created: string, date_updated: string, friendly_name: string, sid: string, type: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -414,7 +438,7 @@ export def "update-configuration-address" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -442,7 +466,7 @@ export def "fetch-configuration-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, filters: list<string>, method: string, post_webhook_url: string, pre_webhook_url: string, target: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, filters: list<string>, method: string, post_webhook_url: string, pre_webhook_url: string, target: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   let full_url = (build-url $base "/v1/Configuration/Webhooks" $auth.query)
@@ -480,7 +504,7 @@ export def "update-configuration-webhook" [
   --post-webhook-url: string # The absolute url the post-event webhook request should be sent to.
   --pre-webhook-url: string # The absolute url the pre-event webhook request should be sent to.
   --target: string@target-completer
-]: any -> record<account_sid: string, filters: list<string>, method: string, post_webhook_url: string, pre_webhook_url: string, target: string, url: string> {
+]: any -> oneof<record<account_sid: string, filters: list<string>, method: string, post_webhook_url: string, pre_webhook_url: string, target: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -489,7 +513,7 @@ export def "update-configuration-webhook" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -524,7 +548,7 @@ export def "list-conversation" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<conversations: table<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<conversations: table<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   let qp = [(serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "State" $state "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
@@ -569,7 +593,7 @@ export def "create-conversation" [
   --timers-closed: string # ISO8601 duration when conversation will be switched to `closed` state. Minimum value for this timer is 10 minutes.
   --timers-inactive: string # ISO8601 duration when conversation will be switched to `inactive` state. Minimum value for this timer is 1 minute.
   --unique-name: string # An application-defined string that uniquely identifies the resource. It can be used to address the resource in place of the resource's `sid` in the URL.
-]: any -> record<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -580,7 +604,7 @@ export def "create-conversation" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -614,7 +638,7 @@ export def "list-conversation-message" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<messages: table<account_sid: string, attributes: string, author: string, body: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list, participant_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<messages: table<account_sid: string, attributes: string, author: string, body: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list, participant_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
@@ -660,7 +684,7 @@ export def "create-conversation-message" [
   --date-created: string # The date that this resource was created. (format: date-time)
   --date-updated: string # The date that this resource was last updated. `null` if the message has not been edited. (format: date-time)
   --media-sid: string # The Media SID to be attached to the new Message.
-]: any -> record<account_sid: string, attributes: string, author: string, body: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list<any>, participant_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, author: string, body: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list<any>, participant_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -672,7 +696,7 @@ export def "create-conversation-message" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -706,7 +730,7 @@ export def "list-conversation-message-receipt" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<delivery_receipts: table<account_sid: string, channel_message_sid: string, conversation_sid: string, date_created: string, date_updated: string, error_code: int, message_sid: string, participant_sid: string, sid: string, status: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<delivery_receipts: table<account_sid: string, channel_message_sid: string, conversation_sid: string, date_created: string, date_updated: string, error_code: int, message_sid: string, participant_sid: string, sid: string, status: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
@@ -746,7 +770,7 @@ export def "fetch-conversation-message-receipt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, channel_message_sid: string, conversation_sid: string, date_created: string, date_updated: string, error_code: int, message_sid: string, participant_sid: string, sid: string, status: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, channel_message_sid: string, conversation_sid: string, date_created: string, date_updated: string, error_code: int, message_sid: string, participant_sid: string, sid: string, status: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
@@ -826,7 +850,7 @@ export def "fetch-conversation-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, attributes: string, author: string, body: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list<any>, participant_sid: string, sid: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, attributes: string, author: string, body: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list<any>, participant_sid: string, sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
@@ -870,7 +894,7 @@ export def "update-conversation-message" [
   --body: string # The content of the message, can be up to 1,600 characters long.
   --date-created: string # The date that this resource was created. (format: date-time)
   --date-updated: string # The date that this resource was last updated. `null` if the message has not been edited. (format: date-time)
-]: any -> record<account_sid: string, attributes: string, author: string, body: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list<any>, participant_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, author: string, body: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list<any>, participant_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -883,7 +907,7 @@ export def "update-conversation-message" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -916,7 +940,7 @@ export def "list-conversation-participant" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, participants: table<account_sid: string, attributes: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, participants: table<account_sid: string, attributes: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
@@ -962,7 +986,7 @@ export def "create-conversation-participant" [
   --messaging-binding-projected-address: string # The address of the Twilio phone number that is used in Group MMS. Communication mask for the Conversation participant with Identity.
   --messaging-binding-proxy-address: string # The address of the Twilio phone number (or WhatsApp number) that the participant is in contact with. This field, together with participant address, is only null when the participant is interacting from an SDK endpoint (see the 'identity' field).
   --role-sid: string # The SID of a conversation-level [Role](https://www.twilio.com/docs/conversations/api/role-resource) to assign to the participant.
-]: any -> record<account_sid: string, attributes: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -974,7 +998,7 @@ export def "create-conversation-participant" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1046,7 +1070,7 @@ export def "fetch-conversation-participant" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, attributes: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, attributes: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
@@ -1094,7 +1118,7 @@ export def "update-conversation-participant" [
   --messaging-binding-projected-address: string # The address of the Twilio phone number that is used in Group MMS. 'null' value will remove it.
   --messaging-binding-proxy-address: string # The address of the Twilio phone number that the participant is in contact with. 'null' value will remove it.
   --role-sid: string # The SID of a conversation-level [Role](https://www.twilio.com/docs/conversations/api/role-resource) to assign to the participant.
-]: any -> record<account_sid: string, attributes: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -1107,7 +1131,7 @@ export def "update-conversation-participant" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1140,7 +1164,7 @@ export def "list-conversation-scoped-webhook" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, webhooks: table<account_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, webhooks: table<account_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
@@ -1184,7 +1208,7 @@ export def "create-conversation-scoped-webhook" [
   --configuration-triggers: list<string> # The list of keywords, firing webhook event for this Conversation.
   --configuration-url: string # The absolute url the webhook request should be sent to.
   target: string@target-completer-1
-]: any -> record<account_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string> {
+]: any -> oneof<record<account_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -1194,7 +1218,7 @@ export def "create-conversation-scoped-webhook" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1263,7 +1287,7 @@ export def "fetch-conversation-scoped-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($conversation_sid | is-empty) { error make --unspanned { msg: "path parameter 'ConversationSid' must be non-empty" } }
@@ -1306,7 +1330,7 @@ export def "update-conversation-scoped-webhook" [
   --configuration-method: string@configuration-method-completer
   --configuration-triggers: list<string> # The list of keywords, firing webhook event for this Conversation.
   --configuration-url: string # The absolute url the webhook request should be sent to.
-]: any -> record<account_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string> {
+]: any -> oneof<record<account_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -1317,7 +1341,7 @@ export def "update-conversation-scoped-webhook" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1386,7 +1410,7 @@ export def "fetch-conversation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
@@ -1432,7 +1456,7 @@ export def "update-conversation" [
   --timers-closed: string # ISO8601 duration when conversation will be switched to `closed` state. Minimum value for this timer is 10 minutes.
   --timers-inactive: string # ISO8601 duration when conversation will be switched to `inactive` state. Minimum value for this timer is 1 minute.
   --unique-name: string # An application-defined string that uniquely identifies the resource. It can be used to address the resource in place of the resource's `sid` in the URL.
-]: any -> record<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -1444,7 +1468,7 @@ export def "update-conversation" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1476,7 +1500,7 @@ export def "list-credential" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<credentials: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sandbox: string, sid: string, type: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<credentials: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sandbox: string, sid: string, type: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1518,7 +1542,7 @@ export def "create-credential" [
   --sandbox: oneof<nothing, bool> # [APN only] Whether to send the credential to sandbox APNs. Can be `true` to send to sandbox APNs or `false` to send to production.
   --secret: string # [FCM only] The **Server key** of your project from the Firebase console, found under Settings / Cloud messaging.
   type: string@type-completer-1
-]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sandbox: string, sid: string, type: string, url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sandbox: string, sid: string, type: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -1527,7 +1551,7 @@ export def "create-credential" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1593,7 +1617,7 @@ export def "fetch-credential" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sandbox: string, sid: string, type: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sandbox: string, sid: string, type: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
@@ -1636,7 +1660,7 @@ export def "update-credential" [
   --sandbox: oneof<nothing, bool> # [APN only] Whether to send the credential to sandbox APNs. Can be `true` to send to sandbox APNs or `false` to send to production.
   --secret: string # [FCM only] The **Server key** of your project from the Firebase console, found under Settings / Cloud messaging.
   --type: string@type-completer-1
-]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sandbox: string, sid: string, type: string, url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, sandbox: string, sid: string, type: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -1646,7 +1670,7 @@ export def "update-credential" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1680,7 +1704,7 @@ export def "list-participant-conversation" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<conversations: table<account_sid: string, chat_service_sid: string, conversation_attributes: string, conversation_created_by: string, conversation_date_created: string, conversation_date_updated: string, conversation_friendly_name: string, conversation_sid: string, conversation_state: string, conversation_timers: any, conversation_unique_name: string, links: record, participant_identity: string, participant_messaging_binding: any, participant_sid: string, participant_user_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<conversations: table<account_sid: string, chat_service_sid: string, conversation_attributes: string, conversation_created_by: string, conversation_date_created: string, conversation_date_updated: string, conversation_friendly_name: string, conversation_sid: string, conversation_state: string, conversation_timers: any, conversation_unique_name: string, links: record, participant_identity: string, participant_messaging_binding: any, participant_sid: string, participant_user_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   let qp = [(serialize-qp "Identity" $identity "scalar") (serialize-qp "Address" $address "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1718,7 +1742,7 @@ export def "list-role" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, roles: table<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list, sid: string, type: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, roles: table<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list, sid: string, type: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1756,7 +1780,7 @@ export def "create-role" [
   friendly_name: string # A descriptive string that you create to describe the new resource. It can be up to 64 characters long.
   permission: list<string> # A permission that you grant to the new role. Only one permission can be granted per parameter. To assign more than one permission, repeat this parameter for each permission value. The values for this parameter depend on the role's `type`.
   type: string@type-completer-2
-]: any -> record<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list<string>, sid: string, type: string, url: string> {
+]: any -> oneof<record<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list<string>, sid: string, type: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -1765,7 +1789,7 @@ export def "create-role" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1831,7 +1855,7 @@ export def "fetch-role" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list<string>, sid: string, type: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list<string>, sid: string, type: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
@@ -1868,7 +1892,7 @@ export def "update-role" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   permission: list<string> # A permission that you grant to the role. Only one permission can be granted per parameter. To assign more than one permission, repeat this parameter for each permission value. Note that the update action replaces all previously assigned permissions with those defined in the update action. To remove a permission, do not include it in the subsequent update action. The values for this parameter depend on the role's `type`.
-]: any -> record<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list<string>, sid: string, type: string, url: string> {
+]: any -> oneof<record<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list<string>, sid: string, type: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -1878,7 +1902,7 @@ export def "update-role" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1910,7 +1934,7 @@ export def "list-service" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, services: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, services: table<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1946,7 +1970,7 @@ export def "create-service" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   friendly_name: string # The human-readable name of this service, limited to 256 characters. Optional.
-]: any -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -1955,7 +1979,7 @@ export def "create-service" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1990,7 +2014,7 @@ export def "list-service-binding" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<bindings: table<account_sid: string, binding_type: string, chat_service_sid: string, credential_sid: string, date_created: string, date_updated: string, endpoint: string, identity: string, message_types: list, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<bindings: table<account_sid: string, binding_type: string, chat_service_sid: string, credential_sid: string, date_created: string, date_updated: string, endpoint: string, identity: string, message_types: list, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -2066,7 +2090,7 @@ export def "fetch-service-binding" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, binding_type: string, chat_service_sid: string, credential_sid: string, date_created: string, date_updated: string, endpoint: string, identity: string, message_types: list<string>, sid: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, binding_type: string, chat_service_sid: string, credential_sid: string, date_created: string, date_updated: string, endpoint: string, identity: string, message_types: list<string>, sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -2103,7 +2127,7 @@ export def "fetch-service-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<chat_service_sid: string, default_chat_service_role_sid: string, default_conversation_creator_role_sid: string, default_conversation_role_sid: string, links: record, reachability_enabled: bool, url: string> {
+]: nothing -> oneof<record<chat_service_sid: string, default_chat_service_role_sid: string, default_conversation_creator_role_sid: string, default_conversation_role_sid: string, links: record, reachability_enabled: bool, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -2143,7 +2167,7 @@ export def "update-service-configuration" [
   --default-conversation-creator-role-sid: string # The conversation-level role assigned to a conversation creator when they join a new conversation. See the [Conversation Role](https://www.twilio.com/docs/conversations/api/role-resource) for more info about roles.
   --default-conversation-role-sid: string # The conversation-level role assigned to users when they are added to a conversation. See the [Conversation Role](https://www.twilio.com/docs/conversations/api/role-resource) for more info about roles.
   --reachability-enabled: oneof<nothing, bool> # Whether the [Reachability Indicator](https://www.twilio.com/docs/chat/reachability-indicator) is enabled for this Conversations Service. The default is `false`.
-]: any -> record<chat_service_sid: string, default_chat_service_role_sid: string, default_conversation_creator_role_sid: string, default_conversation_role_sid: string, links: record, reachability_enabled: bool, url: string> {
+]: any -> oneof<record<chat_service_sid: string, default_chat_service_role_sid: string, default_conversation_creator_role_sid: string, default_conversation_role_sid: string, links: record, reachability_enabled: bool, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -2153,7 +2177,7 @@ export def "update-service-configuration" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2183,7 +2207,7 @@ export def "fetch-service-notification" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, added_to_conversation: any, chat_service_sid: string, log_enabled: bool, new_message: any, removed_from_conversation: any, url: string> {
+]: nothing -> oneof<record<account_sid: string, added_to_conversation: any, chat_service_sid: string, log_enabled: bool, new_message: any, removed_from_conversation: any, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -2232,7 +2256,7 @@ export def "update-service-notification" [
   --removed-from-conversation-enabled: oneof<nothing, bool> # Whether to send a notification to a user when they are removed from a conversation. The default is `false`.
   --removed-from-conversation-sound: string # The name of the sound to play to a user when they are removed from a conversation and `removed_from_conversation.enabled` is `true`.
   --removed-from-conversation-template: string # The template to use to create the notification text displayed to a user when they are removed from a conversation and `removed_from_conversation.enabled` is `true`.
-]: any -> record<account_sid: string, added_to_conversation: any, chat_service_sid: string, log_enabled: bool, new_message: any, removed_from_conversation: any, url: string> {
+]: any -> oneof<record<account_sid: string, added_to_conversation: any, chat_service_sid: string, log_enabled: bool, new_message: any, removed_from_conversation: any, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -2242,7 +2266,7 @@ export def "update-service-notification" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2272,7 +2296,7 @@ export def "fetch-service-webhook-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, chat_service_sid: string, filters: list<string>, method: string, post_webhook_url: string, pre_webhook_url: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, chat_service_sid: string, filters: list<string>, method: string, post_webhook_url: string, pre_webhook_url: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -2312,7 +2336,7 @@ export def "update-service-webhook-configuration" [
   --method: string # The HTTP method to be used when sending a webhook request. One of `GET` or `POST`.
   --post-webhook-url: string # The absolute url the post-event webhook request should be sent to. (format: uri)
   --pre-webhook-url: string # The absolute url the pre-event webhook request should be sent to. (format: uri)
-]: any -> record<account_sid: string, chat_service_sid: string, filters: list<string>, method: string, post_webhook_url: string, pre_webhook_url: string, url: string> {
+]: any -> oneof<record<account_sid: string, chat_service_sid: string, filters: list<string>, method: string, post_webhook_url: string, pre_webhook_url: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -2322,7 +2346,7 @@ export def "update-service-webhook-configuration" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2358,7 +2382,7 @@ export def "list-service-conversation" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<conversations: table<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<conversations: table<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -2405,7 +2429,7 @@ export def "create-service-conversation" [
   --timers-closed: string # ISO8601 duration when conversation will be switched to `closed` state. Minimum value for this timer is 10 minutes.
   --timers-inactive: string # ISO8601 duration when conversation will be switched to `inactive` state. Minimum value for this timer is 1 minute.
   --unique-name: string # An application-defined string that uniquely identifies the resource. It can be used to address the resource in place of the resource's `sid` in the URL.
-]: any -> record<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -2417,7 +2441,7 @@ export def "create-service-conversation" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2452,7 +2476,7 @@ export def "list-service-conversation-message" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<messages: table<account_sid: string, attributes: string, author: string, body: string, chat_service_sid: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list, participant_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<messages: table<account_sid: string, attributes: string, author: string, body: string, chat_service_sid: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list, participant_sid: string, sid: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -2500,7 +2524,7 @@ export def "create-service-conversation-message" [
   --date-created: string # The date that this resource was created. (format: date-time)
   --date-updated: string # The date that this resource was last updated. `null` if the message has not been edited. (format: date-time)
   --media-sid: string # The Media SID to be attached to the new Message.
-]: any -> record<account_sid: string, attributes: string, author: string, body: string, chat_service_sid: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list<any>, participant_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, author: string, body: string, chat_service_sid: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list<any>, participant_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -2513,7 +2537,7 @@ export def "create-service-conversation-message" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2548,7 +2572,7 @@ export def "list-service-conversation-message-receipt" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<delivery_receipts: table<account_sid: string, channel_message_sid: string, chat_service_sid: string, conversation_sid: string, date_created: string, date_updated: string, error_code: int, message_sid: string, participant_sid: string, sid: string, status: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<delivery_receipts: table<account_sid: string, channel_message_sid: string, chat_service_sid: string, conversation_sid: string, date_created: string, date_updated: string, error_code: int, message_sid: string, participant_sid: string, sid: string, status: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -2590,7 +2614,7 @@ export def "fetch-service-conversation-message-receipt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, channel_message_sid: string, chat_service_sid: string, conversation_sid: string, date_created: string, date_updated: string, error_code: int, message_sid: string, participant_sid: string, sid: string, status: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, channel_message_sid: string, chat_service_sid: string, conversation_sid: string, date_created: string, date_updated: string, error_code: int, message_sid: string, participant_sid: string, sid: string, status: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -2674,7 +2698,7 @@ export def "fetch-service-conversation-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, attributes: string, author: string, body: string, chat_service_sid: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list<any>, participant_sid: string, sid: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, attributes: string, author: string, body: string, chat_service_sid: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list<any>, participant_sid: string, sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -2720,7 +2744,7 @@ export def "update-service-conversation-message" [
   --body: string # The content of the message, can be up to 1,600 characters long.
   --date-created: string # The date that this resource was created. (format: date-time)
   --date-updated: string # The date that this resource was last updated. `null` if the message has not been edited. (format: date-time)
-]: any -> record<account_sid: string, attributes: string, author: string, body: string, chat_service_sid: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list<any>, participant_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, author: string, body: string, chat_service_sid: string, content_sid: string, conversation_sid: string, date_created: string, date_updated: string, delivery: any, index: int, links: record, media: list<any>, participant_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -2734,7 +2758,7 @@ export def "update-service-conversation-message" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2768,7 +2792,7 @@ export def "list-service-conversation-participant" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, participants: table<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, participants: table<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -2816,7 +2840,7 @@ export def "create-service-conversation-participant" [
   --messaging-binding-projected-address: string # The address of the Twilio phone number that is used in Group MMS. Communication mask for the Conversation participant with Identity.
   --messaging-binding-proxy-address: string # The address of the Twilio phone number (or WhatsApp number) that the participant is in contact with. This field, together with participant address, is only null when the participant is interacting from an SDK endpoint (see the 'identity' field).
   --role-sid: string # The SID of a conversation-level [Role](https://www.twilio.com/docs/conversations/api/role-resource) to assign to the participant.
-]: any -> record<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -2829,7 +2853,7 @@ export def "create-service-conversation-participant" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -2904,7 +2928,7 @@ export def "fetch-service-conversation-participant" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -2954,7 +2978,7 @@ export def "update-service-conversation-participant" [
   --messaging-binding-projected-address: string # The address of the Twilio phone number that is used in Group MMS. 'null' value will remove it.
   --messaging-binding-proxy-address: string # The address of the Twilio phone number that the participant is in contact with. 'null' value will remove it.
   --role-sid: string # The SID of a conversation-level [Role](https://www.twilio.com/docs/conversations/api/role-resource) to assign to the participant.
-]: any -> record<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, date_created: string, date_updated: string, identity: string, last_read_message_index: int, last_read_timestamp: string, messaging_binding: any, role_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -2968,7 +2992,7 @@ export def "update-service-conversation-participant" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3002,7 +3026,7 @@ export def "list-service-conversation-scoped-webhook" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, webhooks: table<account_sid: string, chat_service_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, webhooks: table<account_sid: string, chat_service_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -3048,7 +3072,7 @@ export def "create-service-conversation-scoped-webhook" [
   --configuration-triggers: list<string> # The list of keywords, firing webhook event for this Conversation.
   --configuration-url: string # The absolute url the webhook request should be sent to.
   target: string@target-completer-1
-]: any -> record<account_sid: string, chat_service_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string> {
+]: any -> oneof<record<account_sid: string, chat_service_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -3059,7 +3083,7 @@ export def "create-service-conversation-scoped-webhook" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3131,7 +3155,7 @@ export def "fetch-service-conversation-scoped-webhook" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, chat_service_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, chat_service_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -3176,7 +3200,7 @@ export def "update-service-conversation-scoped-webhook" [
   --configuration-method: string@configuration-method-completer
   --configuration-triggers: list<string> # The list of keywords, firing webhook event for this Conversation.
   --configuration-url: string # The absolute url the webhook request should be sent to.
-]: any -> record<account_sid: string, chat_service_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string> {
+]: any -> oneof<record<account_sid: string, chat_service_sid: string, configuration: any, conversation_sid: string, date_created: string, date_updated: string, sid: string, target: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -3188,7 +3212,7 @@ export def "update-service-conversation-scoped-webhook" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3260,7 +3284,7 @@ export def "fetch-service-conversation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -3308,7 +3332,7 @@ export def "update-service-conversation" [
   --timers-closed: string # ISO8601 duration when conversation will be switched to `closed` state. Minimum value for this timer is 10 minutes.
   --timers-inactive: string # ISO8601 duration when conversation will be switched to `inactive` state. Minimum value for this timer is 1 minute.
   --unique-name: string # An application-defined string that uniquely identifies the resource. It can be used to address the resource in place of the resource's `sid` in the URL.
-]: any -> record<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, bindings: any, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, messaging_service_sid: string, sid: string, state: string, timers: any, unique_name: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -3321,7 +3345,7 @@ export def "update-service-conversation" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3356,7 +3380,7 @@ export def "list-service-participant-conversation" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<conversations: table<account_sid: string, chat_service_sid: string, conversation_attributes: string, conversation_created_by: string, conversation_date_created: string, conversation_date_updated: string, conversation_friendly_name: string, conversation_sid: string, conversation_state: string, conversation_timers: any, conversation_unique_name: string, links: record, participant_identity: string, participant_messaging_binding: any, participant_sid: string, participant_user_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<conversations: table<account_sid: string, chat_service_sid: string, conversation_attributes: string, conversation_created_by: string, conversation_date_created: string, conversation_date_updated: string, conversation_friendly_name: string, conversation_sid: string, conversation_state: string, conversation_timers: any, conversation_unique_name: string, links: record, participant_identity: string, participant_messaging_binding: any, participant_sid: string, participant_user_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -3396,7 +3420,7 @@ export def "list-service-role" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, roles: table<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list, sid: string, type: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, roles: table<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list, sid: string, type: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -3436,7 +3460,7 @@ export def "create-service-role" [
   friendly_name: string # A descriptive string that you create to describe the new resource. It can be up to 64 characters long.
   permission: list<string> # A permission that you grant to the new role. Only one permission can be granted per parameter. To assign more than one permission, repeat this parameter for each permission value. The values for this parameter depend on the role's `type`.
   type: string@type-completer-2
-]: any -> record<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list<string>, sid: string, type: string, url: string> {
+]: any -> oneof<record<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list<string>, sid: string, type: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -3446,7 +3470,7 @@ export def "create-service-role" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3515,7 +3539,7 @@ export def "fetch-service-role" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list<string>, sid: string, type: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list<string>, sid: string, type: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -3554,7 +3578,7 @@ export def "update-service-role" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   permission: list<string> # A permission that you grant to the role. Only one permission can be granted per parameter. To assign more than one permission, repeat this parameter for each permission value. Note that the update action replaces all previously assigned permissions with those defined in the update action. To remove a permission, do not include it in the subsequent update action. The values for this parameter depend on the role's `type`.
-]: any -> record<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list<string>, sid: string, type: string, url: string> {
+]: any -> oneof<record<account_sid: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, permissions: list<string>, sid: string, type: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -3565,7 +3589,7 @@ export def "update-service-role" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3598,7 +3622,7 @@ export def "list-service-user" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, users: table<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, users: table<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -3640,7 +3664,7 @@ export def "create-service-user" [
   --friendly-name: string # The string that you assigned to describe the resource.
   identity: string # The application-defined string that uniquely identifies the resource's User within the [Conversation Service](https://www.twilio.com/docs/conversations/api/service-resource). This value is often a username or an email address, and is case-sensitive.
   --role-sid: string # The SID of a service-level [Role](https://www.twilio.com/docs/conversations/api/role-resource) to assign to the user.
-]: any -> record<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -3652,7 +3676,7 @@ export def "create-service-user" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3724,7 +3748,7 @@ export def "fetch-service-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -3766,7 +3790,7 @@ export def "update-service-user" [
   --attributes: string # The JSON Object string that stores application-specific data. If attributes have not been set, `{}` is returned.
   --friendly-name: string # The string that you assigned to describe the resource.
   --role-sid: string # The SID of a service-level [Role](https://www.twilio.com/docs/conversations/api/role-resource) to assign to the user.
-]: any -> record<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -3779,7 +3803,7 @@ export def "update-service-user" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -3813,7 +3837,7 @@ export def "list-service-user-conversation" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<conversations: table<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, conversation_state: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, last_read_message_index: int, links: record, notification_level: string, participant_sid: string, timers: any, unique_name: string, unread_messages_count: int, url: string, user_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<conversations: table<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, conversation_state: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, last_read_message_index: int, links: record, notification_level: string, participant_sid: string, timers: any, unique_name: string, unread_messages_count: int, url: string, user_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -3893,7 +3917,7 @@ export def "fetch-service-user-conversation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, conversation_state: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, last_read_message_index: int, links: record, notification_level: string, participant_sid: string, timers: any, unique_name: string, unread_messages_count: int, url: string, user_sid: string> {
+]: nothing -> oneof<record<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, conversation_state: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, last_read_message_index: int, links: record, notification_level: string, participant_sid: string, timers: any, unique_name: string, unread_messages_count: int, url: string, user_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($chat_service_sid | is-empty) { error make --unspanned { msg: "path parameter 'ChatServiceSid' must be non-empty" } }
@@ -3936,7 +3960,7 @@ export def "update-service-user-conversation" [
   --last-read-message-index: int # The index of the last Message in the Conversation that the Participant has read. (nullable)
   --last-read-timestamp: string # The date of the last message read in conversation by the user, given in ISO 8601 format. (format: date-time)
   --notification-level: string@notification-level-completer
-]: any -> record<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, conversation_state: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, last_read_message_index: int, links: record, notification_level: string, participant_sid: string, timers: any, unique_name: string, unread_messages_count: int, url: string, user_sid: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, conversation_state: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, last_read_message_index: int, links: record, notification_level: string, participant_sid: string, timers: any, unique_name: string, unread_messages_count: int, url: string, user_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -3948,7 +3972,7 @@ export def "update-service-user-conversation" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -4014,7 +4038,7 @@ export def "fetch-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, date_created: string, date_updated: string, friendly_name: string, links: record, sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
@@ -4052,7 +4076,7 @@ export def "list-user" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, users: table<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string>> {
+]: nothing -> oneof<record<meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>, users: table<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   let qp = [(serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Page" $page "scalar") (serialize-qp "PageToken" $page_token "scalar")] | flatten | str join "&"
@@ -4092,7 +4116,7 @@ export def "create-user" [
   --friendly-name: string # The string that you assigned to describe the resource.
   identity: string # The application-defined string that uniquely identifies the resource's User within the [Conversation Service](https://www.twilio.com/docs/conversations/api/service-resource). This value is often a username or an email address, and is case-sensitive.
   --role-sid: string # The SID of a service-level [Role](https://www.twilio.com/docs/conversations/api/role-resource) to assign to the user.
-]: any -> record<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -4103,7 +4127,7 @@ export def "create-user" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -4172,7 +4196,7 @@ export def "fetch-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string> {
+]: nothing -> oneof<record<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($sid | is-empty) { error make --unspanned { msg: "path parameter 'Sid' must be non-empty" } }
@@ -4212,7 +4236,7 @@ export def "update-user" [
   --attributes: string # The JSON Object string that stores application-specific data. If attributes have not been set, `{}` is returned.
   --friendly-name: string # The string that you assigned to describe the resource.
   --role-sid: string # The SID of a service-level [Role](https://www.twilio.com/docs/conversations/api/role-resource) to assign to the user.
-]: any -> record<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, chat_service_sid: string, date_created: string, date_updated: string, friendly_name: string, identity: string, is_notifiable: bool, is_online: bool, links: record, role_sid: string, sid: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -4224,7 +4248,7 @@ export def "update-user" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"X-Twilio-Webhook-Enabled": $x_twilio_webhook_enabled} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -4257,7 +4281,7 @@ export def "list-user-conversation" [
   --page-size: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --page: int # The page index. This value is simply for client state.
   --page-token: string # The page token. This is provided by the API.
-]: nothing -> record<conversations: table<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, conversation_state: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, last_read_message_index: int, links: record, notification_level: string, participant_sid: string, timers: any, unique_name: string, unread_messages_count: int, url: string, user_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+]: nothing -> oneof<record<conversations: table<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, conversation_state: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, last_read_message_index: int, links: record, notification_level: string, participant_sid: string, timers: any, unique_name: string, unread_messages_count: int, url: string, user_sid: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($user_sid | is-empty) { error make --unspanned { msg: "path parameter 'UserSid' must be non-empty" } }
@@ -4333,7 +4357,7 @@ export def "fetch-user-conversation" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, conversation_state: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, last_read_message_index: int, links: record, notification_level: string, participant_sid: string, timers: any, unique_name: string, unread_messages_count: int, url: string, user_sid: string> {
+]: nothing -> oneof<record<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, conversation_state: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, last_read_message_index: int, links: record, notification_level: string, participant_sid: string, timers: any, unique_name: string, unread_messages_count: int, url: string, user_sid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
   if ($user_sid | is-empty) { error make --unspanned { msg: "path parameter 'UserSid' must be non-empty" } }
@@ -4374,7 +4398,7 @@ export def "update-user-conversation" [
   --last-read-message-index: int # The index of the last Message in the Conversation that the Participant has read. (nullable)
   --last-read-timestamp: string # The date of the last message read in conversation by the user, given in ISO 8601 format. (format: date-time)
   --notification-level: string@notification-level-completer
-]: any -> record<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, conversation_state: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, last_read_message_index: int, links: record, notification_level: string, participant_sid: string, timers: any, unique_name: string, unread_messages_count: int, url: string, user_sid: string> {
+]: any -> oneof<record<account_sid: string, attributes: string, chat_service_sid: string, conversation_sid: string, conversation_state: string, created_by: string, date_created: string, date_updated: string, friendly_name: string, last_read_message_index: int, links: record, notification_level: string, participant_sid: string, timers: any, unique_name: string, unread_messages_count: int, url: string, user_sid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -4385,7 +4409,7 @@ export def "update-user-conversation" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url

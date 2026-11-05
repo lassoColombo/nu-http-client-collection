@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -138,9 +162,9 @@ def safety-level-completer [] { ["1" "2" "3"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-access-token" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-access-token" "get-request-token" "get-favorites-context-by-id" "get-favorites-by-person-id" "get-gallery-photos-by-id" "get-group-topic-replies-by-id" "get-group-topic-by-id" "get-group-discussions-by-id" "get-group-by-id" "get-rest-method-flickr-groups-pools-get-context" "get-group-photos-by-id" "get-person-by-id" "get-media-by-person-id" "get-photolist-context-by-id" "get-photostream-context-by-id" "get-photo-exif-by-id" "get-photo-by-id" "get-photo-sizes-by-id" "get-license-by-id" "get-media-by-search" "get-album-context-by-id" "get-albums-by-person-id" "get-album-by-id" "get-rest-method-flickr-test-echo" "upload-photo" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -275,7 +299,7 @@ export def "get-favorites-context-by-id" [
   --api-key: string # required
   --photo-id: string # required
   --user-id: string
-]: nothing -> record<count: record<_content: string>, nextphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, prevphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, stat: string> {
+]: nothing -> oneof<record<count: record<_content: string>, nextphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, prevphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, stat: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -318,7 +342,7 @@ export def "get-favorites-by-person-id" [
   --max-fave-date: float
   --page: float
   --per-page: float
-]: nothing -> record<page: float, pages: float, perpage: float, photos: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>, total: float> {
+]: nothing -> oneof<record<page: float, pages: float, perpage: float, photos: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -357,7 +381,7 @@ export def "get-gallery-photos-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # required
   --gallery-id: string # required
-]: nothing -> record<photos: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>> {
+]: nothing -> oneof<record<photos: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -398,7 +422,7 @@ export def "get-group-topic-replies-by-id" [
   --group-id: string
   --topic-id: string # required
   --reply-id: string # required
-]: nothing -> record<reply: record<author: string, author_is_deleted: bool, author_path_alias: string, authorname: string, can_delete: bool, can_edit: bool, datecreate: string, iconfarm: string, iconserver: string, id: string, is_pro: bool, lastedit: string, message: record<_content: string>>, stat: string> {
+]: nothing -> oneof<record<reply: record<author: string, author_is_deleted: bool, author_path_alias: string, authorname: string, can_delete: bool, can_edit: bool, datecreate: string, iconfarm: string, iconserver: string, id: string, is_pro: bool, lastedit: string, message: record<_content: string>>, stat: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -439,7 +463,7 @@ export def "get-group-topic-by-id" [
   --api-key: string # required
   --group-id: string
   --topic-id: string # required
-]: nothing -> record<stat: string, topic: record<author: string, author_is_deleted: bool, author_path_alias: string, authorname: string, can_delete: bool, can_edit: bool, can_reply: bool, count_replies: int, datecreate: string, datelastpost: string, iconfarm: string, iconserver: string, id: string, is_locked: bool, is_pro: bool, is_sticky: bool, last_reply: string, lastedit: string, message: record<_content: string>, role: string, subject: string>> {
+]: nothing -> oneof<record<stat: string, topic: record<author: string, author_is_deleted: bool, author_path_alias: string, authorname: string, can_delete: bool, can_edit: bool, can_reply: bool, count_replies: int, datecreate: string, datelastpost: string, iconfarm: string, iconserver: string, id: string, is_locked: bool, is_pro: bool, is_sticky: bool, last_reply: string, lastedit: string, message: record<_content: string>, role: string, subject: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -480,7 +504,7 @@ export def "get-group-discussions-by-id" [
   --group-id: string
   --page: float
   --per-page: float
-]: nothing -> record<iconfarm: float, iconserver: float, ispoolmoderated: bool, lang: string, members: float, name: string, page: float, pages: float, per_page: float, privacy: float, topics: table<author: string, author_is_deleted: bool, author_path_alias: string, authorname: string, can_delete: bool, can_edit: bool, can_reply: bool, count_replies: int, datecreate: string, datelastpost: string, iconfarm: string, iconserver: string, id: string, is_locked: bool, is_pro: bool, is_sticky: bool, last_reply: string, lastedit: string, message: record, role: string, subject: string>, total: float> {
+]: nothing -> oneof<record<iconfarm: float, iconserver: float, ispoolmoderated: bool, lang: string, members: float, name: string, page: float, pages: float, per_page: float, privacy: float, topics: table<author: string, author_is_deleted: bool, author_path_alias: string, authorname: string, can_delete: bool, can_edit: bool, can_reply: bool, count_replies: int, datecreate: string, datelastpost: string, iconfarm: string, iconserver: string, id: string, is_locked: bool, is_pro: bool, is_sticky: bool, last_reply: string, lastedit: string, message: record, role: string, subject: string>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -520,7 +544,7 @@ export def "get-group-by-id" [
   --group-id: string
   --group-path-alias: string
   --lang: string
-]: nothing -> record<group: record<blast: record<_content: string, date_blast_added: string, user_id: string>, cover: record<farm: string, id: string, isfamily: bool, isfriend: bool, ispublic: bool, owner: string, secret: string, server: string, title: string, y: string>, coverphoto_farm: string, coverphoto_server: string, coverphoto_url: record<h: string, l: string, s: string, t: string>, description: record<_content: string>, iconfarm: string, iconserver: string, id: string, is_admin: bool, is_member: bool, is_moderator: bool, ispoolmoderated: bool, lang: string, members: record<_content: string>, name: record<_content: string>, path_alias: string, pool_count: record<_content: string>, pool_rows: int, privacy: record<_content: string>, restrictions: record<art_ok: bool, has_geo: bool, images_ok: bool, moderate_ok: bool, photos_ok: bool, restricted_ok: bool, safe_ok: bool, screens_ok: bool, videos_ok: bool>, roles: record<admin: string, member: string, moderator: string>, rules: record<_content: string>, throttle: record<count: int, mode: string, remaining: string>, topic_count: record<_content: string>>, stat: string> {
+]: nothing -> oneof<record<group: record<blast: record<_content: string, date_blast_added: string, user_id: string>, cover: record<farm: string, id: string, isfamily: bool, isfriend: bool, ispublic: bool, owner: string, secret: string, server: string, title: string, y: string>, coverphoto_farm: string, coverphoto_server: string, coverphoto_url: record<h: string, l: string, s: string, t: string>, description: record<_content: string>, iconfarm: string, iconserver: string, id: string, is_admin: bool, is_member: bool, is_moderator: bool, ispoolmoderated: bool, lang: string, members: record<_content: string>, name: record<_content: string>, path_alias: string, pool_count: record<_content: string>, pool_rows: int, privacy: record<_content: string>, restrictions: record<art_ok: bool, has_geo: bool, images_ok: bool, moderate_ok: bool, photos_ok: bool, restricted_ok: bool, safe_ok: bool, screens_ok: bool, videos_ok: bool>, roles: record<admin: string, member: string, moderator: string>, rules: record<_content: string>, throttle: record<count: int, mode: string, remaining: string>, topic_count: record<_content: string>>, stat: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -558,7 +582,7 @@ export def "get-rest-method-flickr-groups-pools-get-context" [
   --api-key: string # required
   --photo-id: string # required
   --group-id: string
-]: nothing -> record<count: record<_content: string>, nextphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, prevphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, stat: string> {
+]: nothing -> oneof<record<count: record<_content: string>, nextphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, prevphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, stat: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -597,7 +621,7 @@ export def "get-group-photos-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # required
   --group-id: string
-]: nothing -> record<photos: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>> {
+]: nothing -> oneof<record<photos: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -635,7 +659,7 @@ export def "get-person-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # required
   --user-id: string
-]: nothing -> record<person: record<can_buy_pro: bool, cover: record<farm: string, id: string, isfamily: bool, isfriend: bool, ispublic: bool, owner: string, secret: string, server: string, title: string, y: string>, coverphoto: record<h: string, l: string, s: string, t: string>, coverphoto_farm: string, coverphoto_server: string, description: record<_content: string>, disable_keyboard_shortcuts: record<_content: string>, expire: bool, has_stats: bool, iconfarm: string, iconserver: string, id: string, is_ad_free: bool, ispro: bool, location: record<_content: string>, mbox_sha1sum: record<_content: string>, mobileurl: record<_content: string>, nsid: string, path_alias: string, photos: record<count: record, firstdate: record, firstdatetaken: record, views: record>, photosurl: record<_content: string>, profileurl: record<_content: string>, realname: record<_content: string>, timezone: record<label: string, offset: string, timezone_id: string>, unread_messages: record<_content: string>, user_secret: string, username: record<_content: string>, yintl: string>, stat: string> {
+]: nothing -> oneof<record<person: record<can_buy_pro: bool, cover: record<farm: string, id: string, isfamily: bool, isfriend: bool, ispublic: bool, owner: string, secret: string, server: string, title: string, y: string>, coverphoto: record<h: string, l: string, s: string, t: string>, coverphoto_farm: string, coverphoto_server: string, description: record<_content: string>, disable_keyboard_shortcuts: record<_content: string>, expire: bool, has_stats: bool, iconfarm: string, iconserver: string, id: string, is_ad_free: bool, ispro: bool, location: record<_content: string>, mbox_sha1sum: record<_content: string>, mobileurl: record<_content: string>, nsid: string, path_alias: string, photos: record<count: record, firstdate: record, firstdatetaken: record, views: record>, photosurl: record<_content: string>, profileurl: record<_content: string>, realname: record<_content: string>, timezone: record<label: string, offset: string, timezone_id: string>, unread_messages: record<_content: string>, user_secret: string, username: record<_content: string>, yintl: string>, stat: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -682,7 +706,7 @@ export def "get-media-by-person-id" [
   --privacy-filter: float
   --page: float
   --per-page: float
-]: nothing -> record<page: float, pages: float, perpage: float, photos: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>, total: float> {
+]: nothing -> oneof<record<page: float, pages: float, perpage: float, photos: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -722,7 +746,7 @@ export def "get-photolist-context-by-id" [
   --api-key: string # required
   --photo-id: string # required
   --photolist-id: string # required
-]: nothing -> record<count: record<_content: string>, nextphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, prevphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, stat: string> {
+]: nothing -> oneof<record<count: record<_content: string>, nextphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, prevphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, stat: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -762,7 +786,7 @@ export def "get-photostream-context-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # required
   --photo-id: string # required
-]: nothing -> record<count: record<_content: string>, nextphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, prevphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, stat: string> {
+]: nothing -> oneof<record<count: record<_content: string>, nextphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, prevphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, stat: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -802,7 +826,7 @@ export def "get-photo-exif-by-id" [
   --api-key: string # required
   --photo-id: string # required
   --secret: string
-]: nothing -> record<photo: record<camera: string, exif: list<record>, farm: string, id: string, secret: string, server: string>, stat: string> {
+]: nothing -> oneof<record<photo: record<camera: string, exif: list<record>, farm: string, id: string, secret: string, server: string>, stat: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -841,7 +865,7 @@ export def "get-photo-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # required
   --photo-id: string # required
-]: nothing -> record<photo: record<comments: record<_content: string>, dates: record<lastupdate: string, posted: string, taken: string, takengranularity: string, takenunknown: bool>, dateuploaded: string, description: record<_content: string>, editability: record<canaddmeta: bool, cancomment: bool>, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record<note: list>, originalsecret: string, owner: record<iconfarm: string, iconserver: string, is_ad_free: bool, ispro: bool, location: string, noindexfollow: bool, nsid: string, path_alias: string, realname: string, username: string>, people: record<haspeople: bool>, permissions: record<permaddmeta: string, permcomment: string>, publiceditability: record<canaddmeta: bool, cancomment: bool>, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record<tag: list>, title: record<_content: string>, urls: record<url: list>, usage: record<canblog: bool, candownload: bool, canprint: bool, canshare: bool>, views: string, visibility: record<isfamily: bool, isfriend: bool, ispublic: bool>>, stat: string> {
+]: nothing -> oneof<record<photo: record<comments: record<_content: string>, dates: record<lastupdate: string, posted: string, taken: string, takengranularity: string, takenunknown: bool>, dateuploaded: string, description: record<_content: string>, editability: record<canaddmeta: bool, cancomment: bool>, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record<note: list>, originalsecret: string, owner: record<iconfarm: string, iconserver: string, is_ad_free: bool, ispro: bool, location: string, noindexfollow: bool, nsid: string, path_alias: string, realname: string, username: string>, people: record<haspeople: bool>, permissions: record<permaddmeta: string, permcomment: string>, publiceditability: record<canaddmeta: bool, cancomment: bool>, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record<tag: list>, title: record<_content: string>, urls: record<url: list>, usage: record<canblog: bool, candownload: bool, canprint: bool, canshare: bool>, views: string, visibility: record<isfamily: bool, isfriend: bool, ispublic: bool>>, stat: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -880,7 +904,7 @@ export def "get-photo-sizes-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # required
   --photo-id: string # required
-]: nothing -> record<sizes: record<canblog: float, candownload: float, canprint: float, sizes: list<record>>, stat: string> {
+]: nothing -> oneof<record<sizes: record<canblog: float, candownload: float, canprint: float, sizes: list<record>>, stat: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -918,7 +942,7 @@ export def "get-license-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # required
-]: nothing -> record<licenses: record<license: list<record>>, stat: string> {
+]: nothing -> oneof<record<licenses: record<license: list<record>>, stat: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -987,7 +1011,7 @@ export def "get-media-by-search" [
   --is-getty: oneof<nothing, bool> # Limit the scope of the search to only photos that are for sale on Getty. Default is false.
   --per-page: float # Number of photos to return per page. If this argument is omitted, it defaults to 100. The maximum allowed value is 500.
   --page: float # The page of results to return. If this argument is omitted, it defaults to 1.
-]: nothing -> record<page: float, pages: float, perpage: float, photos: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>, total: float> {
+]: nothing -> oneof<record<page: float, pages: float, perpage: float, photos: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -1026,7 +1050,7 @@ export def "get-album-context-by-id" [
   --api-key: string # required
   --photo-id: string # required
   --photoset-id: string
-]: nothing -> record<count: record<_content: string>, nextphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, prevphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, stat: string> {
+]: nothing -> oneof<record<count: record<_content: string>, nextphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, prevphoto: record<farm: string, id: string, is_faved: bool, license: int, media: string, owner: string, safe: bool, secret: string, server: string, thumb: string, title: string, url: string>, stat: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -1067,7 +1091,7 @@ export def "get-albums-by-person-id" [
   --user-id: string # required
   --page: float
   --per-page: float
-]: nothing -> record<page: float, pages: float, perpage: float, photosets: table<can_comment: bool, count_comments: float, count_views: float, date_create: float, date_update: float, description: string, farm: string, id: string, photos: float, primary: string, secret: string, server: string, title: string, videos: float>, total: float> {
+]: nothing -> oneof<record<page: float, pages: float, perpage: float, photosets: table<can_comment: bool, count_comments: float, count_views: float, date_create: float, date_update: float, description: string, farm: string, id: string, photos: float, primary: string, secret: string, server: string, title: string, videos: float>, total: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -1106,7 +1130,7 @@ export def "get-album-by-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # required
   --photoset-id: string # required
-]: nothing -> record<photoset: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>> {
+]: nothing -> oneof<record<photoset: table<comments: record, dates: record, dateuploaded: string, description: record, editability: record, farm: string, id: string, isfavorite: bool, license: string, media: string, notes: record, originalsecret: string, owner: record, people: record, permissions: record, publiceditability: record, rotation: string, safe: bool, safety_level: string, secret: string, server: string, tags: record, title: record, urls: record, usage: record, views: string, visibility: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -1145,7 +1169,7 @@ export def "get-rest-method-flickr-test-echo" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # required
   --echo: string
-]: nothing -> record<echo: record<_content: string>> {
+]: nothing -> oneof<record<echo: record<_content: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key == null) { error make --unspanned { msg: "required query parameter 'api_key' missing: pass --api-key" } }
@@ -1192,7 +1216,7 @@ export def "upload-photo" [
   --safety-level: string@safety-level-completer
   --tags: string
   --title: string
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

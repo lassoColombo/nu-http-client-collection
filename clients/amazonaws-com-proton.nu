@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -197,9 +220,9 @@ def x-amz-target-completer-83 [] { ["AwsProton20200720.UpdateTemplateSyncConfig"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-environment-account-connection" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["accept-environment-account-connection" "cancel-component-deployment" "cancel-environment-deployment" "cancel-service-instance-deployment" "cancel-service-pipeline-deployment" "create-component" "create-environment" "create-environment-account-connection" "create-environment-template" "create-environment-template-version" "create-repository" "create-service" "create-service-instance" "create-service-sync-config" "create-service-template" "create-service-template-version" "create-template-sync-config" "delete-component" "delete-environment" "delete-environment-account-connection" "delete-environment-template" "delete-environment-template-version" "delete-repository" "delete-service" "delete-service-sync-config" "delete-service-template" "delete-service-template-version" "delete-template-sync-config" "get-account-settings" "get-component" "get-environment" "get-environment-account-connection" "get-environment-template" "get-environment-template-version" "get-repository" "get-repository-sync-status" "get-resources-summary" "get-service" "get-service-instance" "get-service-instance-sync-status" "get-service-sync-blocker-summary" "get-service-sync-config" "get-service-template" "get-service-template-version" "get-template-sync-config" "get-template-sync-status" "list-component-outputs" "list-component-provisioned-resources" "list-components" "list-environment-account-connections" "list-environment-outputs" "list-environment-provisioned-resources" "list-environment-template-versions" "list-environment-templates" "list-environments" "list-repositories" "list-repository-sync-definitions" "list-service-instance-outputs" "list-service-instance-provisioned-resources" "list-service-instances" "list-service-pipeline-outputs" "list-service-pipeline-provisioned-resources" "list-service-template-versions" "list-service-templates" "list-services" "list-tags-for-resource" "notify-resource-deployment-status-change" "reject-environment-account-connection" "tag-resource" "untag-resource" "update-account-settings" "update-component" "update-environment" "update-environment-account-connection" "update-environment-template" "update-environment-template-version" "update-service" "update-service-instance" "update-service-pipeline" "update-service-sync-blocker" "update-service-sync-config" "update-service-template" "update-service-template-version" "update-template-sync-config" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -240,7 +263,7 @@ export def "accept-environment-account-connection" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer # required
   id: string # The ID of the environment account connection.
-]: any -> record<environmentAccountConnection: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, environmentAccountId: string, environmentName: string, id: string, lastModifiedAt: string, managementAccountId: string, requestedAt: string, roleArn: string, status: string>> {
+]: any -> oneof<record<environmentAccountConnection: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, environmentAccountId: string, environmentName: string, id: string, lastModifiedAt: string, managementAccountId: string, requestedAt: string, roleArn: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -289,7 +312,7 @@ export def "cancel-component-deployment" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-1 # required
   component_name: string # The name of the component with the deployment to cancel.
-]: any -> record<component: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, lastModifiedAt: string, name: string, serviceInstanceName: string, serviceName: string, serviceSpec: string>> {
+]: any -> oneof<record<component: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, lastModifiedAt: string, name: string, serviceInstanceName: string, serviceName: string, serviceSpec: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -338,7 +361,7 @@ export def "cancel-environment-deployment" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-2 # required
   environment_name: string # The name of the environment with the deployment to cancel.
-]: any -> record<environment: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentAccountConnectionId: string, environmentAccountId: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, protonServiceRoleArn: string, provisioning: string, provisioningRepository: record<arn: string, branch: string, name: string, provider: string>, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>> {
+]: any -> oneof<record<environment: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentAccountConnectionId: string, environmentAccountId: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, protonServiceRoleArn: string, provisioning: string, provisioningRepository: record<arn: string, branch: string, name: string, provider: string>, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -388,7 +411,7 @@ export def "cancel-service-instance-deployment" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   service_instance_name: string # The name of the service instance with the deployment to cancel.
   service_name: string # The name of the service with the service instance deployment to cancel.
-]: any -> record<serviceInstance: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, serviceName: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>> {
+]: any -> oneof<record<serviceInstance: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, serviceName: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -437,7 +460,7 @@ export def "cancel-service-pipeline-deployment" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-4 # required
   service_name: string # The name of the service with the service pipeline deployment to cancel.
-]: any -> record<pipeline: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>> {
+]: any -> oneof<record<pipeline: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -467,7 +490,6 @@ export def "cancel-service-pipeline-deployment" [
 #
 # POST /
 # operationId: CreateComponent
-# --tags item shape: {key: string, value: string}
 export def "create-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,7 +518,7 @@ export def "create-component" [
   --service-spec: string # The service spec that you want the component to use to access service inputs. Set this only when you attach the component to a service instance. (format: password)
   --tags: list # An optional list of metadata items that you can associate with the Proton component. A tag is a key-value pair. For more information, see Proton resources and tagging (https://docs.aws.amazon.com/proton/latest/userguide/resources.html) in the Proton User Guide. — item shape: {key: string, value: string}
   template_file: string # A path to the Infrastructure as Code (IaC) file describing infrastructure that a custom component provisions. Components support a single IaC file, even if you use Terraform as your template language. (format: password)
-]: any -> record<component: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, lastModifiedAt: string, name: string, serviceInstanceName: string, serviceName: string, serviceSpec: string>> {
+]: any -> oneof<record<component: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, lastModifiedAt: string, name: string, serviceInstanceName: string, serviceName: string, serviceSpec: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -526,8 +548,6 @@ export def "create-component" [
 #
 # POST /
 # operationId: CreateEnvironment
-# --provisioningRepository shape: {branch: string, name: string, provider: "GITHUB"|"GITHUB_ENTERPRISE"|"BITBUCKET"}
-# --tags item shape: {key: string, value: string}
 export def "create-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -558,7 +578,7 @@ export def "create-environment" [
   template_major_version: string # The major version of the environment template.
   --template-minor-version: string # The minor version of the environment template.
   template_name: string # The name of the environment template. For more information, see Environment Templates (https://docs.aws.amazon.com/proton/latest/userguide/ag-templates.html) in the Proton User Guide.
-]: any -> record<environment: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentAccountConnectionId: string, environmentAccountId: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, protonServiceRoleArn: string, provisioning: string, provisioningRepository: record<arn: string, branch: string, name: string, provider: string>, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>> {
+]: any -> oneof<record<environment: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentAccountConnectionId: string, environmentAccountId: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, protonServiceRoleArn: string, provisioning: string, provisioningRepository: record<arn: string, branch: string, name: string, provider: string>, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -588,7 +608,6 @@ export def "create-environment" [
 #
 # POST /
 # operationId: CreateEnvironmentAccountConnection
-# --tags item shape: {key: string, value: string}
 export def "create-environment-account-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -614,7 +633,7 @@ export def "create-environment-account-connection" [
   management_account_id: string # The ID of the management account that accepts or rejects the environment account connection. You create and manage the Proton environment in this account. If the management account accepts the environment account connection, Proton can use the associated IAM role to provision environment infrastructure resources in the associated environment account.
   --role-arn: string # The Amazon Resource Name (ARN) of the IAM service role that's created in the environment account. Proton uses this role to provision infrastructure resources in the associated environment account.
   --tags: list # An optional list of metadata items that you can associate with the Proton environment account connection. A tag is a key-value pair. For more information, see Proton resources and tagging (https://docs.aws.amazon.com/proton/latest/userguide/resources.html) in the Proton User Guide. — item shape: {key: string, value: string}
-]: any -> record<environmentAccountConnection: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, environmentAccountId: string, environmentName: string, id: string, lastModifiedAt: string, managementAccountId: string, requestedAt: string, roleArn: string, status: string>> {
+]: any -> oneof<record<environmentAccountConnection: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, environmentAccountId: string, environmentName: string, id: string, lastModifiedAt: string, managementAccountId: string, requestedAt: string, roleArn: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -644,7 +663,6 @@ export def "create-environment-account-connection" [
 #
 # POST /
 # operationId: CreateEnvironmentTemplate
-# --tags item shape: {key: string, value: string}
 export def "create-environment-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,7 +687,7 @@ export def "create-environment-template" [
   name: string # The name of the environment template.
   --provisioning: string@provisioning-completer # When included, indicates that the environment template is for customer provisioned and managed infrastructure.
   --tags: list # An optional list of metadata items that you can associate with the Proton environment template. A tag is a key-value pair. For more information, see Proton resources and tagging (https://docs.aws.amazon.com/proton/latest/userguide/resources.html) in the Proton User Guide. — item shape: {key: string, value: string}
-]: any -> record<environmentTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, provisioning: string, recommendedVersion: string>> {
+]: any -> oneof<record<environmentTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, provisioning: string, recommendedVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -699,8 +717,6 @@ export def "create-environment-template" [
 #
 # POST /
 # operationId: CreateEnvironmentTemplateVersion
-# --source shape: {s3?: record}
-# --tags item shape: {key: string, value: string}
 export def "create-environment-template-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -725,7 +741,7 @@ export def "create-environment-template-version" [
   source: record # Template version source data. — shape: {s3?: record}
   --tags: list # An optional list of metadata items that you can associate with the Proton environment template version. A tag is a key-value pair. For more information, see Proton resources and tagging (https://docs.aws.amazon.com/proton/latest/userguide/resources.html) in the Proton User Guide. — item shape: {key: string, value: string}
   template_name: string # The name of the environment template.
-]: any -> record<environmentTemplateVersion: record<arn: string, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, templateName: string>> {
+]: any -> oneof<record<environmentTemplateVersion: record<arn: string, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -755,7 +771,6 @@ export def "create-environment-template-version" [
 #
 # POST /
 # operationId: CreateRepository
-# --tags item shape: {key: string, value: string}
 export def "create-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -779,7 +794,7 @@ export def "create-repository" [
   name: string # The repository name (for example, myrepos/myrepo).
   provider: string@provider-completer # The repository provider.
   --tags: list # An optional list of metadata items that you can associate with the Proton repository. A tag is a key-value pair. For more information, see Proton resources and tagging (https://docs.aws.amazon.com/proton/latest/userguide/resources.html) in the Proton User Guide. — item shape: {key: string, value: string}
-]: any -> record<repository: record<arn: string, connectionArn: string, encryptionKey: string, name: string, provider: string>> {
+]: any -> oneof<record<repository: record<arn: string, connectionArn: string, encryptionKey: string, name: string, provider: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -809,7 +824,6 @@ export def "create-repository" [
 #
 # POST /
 # operationId: CreateService
-# --tags item shape: {key: string, value: string}
 export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -838,7 +852,7 @@ export def "create-service" [
   template_major_version: string # The major version of the service template that was used to create the service.
   --template-minor-version: string # The minor version of the service template that was used to create the service.
   template_name: string # The name of the service template that's used to create the service.
-]: any -> record<service: record<arn: string, branchName: string, createdAt: string, description: string, lastModifiedAt: string, name: string, pipeline: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>, repositoryConnectionArn: string, repositoryId: string, spec: string, status: string, statusMessage: string, templateName: string>> {
+]: any -> oneof<record<service: record<arn: string, branchName: string, createdAt: string, description: string, lastModifiedAt: string, name: string, pipeline: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>, repositoryConnectionArn: string, repositoryId: string, spec: string, status: string, statusMessage: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -868,7 +882,6 @@ export def "create-service" [
 #
 # POST /
 # operationId: CreateServiceInstance
-# --tags item shape: {key: string, value: string}
 export def "create-service-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -894,7 +907,7 @@ export def "create-service-instance" [
   --tags: list # An optional list of metadata items that you can associate with the Proton service instance. A tag is a key-value pair. For more information, see Proton resources and tagging (https://docs.aws.amazon.com/proton/latest/userguide/resources.html) in the Proton User Guide. — item shape: {key: string, value: string}
   --template-major-version: string # To create a new major and minor version of the service template, exclude major Version.
   --template-minor-version: string # To create a new minor version of the service template, include a major Version.
-]: any -> record<serviceInstance: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, serviceName: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>> {
+]: any -> oneof<record<serviceInstance: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, serviceName: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -947,7 +960,7 @@ export def "create-service-sync-config" [
   repository_name: string # The repository name.
   repository_provider: string@repository-provider-completer # The provider type for your repository.
   service_name: string # The name of the service the Proton Ops file is for.
-]: any -> record<serviceSyncConfig: record<branch: string, filePath: string, repositoryName: string, repositoryProvider: string, serviceName: string>> {
+]: any -> oneof<record<serviceSyncConfig: record<branch: string, filePath: string, repositoryName: string, repositoryProvider: string, serviceName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -977,7 +990,6 @@ export def "create-service-sync-config" [
 #
 # POST /
 # operationId: CreateServiceTemplate
-# --tags item shape: {key: string, value: string}
 export def "create-service-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1002,7 +1014,7 @@ export def "create-service-template" [
   name: string # The name of the service template.
   --pipeline-provisioning: string@pipeline-provisioning-completer # By default, Proton provides a service pipeline for your service. When this parameter is included, it indicates that an Proton service pipeline isn't provided for your service. After it's included, it can't be changed. For more information, see Template bundles (https://docs.aws.amazon.com/proton/latest/userguide/ag-template-authoring.html#ag-template-bundles) in the Proton User Guide.
   --tags: list # An optional list of metadata items that you can associate with the Proton service template. A tag is a key-value pair. For more information, see Proton resources and tagging (https://docs.aws.amazon.com/proton/latest/userguide/resources.html) in the Proton User Guide. — item shape: {key: string, value: string}
-]: any -> record<serviceTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, pipelineProvisioning: string, recommendedVersion: string>> {
+]: any -> oneof<record<serviceTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, pipelineProvisioning: string, recommendedVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1032,9 +1044,6 @@ export def "create-service-template" [
 #
 # POST /
 # operationId: CreateServiceTemplateVersion
-# --compatibleEnvironmentTemplates item shape: {majorVersion: string, templateName: string}
-# --source shape: {s3?: record}
-# --tags item shape: {key: string, value: string}
 export def "create-service-template-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1061,7 +1070,7 @@ export def "create-service-template-version" [
   --supported-component-sources: list<string> # An array of supported component sources. Components with supported sources can be attached to service instances based on this service template version. For more information about components, see Proton components (https://docs.aws.amazon.com/proton/latest/userguide/ag-components.html) in the Proton User Guide.
   --tags: list # An optional list of metadata items that you can associate with the Proton service template version. A tag is a key-value pair. For more information, see Proton resources and tagging (https://docs.aws.amazon.com/proton/latest/userguide/resources.html) in the Proton User Guide. — item shape: {key: string, value: string}
   template_name: string # The name of the service template.
-]: any -> record<serviceTemplateVersion: record<arn: string, compatibleEnvironmentTemplates: list<record>, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, supportedComponentSources: list<string>, templateName: string>> {
+]: any -> oneof<record<serviceTemplateVersion: record<arn: string, compatibleEnvironmentTemplates: list<record>, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, supportedComponentSources: list<string>, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1115,7 +1124,7 @@ export def "create-template-sync-config" [
   --subdirectory: string # A repository subdirectory path to your template bundle directory. When included, Proton limits the template bundle search to this repository directory.
   template_name: string # The name of your registered template.
   template_type: string@template-type-completer # The type of the registered template.
-]: any -> record<templateSyncConfig: record<branch: string, repositoryName: string, repositoryProvider: string, subdirectory: string, templateName: string, templateType: string>> {
+]: any -> oneof<record<templateSyncConfig: record<branch: string, repositoryName: string, repositoryProvider: string, subdirectory: string, templateName: string, templateType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1164,7 +1173,7 @@ export def "delete-component" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-17 # required
   name: string # The name of the component to delete.
-]: any -> record<component: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, lastModifiedAt: string, name: string, serviceInstanceName: string, serviceName: string, serviceSpec: string>> {
+]: any -> oneof<record<component: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, lastModifiedAt: string, name: string, serviceInstanceName: string, serviceName: string, serviceSpec: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1213,7 +1222,7 @@ export def "delete-environment" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   name: string # The name of the environment to delete.
-]: any -> record<environment: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentAccountConnectionId: string, environmentAccountId: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, protonServiceRoleArn: string, provisioning: string, provisioningRepository: record<arn: string, branch: string, name: string, provider: string>, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>> {
+]: any -> oneof<record<environment: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentAccountConnectionId: string, environmentAccountId: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, protonServiceRoleArn: string, provisioning: string, provisioningRepository: record<arn: string, branch: string, name: string, provider: string>, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1262,7 +1271,7 @@ export def "delete-environment-account-connection" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   id: string # The ID of the environment account connection to delete.
-]: any -> record<environmentAccountConnection: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, environmentAccountId: string, environmentName: string, id: string, lastModifiedAt: string, managementAccountId: string, requestedAt: string, roleArn: string, status: string>> {
+]: any -> oneof<record<environmentAccountConnection: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, environmentAccountId: string, environmentName: string, id: string, lastModifiedAt: string, managementAccountId: string, requestedAt: string, roleArn: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1311,7 +1320,7 @@ export def "delete-environment-template" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   name: string # The name of the environment template to delete.
-]: any -> record<environmentTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, provisioning: string, recommendedVersion: string>> {
+]: any -> oneof<record<environmentTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, provisioning: string, recommendedVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1362,7 +1371,7 @@ export def "delete-environment-template-version" [
   major_version: string # The environment template major version to delete.
   minor_version: string # The environment template minor version to delete.
   template_name: string # The name of the environment template.
-]: any -> record<environmentTemplateVersion: record<arn: string, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, templateName: string>> {
+]: any -> oneof<record<environmentTemplateVersion: record<arn: string, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1412,7 +1421,7 @@ export def "delete-repository" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   name: string # The repository name.
   provider: string@provider-completer # The repository provider.
-]: any -> record<repository: record<arn: string, connectionArn: string, encryptionKey: string, name: string, provider: string>> {
+]: any -> oneof<record<repository: record<arn: string, connectionArn: string, encryptionKey: string, name: string, provider: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1461,7 +1470,7 @@ export def "delete-service" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   name: string # The name of the service to delete.
-]: any -> record<service: record<arn: string, branchName: string, createdAt: string, description: string, lastModifiedAt: string, name: string, pipeline: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>, repositoryConnectionArn: string, repositoryId: string, spec: string, status: string, statusMessage: string, templateName: string>> {
+]: any -> oneof<record<service: record<arn: string, branchName: string, createdAt: string, description: string, lastModifiedAt: string, name: string, pipeline: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>, repositoryConnectionArn: string, repositoryId: string, spec: string, status: string, statusMessage: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1510,7 +1519,7 @@ export def "delete-service-sync-config" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-24 # required
   service_name: string # The name of the service that you want to delete the service sync configuration for.
-]: any -> record<serviceSyncConfig: record<branch: string, filePath: string, repositoryName: string, repositoryProvider: string, serviceName: string>> {
+]: any -> oneof<record<serviceSyncConfig: record<branch: string, filePath: string, repositoryName: string, repositoryProvider: string, serviceName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1559,7 +1568,7 @@ export def "delete-service-template" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-25 # required
   name: string # The name of the service template to delete.
-]: any -> record<serviceTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, pipelineProvisioning: string, recommendedVersion: string>> {
+]: any -> oneof<record<serviceTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, pipelineProvisioning: string, recommendedVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1610,7 +1619,7 @@ export def "delete-service-template-version" [
   major_version: string # The service template major version to delete.
   minor_version: string # The service template minor version to delete.
   template_name: string # The name of the service template.
-]: any -> record<serviceTemplateVersion: record<arn: string, compatibleEnvironmentTemplates: list<record>, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, supportedComponentSources: list<string>, templateName: string>> {
+]: any -> oneof<record<serviceTemplateVersion: record<arn: string, compatibleEnvironmentTemplates: list<record>, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, supportedComponentSources: list<string>, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1660,7 +1669,7 @@ export def "delete-template-sync-config" [
   --x-amz-target: string@x-amz-target-completer-27 # required
   template_name: string # The template name.
   template_type: string@template-type-completer # The template type.
-]: any -> record<templateSyncConfig: record<branch: string, repositoryName: string, repositoryProvider: string, subdirectory: string, templateName: string, templateType: string>> {
+]: any -> oneof<record<templateSyncConfig: record<branch: string, repositoryName: string, repositoryProvider: string, subdirectory: string, templateName: string, templateType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1709,7 +1718,7 @@ export def "get-account-settings" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-28 # required
   --body: record
-]: any -> record<accountSettings: record<pipelineCodebuildRoleArn: string, pipelineProvisioningRepository: record<arn: string, branch: string, name: string, provider: string>, pipelineServiceRoleArn: string>> {
+]: any -> oneof<record<accountSettings: record<pipelineCodebuildRoleArn: string, pipelineProvisioningRepository: record<arn: string, branch: string, name: string, provider: string>, pipelineServiceRoleArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1758,7 +1767,7 @@ export def "get-component" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-29 # required
   name: string # The name of the component that you want to get the detailed data for.
-]: any -> record<component: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, lastModifiedAt: string, name: string, serviceInstanceName: string, serviceName: string, serviceSpec: string>> {
+]: any -> oneof<record<component: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, lastModifiedAt: string, name: string, serviceInstanceName: string, serviceName: string, serviceSpec: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1807,7 +1816,7 @@ export def "get-environment" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-30 # required
   name: string # The name of the environment that you want to get the detailed data for.
-]: any -> record<environment: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentAccountConnectionId: string, environmentAccountId: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, protonServiceRoleArn: string, provisioning: string, provisioningRepository: record<arn: string, branch: string, name: string, provider: string>, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>> {
+]: any -> oneof<record<environment: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentAccountConnectionId: string, environmentAccountId: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, protonServiceRoleArn: string, provisioning: string, provisioningRepository: record<arn: string, branch: string, name: string, provider: string>, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1856,7 +1865,7 @@ export def "get-environment-account-connection" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-31 # required
   id: string # The ID of the environment account connection that you want to get the detailed data for.
-]: any -> record<environmentAccountConnection: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, environmentAccountId: string, environmentName: string, id: string, lastModifiedAt: string, managementAccountId: string, requestedAt: string, roleArn: string, status: string>> {
+]: any -> oneof<record<environmentAccountConnection: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, environmentAccountId: string, environmentName: string, id: string, lastModifiedAt: string, managementAccountId: string, requestedAt: string, roleArn: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1905,7 +1914,7 @@ export def "get-environment-template" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-32 # required
   name: string # The name of the environment template that you want to get the detailed data for.
-]: any -> record<environmentTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, provisioning: string, recommendedVersion: string>> {
+]: any -> oneof<record<environmentTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, provisioning: string, recommendedVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1956,7 +1965,7 @@ export def "get-environment-template-version" [
   major_version: string # To get environment template major version detail data, include major Version.
   minor_version: string # To get environment template minor version detail data, include minorVersion.
   template_name: string # The name of the environment template a version of which you want to get detailed data for.
-]: any -> record<environmentTemplateVersion: record<arn: string, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, templateName: string>> {
+]: any -> oneof<record<environmentTemplateVersion: record<arn: string, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2006,7 +2015,7 @@ export def "get-repository" [
   --x-amz-target: string@x-amz-target-completer-34 # required
   name: string # The repository name, for example myrepos/myrepo.
   provider: string@provider-completer # The repository provider.
-]: any -> record<repository: record<arn: string, connectionArn: string, encryptionKey: string, name: string, provider: string>> {
+]: any -> oneof<record<repository: record<arn: string, connectionArn: string, encryptionKey: string, name: string, provider: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2058,7 +2067,7 @@ export def "get-repository-sync-status" [
   repository_name: string # The repository name.
   repository_provider: string@repository-provider-completer # The repository provider.
   sync_type: string@sync-type-completer # The repository sync type.
-]: any -> record<latestSync: record<events: list<record>, startedAt: string, status: string>> {
+]: any -> oneof<record<latestSync: record<events: list<record>, startedAt: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2107,7 +2116,7 @@ export def "get-resources-summary" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-36 # required
   --body: record
-]: any -> record<counts: record<components: record<behindMajor: int, behindMinor: int, failed: int, total: int, upToDate: int>, environmentTemplates: record<behindMajor: int, behindMinor: int, failed: int, total: int, upToDate: int>, environments: record<behindMajor: int, behindMinor: int, failed: int, total: int, upToDate: int>, pipelines: record<behindMajor: int, behindMinor: int, failed: int, total: int, upToDate: int>, serviceInstances: record<behindMajor: int, behindMinor: int, failed: int, total: int, upToDate: int>, serviceTemplates: record<behindMajor: int, behindMinor: int, failed: int, total: int, upToDate: int>, services: record<behindMajor: int, behindMinor: int, failed: int, total: int, upToDate: int>>> {
+]: any -> oneof<record<counts: record<components: record<behindMajor: int, behindMinor: int, failed: int, total: int, upToDate: int>, environmentTemplates: record<behindMajor: int, behindMinor: int, failed: int, total: int, upToDate: int>, environments: record<behindMajor: int, behindMinor: int, failed: int, total: int, upToDate: int>, pipelines: record<behindMajor: int, behindMinor: int, failed: int, total: int, upToDate: int>, serviceInstances: record<behindMajor: int, behindMinor: int, failed: int, total: int, upToDate: int>, serviceTemplates: record<behindMajor: int, behindMinor: int, failed: int, total: int, upToDate: int>, services: record<behindMajor: int, behindMinor: int, failed: int, total: int, upToDate: int>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2156,7 +2165,7 @@ export def "get-service" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-37 # required
   name: string # The name of the service that you want to get the detailed data for.
-]: any -> record<service: record<arn: string, branchName: string, createdAt: string, description: string, lastModifiedAt: string, name: string, pipeline: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>, repositoryConnectionArn: string, repositoryId: string, spec: string, status: string, statusMessage: string, templateName: string>> {
+]: any -> oneof<record<service: record<arn: string, branchName: string, createdAt: string, description: string, lastModifiedAt: string, name: string, pipeline: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>, repositoryConnectionArn: string, repositoryId: string, spec: string, status: string, statusMessage: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2206,7 +2215,7 @@ export def "get-service-instance" [
   --x-amz-target: string@x-amz-target-completer-38 # required
   name: string # The name of a service instance that you want to get the detailed data for.
   service_name: string # The name of the service that you want the service instance input for.
-]: any -> record<serviceInstance: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, serviceName: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>> {
+]: any -> oneof<record<serviceInstance: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, serviceName: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2256,7 +2265,7 @@ export def "get-service-instance-sync-status" [
   --x-amz-target: string@x-amz-target-completer-39 # required
   service_instance_name: string # The name of the service instance that you want the sync status input for.
   service_name: string # The name of the service that the service instance belongs to.
-]: any -> record<desiredState: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>, latestSuccessfulSync: record<events: list<record>, initialRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>, startedAt: string, status: string, target: string, targetRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>>, latestSync: record<events: list<record>, initialRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>, startedAt: string, status: string, target: string, targetRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>>> {
+]: any -> oneof<record<desiredState: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>, latestSuccessfulSync: record<events: list<record>, initialRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>, startedAt: string, status: string, target: string, targetRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>>, latestSync: record<events: list<record>, initialRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>, startedAt: string, status: string, target: string, targetRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2306,7 +2315,7 @@ export def "get-service-sync-blocker-summary" [
   --x-amz-target: string@x-amz-target-completer-40 # required
   --service-instance-name: string # The name of the service instance that you want to get the service sync blocker summary for. If given bothe the instance name and the service name, only the instance is blocked.
   service_name: string # The name of the service that you want to get the service sync blocker summary for. If given only the service name, all instances are blocked.
-]: any -> record<serviceSyncBlockerSummary: record<latestBlockers: list<record>, serviceInstanceName: string, serviceName: string>> {
+]: any -> oneof<record<serviceSyncBlockerSummary: record<latestBlockers: list<record>, serviceInstanceName: string, serviceName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2355,7 +2364,7 @@ export def "get-service-sync-config" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-41 # required
   service_name: string # The name of the service that you want to get the service sync configuration for.
-]: any -> record<serviceSyncConfig: record<branch: string, filePath: string, repositoryName: string, repositoryProvider: string, serviceName: string>> {
+]: any -> oneof<record<serviceSyncConfig: record<branch: string, filePath: string, repositoryName: string, repositoryProvider: string, serviceName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2404,7 +2413,7 @@ export def "get-service-template" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-42 # required
   name: string # The name of the service template that you want to get detailed data for.
-]: any -> record<serviceTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, pipelineProvisioning: string, recommendedVersion: string>> {
+]: any -> oneof<record<serviceTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, pipelineProvisioning: string, recommendedVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2455,7 +2464,7 @@ export def "get-service-template-version" [
   major_version: string # To get service template major version detail data, include major Version.
   minor_version: string # To get service template minor version detail data, include minorVersion.
   template_name: string # The name of the service template a version of which you want to get detailed data for.
-]: any -> record<serviceTemplateVersion: record<arn: string, compatibleEnvironmentTemplates: list<record>, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, supportedComponentSources: list<string>, templateName: string>> {
+]: any -> oneof<record<serviceTemplateVersion: record<arn: string, compatibleEnvironmentTemplates: list<record>, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, supportedComponentSources: list<string>, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2505,7 +2514,7 @@ export def "get-template-sync-config" [
   --x-amz-target: string@x-amz-target-completer-44 # required
   template_name: string # The template name.
   template_type: string@template-type-completer # The template type.
-]: any -> record<templateSyncConfig: record<branch: string, repositoryName: string, repositoryProvider: string, subdirectory: string, templateName: string, templateType: string>> {
+]: any -> oneof<record<templateSyncConfig: record<branch: string, repositoryName: string, repositoryProvider: string, subdirectory: string, templateName: string, templateType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2556,7 +2565,7 @@ export def "get-template-sync-status" [
   template_name: string # The template name.
   template_type: string@template-type-completer # The template type.
   template_version: string # The template major version.
-]: any -> record<desiredState: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>, latestSuccessfulSync: record<events: list<record>, initialRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>, startedAt: string, status: string, target: string, targetRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>>, latestSync: record<events: list<record>, initialRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>, startedAt: string, status: string, target: string, targetRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>>> {
+]: any -> oneof<record<desiredState: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>, latestSuccessfulSync: record<events: list<record>, initialRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>, startedAt: string, status: string, target: string, targetRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>>, latestSync: record<events: list<record>, initialRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>, startedAt: string, status: string, target: string, targetRevision: record<branch: string, directory: string, repositoryName: string, repositoryProvider: string, sha: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2607,7 +2616,7 @@ export def "list-component-outputs" [
   --x-amz-target: string@x-amz-target-completer-46 # required
   component_name: string # The name of the component whose outputs you want.
   --next-token-body: string # A token that indicates the location of the next output in the array of outputs, after the list of outputs that was previously requested. (body field)
-]: any -> record<nextToken: string, outputs: table<key: string, valueString: string>> {
+]: any -> oneof<record<nextToken: string, outputs: table<key: string, valueString: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2659,7 +2668,7 @@ export def "list-component-provisioned-resources" [
   --x-amz-target: string@x-amz-target-completer-47 # required
   component_name: string # The name of the component whose provisioned resources you want.
   --next-token-body: string # A token that indicates the location of the next provisioned resource in the array of provisioned resources, after the list of provisioned resources that was previously requested. (body field)
-]: any -> record<nextToken: string, provisionedResources: table<identifier: string, name: string, provisioningEngine: string>> {
+]: any -> oneof<record<nextToken: string, provisionedResources: table<identifier: string, name: string, provisioningEngine: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2715,7 +2724,7 @@ export def "list-components" [
   --next-token-body: string # A token that indicates the location of the next component in the array of components, after the list of components that was previously requested. (body field)
   --service-instance-name: string # The name of a service instance for result list filtering. Proton returns the component attached to the service instance, if any.
   --service-name: string # The name of a service for result list filtering. Proton returns components attached to service instances of the service.
-]: any -> record<components: table<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, environmentName: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, lastModifiedAt: string, name: string, serviceInstanceName: string, serviceName: string>, nextToken: string> {
+]: any -> oneof<record<components: table<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, environmentName: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, lastModifiedAt: string, name: string, serviceInstanceName: string, serviceName: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2771,7 +2780,7 @@ export def "list-environment-account-connections" [
   --next-token-body: string # A token that indicates the location of the next environment account connection in the array of environment account connections, after the list of environment account connections that was previously requested. (body field)
   requested_by: string@requested-by-completer # The type of account making the ListEnvironmentAccountConnections request.
   --statuses: list<string> # The status details for each listed environment account connection.
-]: any -> record<environmentAccountConnections: table<arn: string, componentRoleArn: string, environmentAccountId: string, environmentName: string, id: string, lastModifiedAt: string, managementAccountId: string, requestedAt: string, roleArn: string, status: string>, nextToken: string> {
+]: any -> oneof<record<environmentAccountConnections: table<arn: string, componentRoleArn: string, environmentAccountId: string, environmentName: string, id: string, lastModifiedAt: string, managementAccountId: string, requestedAt: string, roleArn: string, status: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2823,7 +2832,7 @@ export def "list-environment-outputs" [
   --x-amz-target: string@x-amz-target-completer-50 # required
   environment_name: string # The environment name.
   --next-token-body: string # A token that indicates the location of the next environment output in the array of environment outputs, after the list of environment outputs that was previously requested. (body field)
-]: any -> record<nextToken: string, outputs: table<key: string, valueString: string>> {
+]: any -> oneof<record<nextToken: string, outputs: table<key: string, valueString: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2875,7 +2884,7 @@ export def "list-environment-provisioned-resources" [
   --x-amz-target: string@x-amz-target-completer-51 # required
   environment_name: string # The environment name.
   --next-token-body: string # A token that indicates the location of the next environment provisioned resource in the array of environment provisioned resources, after the list of environment provisioned resources that was previously requested. (body field)
-]: any -> record<nextToken: string, provisionedResources: table<identifier: string, name: string, provisioningEngine: string>> {
+]: any -> oneof<record<nextToken: string, provisionedResources: table<identifier: string, name: string, provisioningEngine: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2930,7 +2939,7 @@ export def "list-environment-template-versions" [
   --max-results-body: int # The maximum number of major or minor versions of an environment template to list. (body field)
   --next-token-body: string # A token that indicates the location of the next major or minor version in the array of major or minor versions of an environment template, after the list of major or minor versions that was previously requested. (body field)
   template_name: string # The name of the environment template.
-]: any -> record<nextToken: string, templateVersions: table<arn: string, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, status: string, statusMessage: string, templateName: string>> {
+]: any -> oneof<record<nextToken: string, templateVersions: table<arn: string, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, status: string, statusMessage: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2983,7 +2992,7 @@ export def "list-environment-templates" [
   --x-amz-target: string@x-amz-target-completer-53 # required
   --max-results-body: int # The maximum number of environment templates to list. (body field)
   --next-token-body: string # A token that indicates the location of the next environment template in the array of environment templates, after the list of environment templates that was previously requested. (body field)
-]: any -> record<nextToken: string, templates: table<arn: string, createdAt: string, description: string, displayName: string, lastModifiedAt: string, name: string, provisioning: string, recommendedVersion: string>> {
+]: any -> oneof<record<nextToken: string, templates: table<arn: string, createdAt: string, description: string, displayName: string, lastModifiedAt: string, name: string, provisioning: string, recommendedVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3014,7 +3023,6 @@ export def "list-environment-templates" [
 #
 # POST /
 # operationId: ListEnvironments
-# --environmentTemplates item shape: {majorVersion: string, templateName: string}
 export def "list-environments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3038,7 +3046,7 @@ export def "list-environments" [
   --environment-templates: list # An array of the versions of the environment template. — item shape: {majorVersion: string, templateName: string}
   --max-results-body: int # The maximum number of environments to list. (body field)
   --next-token-body: string # A token that indicates the location of the next environment in the array of environments, after the list of environments that was previously requested. (body field)
-]: any -> record<environments: table<arn: string, componentRoleArn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentAccountConnectionId: string, environmentAccountId: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, protonServiceRoleArn: string, provisioning: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>, nextToken: string> {
+]: any -> oneof<record<environments: table<arn: string, componentRoleArn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentAccountConnectionId: string, environmentAccountId: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, protonServiceRoleArn: string, provisioning: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3091,7 +3099,7 @@ export def "list-repositories" [
   --x-amz-target: string@x-amz-target-completer-55 # required
   --max-results-body: int # The maximum number of repositories to list. (body field)
   --next-token-body: string # A token that indicates the location of the next repository in the array of repositories, after the list of repositories previously requested. (body field)
-]: any -> record<nextToken: string, repositories: table<arn: string, connectionArn: string, name: string, provider: string>> {
+]: any -> oneof<record<nextToken: string, repositories: table<arn: string, connectionArn: string, name: string, provider: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3145,7 +3153,7 @@ export def "list-repository-sync-definitions" [
   repository_name: string # The repository name.
   repository_provider: string@repository-provider-completer # The repository provider.
   sync_type: string@sync-type-completer # The sync type. The only supported value is TEMPLATE_SYNC.
-]: any -> record<nextToken: string, syncDefinitions: table<branch: string, directory: string, parent: string, target: string>> {
+]: any -> oneof<record<nextToken: string, syncDefinitions: table<branch: string, directory: string, parent: string, target: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3198,7 +3206,7 @@ export def "list-service-instance-outputs" [
   --next-token-body: string # A token that indicates the location of the next output in the array of outputs, after the list of outputs that was previously requested. (body field)
   service_instance_name: string # The name of the service instance whose outputs you want.
   service_name: string # The name of the service that serviceInstanceName is associated to.
-]: any -> record<nextToken: string, outputs: table<key: string, valueString: string>> {
+]: any -> oneof<record<nextToken: string, outputs: table<key: string, valueString: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3251,7 +3259,7 @@ export def "list-service-instance-provisioned-resources" [
   --next-token-body: string # A token that indicates the location of the next provisioned resource in the array of provisioned resources, after the list of provisioned resources that was previously requested. (body field)
   service_instance_name: string # The name of the service instance whose provisioned resources you want.
   service_name: string # The name of the service that serviceInstanceName is associated to.
-]: any -> record<nextToken: string, provisionedResources: table<identifier: string, name: string, provisioningEngine: string>> {
+]: any -> oneof<record<nextToken: string, provisionedResources: table<identifier: string, name: string, provisioningEngine: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3282,7 +3290,6 @@ export def "list-service-instance-provisioned-resources" [
 #
 # POST /
 # operationId: ListServiceInstances
-# --filters item shape: {key?: "name"|"deploymentStatus"|"templateName"|"serviceName"|"deployedTemplateVersionStatus"|"environmentName"|"lastDeploymentAttemptedAtBefore"|"lastDeploymentAttemptedAtAfter"|"createdAtBefore"|"createdAtAfter", value?: string}
 export def "list-service-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3309,7 +3316,7 @@ export def "list-service-instances" [
   --service-name: string # The name of the service that the service instance belongs to.
   --sort-by: string@sort-by-completer # The field that the result list is sorted by. When you choose to sort by serviceName, service instances within each service are sorted by service instance name. Default: serviceName
   --sort-order: string@sort-order-completer # Result list sort order. Default: ASCENDING
-]: any -> record<nextToken: string, serviceInstances: table<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, environmentName: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, serviceName: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>> {
+]: any -> oneof<record<nextToken: string, serviceInstances: table<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, environmentName: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, serviceName: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3361,7 +3368,7 @@ export def "list-service-pipeline-outputs" [
   --x-amz-target: string@x-amz-target-completer-60 # required
   --next-token-body: string # A token that indicates the location of the next output in the array of outputs, after the list of outputs that was previously requested. (body field)
   service_name: string # The name of the service whose pipeline's outputs you want.
-]: any -> record<nextToken: string, outputs: table<key: string, valueString: string>> {
+]: any -> oneof<record<nextToken: string, outputs: table<key: string, valueString: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3413,7 +3420,7 @@ export def "list-service-pipeline-provisioned-resources" [
   --x-amz-target: string@x-amz-target-completer-61 # required
   --next-token-body: string # A token that indicates the location of the next provisioned resource in the array of provisioned resources, after the list of provisioned resources that was previously requested. (body field)
   service_name: string # The name of the service whose pipeline's provisioned resources you want.
-]: any -> record<nextToken: string, provisionedResources: table<identifier: string, name: string, provisioningEngine: string>> {
+]: any -> oneof<record<nextToken: string, provisionedResources: table<identifier: string, name: string, provisioningEngine: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3468,7 +3475,7 @@ export def "list-service-template-versions" [
   --max-results-body: int # The maximum number of major or minor versions of a service template to list. (body field)
   --next-token-body: string # A token that indicates the location of the next major or minor version in the array of major or minor versions of a service template, after the list of major or minor versions that was previously requested. (body field)
   template_name: string # The name of the service template.
-]: any -> record<nextToken: string, templateVersions: table<arn: string, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, status: string, statusMessage: string, templateName: string>> {
+]: any -> oneof<record<nextToken: string, templateVersions: table<arn: string, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, status: string, statusMessage: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3521,7 +3528,7 @@ export def "list-service-templates" [
   --x-amz-target: string@x-amz-target-completer-63 # required
   --max-results-body: int # The maximum number of service templates to list. (body field)
   --next-token-body: string # A token that indicates the location of the next service template in the array of service templates, after the list of service templates previously requested. (body field)
-]: any -> record<nextToken: string, templates: table<arn: string, createdAt: string, description: string, displayName: string, lastModifiedAt: string, name: string, pipelineProvisioning: string, recommendedVersion: string>> {
+]: any -> oneof<record<nextToken: string, templates: table<arn: string, createdAt: string, description: string, displayName: string, lastModifiedAt: string, name: string, pipelineProvisioning: string, recommendedVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3574,7 +3581,7 @@ export def "list-services" [
   --x-amz-target: string@x-amz-target-completer-64 # required
   --max-results-body: int # The maximum number of services to list. (body field)
   --next-token-body: string # A token that indicates the location of the next service in the array of services, after the list of services that was previously requested. (body field)
-]: any -> record<nextToken: string, services: table<arn: string, createdAt: string, description: string, lastModifiedAt: string, name: string, status: string, statusMessage: string, templateName: string>> {
+]: any -> oneof<record<nextToken: string, services: table<arn: string, createdAt: string, description: string, lastModifiedAt: string, name: string, status: string, statusMessage: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3628,7 +3635,7 @@ export def "list-tags-for-resource" [
   --max-results-body: int # The maximum number of tags to list. (body field)
   --next-token-body: string # A token that indicates the location of the next resource tag in the array of resource tags, after the list of resource tags that was previously requested. (body field)
   resource_arn: string # The Amazon Resource Name (ARN) of the resource for the listed tags.
-]: any -> record<nextToken: string, tags: table<key: string, value: string>> {
+]: any -> oneof<record<nextToken: string, tags: table<key: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3659,7 +3666,6 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: NotifyResourceDeploymentStatusChange
-# --outputs item shape: {key?: string, valueString?: string}
 export def "notify-resource-deployment-status-change" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3683,7 +3689,7 @@ export def "notify-resource-deployment-status-change" [
   resource_arn: string # The provisioned resource Amazon Resource Name (ARN).
   --status: string@status-completer # The state that a PR-based deployment can be updated to.
   --status-message: string # The deployment status message for your provisioned resource. (format: password)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3732,7 +3738,7 @@ export def "reject-environment-account-connection" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-67 # required
   id: string # The ID of the environment account connection to reject.
-]: any -> record<environmentAccountConnection: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, environmentAccountId: string, environmentName: string, id: string, lastModifiedAt: string, managementAccountId: string, requestedAt: string, roleArn: string, status: string>> {
+]: any -> oneof<record<environmentAccountConnection: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, environmentAccountId: string, environmentName: string, id: string, lastModifiedAt: string, managementAccountId: string, requestedAt: string, roleArn: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3762,7 +3768,6 @@ export def "reject-environment-account-connection" [
 #
 # POST /
 # operationId: TagResource
-# --tags item shape: {key: string, value: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3783,7 +3788,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-68 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the Proton resource to apply customer tags to.
   tags: list # A list of customer tags to apply to the Proton resource. — item shape: {key: string, value: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3833,7 +3838,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-69 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource to remove customer tags from.
   tag_keys: list<string> # A list of customer tag keys that indicate the customer tags to be removed from the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3863,7 +3868,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateAccountSettings
-# --pipelineProvisioningRepository shape: {branch: string, name: string, provider: "GITHUB"|"GITHUB_ENTERPRISE"|"BITBUCKET"}
 export def "update-account-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3886,7 +3890,7 @@ export def "update-account-settings" [
   --pipeline-codebuild-role-arn: string # The Amazon Resource Name (ARN) of the service role you want to use for provisioning pipelines. Proton assumes this role for CodeBuild-based provisioning.
   --pipeline-provisioning-repository: record # Detail input data for a linked repository branch. — shape: {branch: string, name: string, provider: "GITHUB"|"GITHUB_ENTERPRISE"|"BITBUCKET"}
   --pipeline-service-role-arn: string # The Amazon Resource Name (ARN) of the service role you want to use for provisioning pipelines. Assumed by Proton for Amazon Web Services-managed provisioning, and by customer-owned automation for self-managed provisioning. To remove a previously configured ARN, specify an empty string.
-]: any -> record<accountSettings: record<pipelineCodebuildRoleArn: string, pipelineProvisioningRepository: record<arn: string, branch: string, name: string, provider: string>, pipelineServiceRoleArn: string>> {
+]: any -> oneof<record<accountSettings: record<pipelineCodebuildRoleArn: string, pipelineProvisioningRepository: record<arn: string, branch: string, name: string, provider: string>, pipelineServiceRoleArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3942,7 +3946,7 @@ export def "update-component" [
   --service-name: string # The name of the service that serviceInstanceName is associated with. Don't specify to keep the component's current service instance attachment. Specify an empty string to detach the component from the service instance it's attached to. Specify non-empty values for both serviceInstanceName and serviceName or for neither of them.
   --service-spec: string # The service spec that you want the component to use to access service inputs. Set this only when the component is attached to a service instance. (format: password)
   --template-file: string # A path to the Infrastructure as Code (IaC) file describing infrastructure that a custom component provisions. Components support a single IaC file, even if you use Terraform as your template language. (format: password)
-]: any -> record<component: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, lastModifiedAt: string, name: string, serviceInstanceName: string, serviceName: string, serviceSpec: string>> {
+]: any -> oneof<record<component: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, lastModifiedAt: string, name: string, serviceInstanceName: string, serviceName: string, serviceSpec: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3972,7 +3976,6 @@ export def "update-component" [
 #
 # POST /
 # operationId: UpdateEnvironment
-# --provisioningRepository shape: {branch: string, name: string, provider: "GITHUB"|"GITHUB_ENTERPRISE"|"BITBUCKET"}
 export def "update-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4002,7 +4005,7 @@ export def "update-environment" [
   --spec: string # The formatted specification that defines the update. (format: password)
   --template-major-version: string # The major version of the environment to update.
   --template-minor-version: string # The minor version of the environment to update.
-]: any -> record<environment: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentAccountConnectionId: string, environmentAccountId: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, protonServiceRoleArn: string, provisioning: string, provisioningRepository: record<arn: string, branch: string, name: string, provider: string>, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>> {
+]: any -> oneof<record<environment: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, description: string, environmentAccountConnectionId: string, environmentAccountId: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, protonServiceRoleArn: string, provisioning: string, provisioningRepository: record<arn: string, branch: string, name: string, provider: string>, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4054,7 +4057,7 @@ export def "update-environment-account-connection" [
   --component-role-arn: string # The Amazon Resource Name (ARN) of the IAM service role that Proton uses when provisioning directly defined components in the associated environment account. It determines the scope of infrastructure that a component can provision in the account. The environment account connection must have a componentRoleArn to allow directly defined components to be associated with any environments running in the account. For more information about components, see Proton components (https://docs.aws.amazon.com/proton/latest/userguide/ag-components.html) in the Proton User Guide.
   id: string # The ID of the environment account connection to update.
   --role-arn: string # The Amazon Resource Name (ARN) of the IAM service role that's associated with the environment account connection to update.
-]: any -> record<environmentAccountConnection: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, environmentAccountId: string, environmentName: string, id: string, lastModifiedAt: string, managementAccountId: string, requestedAt: string, roleArn: string, status: string>> {
+]: any -> oneof<record<environmentAccountConnection: record<arn: string, codebuildRoleArn: string, componentRoleArn: string, environmentAccountId: string, environmentName: string, id: string, lastModifiedAt: string, managementAccountId: string, requestedAt: string, roleArn: string, status: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4105,7 +4108,7 @@ export def "update-environment-template" [
   --description: string # A description of the environment template update. (format: password)
   --display-name: string # The name of the environment template to update as displayed in the developer interface. (format: password)
   name: string # The name of the environment template to update.
-]: any -> record<environmentTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, provisioning: string, recommendedVersion: string>> {
+]: any -> oneof<record<environmentTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, provisioning: string, recommendedVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4158,7 +4161,7 @@ export def "update-environment-template-version" [
   minor_version: string # To update a minor version of an environment template, include minorVersion.
   --status: string@status-completer-1 # The status of the environment template minor version to update.
   template_name: string # The name of the environment template.
-]: any -> record<environmentTemplateVersion: record<arn: string, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, templateName: string>> {
+]: any -> oneof<record<environmentTemplateVersion: record<arn: string, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4209,7 +4212,7 @@ export def "update-service" [
   --description: string # The edited service description. (format: password)
   name: string # The name of the service to edit.
   --spec: string # Lists the service instances to add and the existing service instances to remain. Omit the existing service instances to delete from the list. Don't include edits to the existing service instances or pipeline. For more information, see Edit a service (https://docs.aws.amazon.com/proton/latest/userguide/ag-svc-update.html) in the Proton User Guide. (format: password)
-]: any -> record<service: record<arn: string, branchName: string, createdAt: string, description: string, lastModifiedAt: string, name: string, pipeline: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>, repositoryConnectionArn: string, repositoryId: string, spec: string, status: string, statusMessage: string, templateName: string>> {
+]: any -> oneof<record<service: record<arn: string, branchName: string, createdAt: string, description: string, lastModifiedAt: string, name: string, pipeline: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>, repositoryConnectionArn: string, repositoryId: string, spec: string, status: string, statusMessage: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4264,7 +4267,7 @@ export def "update-service-instance" [
   --spec: string # The formatted specification that defines the service instance update. (format: password)
   --template-major-version: string # The major version of the service template to update.
   --template-minor-version: string # The minor version of the service template to update.
-]: any -> record<serviceInstance: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, serviceName: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>> {
+]: any -> oneof<record<serviceInstance: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, environmentName: string, lastClientRequestToken: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, name: string, serviceName: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4317,7 +4320,7 @@ export def "update-service-pipeline" [
   spec: string # The spec for the service pipeline to update. (format: password)
   --template-major-version: string # The major version of the service template that was used to create the service that the pipeline is associated with.
   --template-minor-version: string # The minor version of the service template that was used to create the service that the pipeline is associated with.
-]: any -> record<pipeline: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>> {
+]: any -> oneof<record<pipeline: record<arn: string, createdAt: string, deploymentStatus: string, deploymentStatusMessage: string, lastDeploymentAttemptedAt: string, lastDeploymentSucceededAt: string, spec: string, templateMajorVersion: string, templateMinorVersion: string, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4367,7 +4370,7 @@ export def "update-service-sync-blocker" [
   --x-amz-target: string@x-amz-target-completer-79 # required
   id: string # The ID of the service sync blocker.
   resolved_reason: string # The reason the service sync blocker was resolved.
-]: any -> record<serviceInstanceName: string, serviceName: string, serviceSyncBlocker: record<contexts: list<record>, createdAt: string, createdReason: string, id: string, resolvedAt: string, resolvedReason: string, status: string, type: string>> {
+]: any -> oneof<record<serviceInstanceName: string, serviceName: string, serviceSyncBlocker: record<contexts: list<record>, createdAt: string, createdReason: string, id: string, resolvedAt: string, resolvedReason: string, status: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4420,7 +4423,7 @@ export def "update-service-sync-config" [
   repository_name: string # The name of the repository where the Proton Ops file is found.
   repository_provider: string@repository-provider-completer # The name of the repository provider where the Proton Ops file is found.
   service_name: string # The name of the service the Proton Ops file is for.
-]: any -> record<serviceSyncConfig: record<branch: string, filePath: string, repositoryName: string, repositoryProvider: string, serviceName: string>> {
+]: any -> oneof<record<serviceSyncConfig: record<branch: string, filePath: string, repositoryName: string, repositoryProvider: string, serviceName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4471,7 +4474,7 @@ export def "update-service-template" [
   --description: string # A description of the service template update. (format: password)
   --display-name: string # The name of the service template to update that's displayed in the developer interface. (format: password)
   name: string # The name of the service template to update.
-]: any -> record<serviceTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, pipelineProvisioning: string, recommendedVersion: string>> {
+]: any -> oneof<record<serviceTemplate: record<arn: string, createdAt: string, description: string, displayName: string, encryptionKey: string, lastModifiedAt: string, name: string, pipelineProvisioning: string, recommendedVersion: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4501,7 +4504,6 @@ export def "update-service-template" [
 #
 # POST /
 # operationId: UpdateServiceTemplateVersion
-# --compatibleEnvironmentTemplates item shape: {majorVersion: string, templateName: string}
 export def "update-service-template-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4527,7 +4529,7 @@ export def "update-service-template-version" [
   --status: string@status-completer-1 # The status of the service template minor version to update.
   --supported-component-sources: list<string> # An array of supported component sources. Components with supported sources can be attached to service instances based on this service template version. A change to supportedComponentSources doesn't impact existing component attachments to instances based on this template version. A change only affects later associations. For more information about components, see Proton components (https://docs.aws.amazon.com/proton/latest/userguide/ag-components.html) in the Proton User Guide.
   template_name: string # The name of the service template.
-]: any -> record<serviceTemplateVersion: record<arn: string, compatibleEnvironmentTemplates: list<record>, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, supportedComponentSources: list<string>, templateName: string>> {
+]: any -> oneof<record<serviceTemplateVersion: record<arn: string, compatibleEnvironmentTemplates: list<record>, createdAt: string, description: string, lastModifiedAt: string, majorVersion: string, minorVersion: string, recommendedMinorVersion: string, schema: string, status: string, statusMessage: string, supportedComponentSources: list<string>, templateName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4581,7 +4583,7 @@ export def "update-template-sync-config" [
   --subdirectory: string # A subdirectory path to your template bundle version. When included, limits the template bundle search to this repository directory.
   template_name: string # The synced template name.
   template_type: string@template-type-completer # The synced template type.
-]: any -> record<templateSyncConfig: record<branch: string, repositoryName: string, repositoryProvider: string, subdirectory: string, templateName: string, templateType: string>> {
+]: any -> oneof<record<templateSyncConfig: record<branch: string, repositoryName: string, repositoryProvider: string, subdirectory: string, templateName: string, templateType: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

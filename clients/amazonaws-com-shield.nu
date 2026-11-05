@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -140,9 +163,9 @@ def x-amz-target-completer-35 [] { ["AWSShield_20160616.UpdateSubscription"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-drt-log-bucket" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-drt-log-bucket" "associate-drt-role" "associate-health-check" "associate-proactive-engagement-details" "create-protection" "create-protection-group" "create-subscription" "delete-protection" "delete-protection-group" "delete-subscription" "describe-attack" "describe-attack-statistics" "describe-drt-access" "describe-emergency-contact-settings" "describe-protection" "describe-protection-group" "describe-subscription" "disable-application-layer-automatic-response" "disable-proactive-engagement" "disassociate-drt-log-bucket" "disassociate-drt-role" "disassociate-health-check" "enable-application-layer-automatic-response" "enable-proactive-engagement" "get-subscription-state" "list-attacks" "list-protection-groups" "list-protections" "list-resources-in-protection-group" "list-tags-for-resource" "tag-resource" "untag-resource" "update-application-layer-automatic-response" "update-emergency-contact-settings" "update-protection-group" "update-subscription" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -183,7 +206,7 @@ export def "associate-drt-log-bucket" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer # required
   log_bucket: string # The Amazon S3 bucket that contains the logs that you want to share.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -232,7 +255,7 @@ export def "associate-drt-role" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-1 # required
   role_arn: string # The Amazon Resource Name (ARN) of the role the SRT will use to access your Amazon Web Services account. Prior to making the AssociateDRTRole request, you must attach the AWSShieldDRTAccessPolicy (https://console.aws.amazon.com/iam/home?#/policies/arn:aws:iam::aws:policy/service-role/AWSShieldDRTAccessPolicy) managed policy to this role. For more information see Attaching and Detaching IAM Policies ( https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_manage-attach-detach.html).
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -282,7 +305,7 @@ export def "associate-health-check" [
   --x-amz-target: string@x-amz-target-completer-2 # required
   protection_id: string # The unique identifier (ID) for the Protection object to add the health check association to.
   health_check_arn: string # The Amazon Resource Name (ARN) of the health check to associate with the protection.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -312,7 +335,6 @@ export def "associate-health-check" [
 #
 # POST /
 # operationId: AssociateProactiveEngagementDetails
-# --EmergencyContactList item shape: {EmailAddress: string, PhoneNumber?: string, ContactNotes?: string}
 export def "associate-proactive-engagement-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -332,7 +354,7 @@ export def "associate-proactive-engagement-details" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   emergency_contact_list: list # A list of email addresses and phone numbers that the Shield Response Team (SRT) can use to contact you for escalations to the SRT and to initiate proactive customer support. To enable proactive engagement, the contact list must include at least one phone number. The contacts that you provide here replace any contacts that were already defined. If you already have contacts defined and want to use them, retrieve the list using DescribeEmergencyContactSettings and then provide it here. — item shape: {EmailAddress: string, PhoneNumber?: string, ContactNotes?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -362,7 +384,6 @@ export def "associate-proactive-engagement-details" [
 #
 # POST /
 # operationId: CreateProtection
-# --Tags item shape: {Key?: string, Value?: string}
 export def "create-protection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -384,7 +405,7 @@ export def "create-protection" [
   name: string # Friendly name for the Protection you are creating.
   resource_arn: string # The ARN (Amazon Resource Name) of the resource to be protected. The ARN should be in one of the following formats: For an Application Load Balancer: arn:aws:elasticloadbalancing:region:account-id:loadbalancer/app/load-balancer-name/load-balancer-id For an Elastic Load Balancer (Classic Load Balancer): arn:aws:elasticloadbalancing:region:account-id:loadbalancer/load-balancer-name For an Amazon CloudFront distribution: arn:aws:cloudfront::account-id:distribution/distribution-id For an Global Accelerator standard accelerator: arn:aws:globalaccelerator::account-id:accelerator/accelerator-id For Amazon Route 53: arn:aws:route53:::hostedzone/hosted-zone-id For an Elastic IP address: arn:aws:ec2:region:account-id:eip-allocation/allocation-id
   --tags: list # One or more tag key-value pairs for the Protection object that is created. — item shape: {Key?: string, Value?: string}
-]: any -> record<ProtectionId: string> {
+]: any -> oneof<record<ProtectionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -414,7 +435,6 @@ export def "create-protection" [
 #
 # POST /
 # operationId: CreateProtectionGroup
-# --Tags item shape: {Key?: string, Value?: string}
 export def "create-protection-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -439,7 +459,7 @@ export def "create-protection-group" [
   --resource-type: string@resource-type-completer # The resource type to include in the protection group. All protected resources of this type are included in the protection group. Newly protected resources of this type are automatically added to the group. You must set this when you set Pattern to BY_RESOURCE_TYPE and you must not set it for any other Pattern setting.
   --members: list<string> # The Amazon Resource Names (ARNs) of the resources to include in the protection group. You must set this when you set Pattern to ARBITRARY and you must not set it for any other Pattern setting.
   --tags: list # One or more tag key-value pairs for the protection group. — item shape: {Key?: string, Value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -488,7 +508,7 @@ export def "create-subscription" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-6 # required
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -537,7 +557,7 @@ export def "delete-protection" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-7 # required
   protection_id: string # The unique identifier (ID) for the Protection object to be deleted.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -586,7 +606,7 @@ export def "delete-protection-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   protection_group_id: string # The name of the protection group. You use this to identify the protection group in lists and to manage the protection group, for example to update, delete, or describe it.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -637,7 +657,7 @@ export def "delete-subscription" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-9 # required
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -686,7 +706,7 @@ export def "describe-attack" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   attack_id: string # The unique identifier (ID) for the attack.
-]: any -> record<Attack: record<AttackId: string, ResourceArn: string, SubResources: list<record>, StartTime: string, EndTime: string, AttackCounters: list<record>, AttackProperties: list<record>, Mitigations: list<record>>> {
+]: any -> oneof<record<Attack: record<AttackId: string, ResourceArn: string, SubResources: list<record>, StartTime: string, EndTime: string, AttackCounters: list<record>, AttackProperties: list<record>, Mitigations: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -735,7 +755,7 @@ export def "describe-attack-statistics" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   --body: record
-]: any -> record<TimeRange: record<FromInclusive: string, ToExclusive: string>, DataItems: table<AttackVolume: record, AttackCount: int>> {
+]: any -> oneof<record<TimeRange: record<FromInclusive: string, ToExclusive: string>, DataItems: table<AttackVolume: record, AttackCount: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -784,7 +804,7 @@ export def "describe-drt-access" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   --body: record
-]: any -> record<RoleArn: string, LogBucketList: list<string>> {
+]: any -> oneof<record<RoleArn: string, LogBucketList: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -833,7 +853,7 @@ export def "describe-emergency-contact-settings" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   --body: record
-]: any -> record<EmergencyContactList: table<EmailAddress: string, PhoneNumber: string, ContactNotes: string>> {
+]: any -> oneof<record<EmergencyContactList: table<EmailAddress: string, PhoneNumber: string, ContactNotes: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -883,7 +903,7 @@ export def "describe-protection" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   --protection-id: string # The unique identifier (ID) for the Protection object to describe. You must provide either the ResourceArn of the protected resource or the ProtectionID of the protection, but not both.
   --resource-arn: string # The ARN (Amazon Resource Name) of the protected Amazon Web Services resource. You must provide either the ResourceArn of the protected resource or the ProtectionID of the protection, but not both.
-]: any -> record<Protection: record<Id: string, Name: string, ResourceArn: string, HealthCheckIds: list<string>, ProtectionArn: string, ApplicationLayerAutomaticResponseConfiguration: record<Status: string, Action: record>>> {
+]: any -> oneof<record<Protection: record<Id: string, Name: string, ResourceArn: string, HealthCheckIds: list<string>, ProtectionArn: string, ApplicationLayerAutomaticResponseConfiguration: record<Status: string, Action: record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -932,7 +952,7 @@ export def "describe-protection-group" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   protection_group_id: string # The name of the protection group. You use this to identify the protection group in lists and to manage the protection group, for example to update, delete, or describe it.
-]: any -> record<ProtectionGroup: record<ProtectionGroupId: string, Aggregation: string, Pattern: string, ResourceType: string, Members: list<string>, ProtectionGroupArn: string>> {
+]: any -> oneof<record<ProtectionGroup: record<ProtectionGroupId: string, Aggregation: string, Pattern: string, ResourceType: string, Members: list<string>, ProtectionGroupArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -981,7 +1001,7 @@ export def "describe-subscription" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   --body: record
-]: any -> record<Subscription: record<StartTime: string, EndTime: string, TimeCommitmentInSeconds: int, AutoRenew: string, Limits: list<record>, ProactiveEngagementStatus: string, SubscriptionLimits: record<ProtectionLimits: record, ProtectionGroupLimits: record>, SubscriptionArn: string>> {
+]: any -> oneof<record<Subscription: record<StartTime: string, EndTime: string, TimeCommitmentInSeconds: int, AutoRenew: string, Limits: list<record>, ProactiveEngagementStatus: string, SubscriptionLimits: record<ProtectionLimits: record, ProtectionGroupLimits: record>, SubscriptionArn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1030,7 +1050,7 @@ export def "disable-application-layer-automatic-response" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-17 # required
   resource_arn: string # The ARN (Amazon Resource Name) of the protected resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1079,7 +1099,7 @@ export def "disable-proactive-engagement" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1128,7 +1148,7 @@ export def "disassociate-drt-log-bucket" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-19 # required
   log_bucket: string # The Amazon S3 bucket that contains the logs that you want to share.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1177,7 +1197,7 @@ export def "disassociate-drt-role" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-20 # required
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1227,7 +1247,7 @@ export def "disassociate-health-check" [
   --x-amz-target: string@x-amz-target-completer-21 # required
   protection_id: string # The unique identifier (ID) for the Protection object to remove the health check association from.
   health_check_arn: string # The Amazon Resource Name (ARN) of the health check that is associated with the protection.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1257,7 +1277,6 @@ export def "disassociate-health-check" [
 #
 # POST /
 # operationId: EnableApplicationLayerAutomaticResponse
-# --Action shape: {Block?: record, Count?: record}
 export def "enable-application-layer-automatic-response" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1278,7 +1297,7 @@ export def "enable-application-layer-automatic-response" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   resource_arn: string # The ARN (Amazon Resource Name) of the protected resource.
   action: record # Specifies the action setting that Shield Advanced should use in the WAF rules that it creates on behalf of the protected resource in response to DDoS attacks. You specify this as part of the configuration for the automatic application layer DDoS mitigation feature, when you enable or update automatic mitigation. Shield Advanced creates the WAF rules in a Shield Advanced-managed rule group, inside the web ACL that you have associated with the resource. — shape: {Block?: record, Count?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1327,7 +1346,7 @@ export def "enable-proactive-engagement" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   --body: record
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1376,7 +1395,7 @@ export def "get-subscription-state" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-24 # required
   --body: record
-]: any -> record<SubscriptionState: string> {
+]: any -> oneof<record<SubscriptionState: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1406,8 +1425,6 @@ export def "get-subscription-state" [
 #
 # POST /
 # operationId: ListAttacks
-# --StartTime shape: {FromInclusive?: string, ToExclusive?: string}
-# --EndTime shape: {FromInclusive?: string, ToExclusive?: string}
 export def "list-attacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1433,7 +1450,7 @@ export def "list-attacks" [
   --end-time: record # The time range. — shape: {FromInclusive?: string, ToExclusive?: string}
   --next-token-body: string # When you request a list of objects from Shield Advanced, if the response does not include all of the remaining available objects, Shield Advanced includes a NextToken value in the response. You can retrieve the next batch of objects by requesting the list again and providing the token that was returned by the prior call in your request. You can indicate the maximum number of objects that you want Shield Advanced to return for a single call with the MaxResults setting. Shield Advanced will not return more than MaxResults objects, but may return fewer, even if more objects are still available. Whenever more objects remain that Shield Advanced has not yet returned to you, the response will include a NextToken value. On your first call to a list operation, leave this setting empty. (body field)
   --max-results-body: int # The greatest number of objects that you want Shield Advanced to return to the list request. Shield Advanced might return fewer objects than you indicate in this setting, even if more objects are available. If there are more objects remaining, Shield Advanced will always also return a NextToken value in the response. The default setting is 20. (body field)
-]: any -> record<AttackSummaries: table<AttackId: string, ResourceArn: string, StartTime: string, EndTime: string, AttackVectors: list>, NextToken: string> {
+]: any -> oneof<record<AttackSummaries: table<AttackId: string, ResourceArn: string, StartTime: string, EndTime: string, AttackVectors: list>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1464,7 +1481,6 @@ export def "list-attacks" [
 #
 # POST /
 # operationId: ListProtectionGroups
-# --InclusionFilters shape: {ProtectionGroupIds?: list<string>, Patterns?: list<string>, ResourceTypes?: list<string>, Aggregations?: list<string>}
 export def "list-protection-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1488,7 +1504,7 @@ export def "list-protection-groups" [
   --next-token-body: string # When you request a list of objects from Shield Advanced, if the response does not include all of the remaining available objects, Shield Advanced includes a NextToken value in the response. You can retrieve the next batch of objects by requesting the list again and providing the token that was returned by the prior call in your request. You can indicate the maximum number of objects that you want Shield Advanced to return for a single call with the MaxResults setting. Shield Advanced will not return more than MaxResults objects, but may return fewer, even if more objects are still available. Whenever more objects remain that Shield Advanced has not yet returned to you, the response will include a NextToken value. On your first call to a list operation, leave this setting empty. (body field)
   --max-results-body: int # The greatest number of objects that you want Shield Advanced to return to the list request. Shield Advanced might return fewer objects than you indicate in this setting, even if more objects are available. If there are more objects remaining, Shield Advanced will always also return a NextToken value in the response. The default setting is 20. (body field)
   --inclusion-filters: record # Narrows the set of protection groups that the call retrieves. You can retrieve a single protection group by its name and you can retrieve all protection groups that are configured with a specific pattern, aggregation, or resource type. You can provide up to one criteria per filter type. Shield Advanced returns the protection groups that exactly match all of the search criteria that you provide. — shape: {ProtectionGroupIds?: list<string>, Patterns?: list<string>, ResourceTypes?: list<string>, Aggregations?: list<string>}
-]: any -> record<ProtectionGroups: table<ProtectionGroupId: string, Aggregation: string, Pattern: string, ResourceType: string, Members: list, ProtectionGroupArn: string>, NextToken: string> {
+]: any -> oneof<record<ProtectionGroups: table<ProtectionGroupId: string, Aggregation: string, Pattern: string, ResourceType: string, Members: list, ProtectionGroupArn: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1519,7 +1535,6 @@ export def "list-protection-groups" [
 #
 # POST /
 # operationId: ListProtections
-# --InclusionFilters shape: {ResourceArns?: list<string>, ProtectionNames?: list<string>, ResourceTypes?: list<string>}
 export def "list-protections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1543,7 +1558,7 @@ export def "list-protections" [
   --next-token-body: string # When you request a list of objects from Shield Advanced, if the response does not include all of the remaining available objects, Shield Advanced includes a NextToken value in the response. You can retrieve the next batch of objects by requesting the list again and providing the token that was returned by the prior call in your request. You can indicate the maximum number of objects that you want Shield Advanced to return for a single call with the MaxResults setting. Shield Advanced will not return more than MaxResults objects, but may return fewer, even if more objects are still available. Whenever more objects remain that Shield Advanced has not yet returned to you, the response will include a NextToken value. On your first call to a list operation, leave this setting empty. (body field)
   --max-results-body: int # The greatest number of objects that you want Shield Advanced to return to the list request. Shield Advanced might return fewer objects than you indicate in this setting, even if more objects are available. If there are more objects remaining, Shield Advanced will always also return a NextToken value in the response. The default setting is 20. (body field)
   --inclusion-filters: record # Narrows the set of protections that the call retrieves. You can retrieve a single protection by providing its name or the ARN (Amazon Resource Name) of its protected resource. You can also retrieve all protections for a specific resource type. You can provide up to one criteria per filter type. Shield Advanced returns protections that exactly match all of the filter criteria that you provide. — shape: {ResourceArns?: list<string>, ProtectionNames?: list<string>, ResourceTypes?: list<string>}
-]: any -> record<Protections: table<Id: string, Name: string, ResourceArn: string, HealthCheckIds: list, ProtectionArn: string, ApplicationLayerAutomaticResponseConfiguration: record>, NextToken: string> {
+]: any -> oneof<record<Protections: table<Id: string, Name: string, ResourceArn: string, HealthCheckIds: list, ProtectionArn: string, ApplicationLayerAutomaticResponseConfiguration: record>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1597,7 +1612,7 @@ export def "list-resources-in-protection-group" [
   protection_group_id: string # The name of the protection group. You use this to identify the protection group in lists and to manage the protection group, for example to update, delete, or describe it.
   --next-token-body: string # When you request a list of objects from Shield Advanced, if the response does not include all of the remaining available objects, Shield Advanced includes a NextToken value in the response. You can retrieve the next batch of objects by requesting the list again and providing the token that was returned by the prior call in your request. You can indicate the maximum number of objects that you want Shield Advanced to return for a single call with the MaxResults setting. Shield Advanced will not return more than MaxResults objects, but may return fewer, even if more objects are still available. Whenever more objects remain that Shield Advanced has not yet returned to you, the response will include a NextToken value. On your first call to a list operation, leave this setting empty. (body field)
   --max-results-body: int # The greatest number of objects that you want Shield Advanced to return to the list request. Shield Advanced might return fewer objects than you indicate in this setting, even if more objects are available. If there are more objects remaining, Shield Advanced will always also return a NextToken value in the response. The default setting is 20. (body field)
-]: any -> record<ResourceArns: list<string>, NextToken: string> {
+]: any -> oneof<record<ResourceArns: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1647,7 +1662,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-29 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource to get tags for.
-]: any -> record<Tags: table<Key: string, Value: string>> {
+]: any -> oneof<record<Tags: table<Key: string, Value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1677,7 +1692,6 @@ export def "list-tags-for-resource" [
 #
 # POST /
 # operationId: TagResource
-# --Tags item shape: {Key?: string, Value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1698,7 +1712,7 @@ export def "tag-resource" [
   --x-amz-target: string@x-amz-target-completer-30 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource that you want to add or update tags for.
   tags: list # The tags that you want to modify or add to the resource. — item shape: {Key?: string, Value?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1748,7 +1762,7 @@ export def "untag-resource" [
   --x-amz-target: string@x-amz-target-completer-31 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource that you want to remove tags from.
   tag_keys: list<string> # The tag key for each tag that you want to remove from the resource.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1778,7 +1792,6 @@ export def "untag-resource" [
 #
 # POST /
 # operationId: UpdateApplicationLayerAutomaticResponse
-# --Action shape: {Block?: record, Count?: record}
 export def "update-application-layer-automatic-response" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1799,7 +1812,7 @@ export def "update-application-layer-automatic-response" [
   --x-amz-target: string@x-amz-target-completer-32 # required
   resource_arn: string # The ARN (Amazon Resource Name) of the resource.
   action: record # Specifies the action setting that Shield Advanced should use in the WAF rules that it creates on behalf of the protected resource in response to DDoS attacks. You specify this as part of the configuration for the automatic application layer DDoS mitigation feature, when you enable or update automatic mitigation. Shield Advanced creates the WAF rules in a Shield Advanced-managed rule group, inside the web ACL that you have associated with the resource. — shape: {Block?: record, Count?: record}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1829,7 +1842,6 @@ export def "update-application-layer-automatic-response" [
 #
 # POST /
 # operationId: UpdateEmergencyContactSettings
-# --EmergencyContactList item shape: {EmailAddress: string, PhoneNumber?: string, ContactNotes?: string}
 export def "update-emergency-contact-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1849,7 +1861,7 @@ export def "update-emergency-contact-settings" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-33 # required
   --emergency-contact-list: list # A list of email addresses and phone numbers that the Shield Response Team (SRT) can use to contact you if you have proactive engagement enabled, for escalations to the SRT and to initiate proactive customer support. If you have proactive engagement enabled, the contact list must include at least one phone number. — item shape: {EmailAddress: string, PhoneNumber?: string, ContactNotes?: string}
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1902,7 +1914,7 @@ export def "update-protection-group" [
   pattern: string@pattern-completer # The criteria to use to choose the protected resources for inclusion in the group. You can include all resources that have protections, provide a list of resource Amazon Resource Names (ARNs), or include all resources of a specified resource type.
   --resource-type: string@resource-type-completer # The resource type to include in the protection group. All protected resources of this type are included in the protection group. You must set this when you set Pattern to BY_RESOURCE_TYPE and you must not set it for any other Pattern setting.
   --members: list<string> # The Amazon Resource Names (ARNs) of the resources to include in the protection group. You must set this when you set Pattern to ARBITRARY and you must not set it for any other Pattern setting.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1951,7 +1963,7 @@ export def "update-subscription" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-35 # required
   --auto-renew: string@auto-renew-completer # When you initally create a subscription, AutoRenew is set to ENABLED. If ENABLED, the subscription will be automatically renewed at the end of the existing subscription period. You can change this by submitting an UpdateSubscription request. If the UpdateSubscription request does not included a value for AutoRenew, the existing value for AutoRenew remains unchanged.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

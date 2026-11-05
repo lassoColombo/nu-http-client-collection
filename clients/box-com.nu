@@ -12,28 +12,37 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,12 +111,14 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # OPTIONS — bodyless
 def send-options [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http options --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http options --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -156,6 +181,8 @@ def direction-completer-1 [] { ["ASC" "DESC"] }
 def stream-type-completer [] { ["admin_logs" "admin_logs_streaming" "all" "changes" "sync"] }
 def status-completer-2 [] { ["active" "inactive"] }
 def disposition-action-completer [] { ["permanently_delete" "remove_retention"] }
+def scope-completer [] { ["enterprise" "global"] }
+def extension-completer [] { ["jpg" "png"] }
 def accept-completer [] { ["application/json" "image/jpg" "image/png"] }
 def type-completer [] { ["file_version"] }
 def sync-state-completer [] { ["not_synced" "partially_synced" "synced"] }
@@ -164,7 +191,6 @@ def role-completer-2 [] { ["admin" "member"] }
 def invitability-level-completer [] { ["admins_and_members" "admins_only" "all_managed_users"] }
 def member-viewability-level-completer [] { ["admins_and_members" "admins_only" "all_managed_users"] }
 def assign-to-type-completer [] { ["file" "file_version" "folder" "user"] }
-def scope-completer [] { ["enterprise" "global"] }
 def conflict-resolution-completer [] { ["none" "overwrite"] }
 def display-name-completer [] { ["Classification"] }
 def scope-completer-1 [] { ["enterprise"] }
@@ -206,9 +232,9 @@ def accept-completer-2 [] { ["application/json" "application/octet-stream"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-authorize" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-authorize" "get-collaboration-whitelist-entries" "post-collaboration-whitelist-entries" "delete-collaboration-whitelist-entries-id" "get-collaboration-whitelist-entries-id" "get-collaboration-whitelist-exempt-targets" "post-collaboration-whitelist-exempt-targets" "delete-collaboration-whitelist-exempt-targets-id" "get-collaboration-whitelist-exempt-targets-id" "get-collaborations" "post-collaborations" "delete-collaborations-id" "get-collaborations-id" "put-collaborations-id" "get-collections" "get-collections-id-items" "post-comments" "delete-comments-id" "get-comments-id" "put-comments-id" "delete-device-pinners-id" "get-device-pinners-id" "get-enterprises-id-device-pinners" "get-events" "options-events" "delete-file-requests-id" "get-file-requests-id" "put-file-requests-id" "post-file-requests-id-copy" "get-file-version-legal-holds" "get-file-version-legal-holds-id" "get-file-version-retentions" "get-file-version-retentions-id" "options-files-content" "post-files-content" "post-files-upload-sessions" "delete-files-upload-sessions-id" "get-files-upload-sessions-id" "put-files-upload-sessions-id" "post-files-upload-sessions-id-commit" "get-files-upload-sessions-id-parts" "delete-files-id" "get-files-id" "post-files-id" "put-files-id" "put-files-idadd-shared-link" "get-files-idget-shared-link" "put-files-idremove-shared-link" "put-files-idupdate-shared-link" "get-files-id-collaborations" "get-files-id-comments" "get-files-id-content" "post-files-id-content" "post-files-id-copy" "get-files-id-metadata" "delete-files-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" "get-files-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" "post-files-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" "put-files-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" "delete-files-id-metadata-global-box-skills-cards" "get-files-id-metadata-global-box-skills-cards" "post-files-id-metadata-global-box-skills-cards" "put-files-id-metadata-global-box-skills-cards" "delete-files-id-metadata-id-id" "get-files-id-metadata-id-id" "post-files-id-metadata-id-id" "put-files-id-metadata-id-id" "get-files-id-tasks" "get-files-id-thumbnail-id" "delete-files-id-trash" "get-files-id-trash" "post-files-id-upload-sessions" "get-files-id-versions" "post-files-id-versions-current" "delete-files-id-versions-id" "get-files-id-versions-id" "put-files-id-versions-id" "delete-files-id-watermark" "get-files-id-watermark" "put-files-id-watermark" "get-folder-locks" "post-folder-locks" "delete-folder-locks-id" "post-folders" "get-folders-trash-items" "delete-folders-id" "get-folders-id" "post-folders-id" "put-folders-id" "put-folders-idadd-shared-link" "get-folders-idget-shared-link" "put-folders-idremove-shared-link" "put-folders-idupdate-shared-link" "get-folders-id-collaborations" "post-folders-id-copy" "get-folders-id-items" "get-folders-id-metadata" "delete-folders-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" "get-folders-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" "post-folders-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" "put-folders-id-metadata-enterprise-security-classification-6vm-vochw-u-wo" "delete-folders-id-metadata-id-id" "get-folders-id-metadata-id-id" "post-folders-id-metadata-id-id" "put-folders-id-metadata-id-id" "delete-folders-id-trash" "get-folders-id-trash" "delete-folders-id-watermark" "get-folders-id-watermark" "put-folders-id-watermark" "post-group-memberships" "delete-group-memberships-id" "get-group-memberships-id" "put-group-memberships-id" "get-groups" "post-groups" "post-groups-terminate-sessions" "delete-groups-id" "get-groups-id" "put-groups-id" "get-groups-id-collaborations" "get-groups-id-memberships" "post-invites" "get-invites-id" "get-legal-hold-policies" "post-legal-hold-policies" "delete-legal-hold-policies-id" "get-legal-hold-policies-id" "put-legal-hold-policies-id" "get-legal-hold-policy-assignments" "post-legal-hold-policy-assignments" "delete-legal-hold-policy-assignments-id" "get-legal-hold-policy-assignments-id" "get-legal-hold-policy-assignments-id-file-versions-on-hold" "get-legal-hold-policy-assignments-id-files-on-hold" "get-metadata-cascade-policies" "post-metadata-cascade-policies" "delete-metadata-cascade-policies-id" "get-metadata-cascade-policies-id" "post-metadata-cascade-policies-id-apply" "post-metadata-queries-execute-read" "get-metadata-query-indices" "get-metadata-templates" "get-metadata-templates-enterprise" "delete-metadata-templates-enterprise-security-classification-6vm-vochw-u-wo-schema" "get-metadata-templates-enterprise-security-classification-6vm-vochw-u-wo-schema" "put-metadata-templates-enterprise-security-classification-6vm-vochw-u-wo-schemaadd" "put-metadata-templates-enterprise-security-classification-6vm-vochw-u-wo-schemadelete" "put-metadata-templates-enterprise-security-classification-6vm-vochw-u-wo-schemaupdate" "get-metadata-templates-global" "post-metadata-templates-schema" "post-metadata-templates-schemaclassifications" "delete-metadata-templates-id-id-schema" "get-metadata-templates-id-id-schema" "put-metadata-templates-id-id-schema" "get-metadata-templates-id" "post-oauth2-revoke" "post-oauth2-token" "post-oauth2-tokenrefresh" "get-recent-items" "get-retention-policies" "post-retention-policies" "delete-retention-policies-id" "get-retention-policies-id" "put-retention-policies-id" "get-retention-policies-id-assignments" "post-retention-policy-assignments" "delete-retention-policy-assignments-id" "get-retention-policy-assignments-id" "get-retention-policy-assignments-id-file-versions-under-retention" "get-retention-policy-assignments-id-files-under-retention" "get-search" "get-shared-items" "get-shared-itemsfolders" "get-shared-itemsweb-links" "get-shield-information-barrier-reports" "post-shield-information-barrier-reports" "get-shield-information-barrier-reports-id" "get-shield-information-barrier-segment-members" "post-shield-information-barrier-segment-members" "delete-shield-information-barrier-segment-members-id" "get-shield-information-barrier-segment-members-id" "get-shield-information-barrier-segment-restrictions" "post-shield-information-barrier-segment-restrictions" "delete-shield-information-barrier-segment-restrictions-id" "get-shield-information-barrier-segment-restrictions-id" "get-shield-information-barrier-segments" "post-shield-information-barrier-segments" "delete-shield-information-barrier-segments-id" "get-shield-information-barrier-segments-id" "put-shield-information-barrier-segments-id" "get-shield-information-barriers" "post-shield-information-barriers" "post-shield-information-barriers-change-status" "get-shield-information-barriers-id" "get-sign-requests" "post-sign-requests" "get-sign-requests-id" "post-sign-requests-id-cancel" "post-sign-requests-id-resend" "put-skill-invocations-id" "get-storage-policies" "get-storage-policies-id" "get-storage-policy-assignments" "post-storage-policy-assignments" "delete-storage-policy-assignments-id" "get-storage-policy-assignments-id" "put-storage-policy-assignments-id" "post-task-assignments" "delete-task-assignments-id" "get-task-assignments-id" "put-task-assignments-id" "post-tasks" "delete-tasks-id" "get-tasks-id" "put-tasks-id" "get-tasks-id-assignments" "get-terms-of-service-user-statuses" "post-terms-of-service-user-statuses" "put-terms-of-service-user-statuses-id" "get-terms-of-services" "post-terms-of-services" "get-terms-of-services-id" "put-terms-of-services-id" "get-users" "post-users" "get-users-me" "post-users-terminate-sessions" "delete-users-id" "get-users-id" "put-users-id" "delete-users-id-avatar" "get-users-id-avatar" "post-users-id-avatar" "get-users-id-email-aliases" "post-users-id-email-aliases" "delete-users-id-email-aliases-id" "put-users-id-folders-0" "get-users-id-memberships" "post-web-links" "delete-web-links-id" "get-web-links-id" "post-web-links-id" "put-web-links-id" "put-web-links-idadd-shared-link" "get-web-links-idget-shared-link" "put-web-links-idremove-shared-link" "put-web-links-idupdate-shared-link" "delete-web-links-id-trash" "get-web-links-id-trash" "get-webhooks" "post-webhooks" "delete-webhooks-id" "get-webhooks-id" "put-webhooks-id" "get-workflows" "post-workflows-id-start" "post-zip-downloads" "get-zip-downloads-id-content" "get-zip-downloads-id-status" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -240,14 +266,16 @@ export def "get-authorize" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --response-type: string@response-type-completer # The type of response we'd like to receive. (format: token, e.g. code)
-  --client-id: string # The Client ID of the application that is requesting to authenticate the user. To get the Client ID for your application, log in to your Box developer console and click the **Edit Application** link for the application you're working with. In the OAuth 2.0 Parameters section of the configuration page, find the item labelled `client_id`. The text of that item is your application's Client ID. (e.g. ly1nj6n11vionaie65emwzk575hnnmrk)
+  --response-type: string@response-type-completer # The type of response we'd like to receive. (required, format: token, e.g. code)
+  --client-id: string # The Client ID of the application that is requesting to authenticate the user. To get the Client ID for your application, log in to your Box developer console and click the **Edit Application** link for the application you're working with. In the OAuth 2.0 Parameters section of the configuration page, find the item labelled `client_id`. The text of that item is your application's Client ID. (required, e.g. ly1nj6n11vionaie65emwzk575hnnmrk)
   --redirect-uri: string # The URI to which Box redirects the browser after the user has granted or denied the application permission. This URI match one of the redirect URIs in the configuration of your application. It must be a valid HTTPS URI and it needs to be able to handle the redirection to complete the next step in the OAuth 2.0 flow. Although this parameter is optional, it must be a part of the authorization URL if you configured multiple redirect URIs for the application in the developer console. A missing parameter causes a `redirect_uri_missing` error after the user grants application access. (format: url, e.g. http://example.com/auth/callback)
   --state: string # A custom string of your choice. Box will pass the same string to the redirect URL when authentication is complete. This parameter can be used to identify a user on redirect, as well as protect against hijacked sessions and other exploits. (e.g. my_state)
   --scope: string # A comma-separated list of application scopes you'd like to authenticate the user for. This defaults to all the scopes configured for the application in its configuration page. (e.g. admin_readwrite)
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default "https://account.box.com/api/oauth2")
+  let response_type = ($response_type | default "code")
+  if ($client_id == null) { error make --unspanned { msg: "required query parameter 'client_id' missing: pass --client-id" } }
   let qp = [(serialize-qp "response_type" $response_type "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authorize" $qp $auth.query)
   let accept_val = "text/html"
@@ -282,7 +310,7 @@ export def "get-collaboration-whitelist-entries" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<created_at: string, direction: string, domain: string, enterprise: record, id: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -319,7 +347,7 @@ export def "post-collaboration-whitelist-entries" [
   --dry-run(-n) # Return the request that would be sent without executing it
   direction: string@direction-completer # The direction in which to allow collaborations. (e.g. inbound)
   domain: string # The domain to add to the list of allowed domains. (e.g. example.com)
-]: any -> record<created_at: string, direction: string, domain: string, enterprise: record<id: string, name: string, type: string>, id: string, type: string> {
+]: any -> oneof<record<created_at: string, direction: string, domain: string, enterprise: record<id: string, name: string, type: string>, id: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -357,7 +385,7 @@ export def "delete-collaboration-whitelist-entries-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collaboration_whitelist_entry_id | is-empty) { error make --unspanned { msg: "path parameter 'collaboration_whitelist_entry_id' must be non-empty" } }
@@ -393,7 +421,7 @@ export def "get-collaboration-whitelist-entries-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, direction: string, domain: string, enterprise: record<id: string, name: string, type: string>, id: string, type: string> {
+]: nothing -> oneof<record<created_at: string, direction: string, domain: string, enterprise: record<id: string, name: string, type: string>, id: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collaboration_whitelist_entry_id | is-empty) { error make --unspanned { msg: "path parameter 'collaboration_whitelist_entry_id' must be non-empty" } }
@@ -430,7 +458,7 @@ export def "get-collaboration-whitelist-exempt-targets" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<created_at: string, enterprise: record, id: string, modified_at: string, type: string, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -455,7 +483,6 @@ export def "get-collaboration-whitelist-exempt-targets" [
 #
 # POST /collaboration_whitelist_exempt_targets
 # operationId: post_collaboration_whitelist_exempt_targets
-# --user shape: {id: string}
 export def "post-collaboration-whitelist-exempt-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -467,7 +494,7 @@ export def "post-collaboration-whitelist-exempt-targets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   user: record # The user to exempt. — shape: {id: string}
-]: any -> record<created_at: string, enterprise: record<id: string, name: string, type: string>, id: string, modified_at: string, type: string, user: record<id: string, name: string, type: string>> {
+]: any -> oneof<record<created_at: string, enterprise: record<id: string, name: string, type: string>, id: string, modified_at: string, type: string, user: record<id: string, name: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -505,7 +532,7 @@ export def "delete-collaboration-whitelist-exempt-targets-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collaboration_whitelist_exempt_target_id | is-empty) { error make --unspanned { msg: "path parameter 'collaboration_whitelist_exempt_target_id' must be non-empty" } }
@@ -541,7 +568,7 @@ export def "get-collaboration-whitelist-exempt-targets-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, enterprise: record<id: string, name: string, type: string>, id: string, modified_at: string, type: string, user: record<id: string, name: string, type: string>> {
+]: nothing -> oneof<record<created_at: string, enterprise: record<id: string, name: string, type: string>, id: string, modified_at: string, type: string, user: record<id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collaboration_whitelist_exempt_target_id | is-empty) { error make --unspanned { msg: "path parameter 'collaboration_whitelist_exempt_target_id' must be non-empty" } }
@@ -576,13 +603,14 @@ export def "get-collaborations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --status: string@status-completer # The status of the collaborations to retrieve (e.g. pending)
+  --status: string@status-completer # The status of the collaborations to retrieve (required, e.g. pending)
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --offset: int # The offset of the item at which to begin the response. Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, offset: int, order: table<by: string, direction: string>, total_count: int, entries: table<acceptance_requirements_status: record, accessible_by: record, acknowledged_at: string, created_at: string, created_by: record, expires_at: string, id: string, invite_email: string, item: record, modified_at: string, role: string, status: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  let status = ($status | default "pending")
   let qp = [(serialize-qp "status" $status "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/collaborations" $qp $auth.query)
   let accept_val = "application/json"
@@ -605,8 +633,6 @@ export def "get-collaborations" [
 #
 # POST /collaborations
 # operationId: post_collaborations
-# --accessible_by shape: {id?: string, login?: string, type: "user"|"group"}
-# --item shape: {id: string, type: "file"|"folder"}
 export def "post-collaborations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -624,7 +650,7 @@ export def "post-collaborations" [
   --expires-at: string # Set the expiration date for the collaboration. At this date, the collaboration will be automatically removed from the item. This feature will only work if the **Automatically remove invited collaborators: Allow folder owners to extend the expiry date** setting has been enabled in the **Enterprise Settings** of the **Admin Console**. When the setting is not enabled, collaborations can not have an expiry date and a value for this field will be result in an error. (format: date-time, e.g. 2019-08-29T23:59:00-07:00)
   item: record # The item to attach the comment to. — shape: {id: string, type: "file"|"folder"}
   role: string@role-completer # The level of access granted. (e.g. editor)
-]: any -> record<acceptance_requirements_status: record<strong_password_requirement: record<enterprise_has_strong_password_required_for_external_users: bool, user_has_strong_password: bool>, terms_of_service_requirement: record<is_accepted: bool, terms_of_service: record>, two_factor_authentication_requirement: record<enterprise_has_two_factor_auth_enabled: bool, user_has_two_factor_authentication_enabled: bool>>, accessible_by: record, acknowledged_at: string, created_at: string, created_by: record, expires_at: string, id: string, invite_email: string, item: record, modified_at: string, role: string, status: string, type: string> {
+]: any -> oneof<record<acceptance_requirements_status: record<strong_password_requirement: record<enterprise_has_strong_password_required_for_external_users: bool, user_has_strong_password: bool>, terms_of_service_requirement: record<is_accepted: bool, terms_of_service: record>, two_factor_authentication_requirement: record<enterprise_has_two_factor_auth_enabled: bool, user_has_two_factor_authentication_enabled: bool>>, accessible_by: record<id: string, type: string, login: string, name: string>, acknowledged_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, expires_at: string, id: string, invite_email: string, item: record, modified_at: string, role: string, status: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -663,7 +689,7 @@ export def "delete-collaborations-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collaboration_id | is-empty) { error make --unspanned { msg: "path parameter 'collaboration_id' must be non-empty" } }
@@ -700,7 +726,7 @@ export def "get-collaborations-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record<acceptance_requirements_status: record<strong_password_requirement: record<enterprise_has_strong_password_required_for_external_users: bool, user_has_strong_password: bool>, terms_of_service_requirement: record<is_accepted: bool, terms_of_service: record>, two_factor_authentication_requirement: record<enterprise_has_two_factor_auth_enabled: bool, user_has_two_factor_authentication_enabled: bool>>, accessible_by: record, acknowledged_at: string, created_at: string, created_by: record, expires_at: string, id: string, invite_email: string, item: record, modified_at: string, role: string, status: string, type: string> {
+]: nothing -> oneof<record<acceptance_requirements_status: record<strong_password_requirement: record<enterprise_has_strong_password_required_for_external_users: bool, user_has_strong_password: bool>, terms_of_service_requirement: record<is_accepted: bool, terms_of_service: record>, two_factor_authentication_requirement: record<enterprise_has_two_factor_auth_enabled: bool, user_has_two_factor_authentication_enabled: bool>>, accessible_by: record<id: string, type: string, login: string, name: string>, acknowledged_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, expires_at: string, id: string, invite_email: string, item: record, modified_at: string, role: string, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collaboration_id | is-empty) { error make --unspanned { msg: "path parameter 'collaboration_id' must be non-empty" } }
@@ -741,7 +767,7 @@ export def "put-collaborations-id" [
   --expires-at: string # Update the expiration date for the collaboration. At this date, the collaboration will be automatically removed from the item. This feature will only work if the **Automatically remove invited collaborators: Allow folder owners to extend the expiry date** setting has been enabled in the **Enterprise Settings** of the **Admin Console**. When the setting is not enabled, collaborations can not have an expiry date and a value for this field will be result in an error. Additionally, a collaboration can only be given an expiration if it was created after the **Automatically remove invited collaborator** setting was enabled. (format: date-time, e.g. 2019-08-29T23:59:00-07:00)
   role: string@role-completer-1 # The level of access granted. (e.g. editor)
   --status: string@status-completer-1 # Set the status of a `pending` collaboration invitation, effectively accepting, or rejecting the invite. (e.g. accepted)
-]: any -> record<acceptance_requirements_status: record<strong_password_requirement: record<enterprise_has_strong_password_required_for_external_users: bool, user_has_strong_password: bool>, terms_of_service_requirement: record<is_accepted: bool, terms_of_service: record>, two_factor_authentication_requirement: record<enterprise_has_two_factor_auth_enabled: bool, user_has_two_factor_authentication_enabled: bool>>, accessible_by: record, acknowledged_at: string, created_at: string, created_by: record, expires_at: string, id: string, invite_email: string, item: record, modified_at: string, role: string, status: string, type: string> {
+]: any -> oneof<record<acceptance_requirements_status: record<strong_password_requirement: record<enterprise_has_strong_password_required_for_external_users: bool, user_has_strong_password: bool>, terms_of_service_requirement: record<is_accepted: bool, terms_of_service: record>, two_factor_authentication_requirement: record<enterprise_has_two_factor_auth_enabled: bool, user_has_two_factor_authentication_enabled: bool>>, accessible_by: record<id: string, type: string, login: string, name: string>, acknowledged_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, expires_at: string, id: string, invite_email: string, item: record, modified_at: string, role: string, status: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -782,7 +808,7 @@ export def "get-collections" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --offset: int # The offset of the item at which to begin the response. Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, offset: int, order: table<by: string, direction: string>, total_count: int, entries: table<collection_type: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -821,7 +847,7 @@ export def "get-collections-id-items" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --offset: int # The offset of the item at which to begin the response. Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, offset: int, order: table<by: string, direction: string>, total_count: int, entries: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -847,7 +873,6 @@ export def "get-collections-id-items" [
 #
 # POST /comments
 # operationId: post_comments
-# --item shape: {id: string, type: "file"|"comment"}
 export def "post-comments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -862,7 +887,7 @@ export def "post-comments" [
   --item: record # The item to attach the comment to. — shape: {id: string, type: "file"|"comment"}
   message: string # The text of the comment. To mention a user, use the `tagged_message` parameter instead. (e.g. Review completed!)
   --tagged-message: string # The text of the comment, including `@[user_id:name]` somewhere in the message to mention another user, which will send them an email notification, letting them know they have been mentioned. The `user_id` is the target user's ID, where the `name` can be any custom phrase. In the Box UI this name will link to the user's profile. If you are not mentioning another user, use `message` instead. (e.g. @[1234:John] Review completed!)
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, is_reply_comment: bool, item: record<id: string, type: string>, message: string, modified_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -901,7 +926,7 @@ export def "delete-comments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
@@ -938,7 +963,7 @@ export def "get-comments-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record {
+]: nothing -> oneof<record<id: string, type: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, is_reply_comment: bool, item: record<id: string, type: string>, message: string, modified_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
@@ -977,7 +1002,7 @@ export def "put-comments-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --message: string # The text of the comment to update (e.g. Review completed!)
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, is_reply_comment: bool, item: record<id: string, type: string>, message: string, modified_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1017,7 +1042,7 @@ export def "delete-device-pinners-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_pinner_id | is-empty) { error make --unspanned { msg: "path parameter 'device_pinner_id' must be non-empty" } }
@@ -1053,7 +1078,7 @@ export def "get-device-pinners-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, owned_by: record, product_name: string, type: string> {
+]: nothing -> oneof<record<id: string, owned_by: record<id: string, type: string, login: string, name: string>, product_name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($device_pinner_id | is-empty) { error make --unspanned { msg: "path parameter 'device_pinner_id' must be non-empty" } }
@@ -1092,7 +1117,7 @@ export def "get-enterprises-id-device-pinners" [
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --direction: string@direction-completer-1 # The direction to sort results in. This can be either in alphabetical ascending (`ASC`) or descending (`DESC`) order. (e.g. ASC)
-]: nothing -> record<entries: table<id: string, owned_by: record, product_name: string, type: string>, limit: int, next_marker: int, order: table<by: string, direction: string>> {
+]: nothing -> oneof<record<entries: table<id: string, owned_by: record, product_name: string, type: string>, limit: int, next_marker: int, order: table<by: string, direction: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($enterprise_id | is-empty) { error make --unspanned { msg: "path parameter 'enterprise_id' must be non-empty" } }
@@ -1134,7 +1159,7 @@ export def "get-events" [
   --event-type: list<string> # A comma-separated list of events to filter by. This can only be used when requesting the events with a `stream_type` of `admin_logs` or `adming_logs_streaming`. For any other `stream_type` this value will be ignored. (e.g. [ACCESS_GRANTED])
   --created-after: string # The lower bound date and time to return events for. This can only be used when requesting the events with a `stream_type` of `admin_logs`. For any other `stream_type` this value will be ignored. (format: date-time, e.g. 2012-12-12T10:53:43-08:00)
   --created-before: string # The upper bound date and time to return events for. This can only be used when requesting the events with a `stream_type` of `admin_logs`. For any other `stream_type` this value will be ignored. (format: date-time, e.g. 2013-12-12T10:53:43-08:00)
-]: nothing -> record<chunk_size: int, entries: table<additional_details: record, created_at: string, created_by: record, event_id: string, event_type: record, recorded_at: string, session_id: string, source: record, type: string>, next_stream_position: string> {
+]: nothing -> oneof<record<chunk_size: int, entries: table<additional_details: record, created_at: string, created_by: record, event_id: string, event_type: string, recorded_at: string, session_id: string, source: record, type: string>, next_stream_position: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stream_type" $stream_type "scalar") (serialize-qp "stream_position" $stream_position "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "event_type" $event_type "csv") (serialize-qp "created_after" $created_after "scalar") (serialize-qp "created_before" $created_before "scalar")] | flatten | str join "&"
@@ -1169,7 +1194,7 @@ export def "options-events" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/events" $auth.query)
@@ -1204,7 +1229,7 @@ export def "delete-file-requests-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_request_id | is-empty) { error make --unspanned { msg: "path parameter 'file_request_id' must be non-empty" } }
@@ -1240,7 +1265,7 @@ export def "get-file-requests-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, created_by: record, description: string, etag: string, expires_at: string, folder: record, id: string, is_description_required: bool, is_email_required: bool, status: string, title: string, type: string, updated_at: string, updated_by: record, url: string> {
+]: nothing -> oneof<record<created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, etag: string, expires_at: string, folder: record<etag: string, id: string, type: string, name: string, sequence_id: string>, id: string, is_description_required: bool, is_email_required: bool, status: string, title: string, type: string, updated_at: string, updated_by: record<id: string, type: string, login: string, name: string>, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_request_id | is-empty) { error make --unspanned { msg: "path parameter 'file_request_id' must be non-empty" } }
@@ -1283,7 +1308,7 @@ export def "put-file-requests-id" [
   --is-email-required: oneof<nothing, bool> # Whether a file request submitter is required to provide their email address. When this setting is set to true, the Box UI will show an email field on the file request form. This will default to the value on the existing file request. (e.g. true)
   --status: string@status-completer-2 # An optional new status of the file request. When the status is set to `inactive`, the file request will no longer accept new submissions, and any visitor to the file request URL will receive a `HTTP 404` status code. This will default to the value on the existing file request. (e.g. active)
   --title: string # An optional new title for the file request. This can be used to change the title of the file request. This will default to the value on the existing file request. (e.g. Please upload required documents)
-]: any -> record<created_at: string, created_by: record, description: string, etag: string, expires_at: string, folder: record, id: string, is_description_required: bool, is_email_required: bool, status: string, title: string, type: string, updated_at: string, updated_by: record, url: string> {
+]: any -> oneof<record<created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, etag: string, expires_at: string, folder: record<etag: string, id: string, type: string, name: string, sequence_id: string>, id: string, is_description_required: bool, is_email_required: bool, status: string, title: string, type: string, updated_at: string, updated_by: record<id: string, type: string, login: string, name: string>, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1313,7 +1338,6 @@ export def "put-file-requests-id" [
 #
 # POST /file_requests/{file_request_id}/copy
 # operationId: post_file_requests_id_copy
-# --folder shape: {id: string, type?: "folder"}
 export def "post-file-requests-id-copy" [
   file_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1332,7 +1356,7 @@ export def "post-file-requests-id-copy" [
   --status: string@status-completer-2 # An optional new status of the file request. When the status is set to `inactive`, the file request will no longer accept new submissions, and any visitor to the file request URL will receive a `HTTP 404` status code. This will default to the value on the existing file request. (e.g. active)
   --title: string # An optional new title for the file request. This can be used to change the title of the file request. This will default to the value on the existing file request. (e.g. Please upload required documents)
   folder: record # The folder to associate the new file request to. — shape: {id: string, type?: "folder"}
-]: any -> record<created_at: string, created_by: record, description: string, etag: string, expires_at: string, folder: record, id: string, is_description_required: bool, is_email_required: bool, status: string, title: string, type: string, updated_at: string, updated_by: record, url: string> {
+]: any -> oneof<record<created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, etag: string, expires_at: string, folder: record<etag: string, id: string, type: string, name: string, sequence_id: string>, id: string, is_description_required: bool, is_email_required: bool, status: string, title: string, type: string, updated_at: string, updated_by: record<id: string, type: string, login: string, name: string>, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1370,12 +1394,13 @@ export def "get-file-version-legal-holds" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --policy-id: string # The ID of the legal hold policy to get the file version legal holds for. (e.g. 133870)
+  --policy-id: string # The ID of the legal hold policy to get the file version legal holds for. (required, e.g. 133870)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<deleted_at: string, file: record, file_version: record, id: string, legal_hold_policy_assignments: list, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($policy_id == null) { error make --unspanned { msg: "required query parameter 'policy_id' missing: pass --policy-id" } }
   let qp = [(serialize-qp "policy_id" $policy_id "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/file_version_legal_holds" $qp $auth.query)
   let accept_val = "application/json"
@@ -1409,7 +1434,7 @@ export def "get-file-version-legal-holds-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<deleted_at: string, file: record, file_version: record, id: string, legal_hold_policy_assignments: list<record>, type: string> {
+]: nothing -> oneof<record<deleted_at: string, file: record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string>, file_version: record<id: string, type: string, sha1: string>, id: string, legal_hold_policy_assignments: table<id: string, type: string, assigned_at: string, assigned_by: record, assigned_to: record, deleted_at: string, legal_hold_policy: record>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_version_legal_hold_id | is-empty) { error make --unspanned { msg: "path parameter 'file_version_legal_hold_id' must be non-empty" } }
@@ -1452,7 +1477,7 @@ export def "get-file-version-retentions" [
   --disposition-after: string # Filters results by files that will have their disposition come into effect after this date. (e.g. 2012-12-19T10:34:23-08:00)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<applied_at: string, disposition_at: string, file: record, file_version: record, id: string, type: string, winning_retention_policy: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_id" $file_id "scalar") (serialize-qp "file_version_id" $file_version_id "scalar") (serialize-qp "policy_id" $policy_id "scalar") (serialize-qp "disposition_action" $disposition_action "scalar") (serialize-qp "disposition_before" $disposition_before "scalar") (serialize-qp "disposition_after" $disposition_after "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
@@ -1488,7 +1513,7 @@ export def "get-file-version-retentions-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<applied_at: string, disposition_at: string, file: record, file_version: record, id: string, type: string, winning_retention_policy: record> {
+]: nothing -> oneof<record<applied_at: string, disposition_at: string, file: record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string>, file_version: record<id: string, type: string, sha1: string>, id: string, type: string, winning_retention_policy: record<id: string, type: string, disposition_action: string, policy_name: string, retention_length: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_version_retention_id | is-empty) { error make --unspanned { msg: "path parameter 'file_version_retention_id' must be non-empty" } }
@@ -1523,7 +1548,7 @@ export def "options-files-content" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files/content" $auth.query)
@@ -1547,7 +1572,6 @@ export def "options-files-content" [
 #
 # POST /files/content
 # operationId: post_files_content
-# --attributes shape: {content_created_at?: string, content_modified_at?: string, name: string, parent: record}
 export def "post-files-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1562,7 +1586,7 @@ export def "post-files-content" [
   --content-md5: string # An optional header containing the SHA1 hash of the file to ensure that the file was not corrupted in transit. (e.g. 134b65991ed521fcfe4724b7d814ab8ded5185dc)
   attributes: record # The additional attributes of the file being uploaded. Mainly the name and the parent folder. These attributes are part of the multi part request body and are in JSON format. The `attributes` part of the body must come **before** the `file` part. Requests that do not follow this format when uploading the file will receive a HTTP `400` error with a `metadata_after_file_contents` error code. — shape: {content_created_at?: string, content_modified_at?: string, name: string, parent: record}
   file: string # The content of the file to upload to Box. The `attributes` part of the body must come **before** the `file` part. Requests that do not follow this format when uploading the file will receive a HTTP `400` error with a `metadata_after_file_contents` error code. (format: binary)
-]: any -> record<entries: list<record>, total_count: int> {
+]: any -> oneof<record<entries: table<etag: string, id: string, type: string, file_version: record, name: string, sequence_id: string, sha1: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record, description: string, item_status: string, modified_at: string, modified_by: record, owned_by: record, parent: record, path_collection: record, purged_at: string, shared_link: record, size: int, trashed_at: string>, total_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.box.com/api/2.0")
@@ -1574,8 +1598,8 @@ export def "post-files-content" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"content-md5": $content_md5} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -1607,7 +1631,7 @@ export def "post-files-upload-sessions" [
   file_name: string # The name of new file (e.g. Project.mov)
   file_size: int # The total number of bytes of the file to be uploaded (format: int64, e.g. 104857600)
   folder_id: string # The ID of the folder to upload the new file to. (e.g. 0)
-]: any -> record<id: string, num_parts_processed: int, part_size: int, session_endpoints: record<abort: string, commit: string, list_parts: string, log_event: string, status: string, upload_part: string>, session_expires_at: string, total_parts: int, type: string> {
+]: any -> oneof<record<id: string, num_parts_processed: int, part_size: int, session_endpoints: record<abort: string, commit: string, list_parts: string, log_event: string, status: string, upload_part: string>, session_expires_at: string, total_parts: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.box.com/api/2.0")
@@ -1645,7 +1669,7 @@ export def "delete-files-upload-sessions-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.box.com/api/2.0")
   if ($upload_session_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_session_id' must be non-empty" } }
@@ -1681,7 +1705,7 @@ export def "get-files-upload-sessions-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, num_parts_processed: int, part_size: int, session_endpoints: record<abort: string, commit: string, list_parts: string, log_event: string, status: string, upload_part: string>, session_expires_at: string, total_parts: int, type: string> {
+]: nothing -> oneof<record<id: string, num_parts_processed: int, part_size: int, session_endpoints: record<abort: string, commit: string, list_parts: string, log_event: string, status: string, upload_part: string>, session_expires_at: string, total_parts: int, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.box.com/api/2.0")
   if ($upload_session_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_session_id' must be non-empty" } }
@@ -1717,14 +1741,16 @@ export def "put-files-upload-sessions-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --digest: string # The [RFC3230][1] message digest of the chunk uploaded. Only SHA1 is supported. The SHA1 digest must be base64 encoded. The format of this header is as `sha=BASE64_ENCODED_DIGEST`. To get the value for the `SHA` digest, use the openSSL command to encode the file part: `openssl sha1 -binary <FILE_PART_NAME> | base64` [1]: https://tools.ietf.org/html/rfc3230 (e.g. sha=fpRyg5eVQletdZqEKaFlqwBXJzM=)
-  --content-range: string # The byte range of the chunk. Must not overlap with the range of a part already uploaded this session. Each part’s size must be exactly equal in size to the part size specified in the upload session that you created. One exception is the last part of the file, as this can be smaller. When providing the value for `content-range`, remember that: * The lower bound of each part's byte range must be a multiple of the part size. * The higher bound must be a multiple of the part size - 1. (e.g. bytes 8388608-16777215/445856194)
+  --digest: string # The [RFC3230][1] message digest of the chunk uploaded. Only SHA1 is supported. The SHA1 digest must be base64 encoded. The format of this header is as `sha=BASE64_ENCODED_DIGEST`. To get the value for the `SHA` digest, use the openSSL command to encode the file part: `openssl sha1 -binary <FILE_PART_NAME> | base64` [1]: https://tools.ietf.org/html/rfc3230 (required, e.g. sha=fpRyg5eVQletdZqEKaFlqwBXJzM=)
+  --content-range: string # The byte range of the chunk. Must not overlap with the range of a part already uploaded this session. Each part’s size must be exactly equal in size to the part size specified in the upload session that you created. One exception is the last part of the file, as this can be smaller. When providing the value for `content-range`, remember that: * The lower bound of each part's byte range must be a multiple of the part size. * The higher bound must be a multiple of the part size - 1. (required, e.g. bytes 8388608-16777215/445856194)
   --body: string
-]: any -> record<part: record> {
+]: any -> oneof<record<part: record<offset: int, part_id: string, size: int, sha1: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.box.com/api/2.0")
   if ($upload_session_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_session_id' must be non-empty" } }
+  if ($digest == null) { error make --unspanned { msg: "required header parameter 'digest' missing: pass --digest" } }
+  if ($content_range == null) { error make --unspanned { msg: "required header parameter 'content-range' missing: pass --content-range" } }
   let full_url = (build-url $base ({upload_session_id: (encode-path-segment $upload_session_id)} | format pattern "/files/upload_sessions/{upload_session_id}") $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
@@ -1750,7 +1776,6 @@ export def "put-files-upload-sessions-id" [
 #
 # POST /files/upload_sessions/{upload_session_id}/commit
 # operationId: post_files_upload_sessions_id_commit
-# --parts item shape: {offset?: int, part_id?: string, size?: int, sha1?: string}
 export def "post-files-upload-sessions-id-commit" [
   upload_session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1762,15 +1787,16 @@ export def "post-files-upload-sessions-id-commit" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --digest: string # The [RFC3230][1] message digest of the whole file. Only SHA1 is supported. The SHA1 digest must be Base64 encoded. The format of this header is as `sha=BASE64_ENCODED_DIGEST`. [1]: https://tools.ietf.org/html/rfc3230 (e.g. sha=fpRyg5eVQletdZqEKaFlqwBXJzM=)
+  --digest: string # The [RFC3230][1] message digest of the whole file. Only SHA1 is supported. The SHA1 digest must be Base64 encoded. The format of this header is as `sha=BASE64_ENCODED_DIGEST`. [1]: https://tools.ietf.org/html/rfc3230 (required, e.g. sha=fpRyg5eVQletdZqEKaFlqwBXJzM=)
   --if-match: string # Ensures this item hasn't recently changed before making changes. Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
   --if-none-match: string # Ensures an item is only returned if it has changed. Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
   parts: list # The list details for the uploaded parts — item shape: {offset?: int, part_id?: string, size?: int, sha1?: string}
-]: any -> record<entries: list<record>, total_count: int> {
+]: any -> oneof<record<entries: table<etag: string, id: string, type: string, file_version: record, name: string, sequence_id: string, sha1: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record, description: string, item_status: string, modified_at: string, modified_by: record, owned_by: record, parent: record, path_collection: record, purged_at: string, shared_link: record, size: int, trashed_at: string>, total_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.box.com/api/2.0")
   if ($upload_session_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_session_id' must be non-empty" } }
+  if ($digest == null) { error make --unspanned { msg: "required header parameter 'digest' missing: pass --digest" } }
   let full_url = (build-url $base ({upload_session_id: (encode-path-segment $upload_session_id)} | format pattern "/files/upload_sessions/{upload_session_id}/commit") $auth.query)
   let req_body = {"parts": $parts} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1809,7 +1835,7 @@ export def "get-files-upload-sessions-id-parts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --offset: int # The offset of the item at which to begin the response. Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, offset: int, order: table<by: string, direction: string>, total_count: int, entries: table<offset: int, part_id: string, size: int, sha1: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.box.com/api/2.0")
   if ($upload_session_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_session_id' must be non-empty" } }
@@ -1847,7 +1873,7 @@ export def "delete-files-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-match: string # Ensures this item hasn't recently changed before making changes. Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -1888,11 +1914,12 @@ export def "get-files-id" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. Additionally this field can be used to query any metadata applied to the file by specifying the `metadata` field as well as the scope and key of the template to retrieve, for example `?field=metadata.enterprise_12345.contractTemplate`. (e.g. [id, type, name])
   --if-none-match: string # Ensures an item is only returned if it has changed. Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
   --boxapi: string # The URL, and optional password, for the shared link of this item. This header can be used to access items that have not been explicitly shared with a user. Use the format `shared_link=[link]` or if a password is required then use `shared_link=[link]&shared_link_password=[password]`. This header can be used on the file or folder shared, as well as on any files or folders nested within the item. (e.g. shared_link=[link]&shared_link_password=[password])
-  --x-rep-hints: string # A header required to request specific `representations` of a file. Use this in combination with the `fields` query parameter to request a specific file representation. The general format for these representations is `X-Rep-Hints: [...]` where `[...]` is one or many hints in the format `[fileType?query]`. For example, to request a `png` representation in `32x32` as well as `64x64` pixel dimensions provide the following hints. `x-rep-hints: [jpg?dimensions=32x32][jpg?dimensions=64x64]` Additionally, a `text` representation is available for all document file types in Box using the `[extracted_text]` representation. `x-rep-hints: [extracted_text]` (e.g. [pdf])
-]: nothing -> record {
+  --x-rep-hints: string # A header required to request specific `representations` of a file. Use this in combination with the `fields` query parameter to request a specific file representation. The general format for these representations is `X-Rep-Hints: [...]` where `[...]` is one or many hints in the format `[fileType?query]`. For example, to request a `png` representation in `32x32` as well as `64x64` pixel dimensions provide the following hints. `x-rep-hints: [jpg?dimensions=32x32][jpg?dimensions=64x64]` Additionally, a `text` representation is available for all document file types in Box using the `[extracted_text]` representation. `x-rep-hints: [extracted_text]` (required, nullable, e.g. [pdf])
+]: nothing -> oneof<record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
+  if ($x_rep_hints == null) { error make --unspanned { msg: "required header parameter 'x-rep-hints' missing: pass --x-rep-hints" } }
   let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -1930,8 +1957,8 @@ export def "post-files-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --name: string # An optional new name for the file. (e.g. Restored.docx)
-  --parent: any
-]: any -> record<content_created_at: string, content_modified_at: string, created_at: string, created_by: record, description: string, etag: string, file_version: record, id: string, item_status: string, modified_at: string, modified_by: record, name: string, owned_by: record, parent: record, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: record, sha1: string, shared_link: string, size: int, trashed_at: string, type: string> {
+  --parent: record # The parent for this item — shape: {id?: string}
+]: any -> oneof<record<content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, etag: string, file_version: record<id: string, type: string, sha1: string>, id: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, name: string, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: string, sha1: string, shared_link: string, size: int, trashed_at: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1960,8 +1987,6 @@ export def "post-files-id" [
 #
 # PUT /files/{file_id}
 # operationId: put_files_id
-# --lock shape: {access?: "lock", expires_at?: string, is_download_prevented?: bool}
-# --permissions shape: {can_download?: "open"|"company"}
 export def "put-files-id" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1979,11 +2004,11 @@ export def "put-files-id" [
   --disposition-at: string # The retention expiration timestamp for the given file. This date cannot be shortened once set on a file. (format: date-time, e.g. 2012-12-12T10:53:43-08:00)
   --lock: record # Defines a lock on an item. This prevents the item from being moved, renamed, or otherwise changed by anyone other than the user who created the lock. Set this to `null` to remove the lock. — shape: {access?: "lock", expires_at?: string, is_download_prevented?: bool}
   --name: string # An optional different name for the file. This can be used to rename the file. (e.g. NewFile.txt)
-  --parent: any
+  --parent: record # The parent for this item — shape: {id?: string}
   --permissions: record # Defines who can download a file. — shape: {can_download?: "open"|"company"}
-  --shared-link: any
+  --shared-link: record # Defines a shared link for an item. Set this to `null` to remove the shared link. — shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
   --tags: list<string> # The tags for this item. These tags are shown in the Box web app and mobile apps next to an item. To add or remove a tag, retrieve the item's current tags, modify them, and then update this field. There is a limit of 100 tags per item, and 10,000 unique tags per enterprise. (e.g. [approved])
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2014,7 +2039,6 @@ export def "put-files-id" [
 #
 # PUT /files/{file_id}
 # operationId: put_files_id#add_shared_link
-# --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
 export def "put-files-idadd-shared-link" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2026,13 +2050,14 @@ export def "put-files-idadd-shared-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (required, e.g. shared_link)
   --shared-link: record # The settings for the shared link to create on the file. Use an empty object (`{}`) to use the default settings for shared links. — shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
+  if ($fields == null) { error make --unspanned { msg: "required query parameter 'fields' missing: pass --fields" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp $auth.query)
   let req_body = {"shared_link": $shared_link} | compact
@@ -2068,11 +2093,12 @@ export def "get-files-idget-shared-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
-]: nothing -> record {
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (required, e.g. shared_link)
+]: nothing -> oneof<record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
+  if ($fields == null) { error make --unspanned { msg: "required query parameter 'fields' missing: pass --fields" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2106,13 +2132,14 @@ export def "put-files-idremove-shared-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (required, e.g. shared_link)
   --shared-link: record # By setting this value to `null`, the shared link is removed from the file. (nullable)
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
+  if ($fields == null) { error make --unspanned { msg: "required query parameter 'fields' missing: pass --fields" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp $auth.query)
   let req_body = {"shared_link": $shared_link} | compact
@@ -2137,7 +2164,6 @@ export def "put-files-idremove-shared-link" [
 #
 # PUT /files/{file_id}
 # operationId: put_files_id#update_shared_link
-# --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
 export def "put-files-idupdate-shared-link" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2149,13 +2175,14 @@ export def "put-files-idupdate-shared-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (required, e.g. shared_link)
   --shared-link: record # The settings for the shared link to update. — shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
+  if ($fields == null) { error make --unspanned { msg: "required query parameter 'fields' missing: pass --fields" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/files/{file_id}") $qp $auth.query)
   let req_body = {"shared_link": $shared_link} | compact
@@ -2194,7 +2221,7 @@ export def "get-files-id-collaborations" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, offset: int, order: table<by: string, direction: string>, total_count: int, entries: table<acceptance_requirements_status: record, accessible_by: record, acknowledged_at: string, created_at: string, created_by: record, expires_at: string, id: string, invite_email: string, item: record, modified_at: string, role: string, status: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -2234,7 +2261,7 @@ export def "get-files-id-comments" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response. Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, offset: int, order: table<by: string, direction: string>, total_count: int, entries: table<id: string, type: string, created_at: string, created_by: record, is_reply_comment: bool, item: record, message: string, modified_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -2275,7 +2302,7 @@ export def "get-files-id-content" [
   --access-token: string # An optional access token that can be used to pre-authenticate this request, which means that a download link can be shared with a browser or a third party service without them needing to know how to handle the authentication. When using this parameter, please make sure that the access token is sufficiently scoped down to only allow read access to that file and no other files or folders. (e.g. c3FIOG9vSGV4VHo4QzAyg5T1JvNnJoZ3ExaVNyQWw6WjRsanRKZG5lQk9qUE1BVQ)
   --range: string # The byte range of the content to download. The format `bytes={start_byte}-{end_byte}` can be used to specify what section of the file to download. (e.g. bytes=0-1024)
   --boxapi: string # The URL, and optional password, for the shared link of this item. This header can be used to access items that have not been explicitly shared with a user. Use the format `shared_link=[link]` or if a password is required then use `shared_link=[link]&shared_link_password=[password]`. This header can be used on the file or folder shared, as well as on any files or folders nested within the item. (e.g. shared_link=[link]&shared_link_password=[password])
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -2303,7 +2330,6 @@ export def "get-files-id-content" [
 #
 # POST /files/{file_id}/content
 # operationId: post_files_id_content
-# --attributes shape: {content_modified_at?: string, name: string}
 export def "post-files-id-content" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2320,7 +2346,7 @@ export def "post-files-id-content" [
   --content-md5: string # An optional header containing the SHA1 hash of the file to ensure that the file was not corrupted in transit. (e.g. 134b65991ed521fcfe4724b7d814ab8ded5185dc)
   attributes: record # The additional attributes of the file being uploaded. Mainly the name and the parent folder. These attributes are part of the multi part request body and are in JSON format. The `attributes` part of the body must come **before** the `file` part. Requests that do not follow this format when uploading the file will receive a HTTP `400` error with a `metadata_after_file_contents` error code. — shape: {content_modified_at?: string, name: string}
   file: string # The content of the file to upload to Box. The `attributes` part of the body must come **before** the `file` part. Requests that do not follow this format when uploading the file will receive a HTTP `400` error with a `metadata_after_file_contents` error code. (format: binary)
-]: any -> record<entries: list<record>, total_count: int> {
+]: any -> oneof<record<entries: table<etag: string, id: string, type: string, file_version: record, name: string, sequence_id: string, sha1: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record, description: string, item_status: string, modified_at: string, modified_by: record, owned_by: record, parent: record, path_collection: record, purged_at: string, shared_link: record, size: int, trashed_at: string>, total_count: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.box.com/api/2.0")
@@ -2333,8 +2359,8 @@ export def "post-files-id-content" [
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let extra_headers = {"if-match": $if_match, "content-md5": $content_md5} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["file"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["file"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -2353,7 +2379,6 @@ export def "post-files-id-content" [
 #
 # POST /files/{file_id}/copy
 # operationId: post_files_id_copy
-# --parent shape: {id: string}
 export def "post-files-id-copy" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2369,7 +2394,7 @@ export def "post-files-id-copy" [
   --name: string # An optional new name for the copied file. There are some restrictions to the file name. Names containing non-printable ASCII characters, forward and backward slashes (`/`, `\`), and protected names like `.` and `..` are automatically sanitized by removing the non-allowed characters. (e.g. FileCopy.txt)
   parent: record # The destination folder to copy the file to. — shape: {id: string}
   --version: string # An optional ID of the specific file version to copy. (e.g. 0)
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2409,7 +2434,7 @@ export def "get-files-id-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<entries: list<record>, limit: int> {
+]: nothing -> oneof<record<entries: table<_parent: string, _scope: string, _template: string, _version: int>, limit: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -2445,7 +2470,7 @@ export def "delete-files-id-metadata-enterprise-security-classification-6vm-voch
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -2481,7 +2506,7 @@ export def "get-files-id-metadata-enterprise-security-classification-6vm-vochw-u
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_canEdit: bool, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: float, _version: int, Box__Security__Classification__Key: string> {
+]: nothing -> oneof<record<_canEdit: bool, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: float, _version: int, Box__Security__Classification__Key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -2518,7 +2543,7 @@ export def "post-files-id-metadata-enterprise-security-classification-6vm-vochw-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --box-security-classification-key: string # The name of the classification to apply to this file. To list the available classifications in an enterprise, use the classification API to retrieve the [classification template](e://get_metadata_templates_enterprise_securityClassification-6VMVochwUWo_schema) which lists all available classification keys. (e.g. Sensitive)
-]: any -> record<_canEdit: bool, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: float, _version: int, Box__Security__Classification__Key: string> {
+]: any -> oneof<record<_canEdit: bool, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: float, _version: int, Box__Security__Classification__Key: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2558,7 +2583,7 @@ export def "put-files-id-metadata-enterprise-security-classification-6vm-vochw-u
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<_canEdit: bool, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: float, _version: int, Box__Security__Classification__Key: string> {
+]: any -> oneof<record<_canEdit: bool, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: float, _version: int, Box__Security__Classification__Key: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2597,7 +2622,7 @@ export def "delete-files-id-metadata-global-box-skills-cards" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -2633,7 +2658,7 @@ export def "get-files-id-metadata-global-box-skills-cards" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_canEdit: bool, _id: string, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: int, _version: int, cards: list<any>> {
+]: nothing -> oneof<record<_canEdit: bool, _id: string, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: int, _version: int, cards: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -2670,7 +2695,7 @@ export def "post-files-id-metadata-global-box-skills-cards" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   cards: list # A list of Box Skill cards to apply to this file.
-]: any -> record<_canEdit: bool, _id: string, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: int, _version: int, cards: list<any>> {
+]: any -> oneof<record<_canEdit: bool, _id: string, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: int, _version: int, cards: list<any>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2710,7 +2735,7 @@ export def "put-files-id-metadata-global-box-skills-cards" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<_canEdit: bool, _id: string, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: int, _version: int, cards: list<any>> {
+]: any -> oneof<record<_canEdit: bool, _id: string, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: int, _version: int, cards: list<any>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2740,7 +2765,7 @@ export def "put-files-id-metadata-global-box-skills-cards" [
 # operationId: delete_files_id_metadata_id_id
 export def "delete-files-id-metadata-id-id" [
   file_id: string
-  scope: string
+  scope: string@scope-completer
   template_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2751,7 +2776,7 @@ export def "delete-files-id-metadata-id-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -2780,7 +2805,7 @@ export def "delete-files-id-metadata-id-id" [
 # operationId: get_files_id_metadata_id_id
 export def "get-files-id-metadata-id-id" [
   file_id: string
-  scope: string
+  scope: string@scope-completer
   template_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2791,7 +2816,7 @@ export def "get-files-id-metadata-id-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record<_parent: string, _scope: string, _template: string, _version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -2820,7 +2845,7 @@ export def "get-files-id-metadata-id-id" [
 # operationId: post_files_id_metadata_id_id
 export def "post-files-id-metadata-id-id" [
   file_id: string
-  scope: string
+  scope: string@scope-completer
   template_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2832,7 +2857,7 @@ export def "post-files-id-metadata-id-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> oneof<record<_parent: string, _scope: string, _template: string, _version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2864,7 +2889,7 @@ export def "post-files-id-metadata-id-id" [
 # operationId: put_files_id_metadata_id_id
 export def "put-files-id-metadata-id-id" [
   file_id: string
-  scope: string
+  scope: string@scope-completer
   template_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2876,7 +2901,7 @@ export def "put-files-id-metadata-id-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record {
+]: any -> oneof<record<_parent: string, _scope: string, _template: string, _version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2917,7 +2942,7 @@ export def "get-files-id-tasks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<entries: table<action: string, completion_rule: string, created_at: string, created_by: record, due_at: string, id: string, is_completed: bool, item: record, message: string, task_assignment_collection: record, type: string>, total_count: int> {
+]: nothing -> oneof<record<entries: table<action: string, completion_rule: string, created_at: string, created_by: record, due_at: string, id: string, is_completed: bool, item: record, message: string, task_assignment_collection: record, type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -2944,7 +2969,7 @@ export def "get-files-id-tasks" [
 # operationId: get_files_id_thumbnail_id
 export def "get-files-id-thumbnail-id" [
   file_id: string
-  extension: string
+  extension: string@extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2997,7 +3022,7 @@ export def "delete-files-id-trash" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -3034,7 +3059,7 @@ export def "get-files-id-trash" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record<content_created_at: string, content_modified_at: string, created_at: string, created_by: record, description: string, etag: string, file_version: record, id: string, item_status: string, modified_at: string, modified_by: record, name: string, owned_by: record, parent: record, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: record, sha1: string, shared_link: string, size: int, trashed_at: string, type: string> {
+]: nothing -> oneof<record<content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, etag: string, file_version: record<id: string, type: string, sha1: string>, id: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, name: string, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: string, sha1: string, shared_link: string, size: int, trashed_at: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -3073,7 +3098,7 @@ export def "post-files-id-upload-sessions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file-name: string # The optional new name of new file (e.g. Project.mov)
   file_size: int # The total number of bytes of the file to be uploaded (format: int64, e.g. 104857600)
-]: any -> record<id: string, num_parts_processed: int, part_size: int, session_endpoints: record<abort: string, commit: string, list_parts: string, log_event: string, status: string, upload_part: string>, session_expires_at: string, total_parts: int, type: string> {
+]: any -> oneof<record<id: string, num_parts_processed: int, part_size: int, session_endpoints: record<abort: string, commit: string, list_parts: string, log_event: string, status: string, upload_part: string>, session_expires_at: string, total_parts: int, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://upload.box.com/api/2.0")
@@ -3115,7 +3140,7 @@ export def "get-files-id-versions" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response. Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, offset: int, order: table<by: string, direction: string>, total_count: int, entries: table<id: string, type: string, sha1: string, created_at: string, modified_at: string, modified_by: record, name: string, purged_at: string, restored_at: string, restored_by: record, size: int, trashed_at: string, trashed_by: record, uploader_display_name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -3155,7 +3180,7 @@ export def "post-files-id-versions-current" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --id: string # The file version ID (e.g. 11446498)
   --type: string@type-completer # The type to promote (e.g. file_version)
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, sha1: string, created_at: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, name: string, purged_at: string, restored_at: string, restored_by: record<id: string, type: string, login: string, name: string>, size: int, trashed_at: string, trashed_by: record<id: string, type: string, login: string, name: string>, uploader_display_name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3197,7 +3222,7 @@ export def "delete-files-id-versions-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-match: string # Ensures this item hasn't recently changed before making changes. Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -3238,7 +3263,7 @@ export def "get-files-id-versions-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record {
+]: nothing -> oneof<record<id: string, type: string, sha1: string, created_at: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, name: string, purged_at: string, restored_at: string, restored_by: record<id: string, type: string, login: string, name: string>, size: int, trashed_at: string, trashed_by: record<id: string, type: string, login: string, name: string>, uploader_display_name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -3278,7 +3303,7 @@ export def "put-files-id-versions-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --trashed-at: string # Set this to `null` to clear the date and restore the file. (e.g. null)
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, sha1: string, created_at: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, name: string, purged_at: string, restored_at: string, restored_by: record<id: string, type: string, login: string, name: string>, size: int, trashed_at: string, trashed_by: record<id: string, type: string, login: string, name: string>, uploader_display_name: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3318,7 +3343,7 @@ export def "delete-files-id-watermark" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -3354,7 +3379,7 @@ export def "get-files-id-watermark" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<watermark: record<created_at: string, modified_at: string>> {
+]: nothing -> oneof<record<watermark: record<created_at: string, modified_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -3379,7 +3404,6 @@ export def "get-files-id-watermark" [
 #
 # PUT /files/{file_id}/watermark
 # operationId: put_files_id_watermark
-# --watermark shape: {imprint: "default"}
 export def "put-files-id-watermark" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3392,7 +3416,7 @@ export def "put-files-id-watermark" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   watermark: record # The watermark to imprint on the file — shape: {imprint: "default"}
-]: any -> record<watermark: record<created_at: string, modified_at: string>> {
+]: any -> oneof<record<watermark: record<created_at: string, modified_at: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3430,10 +3454,11 @@ export def "get-folder-locks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --folder-id: string # The unique identifier that represent a folder. The ID for any folder can be determined by visiting this folder in the web application and copying the ID from the URL. For example, for the URL `https://*.app.box.com/folder/123` the `folder_id` is `123`. The root folder of a Box account is always represented by the ID `0`. (e.g. 12345)
-]: nothing -> record {
+  --folder-id: string # The unique identifier that represent a folder. The ID for any folder can be determined by visiting this folder in the web application and copying the ID from the URL. For example, for the URL `https://*.app.box.com/folder/123` the `folder_id` is `123`. The root folder of a Box account is always represented by the ID `0`. (required, e.g. 12345)
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<created_at: string, created_by: record, folder: record, id: string, lock_type: string, locked_operations: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($folder_id == null) { error make --unspanned { msg: "required query parameter 'folder_id' missing: pass --folder-id" } }
   let qp = [(serialize-qp "folder_id" $folder_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/folder_locks" $qp $auth.query)
   let accept_val = "application/json"
@@ -3456,8 +3481,6 @@ export def "get-folder-locks" [
 #
 # POST /folder_locks
 # operationId: post_folder_locks
-# --folder shape: {id: string, type: string}
-# --locked_operations shape: {delete: bool, move: bool}
 export def "post-folder-locks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3470,7 +3493,7 @@ export def "post-folder-locks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   folder: record # The folder to apply the lock to. — shape: {id: string, type: string}
   --locked-operations: record # The operations to lock for the folder. If `locked_operations` is included in the request, both `move` and `delete` must also be included and both set to `true`. — shape: {delete: bool, move: bool}
-]: any -> record<created_at: string, created_by: record<id: string, type: string>, folder: record, id: string, lock_type: string, locked_operations: record<delete: bool, move: bool>, type: string> {
+]: any -> oneof<record<created_at: string, created_by: record<id: string, type: string>, folder: record<etag: string, id: string, type: string, name: string, sequence_id: string>, id: string, lock_type: string, locked_operations: record<delete: bool, move: bool>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3508,7 +3531,7 @@ export def "delete-folder-locks-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_lock_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_lock_id' must be non-empty" } }
@@ -3533,7 +3556,6 @@ export def "delete-folder-locks-id" [
 #
 # POST /folders
 # operationId: post_folders
-# --parent shape: {id: string}
 export def "post-folders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3545,11 +3567,11 @@ export def "post-folders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-  --folder-upload-email: any
+  --folder-upload-email: record # The Write Folder Upload Email object — shape: {access?: "open"|"collaborators"}
   name: string # The name for the new folder. There are some restrictions to the file name. Names containing non-printable ASCII characters, forward and backward slashes (`/`, `\`), as well as names with trailing spaces are prohibited. Additionally, the names `.` and `..` are not allowed either. (e.g. New Folder)
   parent: record # The parent folder to create the new folder within. — shape: {id: string}
   --sync-state: string@sync-state-completer # Specifies whether a folder should be synced to a user's device or not. This is used by Box Sync (discontinued) and is not used by Box Drive. (e.g. synced)
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, folder_upload_email: record<access: string, email: string>, item_collection: record<limit: int, offset: int, order: list<record>, total_count: int, entries: list<any>>, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3593,18 +3615,18 @@ export def "get-folders-trash-items" [
   --usemarker: oneof<nothing, bool> # Specifies whether to use marker-based pagination instead of offset-based pagination. Only one pagination method can be used at a time. By setting this value to true, the API will return a `marker` field that can be passed as a parameter to this endpoint to get the next page of the response. (e.g. true)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --direction: string@direction-completer-1 # The direction to sort results in. This can be either in alphabetical ascending (`ASC`) or descending (`DESC`) order. (e.g. ASC)
-  --qp-sort: string@sort-completer # Defines the **second** attribute by which items are sorted. Items are always sorted by their `type` first, with folders listed before files, and files listed before web links. This parameter is not supported when using marker-based pagination. (e.g. id)
-]: nothing -> record {
+  --sort: string@sort-completer # Defines the **second** attribute by which items are sorted. Items are always sorted by their `type` first, with folders listed before files, and files listed before web links. This parameter is not supported when using marker-based pagination. (e.g. id)
+]: nothing -> oneof<record<limit: int, offset: int, order: table<by: string, direction: string>, total_count: int, entries: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "usemarker" $usemarker "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "usemarker" $usemarker "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/folders/trash/items" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"fields": $fields, "limit": $limit, "offset": $offset, "usemarker": $usemarker, "marker": $marker, "direction": $direction, "sort": $qp_sort} | compact)
+    query: ({"fields": $fields, "limit": $limit, "offset": $offset, "usemarker": $usemarker, "marker": $marker, "direction": $direction, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3632,7 +3654,7 @@ export def "delete-folders-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --recursive: oneof<nothing, bool> # Delete a folder that is not empty by recursively deleting the folder and all of its content. (e.g. true)
   --if-match: string # Ensures this item hasn't recently changed before making changes. Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `412 Precondition Failed` if it has changed since. (e.g. 1)
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
@@ -3674,7 +3696,7 @@ export def "get-folders-id" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. Additionally this field can be used to query any metadata applied to the file by specifying the `metadata` field as well as the scope and key of the template to retrieve, for example `?field=metadata.enterprise_12345.contractTemplate`. (e.g. [id, type, name])
   --if-none-match: string # Ensures an item is only returned if it has changed. Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
   --boxapi: string # The URL, and optional password, for the shared link of this item. This header can be used to access items that have not been explicitly shared with a user. Use the format `shared_link=[link]` or if a password is required then use `shared_link=[link]&shared_link_password=[password]`. This header can be used on the file or folder shared, as well as on any files or folders nested within the item. (e.g. shared_link=[link]&shared_link_password=[password])
-]: nothing -> record {
+]: nothing -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, folder_upload_email: record<access: string, email: string>, item_collection: record<limit: int, offset: int, order: list<record>, total_count: int, entries: list<any>>, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
@@ -3715,8 +3737,8 @@ export def "post-folders-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --name: string # An optional new name for the folder. (e.g. Restored Photos)
-  --parent: any
-]: any -> record<content_created_at: string, content_modified_at: string, created_at: string, created_by: record, description: record, etag: string, folder_upload_email: string, id: string, item_status: string, modified_at: string, modified_by: record, name: string, owned_by: record, parent: record, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: record, shared_link: string, size: int, trashed_at: string, type: string> {
+  --parent: record # The parent for this item — shape: {id?: string}
+]: any -> oneof<record<content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, etag: string, folder_upload_email: string, id: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, name: string, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: string, shared_link: string, size: int, trashed_at: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3745,8 +3767,6 @@ export def "post-folders-id" [
 #
 # PUT /folders/{folder_id}
 # operationId: put_folders_id
-# --collections item shape: {id?: string, type?: string}
-# --parent shape: {id?: string}
 export def "put-folders-id" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3764,14 +3784,14 @@ export def "put-folders-id" [
   --can-non-owners-view-collaborators: oneof<nothing, bool> # Restricts collaborators who are not the owner of this folder from viewing other collaborations on this folder. It also restricts non-owners from inviting new collaborators. When setting this field to `false`, it is required to also set `can_non_owners_invite_collaborators` to `false` if it has not already been set. (e.g. true)
   --collections: list # An array of collections to make this folder a member of. Currently we only support the `favorites` collection. To get the ID for a collection, use the [List all collections][1] endpoint. Passing an empty array `[]` or `null` will remove the folder from all collections. [1]: ../advanced-files-and-folders/#get-collections — item shape: {id?: string, type?: string}
   --description: string # The optional description of this folder (e.g. Legal contracts for the new ACME deal)
-  --folder-upload-email: any
+  --folder-upload-email: record # The Write Folder Upload Email object — shape: {access?: "open"|"collaborators"}
   --is-collaboration-restricted-to-enterprise: oneof<nothing, bool> # Specifies if new invites to this folder are restricted to users within the enterprise. This does not affect existing collaborations. (e.g. true)
   --name: string # The optional new name for this folder. (e.g. New Folder)
   --parent: record # The parent folder for this folder. Use this to move the folder or to restore it out of the trash. — shape: {id?: string}
-  --shared-link: any
+  --shared-link: record # Defines a shared link for an item. Set this to `null` to remove the shared link. — shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
   --sync-state: string@sync-state-completer # Specifies whether a folder should be synced to a user's device or not. This is used by Box Sync (discontinued) and is not used by Box Drive. (e.g. synced)
   --tags: list<string> # The tags for this item. These tags are shown in the Box web app and mobile apps next to an item. To add or remove a tag, retrieve the item's current tags, modify them, and then update this field. There is a limit of 100 tags per item, and 10,000 unique tags per enterprise. (e.g. [approved])
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, folder_upload_email: record<access: string, email: string>, item_collection: record<limit: int, offset: int, order: list<record>, total_count: int, entries: list<any>>, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3802,7 +3822,6 @@ export def "put-folders-id" [
 #
 # PUT /folders/{folder_id}
 # operationId: put_folders_id#add_shared_link
-# --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
 export def "put-folders-idadd-shared-link" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3814,13 +3833,14 @@ export def "put-folders-idadd-shared-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (required, e.g. shared_link)
   --shared-link: record # The settings for the shared link to create on the folder. Use an empty object (`{}`) to use the default settings for shared links. — shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, folder_upload_email: record<access: string, email: string>, item_collection: record<limit: int, offset: int, order: list<record>, total_count: int, entries: list<any>>, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
+  if ($fields == null) { error make --unspanned { msg: "required query parameter 'fields' missing: pass --fields" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/folders/{folder_id}") $qp $auth.query)
   let req_body = {"shared_link": $shared_link} | compact
@@ -3856,11 +3876,12 @@ export def "get-folders-idget-shared-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
-]: nothing -> record {
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (required, e.g. shared_link)
+]: nothing -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, folder_upload_email: record<access: string, email: string>, item_collection: record<limit: int, offset: int, order: list<record>, total_count: int, entries: list<any>>, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
+  if ($fields == null) { error make --unspanned { msg: "required query parameter 'fields' missing: pass --fields" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/folders/{folder_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -3894,13 +3915,14 @@ export def "put-folders-idremove-shared-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (required, e.g. shared_link)
   --shared-link: record # By setting this value to `null`, the shared link is removed from the folder. (nullable)
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, folder_upload_email: record<access: string, email: string>, item_collection: record<limit: int, offset: int, order: list<record>, total_count: int, entries: list<any>>, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
+  if ($fields == null) { error make --unspanned { msg: "required query parameter 'fields' missing: pass --fields" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/folders/{folder_id}") $qp $auth.query)
   let req_body = {"shared_link": $shared_link} | compact
@@ -3925,7 +3947,6 @@ export def "put-folders-idremove-shared-link" [
 #
 # PUT /folders/{folder_id}
 # operationId: put_folders_id#update_shared_link
-# --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
 export def "put-folders-idupdate-shared-link" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3937,13 +3958,14 @@ export def "put-folders-idupdate-shared-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (required, e.g. shared_link)
   --shared-link: record # The settings for the shared link to update. — shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, folder_upload_email: record<access: string, email: string>, item_collection: record<limit: int, offset: int, order: list<record>, total_count: int, entries: list<any>>, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
+  if ($fields == null) { error make --unspanned { msg: "required query parameter 'fields' missing: pass --fields" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/folders/{folder_id}") $qp $auth.query)
   let req_body = {"shared_link": $shared_link} | compact
@@ -3980,7 +4002,7 @@ export def "get-folders-id-collaborations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, offset: int, order: table<by: string, direction: string>, total_count: int, entries: table<acceptance_requirements_status: record, accessible_by: record, acknowledged_at: string, created_at: string, created_by: record, expires_at: string, id: string, invite_email: string, item: record, modified_at: string, role: string, status: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
@@ -4006,7 +4028,6 @@ export def "get-folders-id-collaborations" [
 #
 # POST /folders/{folder_id}/copy
 # operationId: post_folders_id_copy
-# --parent shape: {id: string}
 export def "post-folders-id-copy" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4021,7 +4042,7 @@ export def "post-folders-id-copy" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --name: string # An optional new name for the copied folder. There are some restrictions to the file name. Names containing non-printable ASCII characters, forward and backward slashes (`/`, `\`), as well as names with trailing spaces are prohibited. Additionally, the names `.` and `..` are not allowed either. (e.g. New Folder)
   parent: record # The destination folder to copy the folder to. — shape: {id: string}
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, folder_upload_email: record<access: string, email: string>, item_collection: record<limit: int, offset: int, order: list<record>, total_count: int, entries: list<any>>, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4066,14 +4087,14 @@ export def "get-folders-id-items" [
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --offset: int # The offset of the item at which to begin the response. Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-  --qp-sort: string@sort-completer # Defines the **second** attribute by which items are sorted. Items are always sorted by their `type` first, with folders listed before files, and files listed before web links. This parameter is not supported for marker-based pagination on the root folder (the folder with an ID of `0`). (e.g. id)
+  --sort: string@sort-completer # Defines the **second** attribute by which items are sorted. Items are always sorted by their `type` first, with folders listed before files, and files listed before web links. This parameter is not supported for marker-based pagination on the root folder (the folder with an ID of `0`). (e.g. id)
   --direction: string@direction-completer-1 # The direction to sort results in. This can be either in alphabetical ascending (`ASC`) or descending (`DESC`) order. (e.g. ASC)
   --boxapi: string # The URL, and optional password, for the shared link of this item. This header can be used to access items that have not been explicitly shared with a user. Use the format `shared_link=[link]` or if a password is required then use `shared_link=[link]&shared_link_password=[password]`. This header can be used on the file or folder shared, as well as on any files or folders nested within the item. (e.g. shared_link=[link]&shared_link_password=[password])
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, offset: int, order: table<by: string, direction: string>, total_count: int, entries: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
-  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "usemarker" $usemarker "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "usemarker" $usemarker "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({folder_id: (encode-path-segment $folder_id)} | format pattern "/folders/{folder_id}/items") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4082,7 +4103,7 @@ export def "get-folders-id-items" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"fields": $fields, "usemarker": $usemarker, "marker": $marker, "offset": $offset, "limit": $limit, "sort": $qp_sort, "direction": $direction} | compact)
+    query: ({"fields": $fields, "usemarker": $usemarker, "marker": $marker, "offset": $offset, "limit": $limit, "sort": $sort, "direction": $direction} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4108,7 +4129,7 @@ export def "get-folders-id-metadata" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<entries: list<record>, limit: int> {
+]: nothing -> oneof<record<entries: table<_parent: string, _scope: string, _template: string, _version: int>, limit: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
@@ -4144,7 +4165,7 @@ export def "delete-folders-id-metadata-enterprise-security-classification-6vm-vo
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
@@ -4180,7 +4201,7 @@ export def "get-folders-id-metadata-enterprise-security-classification-6vm-vochw
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<_canEdit: bool, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: float, _version: int, Box__Security__Classification__Key: string> {
+]: nothing -> oneof<record<_canEdit: bool, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: float, _version: int, Box__Security__Classification__Key: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
@@ -4217,7 +4238,7 @@ export def "post-folders-id-metadata-enterprise-security-classification-6vm-voch
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --box-security-classification-key: string # The name of the classification to apply to this folder. To list the available classifications in an enterprise, use the classification API to retrieve the [classification template](e://get_metadata_templates_enterprise_securityClassification-6VMVochwUWo_schema) which lists all available classification keys. (e.g. Sensitive)
-]: any -> record<_canEdit: bool, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: float, _version: int, Box__Security__Classification__Key: string> {
+]: any -> oneof<record<_canEdit: bool, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: float, _version: int, Box__Security__Classification__Key: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4257,7 +4278,7 @@ export def "put-folders-id-metadata-enterprise-security-classification-6vm-vochw
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<_canEdit: bool, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: float, _version: int, Box__Security__Classification__Key: string> {
+]: any -> oneof<record<_canEdit: bool, _parent: string, _scope: string, _template: string, _type: string, _typeVersion: float, _version: int, Box__Security__Classification__Key: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4287,7 +4308,7 @@ export def "put-folders-id-metadata-enterprise-security-classification-6vm-vochw
 # operationId: delete_folders_id_metadata_id_id
 export def "delete-folders-id-metadata-id-id" [
   folder_id: string
-  scope: string
+  scope: string@scope-completer
   template_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4298,7 +4319,7 @@ export def "delete-folders-id-metadata-id-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
@@ -4327,7 +4348,7 @@ export def "delete-folders-id-metadata-id-id" [
 # operationId: get_folders_id_metadata_id_id
 export def "get-folders-id-metadata-id-id" [
   folder_id: string
-  scope: string
+  scope: string@scope-completer
   template_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4338,7 +4359,7 @@ export def "get-folders-id-metadata-id-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record<_parent: string, _scope: string, _template: string, _version: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
@@ -4367,7 +4388,7 @@ export def "get-folders-id-metadata-id-id" [
 # operationId: post_folders_id_metadata_id_id
 export def "post-folders-id-metadata-id-id" [
   folder_id: string
-  scope: string
+  scope: string@scope-completer
   template_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4379,7 +4400,7 @@ export def "post-folders-id-metadata-id-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: record
-]: any -> record {
+]: any -> oneof<record<_parent: string, _scope: string, _template: string, _version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4411,7 +4432,7 @@ export def "post-folders-id-metadata-id-id" [
 # operationId: put_folders_id_metadata_id_id
 export def "put-folders-id-metadata-id-id" [
   folder_id: string
-  scope: string
+  scope: string@scope-completer
   template_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4423,7 +4444,7 @@ export def "put-folders-id-metadata-id-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record {
+]: any -> oneof<record<_parent: string, _scope: string, _template: string, _version: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4464,7 +4485,7 @@ export def "delete-folders-id-trash" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
@@ -4501,7 +4522,7 @@ export def "get-folders-id-trash" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record<content_created_at: string, content_modified_at: string, created_at: string, created_by: record, description: record, etag: string, folder_upload_email: string, id: string, item_status: string, modified_at: string, modified_by: record, name: string, owned_by: record, parent: record, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: record, shared_link: string, size: int, trashed_at: string, type: string> {
+]: nothing -> oneof<record<content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, etag: string, folder_upload_email: string, id: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, name: string, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: string, shared_link: string, size: int, trashed_at: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
@@ -4538,7 +4559,7 @@ export def "delete-folders-id-watermark" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
@@ -4574,7 +4595,7 @@ export def "get-folders-id-watermark" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<watermark: record<created_at: string, modified_at: string>> {
+]: nothing -> oneof<record<watermark: record<created_at: string, modified_at: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($folder_id | is-empty) { error make --unspanned { msg: "path parameter 'folder_id' must be non-empty" } }
@@ -4599,7 +4620,6 @@ export def "get-folders-id-watermark" [
 #
 # PUT /folders/{folder_id}/watermark
 # operationId: put_folders_id_watermark
-# --watermark shape: {imprint: "default"}
 export def "put-folders-id-watermark" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4612,7 +4632,7 @@ export def "put-folders-id-watermark" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   watermark: record # The watermark to imprint on the folder — shape: {imprint: "default"}
-]: any -> record<watermark: record<created_at: string, modified_at: string>> {
+]: any -> oneof<record<watermark: record<created_at: string, modified_at: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4640,8 +4660,6 @@ export def "put-folders-id-watermark" [
 #
 # POST /group_memberships
 # operationId: post_group_memberships
-# --group shape: {id: string}
-# --user shape: {id: string}
 export def "post-group-memberships" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4657,7 +4675,7 @@ export def "post-group-memberships" [
   group: record # The group to add the user to. — shape: {id: string}
   --role: string@role-completer-2 # The role of the user in the group. (e.g. member)
   user: record # The user to add to the group. — shape: {id: string}
-]: any -> record<created_at: string, group: record, id: string, modified_at: string, role: string, type: string, user: record> {
+]: any -> oneof<record<created_at: string, group: record<id: string, type: string, group_type: string, name: string>, id: string, modified_at: string, role: string, type: string, user: record<id: string, type: string, login: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4696,7 +4714,7 @@ export def "delete-group-memberships-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'group_membership_id' must be non-empty" } }
@@ -4733,7 +4751,7 @@ export def "get-group-memberships-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record<created_at: string, group: record, id: string, modified_at: string, role: string, type: string, user: record> {
+]: nothing -> oneof<record<created_at: string, group: record<id: string, type: string, group_type: string, name: string>, id: string, modified_at: string, role: string, type: string, user: record<id: string, type: string, login: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'group_membership_id' must be non-empty" } }
@@ -4773,7 +4791,7 @@ export def "put-group-memberships-id" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --configurable-permissions: record # Custom configuration for the permissions an admin if a group will receive. This option has no effect on members with a role of `member`. Setting these permissions overwrites the default access levels of an admin. Specifying a value of "null" for this object will disable all configurable permissions. Specifying permissions will set them accordingly, omitted permissions will be enabled by default. (e.g. {can_run_reports: true})
   --role: string@role-completer-2 # The role of the user in the group. (e.g. member)
-]: any -> record<created_at: string, group: record, id: string, modified_at: string, role: string, type: string, user: record> {
+]: any -> oneof<record<created_at: string, group: record<id: string, type: string, group_type: string, name: string>, id: string, modified_at: string, role: string, type: string, user: record<id: string, type: string, login: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4816,7 +4834,7 @@ export def "get-groups" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response. Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, offset: int, order: table<by: string, direction: string>, total_count: int, entries: table<id: string, type: string, group_type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter_term" $filter_term "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -4858,7 +4876,7 @@ export def "post-groups" [
   --member-viewability-level: string@member-viewability-level-completer # Specifies who can see the members of the group. * `admins_only` - the enterprise admin, co-admins, group's group admin * `admins_and_members` - all admins and group members * `all_managed_users` - all managed users in the enterprise (e.g. admins_only)
   name: string # The name of the new group to be created. This name must be unique within the enterprise. (e.g. Customer Support)
   --provenance: string # Keeps track of which external source this group is coming, for example `Active Directory`, or `Okta`. Setting this will also prevent Box admins from editing the group name and its members directly via the Box web application. This is desirable for one-way syncing of groups. (e.g. Active Directory)
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, group_type: string, name: string, created_at: string, modified_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4897,7 +4915,7 @@ export def "post-groups-terminate-sessions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   group_ids: list<string> # A list of group IDs (e.g. [123456, 456789])
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4935,7 +4953,7 @@ export def "delete-groups-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -4972,7 +4990,7 @@ export def "get-groups-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record {
+]: nothing -> oneof<record<id: string, type: string, group_type: string, name: string, created_at: string, modified_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -5016,7 +5034,7 @@ export def "put-groups-id" [
   --member-viewability-level: string@member-viewability-level-completer # Specifies who can see the members of the group. * `admins_only` - the enterprise admin, co-admins, group's group admin * `admins_and_members` - all admins and group members * `all_managed_users` - all managed users in the enterprise (e.g. admins_only)
   --name: string # The name of the new group to be created. Must be unique within the enterprise. (e.g. Customer Support)
   --provenance: string # Keeps track of which external source this group is coming, for example `Active Directory`, or `Okta`. Setting this will also prevent Box admins from editing the group name and its members directly via the Box web application. This is desirable for one-way syncing of groups. (e.g. Active Directory)
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, group_type: string, name: string, created_at: string, modified_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5058,7 +5076,7 @@ export def "get-groups-id-collaborations" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response. Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, offset: int, order: table<by: string, direction: string>, total_count: int, entries: table<acceptance_requirements_status: record, accessible_by: record, acknowledged_at: string, created_at: string, created_by: record, expires_at: string, id: string, invite_email: string, item: record, modified_at: string, role: string, status: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -5097,7 +5115,7 @@ export def "get-groups-id-memberships" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response. Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, offset: int, order: table<by: string, direction: string>, total_count: int, entries: table<created_at: string, group: record, id: string, modified_at: string, role: string, type: string, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -5123,8 +5141,6 @@ export def "get-groups-id-memberships" [
 #
 # POST /invites
 # operationId: post_invites
-# --actionable_by shape: {login?: string}
-# --enterprise shape: {id: string}
 export def "post-invites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5138,7 +5154,7 @@ export def "post-invites" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   actionable_by: record # The user to invite — shape: {login?: string}
   enterprise: record # The enterprise to invite the user to — shape: {id: string}
-]: any -> record<actionable_by: record, created_at: string, id: string, invited_by: record, invited_to: record<id: string, name: string, type: string>, modified_at: string, status: string, type: string> {
+]: any -> oneof<record<actionable_by: record<id: string, type: string, login: string, name: string>, created_at: string, id: string, invited_by: record<id: string, type: string, login: string, name: string>, invited_to: record<id: string, name: string, type: string>, modified_at: string, status: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5178,7 +5194,7 @@ export def "get-invites-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record<actionable_by: record, created_at: string, id: string, invited_by: record, invited_to: record<id: string, name: string, type: string>, modified_at: string, status: string, type: string> {
+]: nothing -> oneof<record<actionable_by: record<id: string, type: string, login: string, name: string>, created_at: string, id: string, invited_by: record<id: string, type: string, login: string, name: string>, invited_to: record<id: string, name: string, type: string>, modified_at: string, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invite_id | is-empty) { error make --unspanned { msg: "path parameter 'invite_id' must be non-empty" } }
@@ -5218,7 +5234,7 @@ export def "get-legal-hold-policies" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<id: string, type: string, assignment_counts: record, created_at: string, created_by: record, deleted_at: string, description: string, filter_ended_at: string, filter_started_at: string, modified_at: string, policy_name: string, release_notes: string, status: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "policy_name" $policy_name "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -5258,7 +5274,7 @@ export def "post-legal-hold-policies" [
   --filter-started-at: string # The filter start date. When this policy is applied using a `custodian` legal hold assignments, it will only apply to file versions created or uploaded inside of the date range. Other assignment types, such as folders and files, will ignore the date filter. Required if `is_ongoing` is set to `false`. (format: date-time, e.g. 2012-12-12T10:53:43-08:00)
   --is-ongoing: oneof<nothing, bool> # Whether new assignments under this policy should continue applying to files even after initialization. When this policy is applied using a legal hold assignment, it will continue applying the policy to any new file versions even after it has been applied. For example, if a legal hold assignment is placed on a user today, and that user uploads a file tomorrow, that file will get held. This will continue until the policy is retired. Required if no filter dates are set. (e.g. true)
   policy_name: string # The name of the policy. (e.g. Sales Policy)
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, assignment_counts: record<file: int, file_version: int, folder: int, user: int>, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, deleted_at: string, description: string, filter_ended_at: string, filter_started_at: string, modified_at: string, policy_name: string, release_notes: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5296,7 +5312,7 @@ export def "delete-legal-hold-policies-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($legal_hold_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'legal_hold_policy_id' must be non-empty" } }
@@ -5332,7 +5348,7 @@ export def "get-legal-hold-policies-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record<id: string, type: string, assignment_counts: record<file: int, file_version: int, folder: int, user: int>, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, deleted_at: string, description: string, filter_ended_at: string, filter_started_at: string, modified_at: string, policy_name: string, release_notes: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($legal_hold_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'legal_hold_policy_id' must be non-empty" } }
@@ -5371,7 +5387,7 @@ export def "put-legal-hold-policies-id" [
   --description: string # A description for the policy. (e.g. A custom policy for the sales team)
   --policy-name: string # The name of the policy. (e.g. Sales Policy)
   --release-notes: string # Notes around why the policy was released. (e.g. Required for GDPR)
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, assignment_counts: record<file: int, file_version: int, folder: int, user: int>, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, deleted_at: string, description: string, filter_ended_at: string, filter_started_at: string, modified_at: string, policy_name: string, release_notes: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5409,15 +5425,16 @@ export def "get-legal-hold-policy-assignments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --policy-id: string # The ID of the legal hold policy (e.g. 324432)
+  --policy-id: string # The ID of the legal hold policy (required, e.g. 324432)
   --assign-to-type: string@assign-to-type-completer # Filters the results by the type of item the policy was applied to. (e.g. file)
   --assign-to-id: string # Filters the results by the ID of item the policy was applied to. (e.g. 1234323)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<id: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($policy_id == null) { error make --unspanned { msg: "required query parameter 'policy_id' missing: pass --policy-id" } }
   let qp = [(serialize-qp "policy_id" $policy_id "scalar") (serialize-qp "assign_to_type" $assign_to_type "scalar") (serialize-qp "assign_to_id" $assign_to_id "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/legal_hold_policy_assignments" $qp $auth.query)
   let accept_val = "application/json"
@@ -5440,7 +5457,6 @@ export def "get-legal-hold-policy-assignments" [
 #
 # POST /legal_hold_policy_assignments
 # operationId: post_legal_hold_policy_assignments
-# --assign_to shape: {id: string, type: "file"|"file_version"|"folder"|"user"}
 export def "post-legal-hold-policy-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5453,7 +5469,7 @@ export def "post-legal-hold-policy-assignments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assign_to: record # The item to assign the policy to — shape: {id: string, type: "file"|"file_version"|"folder"|"user"}
   policy_id: string # The ID of the policy to assign. (e.g. 123244)
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, assigned_at: string, assigned_by: record<id: string, type: string, login: string, name: string>, assigned_to: record, deleted_at: string, legal_hold_policy: record<id: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5491,7 +5507,7 @@ export def "delete-legal-hold-policy-assignments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($legal_hold_policy_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'legal_hold_policy_assignment_id' must be non-empty" } }
@@ -5527,7 +5543,7 @@ export def "get-legal-hold-policy-assignments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record<id: string, type: string, assigned_at: string, assigned_by: record<id: string, type: string, login: string, name: string>, assigned_to: record, deleted_at: string, legal_hold_policy: record<id: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($legal_hold_policy_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'legal_hold_policy_assignment_id' must be non-empty" } }
@@ -5566,7 +5582,7 @@ export def "get-legal-hold-policy-assignments-id-file-versions-on-hold" [
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<deleted_at: string, file: record, file_version: record, id: string, legal_hold_policy_assignments: list, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($legal_hold_policy_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'legal_hold_policy_assignment_id' must be non-empty" } }
@@ -5606,7 +5622,7 @@ export def "get-legal-hold-policy-assignments-id-files-on-hold" [
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<deleted_at: string, file: record, file_version: record, id: string, legal_hold_policy_assignments: list, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($legal_hold_policy_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'legal_hold_policy_assignment_id' must be non-empty" } }
@@ -5642,13 +5658,14 @@ export def "get-metadata-cascade-policies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --folder-id: string # Specifies which folder to return policies for. This can not be used on the root folder with ID `0`. (e.g. 31232)
+  --folder-id: string # Specifies which folder to return policies for. This can not be used on the root folder with ID `0`. (required, e.g. 31232)
   --owner-enterprise-id: string # The ID of the enterprise ID for which to find metadata cascade policies. If not specified, it defaults to the current enterprise. (e.g. 31232)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --offset: int # The offset of the item at which to begin the response. Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<id: string, owner_enterprise: record, parent: record, scope: string, templateKey: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($folder_id == null) { error make --unspanned { msg: "required query parameter 'folder_id' missing: pass --folder-id" } }
   let qp = [(serialize-qp "folder_id" $folder_id "scalar") (serialize-qp "owner_enterprise_id" $owner_enterprise_id "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metadata_cascade_policies" $qp $auth.query)
   let accept_val = "application/json"
@@ -5684,7 +5701,7 @@ export def "post-metadata-cascade-policies" [
   folder_id: string # The ID of the folder to apply the policy to. This folder will need to already have an instance of the targeted metadata template applied to it. (e.g. 1234567)
   scope: string@scope-completer # The scope of the targeted metadata template. This template will need to already have an instance applied to the targeted folder. (e.g. enterprise)
   template_key: string # The key of the targeted metadata template. This template will need to already have an instance applied to the targeted folder. In many cases the template key is automatically derived of its display name, for example `Contract Template` would become `contractTemplate`. In some cases the creator of the template will have provided its own template key. Please [list the templates for an enterprise][list], or get all instances on a [file][file] or [folder][folder] to inspect a template's key. [list]: e://get-metadata-templates-enterprise [file]: e://get-files-id-metadata [folder]: e://get-folders-id-metadata (e.g. productInfo)
-]: any -> record<id: string, owner_enterprise: record<id: string, type: string>, parent: record<id: string, type: string>, scope: string, templateKey: string, type: string> {
+]: any -> oneof<record<id: string, owner_enterprise: record<id: string, type: string>, parent: record<id: string, type: string>, scope: string, templateKey: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5722,7 +5739,7 @@ export def "delete-metadata-cascade-policies-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($metadata_cascade_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'metadata_cascade_policy_id' must be non-empty" } }
@@ -5758,7 +5775,7 @@ export def "get-metadata-cascade-policies-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<id: string, owner_enterprise: record<id: string, type: string>, parent: record<id: string, type: string>, scope: string, templateKey: string, type: string> {
+]: nothing -> oneof<record<id: string, owner_enterprise: record<id: string, type: string>, parent: record<id: string, type: string>, scope: string, templateKey: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($metadata_cascade_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'metadata_cascade_policy_id' must be non-empty" } }
@@ -5795,7 +5812,7 @@ export def "post-metadata-cascade-policies-id-apply" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   conflict_resolution: string@conflict-resolution-completer # Describes the desired behavior when dealing with the conflict where a metadata template already has an instance applied to a child. * `none` will preserve the existing value on the file * `overwrite` will force-apply the templates values over any existing values. (e.g. none)
-]: any -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5823,7 +5840,6 @@ export def "post-metadata-cascade-policies-id-apply" [
 #
 # POST /metadata_queries/execute_read
 # operationId: post_metadata_queries_execute_read
-# --order_by item shape: {direction?: "ASC"|"DESC"|"asc"|"desc", field_key?: string}
 export def "post-metadata-queries-execute-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5836,18 +5852,18 @@ export def "post-metadata-queries-execute-read" [
   --dry-run(-n) # Return the request that would be sent without executing it
   ancestor_folder_id: string # The ID of the folder that you are restricting the query to. A value of zero will return results from all folders you have access to. A non-zero value will only return results found in the folder corresponding to the ID or in any of its subfolders. (e.g. 0)
   --fields: list<string> # By default, this endpoint returns only the most basic info about the items for which the query matches. This attribute can be used to specify a list of additional attributes to return for any item, including its metadata. This attribute takes a list of item fields, metadata template identifiers, or metadata template field identifiers. For example: * `created_by` will add the details of the user who created the item to the response. * `metadata..` will return the mini-representation of the metadata instance identified by the `scope` and `templateKey`. * `metadata...` will return all the mini-representation of the metadata instance identified by the `scope` and `templateKey` plus the field specified by the `field` name. Multiple fields for the same `scope` and `templateKey` can be defined. (e.g. [extension, created_at, item_status, metadata.enterprise_1234.contracts, metadata.enterprise_1234.regions.location])
-  --body-from: string # Specifies the template used in the query. Must be in the form `scope.templateKey`. Not all templates can be used in this field, most notably the built-in, Box-provided classification templates can not be used in a query. (e.g. enterprise_123456.someTemplate)
+  from: string # Specifies the template used in the query. Must be in the form `scope.templateKey`. Not all templates can be used in this field, most notably the built-in, Box-provided classification templates can not be used in a query. (e.g. enterprise_123456.someTemplate)
   --limit: int # A value between 0 and 100 that indicates the maximum number of results to return for a single request. This only specifies a maximum boundary and will not guarantee the minimum number of results returned. (default: 100, e.g. 50)
   --marker: string # Marker to use for requesting the next page. (e.g. AAAAAmVYB1FWec8GH6yWu2nwmanfMh07IyYInaa7DZDYjgO1H4KoLW29vPlLY173OKsci6h6xGh61gG73gnaxoS+o0BbI1/h6le6cikjlupVhASwJ2Cj0tOD9wlnrUMHHw3/ISf+uuACzrOMhN6d5fYrbidPzS6MdhJOejuYlvsg4tcBYzjauP3+VU51p77HFAIuObnJT0ff)
   --order-by: list # A list of template fields and directions to sort the metadata query results by. The ordering `direction` must be the same for each item in the array. — item shape: {direction?: "ASC"|"DESC"|"asc"|"desc", field_key?: string}
   --query: string # The query to perform. A query is a logical expression that is very similar to a SQL `SELECT` statement. Values in the search query can be turned into parameters specified in the `query_param` arguments list to prevent having to manually insert search values into the query string. For example, a value of `:amount` would represent the `amount` value in `query_params` object. (e.g. value >= :amount)
   --query-params: record # Set of arguments corresponding to the parameters specified in the `query`. The type of each parameter used in the `query_params` must match the type of the corresponding metadata template field. (e.g. {amount: 100})
-]: any -> record<entries: list<any>, limit: int, next_marker: string> {
+]: any -> oneof<record<entries: list<any>, limit: int, next_marker: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata_queries/execute_read" $auth.query)
-  let req_body = {"ancestor_folder_id": $ancestor_folder_id, "fields": $fields, "from": $body_from, "limit": $limit, "marker": $marker, "order_by": $order_by, "query": $query, "query_params": $query_params} | compact
+  let req_body = {"ancestor_folder_id": $ancestor_folder_id, "fields": $fields, "from": $from, "limit": $limit, "marker": $marker, "order_by": $order_by, "query": $query, "query_params": $query_params} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5879,11 +5895,13 @@ export def "get-metadata-query-indices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --scope: string@scope-completer # The scope of the metadata template (e.g. global)
-  --template-key: string # The name of the metadata template (e.g. properties)
-]: nothing -> record<entries: table<fields: list, id: string, status: string, type: string>, limit: int, next_marker: string> {
+  --scope: string@scope-completer # The scope of the metadata template (required, e.g. global)
+  --template-key: string # The name of the metadata template (required, e.g. properties)
+]: nothing -> oneof<record<entries: table<fields: list, id: string, status: string, type: string>, limit: int, next_marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($scope == null) { error make --unspanned { msg: "required query parameter 'scope' missing: pass --scope" } }
+  if ($template_key == null) { error make --unspanned { msg: "required query parameter 'template_key' missing: pass --template-key" } }
   let qp = [(serialize-qp "scope" $scope "scalar") (serialize-qp "template_key" $template_key "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metadata_query_indices" $qp $auth.query)
   let accept_val = "application/json"
@@ -5916,10 +5934,11 @@ export def "get-metadata-templates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --metadata-instance-id: string # The ID of an instance of the metadata template to find. (format: uuid, e.g. 01234500-12f1-1234-aa12-b1d234cb567e)
-]: nothing -> record {
+  --metadata-instance-id: string # The ID of an instance of the metadata template to find. (required, format: uuid, e.g. 01234500-12f1-1234-aa12-b1d234cb567e)
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<copyInstanceOnItemCopy: bool, displayName: string, fields: list, hidden: bool, id: string, scope: string, templateKey: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($metadata_instance_id == null) { error make --unspanned { msg: "required query parameter 'metadata_instance_id' missing: pass --metadata-instance-id" } }
   let qp = [(serialize-qp "metadata_instance_id" $metadata_instance_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/metadata_templates" $qp $auth.query)
   let accept_val = "application/json"
@@ -5954,7 +5973,7 @@ export def "get-metadata-templates-enterprise" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<copyInstanceOnItemCopy: bool, displayName: string, fields: list, hidden: bool, id: string, scope: string, templateKey: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -5989,7 +6008,7 @@ export def "delete-metadata-templates-enterprise-security-classification-6vm-voc
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata_templates/enterprise/securityClassification-6VMVochwUWo/schema" $auth.query)
@@ -6023,7 +6042,7 @@ export def "get-metadata-templates-enterprise-security-classification-6vm-vochw-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<copyInstanceOnItemCopy: bool, displayName: string, fields: table<displayName: string, hidden: bool, id: string, key: string, options: list, type: string>, hidden: bool, id: string, scope: string, templateKey: string, type: string> {
+]: nothing -> oneof<record<copyInstanceOnItemCopy: bool, displayName: string, fields: table<displayName: string, hidden: bool, id: string, key: string, options: list, type: string>, hidden: bool, id: string, scope: string, templateKey: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/metadata_templates/enterprise/securityClassification-6VMVochwUWo/schema" $auth.query)
@@ -6058,7 +6077,7 @@ export def "put-metadata-templates-enterprise-security-classification-6vm-vochw-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<copyInstanceOnItemCopy: bool, displayName: string, fields: table<displayName: string, hidden: bool, id: string, key: string, options: list, type: string>, hidden: bool, id: string, scope: string, templateKey: string, type: string> {
+]: any -> oneof<record<copyInstanceOnItemCopy: bool, displayName: string, fields: table<displayName: string, hidden: bool, id: string, key: string, options: list, type: string>, hidden: bool, id: string, scope: string, templateKey: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6096,7 +6115,7 @@ export def "put-metadata-templates-enterprise-security-classification-6vm-vochw-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<copyInstanceOnItemCopy: bool, displayName: string, fields: table<displayName: string, hidden: bool, id: string, key: string, options: list, type: string>, hidden: bool, id: string, scope: string, templateKey: string, type: string> {
+]: any -> oneof<record<copyInstanceOnItemCopy: bool, displayName: string, fields: table<displayName: string, hidden: bool, id: string, key: string, options: list, type: string>, hidden: bool, id: string, scope: string, templateKey: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6134,7 +6153,7 @@ export def "put-metadata-templates-enterprise-security-classification-6vm-vochw-
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<copyInstanceOnItemCopy: bool, displayName: string, fields: table<displayName: string, hidden: bool, id: string, key: string, options: list, type: string>, hidden: bool, id: string, scope: string, templateKey: string, type: string> {
+]: any -> oneof<record<copyInstanceOnItemCopy: bool, displayName: string, fields: table<displayName: string, hidden: bool, id: string, key: string, options: list, type: string>, hidden: bool, id: string, scope: string, templateKey: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6173,7 +6192,7 @@ export def "get-metadata-templates-global" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<copyInstanceOnItemCopy: bool, displayName: string, fields: list, hidden: bool, id: string, scope: string, templateKey: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -6198,7 +6217,6 @@ export def "get-metadata-templates-global" [
 #
 # POST /metadata_templates/schema
 # operationId: post_metadata_templates_schema
-# --fields item shape: {description?: string, displayName: string, hidden?: bool, key: string, options?: list, type: "string"|"float"|"date"|"enum"|"multiSelect"}
 export def "post-metadata-templates-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6215,7 +6233,7 @@ export def "post-metadata-templates-schema" [
   --hidden: oneof<nothing, bool> # Defines if this template is visible in the Box web app UI, or if it is purely intended for usage through the API. (default: false, e.g. true)
   scope: string # The scope of the metadata template to create. Applications can only create templates for use within the authenticated user's enterprise. This value needs to be set to `enterprise`, as `global` scopes can not be created by applications. (e.g. enterprise)
   --template-key: string # A unique identifier for the template. This identifier needs to be unique across the enterprise for which the metadata template is being created. When not provided, the API will create a unique `templateKey` based on the value of the `displayName`. (e.g. productInfo)
-]: any -> record<copyInstanceOnItemCopy: bool, displayName: string, fields: list<record>, hidden: bool, id: string, scope: string, templateKey: string, type: string> {
+]: any -> oneof<record<copyInstanceOnItemCopy: bool, displayName: string, fields: table<description: string, displayName: string, hidden: bool, key: string, options: list, type: string, id: string>, hidden: bool, id: string, scope: string, templateKey: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6242,7 +6260,6 @@ export def "post-metadata-templates-schema" [
 #
 # POST /metadata_templates/schema
 # operationId: post_metadata_templates_schema#classifications
-# --fields item shape: {displayName?: "Classification", hidden?: bool, key?: "Box__Security__Classification__Key", options?: list, type?: "enum"}
 export def "post-metadata-templates-schemaclassifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6259,7 +6276,7 @@ export def "post-metadata-templates-schemaclassifications" [
   --hidden: oneof<nothing, bool> # `false` (e.g. false)
   scope: string@scope-completer-1 # The scope in which to create the classifications. This should be `enterprise` or `enterprise_{id}` where `id` is the unique ID of the enterprise. (e.g. enterprise)
   --template-key: string@template-key-completer # `securityClassification-6VMVochwUWo` (e.g. securityClassification-6VMVochwUWo)
-]: any -> record<copyInstanceOnItemCopy: bool, displayName: string, fields: table<displayName: string, hidden: bool, id: string, key: string, options: list, type: string>, hidden: bool, id: string, scope: string, templateKey: string, type: string> {
+]: any -> oneof<record<copyInstanceOnItemCopy: bool, displayName: string, fields: table<displayName: string, hidden: bool, id: string, key: string, options: list, type: string>, hidden: bool, id: string, scope: string, templateKey: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6287,7 +6304,7 @@ export def "post-metadata-templates-schemaclassifications" [
 # DELETE /metadata_templates/{scope}/{template_key}/schema
 # operationId: delete_metadata_templates_id_id_schema
 export def "delete-metadata-templates-id-id-schema" [
-  scope: string
+  scope: string@scope-completer
   template_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6298,7 +6315,7 @@ export def "delete-metadata-templates-id-id-schema" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
@@ -6325,7 +6342,7 @@ export def "delete-metadata-templates-id-id-schema" [
 # GET /metadata_templates/{scope}/{template_key}/schema
 # operationId: get_metadata_templates_id_id_schema
 export def "get-metadata-templates-id-id-schema" [
-  scope: string
+  scope: string@scope-completer
   template_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6336,7 +6353,7 @@ export def "get-metadata-templates-id-id-schema" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<copyInstanceOnItemCopy: bool, displayName: string, fields: list<record>, hidden: bool, id: string, scope: string, templateKey: string, type: string> {
+]: nothing -> oneof<record<copyInstanceOnItemCopy: bool, displayName: string, fields: table<description: string, displayName: string, hidden: bool, key: string, options: list, type: string, id: string>, hidden: bool, id: string, scope: string, templateKey: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scope | is-empty) { error make --unspanned { msg: "path parameter 'scope' must be non-empty" } }
@@ -6363,7 +6380,7 @@ export def "get-metadata-templates-id-id-schema" [
 # PUT /metadata_templates/{scope}/{template_key}/schema
 # operationId: put_metadata_templates_id_id_schema
 export def "put-metadata-templates-id-id-schema" [
-  scope: string
+  scope: string@scope-completer
   template_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6375,7 +6392,7 @@ export def "put-metadata-templates-id-id-schema" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> record<copyInstanceOnItemCopy: bool, displayName: string, fields: list<record>, hidden: bool, id: string, scope: string, templateKey: string, type: string> {
+]: any -> oneof<record<copyInstanceOnItemCopy: bool, displayName: string, fields: table<description: string, displayName: string, hidden: bool, key: string, options: list, type: string, id: string>, hidden: bool, id: string, scope: string, templateKey: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6415,7 +6432,7 @@ export def "get-metadata-templates-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<copyInstanceOnItemCopy: bool, displayName: string, fields: list<record>, hidden: bool, id: string, scope: string, templateKey: string, type: string> {
+]: nothing -> oneof<record<copyInstanceOnItemCopy: bool, displayName: string, fields: table<description: string, displayName: string, hidden: bool, key: string, options: list, type: string, id: string>, hidden: bool, id: string, scope: string, templateKey: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_id | is-empty) { error make --unspanned { msg: "path parameter 'template_id' must be non-empty" } }
@@ -6453,7 +6470,7 @@ export def "post-oauth2-revoke" [
   --client-id: string # The Client ID of the application requesting to revoke the access token. (e.g. ly1nj6n11vionaie65emwzk575hnnmrk)
   --client-secret: string # The client secret of the application requesting to revoke an access token. (e.g. hOzsTeFlT6ko0dme22uGbQal04SBPYc1)
   --body-token: string # The access token to revoke. (format: token, e.g. n22JPxrh18m4Y0wIZPIqYZK7VRrsMTWW)
-]: any -> record<error: string, error_description: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default "https://api.box.com")
@@ -6462,7 +6479,7 @@ export def "post-oauth2-revoke" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -6506,7 +6523,7 @@ export def "post-oauth2-token" [
   --scope: string # The space-delimited list of scopes that you want apply to the new access token. The `subject_token` will need to have all of these scopes or the call will error with **401 Unauthorized**. (format: space_delimited_list, e.g. item_upload item_preview base_explorer)
   --subject-token: string # The token to exchange for a downscoped token. This can be a regular access token, a JWT assertion, or an app token. Used in combination with `urn:ietf:params:oauth:grant-type:token-exchange` as the `grant_type`. (format: token, e.g. c3FIOG9vSGV4VHo4QzAyg5T1JvNnJoZ3ExaVNyQWw6WjRsanRKZG5lQk9qUE1BVQ)
   --subject-token-type: string@subject-token-type-completer # The type of `subject_token` passed in. Used in combination with `urn:ietf:params:oauth:grant-type:token-exchange` as the `grant_type`. (e.g. urn:ietf:params:oauth:token-type:access_token)
-]: any -> record<access_token: string, expires_in: int, issued_token_type: string, refresh_token: string, restricted_to: table<object: record, scope: string>, token_type: string> {
+]: any -> oneof<record<access_token: string, expires_in: int, issued_token_type: string, refresh_token: string, restricted_to: table<object: record, scope: string>, token_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default "https://api.box.com")
@@ -6515,7 +6532,7 @@ export def "post-oauth2-token" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -6548,7 +6565,7 @@ export def "post-oauth2-tokenrefresh" [
   client_secret: string # The client secret of the application requesting to refresh the token. (e.g. hOzsTeFlT6ko0dme22uGbQal04SBPYc1)
   grant_type: string@grant-type-completer-1 # The type of request being made, in this case a refresh request. (format: urn, e.g. refresh_token)
   refresh_token: string # The refresh token to refresh. (format: token, e.g. c3FIOG9vSGV4VHo4QzAyg5T1JvNnJoZ3ExaVNyQWw6WjRsanRKZG5lQk9qUE1BVQ)
-]: any -> record<access_token: string, expires_in: int, issued_token_type: string, refresh_token: string, restricted_to: table<object: record, scope: string>, token_type: string> {
+]: any -> oneof<record<access_token: string, expires_in: int, issued_token_type: string, refresh_token: string, restricted_to: table<object: record, scope: string>, token_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default "https://api.box.com")
@@ -6557,7 +6574,7 @@ export def "post-oauth2-tokenrefresh" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -6589,7 +6606,7 @@ export def "get-recent-items" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<interacted_at: string, interaction_shared_link: string, interaction_type: string, item: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
@@ -6630,7 +6647,7 @@ export def "get-retention-policies" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
-]: nothing -> record {
+]: nothing -> oneof<record<entries: table<id: string, type: string, disposition_action: string, policy_name: string, retention_length: string>, limit: int, next_marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "policy_name" $policy_name "scalar") (serialize-qp "policy_type" $policy_type "scalar") (serialize-qp "created_by_user_id" $created_by_user_id "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
@@ -6655,7 +6672,6 @@ export def "get-retention-policies" [
 #
 # POST /retention_policies
 # operationId: post_retention_policies
-# --custom_notification_recipients item shape: {id?: string, type: "user", login: string, name: string}
 export def "post-retention-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6675,7 +6691,7 @@ export def "post-retention-policies" [
   policy_type: string@policy-type-completer # The type of the retention policy. A retention policy type can either be `finite`, where a specific amount of time to retain the content is known upfront, or `indefinite`, where the amount of time to retain the content is still unknown. (e.g. finite)
   --retention-length: string # The length of the retention policy. This value specifies the duration in days that the retention policy will be active for after being assigned to content. If the policy has a `policy_type` of `indefinite`, the `retention_length` will also be `indefinite`. (format: int32, e.g. 365)
   --retention-type: string@retention-type-completer # Specifies the retention type: * `modifiable`: You can modify the retention policy. For example, you can add or remove folders, shorten or lengthen the policy duration, or delete the assignment. Use this type if your retention policy is not related to any regulatory purposes. * `non-modifiable`: You can modify the retention policy only in a limited way: add a folder, lengthen the duration, retire the policy, change the disposition action or notification settings. You cannot perform other actions, such as deleting the assignment or shortening the policy duration. Use this type to ensure compliance with regulatory retention policies. (e.g. modifiable)
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, disposition_action: string, policy_name: string, retention_length: string, are_owners_notified: bool, assignment_counts: record<enterprise: int, folder: int, metadata_template: int>, can_owner_extend_retention: bool, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, custom_notification_recipients: table<id: string, type: string, login: string, name: string>, description: string, modified_at: string, policy_type: string, retention_type: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6713,7 +6729,7 @@ export def "delete-retention-policies-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($retention_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'retention_policy_id' must be non-empty" } }
@@ -6750,7 +6766,7 @@ export def "get-retention-policies-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record {
+]: nothing -> oneof<record<id: string, type: string, disposition_action: string, policy_name: string, retention_length: string, are_owners_notified: bool, assignment_counts: record<enterprise: int, folder: int, metadata_template: int>, can_owner_extend_retention: bool, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, custom_notification_recipients: table<id: string, type: string, login: string, name: string>, description: string, modified_at: string, policy_type: string, retention_type: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($retention_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'retention_policy_id' must be non-empty" } }
@@ -6776,7 +6792,6 @@ export def "get-retention-policies-id" [
 #
 # PUT /retention_policies/{retention_policy_id}
 # operationId: put_retention_policies_id
-# --custom_notification_recipients item shape: {id?: string, type: "user", login: string, name: string}
 export def "put-retention-policies-id" [
   retention_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6797,7 +6812,7 @@ export def "put-retention-policies-id" [
   --retention-length: string # The length of the retention policy. This value specifies the duration in days that the retention policy will be active for after being assigned to content. If the policy has a `policy_type` of `indefinite`, the `retention_length` will also be `indefinite`. (format: int32, e.g. 365)
   --retention-type: string # Specifies the retention type: * `modifiable`: You can modify the retention policy. For example, you can add or remove folders, shorten or lengthen the policy duration, or delete the assignment. Use this type if your retention policy is not related to any regulatory purposes. * `non-modifiable`: You can modify the retention policy only in a limited way: add a folder, lengthen the duration, retire the policy, change the disposition action or notification settings. You cannot perform other actions, such as deleting the assignment or shortening the policy duration. Use this type to ensure compliance with regulatory retention policies. When updating a retention policy, you can use `non-modifiable` type only. You can convert a `modifiable` policy to `non-modifiable`, but not the other way around. (e.g. non-modifiable)
   --status: string # Used to retire a retention policy. If not retiring a policy, do not include this parameter or set it to `null`. (e.g. retired)
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, disposition_action: string, policy_name: string, retention_length: string, are_owners_notified: bool, assignment_counts: record<enterprise: int, folder: int, metadata_template: int>, can_owner_extend_retention: bool, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, custom_notification_recipients: table<id: string, type: string, login: string, name: string>, description: string, modified_at: string, policy_type: string, retention_type: string, status: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6840,7 +6855,7 @@ export def "get-retention-policies-id-assignments" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<entries: table<id: string, type: string>, limit: int, next_marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($retention_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'retention_policy_id' must be non-empty" } }
@@ -6866,8 +6881,6 @@ export def "get-retention-policies-id-assignments" [
 #
 # POST /retention_policy_assignments
 # operationId: post_retention_policy_assignments
-# --assign_to shape: {id: string, type: "enterprise"|"folder"|"metadata_template"}
-# --filter_fields item shape: {field?: string, value?: string}
 export def "post-retention-policy-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6882,7 +6895,7 @@ export def "post-retention-policy-assignments" [
   --filter-fields: list # If the `assign_to` type is `metadata_template`, then optionally add the `filter_fields` parameter which will require an array of objects with a field entry and a value entry. Currently only one object of `field` and `value` is supported. — item shape: {field?: string, value?: string}
   policy_id: string # The ID of the retention policy to assign (e.g. 173463)
   --start-date-field: string # The date the retention policy assignment begins. If the `assigned_to` type is `metadata_template`, this field can be a date field's metadata attribute key id. (e.g. upload_date)
-]: any -> record<assigned_at: string, assigned_by: record, assigned_to: record<id: string, type: string>, filter_fields: table<field: string, value: string>, id: string, retention_policy: record, start_date_field: string, type: string> {
+]: any -> oneof<record<assigned_at: string, assigned_by: record<id: string, type: string, login: string, name: string>, assigned_to: record<id: string, type: string>, filter_fields: table<field: string, value: string>, id: string, retention_policy: record<id: string, type: string, disposition_action: string, policy_name: string, retention_length: string>, start_date_field: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6920,7 +6933,7 @@ export def "delete-retention-policy-assignments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($retention_policy_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'retention_policy_assignment_id' must be non-empty" } }
@@ -6957,7 +6970,7 @@ export def "get-retention-policy-assignments-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record<assigned_at: string, assigned_by: record, assigned_to: record<id: string, type: string>, filter_fields: table<field: string, value: string>, id: string, retention_policy: record, start_date_field: string, type: string> {
+]: nothing -> oneof<record<assigned_at: string, assigned_by: record<id: string, type: string, login: string, name: string>, assigned_to: record<id: string, type: string>, filter_fields: table<field: string, value: string>, id: string, retention_policy: record<id: string, type: string, disposition_action: string, policy_name: string, retention_length: string>, start_date_field: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($retention_policy_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'retention_policy_assignment_id' must be non-empty" } }
@@ -6996,7 +7009,7 @@ export def "get-retention-policy-assignments-id-file-versions-under-retention" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<etag: string, id: string, type: string, file_version: record, name: string, sequence_id: string, sha1: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($retention_policy_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'retention_policy_assignment_id' must be non-empty" } }
@@ -7035,7 +7048,7 @@ export def "get-retention-policy-assignments-id-files-under-retention" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<etag: string, id: string, type: string, file_version: record, name: string, sequence_id: string, sha1: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($retention_policy_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'retention_policy_assignment_id' must be non-empty" } }
@@ -7084,7 +7097,7 @@ export def "get-search" [
   --type: string@type-completer-2 # Limits the search results to any items of this type. This parameter only takes one value. By default the API returns items that match any of these types. * `file` - Limits the search results to files * `folder` - Limits the search results to folders * `web_link` - Limits the search results to web links, also known as bookmarks (e.g. file)
   --trash-content: string@trash-content-completer # Determines if the search should look in the trash for items. By default, this API only returns search results for items not currently in the trash (`non_trashed_only`). * `trashed_only` - Only searches for items currently in the trash * `non_trashed_only` - Only searches for items currently not in the trash (default: non_trashed_only, e.g. non_trashed_only)
   --mdfilters: list # Limits the search results to any items for which the metadata matches the provided filter. This parameter contains a list of 1 metadata template to filter the search results by. This list can currently only contain one entry, though this might be expanded in the future. This parameter is required unless the `query` parameter is provided. (e.g. [{filters: {category: online}, scope: enterprise, templateKey: contract}])
-  --qp-sort: string@sort-completer-1 # Defines the order in which search results are returned. This API defaults to returning items by relevance unless this parameter is explicitly specified. * `relevance` (default) returns the results sorted by relevance to the query search term. The relevance is based on the occurrence of the search term in the items name, description, content, and additional properties. * `modified_at` returns the results ordered in descending order by date at which the item was last modified. (default: relevance, e.g. modified_at)
+  --sort: string@sort-completer-1 # Defines the order in which search results are returned. This API defaults to returning items by relevance unless this parameter is explicitly specified. * `relevance` (default) returns the results sorted by relevance to the query search term. The relevance is based on the occurrence of the search term in the items name, description, content, and additional properties. * `modified_at` returns the results ordered in descending order by date at which the item was last modified. (default: relevance, e.g. modified_at)
   --direction: string@direction-completer-1 # Defines the direction in which search results are ordered. This API defaults to returning items in descending (`DESC`) order unless this parameter is explicitly specified. When results are sorted by `relevance` the ordering is locked to returning items in descending order of relevance, and this parameter is ignored. (default: DESC, e.g. ASC)
   --limit: int # Defines the maximum number of items to return as part of a page of results. (format: int64, default: 30, e.g. 100)
   --include-recent-shared-links: oneof<nothing, bool> # Defines whether the search results should include any items that the user recently accessed through a shared link. Please note that when this parameter has been set to true, the format of the response of this API changes to return a list of [Search Results with Shared Links](r://search_results_with_shared_links) (default: false, e.g. true)
@@ -7093,14 +7106,14 @@ export def "get-search" [
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "file_extensions" $file_extensions "csv") (serialize-qp "created_at_range" $created_at_range "csv") (serialize-qp "updated_at_range" $updated_at_range "csv") (serialize-qp "size_range" $size_range "csv") (serialize-qp "owner_user_ids" $owner_user_ids "csv") (serialize-qp "recent_updater_user_ids" $recent_updater_user_ids "csv") (serialize-qp "ancestor_folder_ids" $ancestor_folder_ids "csv") (serialize-qp "content_types" $content_types "csv") (serialize-qp "type" $type "scalar") (serialize-qp "trash_content" $trash_content "scalar") (serialize-qp "mdfilters" $mdfilters "multi") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include_recent_shared_links" $include_recent_shared_links "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "file_extensions" $file_extensions "csv") (serialize-qp "created_at_range" $created_at_range "csv") (serialize-qp "updated_at_range" $updated_at_range "csv") (serialize-qp "size_range" $size_range "csv") (serialize-qp "owner_user_ids" $owner_user_ids "csv") (serialize-qp "recent_updater_user_ids" $recent_updater_user_ids "csv") (serialize-qp "ancestor_folder_ids" $ancestor_folder_ids "csv") (serialize-qp "content_types" $content_types "csv") (serialize-qp "type" $type "scalar") (serialize-qp "trash_content" $trash_content "scalar") (serialize-qp "mdfilters" $mdfilters "multi") (serialize-qp "sort" $sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "include_recent_shared_links" $include_recent_shared_links "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"query": $query, "scope": $scope, "file_extensions": $file_extensions, "created_at_range": $created_at_range, "updated_at_range": $updated_at_range, "size_range": $size_range, "owner_user_ids": $owner_user_ids, "recent_updater_user_ids": $recent_updater_user_ids, "ancestor_folder_ids": $ancestor_folder_ids, "content_types": $content_types, "type": $type, "trash_content": $trash_content, "mdfilters": $mdfilters, "sort": $qp_sort, "direction": $direction, "limit": $limit, "include_recent_shared_links": $include_recent_shared_links, "fields": $fields, "offset": $offset} | compact)
+    query: ({"query": $query, "scope": $scope, "file_extensions": $file_extensions, "created_at_range": $created_at_range, "updated_at_range": $updated_at_range, "size_range": $size_range, "owner_user_ids": $owner_user_ids, "recent_updater_user_ids": $recent_updater_user_ids, "ancestor_folder_ids": $ancestor_folder_ids, "content_types": $content_types, "type": $type, "trash_content": $trash_content, "mdfilters": $mdfilters, "sort": $sort, "direction": $direction, "limit": $limit, "include_recent_shared_links": $include_recent_shared_links, "fields": $fields, "offset": $offset} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -7127,10 +7140,11 @@ export def "get-shared-items" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --if-none-match: string # Ensures an item is only returned if it has changed. Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
-  --boxapi: string # A header containing the shared link and optional password for the shared link. The format for this header is as follows. `shared_link=[link]&shared_link_password=[password]` (e.g. shared_link=[link]&shared_link_password=[password])
-]: nothing -> record {
+  --boxapi: string # A header containing the shared link and optional password for the shared link. The format for this header is as follows. `shared_link=[link]&shared_link_password=[password]` (required, e.g. shared_link=[link]&shared_link_password=[password])
+]: nothing -> oneof<record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($boxapi == null) { error make --unspanned { msg: "required header parameter 'boxapi' missing: pass --boxapi" } }
   let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/shared_items" $qp $auth.query)
   let accept_val = "application/json"
@@ -7167,10 +7181,11 @@ export def "get-shared-itemsfolders" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --if-none-match: string # Ensures an item is only returned if it has changed. Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
-  --boxapi: string # A header containing the shared link and optional password for the shared link. The format for this header is as follows. `shared_link=[link]&shared_link_password=[password]` (e.g. shared_link=[link]&shared_link_password=[password])
-]: nothing -> record {
+  --boxapi: string # A header containing the shared link and optional password for the shared link. The format for this header is as follows. `shared_link=[link]&shared_link_password=[password]` (required, e.g. shared_link=[link]&shared_link_password=[password])
+]: nothing -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, folder_upload_email: record<access: string, email: string>, item_collection: record<limit: int, offset: int, order: list<record>, total_count: int, entries: list<any>>, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($boxapi == null) { error make --unspanned { msg: "required header parameter 'boxapi' missing: pass --boxapi" } }
   let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/shared_items" $qp $auth.query)
   let accept_val = "application/json"
@@ -7207,10 +7222,11 @@ export def "get-shared-itemsweb-links" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --if-none-match: string # Ensures an item is only returned if it has changed. Pass in the item's last observed `etag` value into this header and the endpoint will fail with a `304 Not Modified` if the item has not changed since. (e.g. 1)
-  --boxapi: string # A header containing the shared link and optional password for the shared link. The format for this header is as follows. `shared_link=[link]&shared_link_password=[password]` (e.g. shared_link=[link]&shared_link_password=[password])
-]: nothing -> record {
+  --boxapi: string # A header containing the shared link and optional password for the shared link. The format for this header is as follows. `shared_link=[link]&shared_link_password=[password]` (required, e.g. shared_link=[link]&shared_link_password=[password])
+]: nothing -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, url: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, trashed_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($boxapi == null) { error make --unspanned { msg: "required header parameter 'boxapi' missing: pass --boxapi" } }
   let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/shared_items" $qp $auth.query)
   let accept_val = "application/json"
@@ -7245,12 +7261,13 @@ export def "get-shield-information-barrier-reports" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --shield-information-barrier-id: string # The ID of the shield information barrier. (e.g. 1910967)
+  --shield-information-barrier-id: string # The ID of the shield information barrier. (required, e.g. 1910967)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record<entries: list<record>, limit: int, next_marker: string> {
+]: nothing -> oneof<record<entries: table<id: string, type: string, created_at: string, created_by: record, details: record, shield_information_barrier: record, status: string, updated_at: string>, limit: int, next_marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($shield_information_barrier_id == null) { error make --unspanned { msg: "required query parameter 'shield_information_barrier_id' missing: pass --shield-information-barrier-id" } }
   let qp = [(serialize-qp "shield_information_barrier_id" $shield_information_barrier_id "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shield_information_barrier_reports" $qp $auth.query)
   let accept_val = "application/json"
@@ -7273,7 +7290,6 @@ export def "get-shield-information-barrier-reports" [
 #
 # POST /shield_information_barrier_reports
 # operationId: post_shield_information_barrier_reports
-# --shield_information_barrier shape: {id?: string, type?: "shield_information_barrier"}
 export def "post-shield-information-barrier-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7285,7 +7301,7 @@ export def "post-shield-information-barrier-reports" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --shield-information-barrier: record # A base representation of a shield information barrier object — shape: {id?: string, type?: "shield_information_barrier"}
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, created_at: string, created_by: record<id: string, type: string>, details: record<details: record<folder_id: string>>, shield_information_barrier: record<shield_information_barrier: record<id: string, type: string>>, status: string, updated_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7323,7 +7339,7 @@ export def "get-shield-information-barrier-reports-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record<id: string, type: string, created_at: string, created_by: record<id: string, type: string>, details: record<details: record<folder_id: string>>, shield_information_barrier: record<shield_information_barrier: record<id: string, type: string>>, status: string, updated_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shield_information_barrier_report_id | is-empty) { error make --unspanned { msg: "path parameter 'shield_information_barrier_report_id' must be non-empty" } }
@@ -7358,12 +7374,13 @@ export def "get-shield-information-barrier-segment-members" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --shield-information-barrier-segment-id: string # The ID of the shield information barrier segment. (e.g. 3423)
+  --shield-information-barrier-segment-id: string # The ID of the shield information barrier segment. (required, e.g. 3423)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record<entries: list<record>, limit: int, next_marker: string> {
+]: nothing -> oneof<record<entries: table<id: string, type: string, user: record, created_at: string, created_by: record, shield_information_barrier: record, shield_information_barrier_segment: record, updated_at: string, updated_by: record>, limit: int, next_marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($shield_information_barrier_segment_id == null) { error make --unspanned { msg: "required query parameter 'shield_information_barrier_segment_id' missing: pass --shield-information-barrier-segment-id" } }
   let qp = [(serialize-qp "shield_information_barrier_segment_id" $shield_information_barrier_segment_id "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shield_information_barrier_segment_members" $qp $auth.query)
   let accept_val = "application/json"
@@ -7386,8 +7403,6 @@ export def "get-shield-information-barrier-segment-members" [
 #
 # POST /shield_information_barrier_segment_members
 # operationId: post_shield_information_barrier_segment_members
-# --shield_information_barrier shape: {id?: string, type?: "shield_information_barrier"}
-# --shield_information_barrier_segment shape: {id?: string, type?: "shield_information_barrier_segment"}
 export def "post-shield-information-barrier-segment-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7401,8 +7416,8 @@ export def "post-shield-information-barrier-segment-members" [
   --shield-information-barrier: record # A base representation of a shield information barrier object — shape: {id?: string, type?: "shield_information_barrier"}
   shield_information_barrier_segment: record # The `type` and `id` of the requested shield information barrier segment. — shape: {id?: string, type?: "shield_information_barrier_segment"}
   --type: string@type-completer-3 # -| A type of the shield barrier segment member. (e.g. shield_information_barrier_segment_member)
-  user: any
-]: any -> record {
+  user: record # A mini representation of a user, used when nested within another resource. — shape: {id?: string, type: "user"}
+]: any -> oneof<record<id: string, type: string, user: record<id: string, type: string>, created_at: string, created_by: record<id: string, type: string>, shield_information_barrier: record<id: string, type: string>, shield_information_barrier_segment: record<id: string, type: string>, updated_at: string, updated_by: record<id: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7440,7 +7455,7 @@ export def "delete-shield-information-barrier-segment-members-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shield_information_barrier_segment_member_id | is-empty) { error make --unspanned { msg: "path parameter 'shield_information_barrier_segment_member_id' must be non-empty" } }
@@ -7476,7 +7491,7 @@ export def "get-shield-information-barrier-segment-members-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record<id: string, type: string, user: record<id: string, type: string>, created_at: string, created_by: record<id: string, type: string>, shield_information_barrier: record<id: string, type: string>, shield_information_barrier_segment: record<id: string, type: string>, updated_at: string, updated_by: record<id: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shield_information_barrier_segment_member_id | is-empty) { error make --unspanned { msg: "path parameter 'shield_information_barrier_segment_member_id' must be non-empty" } }
@@ -7511,12 +7526,13 @@ export def "get-shield-information-barrier-segment-restrictions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --shield-information-barrier-segment-id: string # The ID of the shield information barrier segment. (e.g. 3423)
+  --shield-information-barrier-segment-id: string # The ID of the shield information barrier segment. (required, e.g. 3423)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record<entries: list<record>, limit: int, next_marker: string> {
+]: nothing -> oneof<record<entries: table<id: string, type: string, restricted_segment: record, shield_information_barrier_segment: record, created_at: string, created_by: record, shield_information_barrier: record, updated_at: string, updated_by: record>, limit: int, next_marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($shield_information_barrier_segment_id == null) { error make --unspanned { msg: "required query parameter 'shield_information_barrier_segment_id' missing: pass --shield-information-barrier-segment-id" } }
   let qp = [(serialize-qp "shield_information_barrier_segment_id" $shield_information_barrier_segment_id "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shield_information_barrier_segment_restrictions" $qp $auth.query)
   let accept_val = "application/json"
@@ -7539,9 +7555,6 @@ export def "get-shield-information-barrier-segment-restrictions" [
 #
 # POST /shield_information_barrier_segment_restrictions
 # operationId: post_shield_information_barrier_segment_restrictions
-# --restricted_segment shape: {id?: string, type?: "shield_information_barrier_segment"}
-# --shield_information_barrier shape: {id?: string, type?: "shield_information_barrier"}
-# --shield_information_barrier_segment shape: {id?: string, type?: "shield_information_barrier_segment"}
 export def "post-shield-information-barrier-segment-restrictions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7556,7 +7569,7 @@ export def "post-shield-information-barrier-segment-restrictions" [
   --shield-information-barrier: record # A base representation of a shield information barrier object — shape: {id?: string, type?: "shield_information_barrier"}
   shield_information_barrier_segment: record # The `type` and `id` of the requested shield information barrier segment. — shape: {id?: string, type?: "shield_information_barrier_segment"}
   type: string@type-completer-4 # The type of the shield barrier segment restriction for this member. (e.g. shield_information_barrier_segment_restriction)
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, restricted_segment: record<id: string, type: string>, shield_information_barrier_segment: record<id: string, type: string>, created_at: string, created_by: record<id: string, type: string>, shield_information_barrier: record<id: string, type: string>, updated_at: string, updated_by: record<id: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7594,7 +7607,7 @@ export def "delete-shield-information-barrier-segment-restrictions-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shield_information_barrier_segment_restriction_id | is-empty) { error make --unspanned { msg: "path parameter 'shield_information_barrier_segment_restriction_id' must be non-empty" } }
@@ -7630,7 +7643,7 @@ export def "get-shield-information-barrier-segment-restrictions-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record<id: string, type: string, restricted_segment: record<id: string, type: string>, shield_information_barrier_segment: record<id: string, type: string>, created_at: string, created_by: record<id: string, type: string>, shield_information_barrier: record<id: string, type: string>, updated_at: string, updated_by: record<id: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shield_information_barrier_segment_restriction_id | is-empty) { error make --unspanned { msg: "path parameter 'shield_information_barrier_segment_restriction_id' must be non-empty" } }
@@ -7665,12 +7678,13 @@ export def "get-shield-information-barrier-segments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --shield-information-barrier-id: string # The ID of the shield information barrier. (e.g. 1910967)
+  --shield-information-barrier-id: string # The ID of the shield information barrier. (required, e.g. 1910967)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record<entries: table<created_at: string, created_by: record, description: string, id: string, name: string, shield_information_barrier: record, type: string, updated_at: string, updated_by: record>, limit: int, next_marker: string> {
+]: nothing -> oneof<record<entries: table<created_at: string, created_by: record, description: string, id: string, name: string, shield_information_barrier: record, type: string, updated_at: string, updated_by: record>, limit: int, next_marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($shield_information_barrier_id == null) { error make --unspanned { msg: "required query parameter 'shield_information_barrier_id' missing: pass --shield-information-barrier-id" } }
   let qp = [(serialize-qp "shield_information_barrier_id" $shield_information_barrier_id "scalar") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shield_information_barrier_segments" $qp $auth.query)
   let accept_val = "application/json"
@@ -7693,7 +7707,6 @@ export def "get-shield-information-barrier-segments" [
 #
 # POST /shield_information_barrier_segments
 # operationId: post_shield_information_barrier_segments
-# --shield_information_barrier shape: {id?: string, type?: "shield_information_barrier"}
 export def "post-shield-information-barrier-segments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7707,7 +7720,7 @@ export def "post-shield-information-barrier-segments" [
   --description: string # Description of the shield information barrier segment (e.g. 'Corporate division that engages in  advisory_based financial transactions on behalf of individuals, corporations, and governments.')
   name: string # Name of the shield information barrier segment (e.g. Investment Banking)
   shield_information_barrier: record # A base representation of a shield information barrier object — shape: {id?: string, type?: "shield_information_barrier"}
-]: any -> record<created_at: string, created_by: record<id: string, type: string>, description: string, id: string, name: string, shield_information_barrier: record<id: string, type: string>, type: string, updated_at: string, updated_by: record<id: string, type: string>> {
+]: any -> oneof<record<created_at: string, created_by: record<id: string, type: string>, description: string, id: string, name: string, shield_information_barrier: record<id: string, type: string>, type: string, updated_at: string, updated_by: record<id: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7745,7 +7758,7 @@ export def "delete-shield-information-barrier-segments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shield_information_barrier_segment_id | is-empty) { error make --unspanned { msg: "path parameter 'shield_information_barrier_segment_id' must be non-empty" } }
@@ -7781,7 +7794,7 @@ export def "get-shield-information-barrier-segments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, created_by: record<id: string, type: string>, description: string, id: string, name: string, shield_information_barrier: record<id: string, type: string>, type: string, updated_at: string, updated_by: record<id: string, type: string>> {
+]: nothing -> oneof<record<created_at: string, created_by: record<id: string, type: string>, description: string, id: string, name: string, shield_information_barrier: record<id: string, type: string>, type: string, updated_at: string, updated_by: record<id: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shield_information_barrier_segment_id | is-empty) { error make --unspanned { msg: "path parameter 'shield_information_barrier_segment_id' must be non-empty" } }
@@ -7819,7 +7832,7 @@ export def "put-shield-information-barrier-segments-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # The updated description for the shield information barrier segment. (nullable, e.g. 'Corporate division that engages in advisory_based financial transactions on behalf of individuals, corporations, and governments.')
   --name: string # The updated name for the shield information barrier segment. (e.g. Investment Banking)
-]: any -> record<created_at: string, created_by: record<id: string, type: string>, description: string, id: string, name: string, shield_information_barrier: record<id: string, type: string>, type: string, updated_at: string, updated_by: record<id: string, type: string>> {
+]: any -> oneof<record<created_at: string, created_by: record<id: string, type: string>, description: string, id: string, name: string, shield_information_barrier: record<id: string, type: string>, type: string, updated_at: string, updated_by: record<id: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7859,7 +7872,7 @@ export def "get-shield-information-barriers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record<entries: table<created_at: string, created_by: record, enabled_at: string, enabled_by: record, enterprise: record, id: string, status: string, type: string, updated_at: string, updated_by: record>, limit: int, next_marker: string> {
+]: nothing -> oneof<record<entries: table<created_at: string, created_by: record, enabled_at: string, enabled_by: record, enterprise: record, id: string, status: string, type: string, updated_at: string, updated_by: record>, limit: int, next_marker: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -7895,16 +7908,16 @@ export def "post-shield-information-barriers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --created-at: string # ISO date time string when this shield information barrier object was created. (format: date-time, e.g. 2020-06-26T18:44:45.869Z)
-  --created-by: any
+  --created-by: record # A mini representation of a user, used when nested within another resource. — shape: {id?: string, type: "user"}
   --enabled-at: string # ISO date time string when this shield information barrier was enabled. (format: date-time, e.g. 2020-07-26T18:44:45.869Z)
-  --enabled-by: any
-  --enterprise: any
+  --enabled-by: record # A mini representation of a user, used when nested within another resource. — shape: {id?: string, type: "user"}
+  --enterprise: record # A mini representation of a enterprise, used when nested within another resource. — shape: {id?: string, type?: "enterprise"}
   --id: string # The unique identifier for the shield information barrier (e.g. 11446498)
   --status: string@status-completer-3 # Status of the shield information barrier (e.g. draft)
   --type: string@type-completer-5 # The type of the shield information barrier (e.g. shield_information_barrier)
   --updated-at: string # ISO date time string when this shield information barrier was updated. (format: date-time, e.g. 2020-07-26T18:44:45.869Z)
-  --updated-by: any
-]: any -> record<created_at: string, created_by: record<id: string, type: string>, enabled_at: string, enabled_by: record<id: string, type: string>, enterprise: record<id: string, type: string>, id: string, status: string, type: string, updated_at: string, updated_by: record<id: string, type: string>> {
+  --updated-by: record # A mini representation of a user, used when nested within another resource. — shape: {id?: string, type: "user"}
+]: any -> oneof<record<created_at: string, created_by: record<id: string, type: string>, enabled_at: string, enabled_by: record<id: string, type: string>, enterprise: record<id: string, type: string>, id: string, status: string, type: string, updated_at: string, updated_by: record<id: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7943,7 +7956,7 @@ export def "post-shield-information-barriers-change-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   id: string # The ID of the shield information barrier. (e.g. 1910967)
   status: string@status-completer-4 # The desired status for the shield information barrier. (e.g. pending)
-]: any -> record<created_at: string, created_by: record<id: string, type: string>, enabled_at: string, enabled_by: record<id: string, type: string>, enterprise: record<id: string, type: string>, id: string, status: string, type: string, updated_at: string, updated_by: record<id: string, type: string>> {
+]: any -> oneof<record<created_at: string, created_by: record<id: string, type: string>, enabled_at: string, enabled_by: record<id: string, type: string>, enterprise: record<id: string, type: string>, id: string, status: string, type: string, updated_at: string, updated_by: record<id: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7981,7 +7994,7 @@ export def "get-shield-information-barriers-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<created_at: string, created_by: record<id: string, type: string>, enabled_at: string, enabled_by: record<id: string, type: string>, enterprise: record<id: string, type: string>, id: string, status: string, type: string, updated_at: string, updated_by: record<id: string, type: string>> {
+]: nothing -> oneof<record<created_at: string, created_by: record<id: string, type: string>, enabled_at: string, enabled_by: record<id: string, type: string>, enterprise: record<id: string, type: string>, id: string, status: string, type: string, updated_at: string, updated_by: record<id: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shield_information_barrier_id | is-empty) { error make --unspanned { msg: "path parameter 'shield_information_barrier_id' must be non-empty" } }
@@ -8018,7 +8031,7 @@ export def "get-sign-requests" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<are_reminders_enabled: bool, are_text_signatures_enabled: bool, days_valid: int, declined_redirect_url: string, email_message: string, email_subject: string, external_id: string, is_document_preparation_needed: bool, is_phone_verification_required_to_view: bool, name: string, parent_folder: record, prefill_tags: list, redirect_url: string, auto_expire_at: string, id: string, prepare_url: string, sign_files: record, signature_color: string, signers: list, signing_log: record, source_files: list, status: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -8043,9 +8056,6 @@ export def "get-sign-requests" [
 #
 # POST /sign_requests
 # operationId: post_sign_requests
-# --prefill_tags item shape: {checkbox_value?: bool, date_value?: string, document_tag_id?: string, text_value?: string}
-# --signers item shape: {declined_redirect_url?: string, email: string, embed_url_external_user_id?: string, is_in_person?: bool, login_required?: bool, order?: int, password?: string, redirect_url?: string, role?: "signer"|"approver"|"final_copy_reader", verification_phone_number?: string}
-# --source_files item shape: {etag?: string, id: string, type: "file", file_version?: any, name?: string, sequence_id: any, sha1: string}
 export def "post-sign-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8066,13 +8076,13 @@ export def "post-sign-requests" [
   --is-document-preparation-needed: oneof<nothing, bool> # Indicates if the sender should receive a `prepare_url` in the response to complete document preparation via UI. (e.g. true)
   --is-phone-verification-required-to-view: oneof<nothing, bool> # Forces signers to verify a text message prior to viewing the document. You must specify the phone number of signers to have this setting apply to them. (nullable, e.g. true)
   --name: string # Name of the sign request. (e.g. name)
-  parent_folder: any
+  parent_folder: record # A mini representation of a file version, used when nested under another resource. — shape: {etag?: string, id: string, type: "folder", name?: string, sequence_id?: string}
   --prefill-tags: list # When a document contains sign related tags in the content, you can prefill them using this `prefill_tags` by referencing the 'id' of the tag as the `external_id` field of the prefill tag. — item shape: {checkbox_value?: bool, date_value?: string, document_tag_id?: string, text_value?: string}
   --redirect-url: string # When specified, signature request will be redirected to this url when a document is signed. (nullable, e.g. https://www.example.com)
   --signature-color: string@signature-color-completer # Force a specific signature color (blue, black, or red). (nullable, e.g. blue)
   signers: list # Array of signers for the sign request. 35 is the max number of signers permitted. — item shape: {declined_redirect_url?: string, email: string, embed_url_external_user_id?: string, is_in_person?: bool, login_required?: bool, order?: int, password?: string, redirect_url?: string, role?: "signer"|"approver"|"final_copy_reader", verification_phone_number?: string}
-  source_files: list # List of files to create a signing document from. This is currently limited to 10 files. Only the ID and type fields are required for each file. The array will be empty if the `source_files` are deleted. — item shape: {etag?: string, id: string, type: "file", file_version?: any, name?: string, sequence_id: any, sha1: string}
-]: any -> record {
+  source_files: list # List of files to create a signing document from. This is currently limited to 10 files. Only the ID and type fields are required for each file. The array will be empty if the `source_files` are deleted. — item shape: {etag?: string, id: string, type: "file", file_version?: record, name?: string, sequence_id: string, sha1: string}
+]: any -> oneof<record<are_reminders_enabled: bool, are_text_signatures_enabled: bool, days_valid: int, declined_redirect_url: string, email_message: string, email_subject: string, external_id: string, is_document_preparation_needed: bool, is_phone_verification_required_to_view: bool, name: string, parent_folder: record<etag: string, id: string, type: string, name: string, sequence_id: string>, prefill_tags: table<checkbox_value: bool, date_value: string, document_tag_id: string, text_value: string>, redirect_url: string, auto_expire_at: string, id: string, prepare_url: string, sign_files: record<files: list<record>, is_ready_for_download: bool>, signature_color: string, signers: table<declined_redirect_url: string, email: string, embed_url_external_user_id: string, is_in_person: bool, login_required: bool, order: int, password: string, redirect_url: string, role: string, verification_phone_number: string, embed_url: string, has_viewed_document: bool, inputs: list, signer_decision: record>, signing_log: record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string>, source_files: table<etag: string, id: string, type: string, file_version: record, name: string, sequence_id: string, sha1: string>, status: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8110,7 +8120,7 @@ export def "get-sign-requests-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record<are_reminders_enabled: bool, are_text_signatures_enabled: bool, days_valid: int, declined_redirect_url: string, email_message: string, email_subject: string, external_id: string, is_document_preparation_needed: bool, is_phone_verification_required_to_view: bool, name: string, parent_folder: record<etag: string, id: string, type: string, name: string, sequence_id: string>, prefill_tags: table<checkbox_value: bool, date_value: string, document_tag_id: string, text_value: string>, redirect_url: string, auto_expire_at: string, id: string, prepare_url: string, sign_files: record<files: list<record>, is_ready_for_download: bool>, signature_color: string, signers: table<declined_redirect_url: string, email: string, embed_url_external_user_id: string, is_in_person: bool, login_required: bool, order: int, password: string, redirect_url: string, role: string, verification_phone_number: string, embed_url: string, has_viewed_document: bool, inputs: list, signer_decision: record>, signing_log: record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string>, source_files: table<etag: string, id: string, type: string, file_version: record, name: string, sequence_id: string, sha1: string>, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sign_request_id | is-empty) { error make --unspanned { msg: "path parameter 'sign_request_id' must be non-empty" } }
@@ -8146,7 +8156,7 @@ export def "post-sign-requests-id-cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record<are_reminders_enabled: bool, are_text_signatures_enabled: bool, days_valid: int, declined_redirect_url: string, email_message: string, email_subject: string, external_id: string, is_document_preparation_needed: bool, is_phone_verification_required_to_view: bool, name: string, parent_folder: record<etag: string, id: string, type: string, name: string, sequence_id: string>, prefill_tags: table<checkbox_value: bool, date_value: string, document_tag_id: string, text_value: string>, redirect_url: string, auto_expire_at: string, id: string, prepare_url: string, sign_files: record<files: list<record>, is_ready_for_download: bool>, signature_color: string, signers: table<declined_redirect_url: string, email: string, embed_url_external_user_id: string, is_in_person: bool, login_required: bool, order: int, password: string, redirect_url: string, role: string, verification_phone_number: string, embed_url: string, has_viewed_document: bool, inputs: list, signer_decision: record>, signing_log: record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string>, source_files: table<etag: string, id: string, type: string, file_version: record, name: string, sequence_id: string, sha1: string>, status: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sign_request_id | is-empty) { error make --unspanned { msg: "path parameter 'sign_request_id' must be non-empty" } }
@@ -8182,7 +8192,7 @@ export def "post-sign-requests-id-resend" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sign_request_id | is-empty) { error make --unspanned { msg: "path parameter 'sign_request_id' must be non-empty" } }
@@ -8207,10 +8217,6 @@ export def "post-sign-requests-id-resend" [
 #
 # PUT /skill_invocations/{skill_id}
 # operationId: put_skill_invocations_id
-# --file shape: {id?: string, type?: "file"}
-# --file_version shape: {id?: string, type?: "file_version"}
-# --metadata shape: {cards?: list}
-# --usage shape: {unit?: string, value?: float}
 export def "put-skill-invocations-id" [
   skill_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8227,7 +8233,7 @@ export def "put-skill-invocations-id" [
   metadata: record # The metadata to set for this skill. This is a list of Box Skills cards. These cards will overwrite any existing Box skill cards on the file. — shape: {cards?: list}
   status: string@status-completer-5 # Defines the status of this invocation. Set this to `success` when setting Skill cards. (e.g. success)
   --usage: record # A descriptor that defines what items are affected by this call. Set this to the default values when setting a card to a `success` state, and leave it out in most other situations. — shape: {unit?: string, value?: float}
-]: any -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8268,7 +8274,7 @@ export def "get-storage-policies" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<id: string, type: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "csv") (serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -8304,7 +8310,7 @@ export def "get-storage-policies-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record<id: string, type: string, name: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'storage_policy_id' must be non-empty" } }
@@ -8340,11 +8346,13 @@ export def "get-storage-policy-assignments" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
-  --resolved-for-type: string@resolved-for-type-completer # The target type to return assignments for (e.g. user)
-  --resolved-for-id: string # The ID of the user or enterprise to return assignments for (e.g. 984322)
-]: nothing -> record {
+  --resolved-for-type: string@resolved-for-type-completer # The target type to return assignments for (required, e.g. user)
+  --resolved-for-id: string # The ID of the user or enterprise to return assignments for (required, e.g. 984322)
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<assigned_to: record, storage_policy: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($resolved_for_type == null) { error make --unspanned { msg: "required query parameter 'resolved_for_type' missing: pass --resolved-for-type" } }
+  if ($resolved_for_id == null) { error make --unspanned { msg: "required query parameter 'resolved_for_id' missing: pass --resolved-for-id" } }
   let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "resolved_for_type" $resolved_for_type "scalar") (serialize-qp "resolved_for_id" $resolved_for_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/storage_policy_assignments" $qp $auth.query)
   let accept_val = "application/json"
@@ -8367,8 +8375,6 @@ export def "get-storage-policy-assignments" [
 #
 # POST /storage_policy_assignments
 # operationId: post_storage_policy_assignments
-# --assigned_to shape: {id: string, type: "user"|"enterprise"}
-# --storage_policy shape: {id: string, type: "storage_policy"}
 export def "post-storage-policy-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8381,7 +8387,7 @@ export def "post-storage-policy-assignments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assigned_to: record # The user or enterprise to assign the storage policy to. — shape: {id: string, type: "user"|"enterprise"}
   storage_policy: record # The storage policy to assign to the user or enterprise — shape: {id: string, type: "storage_policy"}
-]: any -> record<assigned_to: record<id: string, type: string>, storage_policy: record<id: string, type: string>> {
+]: any -> oneof<record<assigned_to: record<id: string, type: string>, storage_policy: record<id: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8419,7 +8425,7 @@ export def "delete-storage-policy-assignments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_policy_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'storage_policy_assignment_id' must be non-empty" } }
@@ -8455,7 +8461,7 @@ export def "get-storage-policy-assignments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assigned_to: record<id: string, type: string>, storage_policy: record<id: string, type: string>> {
+]: nothing -> oneof<record<assigned_to: record<id: string, type: string>, storage_policy: record<id: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storage_policy_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'storage_policy_assignment_id' must be non-empty" } }
@@ -8480,7 +8486,6 @@ export def "get-storage-policy-assignments-id" [
 #
 # PUT /storage_policy_assignments/{storage_policy_assignment_id}
 # operationId: put_storage_policy_assignments_id
-# --storage_policy shape: {id: string, type: "storage_policy"}
 export def "put-storage-policy-assignments-id" [
   storage_policy_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8493,7 +8498,7 @@ export def "put-storage-policy-assignments-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   storage_policy: record # The storage policy to assign to the user or enterprise — shape: {id: string, type: "storage_policy"}
-]: any -> record<assigned_to: record<id: string, type: string>, storage_policy: record<id: string, type: string>> {
+]: any -> oneof<record<assigned_to: record<id: string, type: string>, storage_policy: record<id: string, type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8521,8 +8526,6 @@ export def "put-storage-policy-assignments-id" [
 #
 # POST /task_assignments
 # operationId: post_task_assignments
-# --assign_to shape: {id?: string, login?: string}
-# --task shape: {id: string, type: "task"}
 export def "post-task-assignments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8535,7 +8538,7 @@ export def "post-task-assignments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   assign_to: record # The user to assign the task to. — shape: {id?: string, login?: string}
   task: record # The task to assign to a user. — shape: {id: string, type: "task"}
-]: any -> record<assigned_at: string, assigned_by: record, assigned_to: record, completed_at: string, id: string, item: record, message: string, reminded_at: string, resolution_state: string, type: string> {
+]: any -> oneof<record<assigned_at: string, assigned_by: record<id: string, type: string, login: string, name: string>, assigned_to: record<id: string, type: string, login: string, name: string>, completed_at: string, id: string, item: record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string>, message: string, reminded_at: string, resolution_state: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8573,7 +8576,7 @@ export def "delete-task-assignments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'task_assignment_id' must be non-empty" } }
@@ -8609,7 +8612,7 @@ export def "get-task-assignments-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<assigned_at: string, assigned_by: record, assigned_to: record, completed_at: string, id: string, item: record, message: string, reminded_at: string, resolution_state: string, type: string> {
+]: nothing -> oneof<record<assigned_at: string, assigned_by: record<id: string, type: string, login: string, name: string>, assigned_to: record<id: string, type: string, login: string, name: string>, completed_at: string, id: string, item: record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string>, message: string, reminded_at: string, resolution_state: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_assignment_id | is-empty) { error make --unspanned { msg: "path parameter 'task_assignment_id' must be non-empty" } }
@@ -8647,7 +8650,7 @@ export def "put-task-assignments-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --message: string # An optional message by the assignee that can be added to the task. (e.g. Looks good to me)
   --resolution-state: string@resolution-state-completer # The state of the task assigned to the user. * For a task with an `action` value of `complete` this can be `incomplete` or `completed`. * For a task with an `action` of `review` this can be `incomplete`, `approved`, or `rejected`. (e.g. completed)
-]: any -> record<assigned_at: string, assigned_by: record, assigned_to: record, completed_at: string, id: string, item: record, message: string, reminded_at: string, resolution_state: string, type: string> {
+]: any -> oneof<record<assigned_at: string, assigned_by: record<id: string, type: string, login: string, name: string>, assigned_to: record<id: string, type: string, login: string, name: string>, completed_at: string, id: string, item: record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string>, message: string, reminded_at: string, resolution_state: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8675,7 +8678,6 @@ export def "put-task-assignments-id" [
 #
 # POST /tasks
 # operationId: post_tasks
-# --item shape: {id: string, type: "file"}
 export def "post-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8690,8 +8692,8 @@ export def "post-tasks" [
   --completion-rule: string@completion-rule-completer # Defines which assignees need to complete this task before the task is considered completed. * `all_assignees` (default) requires all assignees to review or approve the the task in order for it to be considered completed. * `any_assignee` accepts any one assignee to review or approve the the task in order for it to be considered completed. (default: all_assignees, e.g. all_assignees)
   --due-at: string # Defines when the task is due. Defaults to `null` if not provided. (format: date-time, e.g. 2012-12-12T10:53:43-08:00)
   item: record # The file to attach the task to. — shape: {id: string, type: "file"}
-  --message: string # An optional message to include with the task. (default: , e.g. Please review)
-]: any -> record<action: string, completion_rule: string, created_at: string, created_by: record, due_at: string, id: string, is_completed: bool, item: record, message: string, task_assignment_collection: record<entries: list<record>, total_count: int>, type: string> {
+  --message: string # An optional message to include with the task. (default: "", e.g. Please review)
+]: any -> oneof<record<action: string, completion_rule: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, due_at: string, id: string, is_completed: bool, item: record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string>, message: string, task_assignment_collection: record<entries: list<record>, total_count: int>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8729,7 +8731,7 @@ export def "delete-tasks-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
@@ -8765,7 +8767,7 @@ export def "get-tasks-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<action: string, completion_rule: string, created_at: string, created_by: record, due_at: string, id: string, is_completed: bool, item: record, message: string, task_assignment_collection: record<entries: list<record>, total_count: int>, type: string> {
+]: nothing -> oneof<record<action: string, completion_rule: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, due_at: string, id: string, is_completed: bool, item: record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string>, message: string, task_assignment_collection: record<entries: list<record>, total_count: int>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
@@ -8805,7 +8807,7 @@ export def "put-tasks-id" [
   --completion-rule: string@completion-rule-completer # Defines which assignees need to complete this task before the task is considered completed. * `all_assignees` (default) requires all assignees to review or approve the the task in order for it to be considered completed. * `any_assignee` accepts any one assignee to review or approve the the task in order for it to be considered completed. (e.g. all_assignees)
   --due-at: string # When the task is due at. (format: date-time, e.g. 2012-12-12T10:53:43-08:00)
   --message: string # The message included with the task. (e.g. Please review)
-]: any -> record<action: string, completion_rule: string, created_at: string, created_by: record, due_at: string, id: string, is_completed: bool, item: record, message: string, task_assignment_collection: record<entries: list<record>, total_count: int>, type: string> {
+]: any -> oneof<record<action: string, completion_rule: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, due_at: string, id: string, is_completed: bool, item: record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string>, message: string, task_assignment_collection: record<entries: list<record>, total_count: int>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8844,7 +8846,7 @@ export def "get-tasks-id-assignments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<entries: table<assigned_at: string, assigned_by: record, assigned_to: record, completed_at: string, id: string, item: record, message: string, reminded_at: string, resolution_state: string, type: string>, total_count: int> {
+]: nothing -> oneof<record<entries: table<assigned_at: string, assigned_by: record, assigned_to: record, completed_at: string, id: string, item: record, message: string, reminded_at: string, resolution_state: string, type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
@@ -8879,11 +8881,12 @@ export def "get-terms-of-service-user-statuses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tos-id: string # The ID of the terms of service. (e.g. 324234)
+  --tos-id: string # The ID of the terms of service. (required, e.g. 324234)
   --user-id: string # Limits results to the given user ID. (e.g. 123334)
-]: nothing -> record<entries: table<created_at: string, id: string, is_accepted: bool, modified_at: string, tos: record, type: string, user: record>, total_count: int> {
+]: nothing -> oneof<record<entries: table<created_at: string, id: string, is_accepted: bool, modified_at: string, tos: record, type: string, user: record>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($tos_id == null) { error make --unspanned { msg: "required query parameter 'tos_id' missing: pass --tos-id" } }
   let qp = [(serialize-qp "tos_id" $tos_id "scalar") (serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/terms_of_service_user_statuses" $qp $auth.query)
   let accept_val = "application/json"
@@ -8906,8 +8909,6 @@ export def "get-terms-of-service-user-statuses" [
 #
 # POST /terms_of_service_user_statuses
 # operationId: post_terms_of_service_user_statuses
-# --tos shape: {id: string, type: "terms_of_service"}
-# --user shape: {id: string, type: "user"}
 export def "post-terms-of-service-user-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8921,13 +8922,14 @@ export def "post-terms-of-service-user-statuses" [
   --is-accepted: oneof<nothing, bool> # Whether the user has accepted the terms. (e.g. true)
   tos: record # The terms of service to set the status for. — shape: {id: string, type: "terms_of_service"}
   user: record # The user to set the status for. — shape: {id: string, type: "user"}
-]: any -> record<created_at: string, id: string, is_accepted: bool, modified_at: string, tos: record<id: string, type: string>, type: string, user: record> {
+]: any -> oneof<record<created_at: string, id: string, is_accepted: bool, modified_at: string, tos: record<id: string, type: string>, type: string, user: record<id: string, type: string, login: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/terms_of_service_user_statuses" $auth.query)
   let req_body = {"is_accepted": $is_accepted, "tos": $tos, "user": $user} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "is_accepted") == null) { error make --unspanned { msg: "required body field 'is_accepted' missing: pass --is-accepted or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -8960,7 +8962,7 @@ export def "put-terms-of-service-user-statuses-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-accepted: oneof<nothing, bool> # Whether the user has accepted the terms. (e.g. true)
-]: any -> record<created_at: string, id: string, is_accepted: bool, modified_at: string, tos: record<id: string, type: string>, type: string, user: record> {
+]: any -> oneof<record<created_at: string, id: string, is_accepted: bool, modified_at: string, tos: record<id: string, type: string>, type: string, user: record<id: string, type: string, login: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8968,6 +8970,7 @@ export def "put-terms-of-service-user-statuses-id" [
   let full_url = (build-url $base ({terms_of_service_user_status_id: (encode-path-segment $terms_of_service_user_status_id)} | format pattern "/terms_of_service_user_statuses/{terms_of_service_user_status_id}") $auth.query)
   let req_body = {"is_accepted": $is_accepted} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  if (($req_body | get -o "is_accepted") == null) { error make --unspanned { msg: "required body field 'is_accepted' missing: pass --is-accepted or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
@@ -8999,7 +9002,7 @@ export def "get-terms-of-services" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --tos-type: string@tos-type-completer # Limits the results to the terms of service of the given type. (e.g. managed)
-]: nothing -> record<entries: list<record>, total_count: int> {
+]: nothing -> oneof<record<entries: table<id: string, type: string, created_at: string, enterprise: record, modified_at: string, status: string, text: string, tos_type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tos_type" $tos_type "scalar")] | flatten | str join "&"
@@ -9037,7 +9040,7 @@ export def "post-terms-of-services" [
   status: string@status-completer-6 # Whether this terms of service is active. (e.g. enabled)
   text: string # The terms of service text to display to users. The text can be set to empty if the `status` is set to `disabled`. (e.g. By collaborating on this file you are accepting...)
   --tos-type: string@tos-type-completer # The type of user to set the terms of service for. (e.g. managed)
-]: any -> record<action: string, completion_rule: string, created_at: string, created_by: record, due_at: string, id: string, is_completed: bool, item: record, message: string, task_assignment_collection: record<entries: list<record>, total_count: int>, type: string> {
+]: any -> oneof<record<action: string, completion_rule: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, due_at: string, id: string, is_completed: bool, item: record<etag: string, id: string, type: string, file_version: record<id: string, type: string, sha1: string>, name: string, sequence_id: string, sha1: string>, message: string, task_assignment_collection: record<entries: list<record>, total_count: int>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9075,7 +9078,7 @@ export def "get-terms-of-services-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record<id: string, type: string, created_at: string, enterprise: record<id: string, name: string, type: string>, modified_at: string, status: string, text: string, tos_type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($terms_of_service_id | is-empty) { error make --unspanned { msg: "path parameter 'terms_of_service_id' must be non-empty" } }
@@ -9113,7 +9116,7 @@ export def "put-terms-of-services-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   status: string@status-completer-6 # Whether this terms of service is active. (e.g. enabled)
   text: string # The terms of service text to display to users. The text can be set to empty if the `status` is set to `disabled`. (e.g. By collaborating on this file you are accepting...)
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, created_at: string, enterprise: record<id: string, name: string, type: string>, modified_at: string, status: string, text: string, tos_type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9159,7 +9162,7 @@ export def "get-users" [
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --usemarker: oneof<nothing, bool> # Specifies whether to use marker-based pagination instead of offset-based pagination. Only one pagination method can be used at a time. By setting this value to true, the API will return a `marker` field that can be passed as a parameter to this endpoint to get the next page of the response. (e.g. true)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, offset: int, order: table<by: string, direction: string>, total_count: int, entries: table<id: string, type: string, login: string, name: string, address: string, avatar_url: string, created_at: string, job_title: string, language: string, max_upload_size: int, modified_at: string, notification_email: record, phone: string, space_amount: int, space_used: int, status: string, timezone: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter_term" $filter_term "scalar") (serialize-qp "user_type" $user_type "scalar") (serialize-qp "external_app_user_id" $external_app_user_id "scalar") (serialize-qp "fields" $fields "csv") (serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "usemarker" $usemarker "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
@@ -9184,7 +9187,6 @@ export def "get-users" [
 #
 # POST /users
 # operationId: post_users
-# --tracking_codes item shape: {name?: string, type?: "tracking_code", value?: string}
 export def "post-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9214,7 +9216,7 @@ export def "post-users" [
   --status: string@status-completer-7 # The user's account status (e.g. active)
   --timezone: string # The user's timezone (format: timezone, e.g. Africa/Bujumbura)
   --tracking-codes: list # Tracking codes allow an admin to generate reports from the admin console and assign an attribute to a specific group of users. This setting must be enabled for an enterprise before it can be used. — item shape: {name?: string, type?: "tracking_code", value?: string}
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, login: string, name: string, address: string, avatar_url: string, created_at: string, job_title: string, language: string, max_upload_size: int, modified_at: string, notification_email: record<email: string, is_confirmed: bool>, phone: string, space_amount: int, space_used: int, status: string, timezone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9253,7 +9255,7 @@ export def "get-users-me" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record {
+]: nothing -> oneof<record<id: string, type: string, login: string, name: string, address: string, avatar_url: string, created_at: string, job_title: string, language: string, max_upload_size: int, modified_at: string, notification_email: record<email: string, is_confirmed: bool>, phone: string, space_amount: int, space_used: int, status: string, timezone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "csv")] | flatten | str join "&"
@@ -9290,7 +9292,7 @@ export def "post-users-terminate-sessions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   user_ids: list<string> # A list of user IDs (e.g. [123456, 456789])
   user_logins: list<string> # A list of user logins (e.g. [user@sample.com, user2@sample.com])
-]: any -> record<message: string> {
+]: any -> oneof<record<message: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9330,7 +9332,7 @@ export def "delete-users-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --notify: oneof<nothing, bool> # Whether the user will receive email notification of the deletion (e.g. true)
   --force: oneof<nothing, bool> # Whether the user should be deleted even if this user still own files (e.g. true)
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -9368,7 +9370,7 @@ export def "get-users-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record {
+]: nothing -> oneof<record<id: string, type: string, login: string, name: string, address: string, avatar_url: string, created_at: string, job_title: string, language: string, max_upload_size: int, modified_at: string, notification_email: record<email: string, is_confirmed: bool>, phone: string, space_amount: int, space_used: int, status: string, timezone: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -9394,8 +9396,6 @@ export def "get-users-id" [
 #
 # PUT /users/{user_id}
 # operationId: put_users_id
-# --notification_email shape: {email?: string}
-# --tracking_codes item shape: {name?: string, type?: "tracking_code", value?: string}
 export def "put-users-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9429,7 +9429,7 @@ export def "put-users-id" [
   --status: string@status-completer-7 # The user's account status (e.g. active)
   --timezone: string # The user's timezone (format: timezone, e.g. Africa/Bujumbura)
   --tracking-codes: list # Tracking codes allow an admin to generate reports from the admin console and assign an attribute to a specific group of users. This setting must be enabled for an enterprise before it can be used. — item shape: {name?: string, type?: "tracking_code", value?: string}
-]: any -> record {
+]: any -> oneof<record<id: string, type: string, login: string, name: string, address: string, avatar_url: string, created_at: string, job_title: string, language: string, max_upload_size: int, modified_at: string, notification_email: record<email: string, is_confirmed: bool>, phone: string, space_amount: int, space_used: int, status: string, timezone: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9469,7 +9469,7 @@ export def "delete-users-id-avatar" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -9543,7 +9543,7 @@ export def "post-users-id-avatar" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   pic: string # The image file to be uploaded to Box. Accepted file extensions are `.jpg` or `.png`. The maximum file size is 1MB. (format: binary)
-]: any -> record<pic_urls: record<large: string, preview: string, small: string>> {
+]: any -> oneof<record<pic_urls: record<large: string, preview: string, small: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9553,8 +9553,8 @@ export def "post-users-id-avatar" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else { {} }
-  let mp = (build-multipart-body $req_body ["pic"] $dry_run)
+  let req_body = if ($req_body | describe | str starts-with "record") { $req_body } else if ($req_body == null) { {} } else { $req_body }
+  let mp = if ($req_body | describe | str starts-with "record") { build-multipart-body $req_body ["pic"] $dry_run } else { {body: $req_body, content_type: "multipart/form-data"} }
   let req = {
     method: "post"
     url: $full_url
@@ -9584,7 +9584,7 @@ export def "get-users-id-email-aliases" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<entries: table<email: string, id: string, is_confirmed: bool, type: string>, total_count: int> {
+]: nothing -> oneof<record<entries: table<email: string, id: string, is_confirmed: bool, type: string>, total_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -9621,7 +9621,7 @@ export def "post-users-id-email-aliases" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   email: string # The email address to add to the account as an alias. Note: The domain of the email alias needs to be registered to your enterprise. See the [domain verification guide]( https://support.box.com/hc/en-us/articles/4408619650579-Domain-Verification ) for steps to add a new domain. (e.g. alias@example.com)
-]: any -> record<email: string, id: string, is_confirmed: bool, type: string> {
+]: any -> oneof<record<email: string, id: string, is_confirmed: bool, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9661,7 +9661,7 @@ export def "delete-users-id-email-aliases-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -9687,7 +9687,6 @@ export def "delete-users-id-email-aliases-id" [
 #
 # PUT /users/{user_id}/folders/0
 # operationId: put_users_id_folders_0
-# --owned_by shape: {id: string}
 export def "put-users-id-folders-0" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9702,7 +9701,7 @@ export def "put-users-id-folders-0" [
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --notify: oneof<nothing, bool> # Determines if users should receive email notification for the action performed. (e.g. true)
   owned_by: record # The user who the folder will be transferred to — shape: {id: string}
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, content_created_at: string, content_modified_at: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, folder_upload_email: record<access: string, email: string>, item_collection: record<limit: int, offset: int, order: list<record>, total_count: int, entries: list<any>>, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, size: int, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9744,7 +9743,7 @@ export def "get-users-id-memberships" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --offset: int # The offset of the item at which to begin the response. Queries with offset parameter value exceeding 10000 will be rejected with a 400 response. (format: int64, default: 0, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, offset: int, order: table<by: string, direction: string>, total_count: int, entries: table<created_at: string, group: record, id: string, modified_at: string, role: string, type: string, user: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -9770,8 +9769,6 @@ export def "get-users-id-memberships" [
 #
 # POST /web_links
 # operationId: post_web_links
-# --parent shape: {id: string}
-# --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, unshared_at?: string, vanity_name?: string}
 export def "post-web-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9787,7 +9784,7 @@ export def "post-web-links" [
   parent: record # The parent folder to create the web link within. — shape: {id: string}
   --shared-link: record # The settings for the shared link to update. — shape: {access?: "open"|"company"|"collaborators", password?: string, unshared_at?: string, vanity_name?: string}
   url: string # The URL that this web link links to. Must start with `"http://"` or `"https://"`. (e.g. https://box.com)
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, url: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9825,7 +9822,7 @@ export def "delete-web-links-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_link_id | is-empty) { error make --unspanned { msg: "path parameter 'web_link_id' must be non-empty" } }
@@ -9862,7 +9859,7 @@ export def "get-web-links-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --boxapi: string # The URL, and optional password, for the shared link of this item. This header can be used to access items that have not been explicitly shared with a user. Use the format `shared_link=[link]` or if a password is required then use `shared_link=[link]&shared_link_password=[password]`. This header can be used on the file or folder shared, as well as on any files or folders nested within the item. (e.g. shared_link=[link]&shared_link_password=[password])
-]: nothing -> record {
+]: nothing -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, url: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, trashed_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_link_id | is-empty) { error make --unspanned { msg: "path parameter 'web_link_id' must be non-empty" } }
@@ -9902,8 +9899,8 @@ export def "post-web-links-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
   --name: string # An optional new name for the web link. (e.g. Restored.docx)
-  --parent: any
-]: any -> record<created_at: string, created_by: record, description: string, etag: string, id: string, item_status: string, modified_at: string, modified_by: record, name: string, owned_by: record, parent: record, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: record, shared_link: string, trashed_at: string, type: string, url: string> {
+  --parent: record # The parent for this item — shape: {id?: string}
+]: any -> oneof<record<created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, etag: string, id: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, name: string, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: string, shared_link: string, trashed_at: string, type: string, url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9932,7 +9929,6 @@ export def "post-web-links-id" [
 #
 # PUT /web_links/{web_link_id}
 # operationId: put_web_links_id
-# --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, unshared_at?: string, vanity_name?: string}
 export def "put-web-links-id" [
   web_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9946,10 +9942,10 @@ export def "put-web-links-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string # A new description of the web link. (e.g. Cloud Content Management)
   --name: string # A new name for the web link. Defaults to the URL if not set. (e.g. Box Website)
-  --parent: any
+  --parent: record # The parent for this item — shape: {id?: string}
   --shared-link: record # The settings for the shared link to update. — shape: {access?: "open"|"company"|"collaborators", password?: string, unshared_at?: string, vanity_name?: string}
   --url: string # The new URL that the web link links to. Must start with `"http://"` or `"https://"`. (e.g. https://box.com)
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, url: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9977,7 +9973,6 @@ export def "put-web-links-id" [
 #
 # PUT /web_links/{web_link_id}
 # operationId: put_web_links_id#add_shared_link
-# --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
 export def "put-web-links-idadd-shared-link" [
   web_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9989,13 +9984,14 @@ export def "put-web-links-idadd-shared-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (required, e.g. shared_link)
   --shared-link: record # The settings for the shared link to create on the web link. Use an empty object (`{}`) to use the default settings for shared links. — shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, url: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_link_id | is-empty) { error make --unspanned { msg: "path parameter 'web_link_id' must be non-empty" } }
+  if ($fields == null) { error make --unspanned { msg: "required query parameter 'fields' missing: pass --fields" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_link_id: (encode-path-segment $web_link_id)} | format pattern "/web_links/{web_link_id}") $qp $auth.query)
   let req_body = {"shared_link": $shared_link} | compact
@@ -10031,11 +10027,12 @@ export def "get-web-links-idget-shared-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
-]: nothing -> record {
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (required, e.g. shared_link)
+]: nothing -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, url: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, trashed_at: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_link_id | is-empty) { error make --unspanned { msg: "path parameter 'web_link_id' must be non-empty" } }
+  if ($fields == null) { error make --unspanned { msg: "required query parameter 'fields' missing: pass --fields" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_link_id: (encode-path-segment $web_link_id)} | format pattern "/web_links/{web_link_id}") $qp $auth.query)
   let accept_val = "application/json"
@@ -10069,13 +10066,14 @@ export def "put-web-links-idremove-shared-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (required, e.g. shared_link)
   --shared-link: record # By setting this value to `null`, the shared link is removed from the web link. (nullable)
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, url: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_link_id | is-empty) { error make --unspanned { msg: "path parameter 'web_link_id' must be non-empty" } }
+  if ($fields == null) { error make --unspanned { msg: "required query parameter 'fields' missing: pass --fields" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_link_id: (encode-path-segment $web_link_id)} | format pattern "/web_links/{web_link_id}") $qp $auth.query)
   let req_body = {"shared_link": $shared_link} | compact
@@ -10100,7 +10098,6 @@ export def "put-web-links-idremove-shared-link" [
 #
 # PUT /web_links/{web_link_id}
 # operationId: put_web_links_id#update_shared_link
-# --shared_link shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
 export def "put-web-links-idupdate-shared-link" [
   web_link_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10112,13 +10109,14 @@ export def "put-web-links-idupdate-shared-link" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (e.g. shared_link)
+  --fields: string # Explicitly request the `shared_link` fields to be returned for this item. (required, e.g. shared_link)
   --shared-link: record # The settings for the shared link to update. — shape: {access?: "open"|"company"|"collaborators", password?: string, permissions?: record, unshared_at?: string, vanity_name?: string}
-]: any -> record {
+]: any -> oneof<record<etag: string, id: string, type: string, name: string, sequence_id: string, url: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, shared_link: record<access: string, download_count: int, download_url: string, effective_access: string, effective_permission: string, is_password_enabled: bool, permissions: record<can_download: bool, can_edit: bool, can_preview: bool>, preview_count: int, unshared_at: string, url: string, vanity_name: string, vanity_url: string>, trashed_at: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_link_id | is-empty) { error make --unspanned { msg: "path parameter 'web_link_id' must be non-empty" } }
+  if ($fields == null) { error make --unspanned { msg: "required query parameter 'fields' missing: pass --fields" } }
   let qp = [(serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({web_link_id: (encode-path-segment $web_link_id)} | format pattern "/web_links/{web_link_id}") $qp $auth.query)
   let req_body = {"shared_link": $shared_link} | compact
@@ -10154,7 +10152,7 @@ export def "delete-web-links-id-trash" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_link_id | is-empty) { error make --unspanned { msg: "path parameter 'web_link_id' must be non-empty" } }
@@ -10191,7 +10189,7 @@ export def "get-web-links-id-trash" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: list<string> # A comma-separated list of attributes to include in the response. This can be used to request fields that are not normally returned in a standard response. Be aware that specifying this parameter will have the effect that none of the standard fields are returned in the response unless explicitly specified, instead only fields for the mini representation are returned, additional to the fields requested. (e.g. [id, type, name])
-]: nothing -> record<created_at: string, created_by: record, description: string, etag: string, id: string, item_status: string, modified_at: string, modified_by: record, name: string, owned_by: record, parent: record, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: record, shared_link: string, trashed_at: string, type: string, url: string> {
+]: nothing -> oneof<record<created_at: string, created_by: record<id: string, type: string, login: string, name: string>, description: string, etag: string, id: string, item_status: string, modified_at: string, modified_by: record<id: string, type: string, login: string, name: string>, name: string, owned_by: record<id: string, type: string, login: string, name: string>, parent: record<etag: string, id: string, type: string, name: string, sequence_id: string>, path_collection: record<entries: list<record>, total_count: int>, purged_at: string, sequence_id: string, shared_link: string, trashed_at: string, type: string, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($web_link_id | is-empty) { error make --unspanned { msg: "path parameter 'web_link_id' must be non-empty" } }
@@ -10229,7 +10227,7 @@ export def "get-webhooks" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<id: string, target: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -10254,7 +10252,6 @@ export def "get-webhooks" [
 #
 # POST /webhooks
 # operationId: post_webhooks
-# --target shape: {id?: string, type?: "file"|"folder"}
 export def "post-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10268,7 +10265,7 @@ export def "post-webhooks" [
   address: string # The URL that is notified by this webhook (e.g. https://example.com/webhooks)
   target: record # The item that will trigger the webhook — shape: {id?: string, type?: "file"|"folder"}
   triggers: list<string> # An array of event names that this webhook is to be triggered for (e.g. [FILE.UPLOADED])
-]: any -> record {
+]: any -> oneof<record<id: string, target: record<id: string, type: string>, type: string, address: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, triggers: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10306,7 +10303,7 @@ export def "delete-webhooks-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhook_id' must be non-empty" } }
@@ -10342,7 +10339,7 @@ export def "get-webhooks-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record<id: string, target: record<id: string, type: string>, type: string, address: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, triggers: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhook_id' must be non-empty" } }
@@ -10367,7 +10364,6 @@ export def "get-webhooks-id" [
 #
 # PUT /webhooks/{webhook_id}
 # operationId: put_webhooks_id
-# --target shape: {id?: string, type?: "file"|"folder"}
 export def "put-webhooks-id" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10382,7 +10378,7 @@ export def "put-webhooks-id" [
   --address: string # The URL that is notified by this webhook (e.g. https://example.com/webhooks)
   --target: record # The item that will trigger the webhook — shape: {id?: string, type?: "file"|"folder"}
   --triggers: list<string> # An array of event names that this webhook is to be triggered for (e.g. [FILE.UPLOADED])
-]: any -> record {
+]: any -> oneof<record<id: string, target: record<id: string, type: string>, type: string, address: string, created_at: string, created_by: record<id: string, type: string, login: string, name: string>, triggers: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10420,13 +10416,14 @@ export def "get-workflows" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --folder-id: string # The unique identifier that represent a folder. The ID for any folder can be determined by visiting this folder in the web application and copying the ID from the URL. For example, for the URL `https://*.app.box.com/folder/123` the `folder_id` is `123`. The root folder of a Box account is always represented by the ID `0`. (e.g. 12345)
+  --folder-id: string # The unique identifier that represent a folder. The ID for any folder can be determined by visiting this folder in the web application and copying the ID from the URL. For example, for the URL `https://*.app.box.com/folder/123` the `folder_id` is `123`. The root folder of a Box account is always represented by the ID `0`. (required, e.g. 12345)
   --trigger-type: string # Type of trigger to search for. (e.g. WORKFLOW_MANUAL_START)
   --limit: int # The maximum number of items to return per page. (format: int64, e.g. 1000)
   --marker: string # Defines the position marker at which to begin returning results. This is used when paginating using marker-based pagination. This requires `usemarker` to be set to `true`. (e.g. JV9IRGZmieiBasejOG9yDCRNgd2ymoZIbjsxbJMjIs3kioVii)
-]: nothing -> record {
+]: nothing -> oneof<record<limit: int, next_marker: int, prev_marker: int, entries: table<description: string, id: string, is_enabled: bool, name: string, type: string, flows: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($folder_id == null) { error make --unspanned { msg: "required query parameter 'folder_id' missing: pass --folder-id" } }
   let qp = [(serialize-qp "folder_id" $folder_id "scalar") (serialize-qp "trigger_type" $trigger_type "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "marker" $marker "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/workflows" $qp $auth.query)
   let accept_val = "application/json"
@@ -10449,10 +10446,6 @@ export def "get-workflows" [
 #
 # POST /workflows/{workflow_id}/start
 # operationId: post_workflows_id_start
-# --files item shape: {id?: string, type?: "file"}
-# --flow shape: {id?: string, type?: string}
-# --folder shape: {id?: string, type?: "folder"}
-# --outcomes item shape: {id?: string, parameter?: string, type?: "outcome"}
 export def "post-workflows-id-start" [
   workflow_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10469,7 +10462,7 @@ export def "post-workflows-id-start" [
   folder: record # The folder object for which the workflow is configured. — shape: {id?: string, type?: "folder"}
   --outcomes: list # A list of outcomes required to be configured at start time. — item shape: {id?: string, parameter?: string, type?: "outcome"}
   --type: string@type-completer-6 # The type of the parameters object (e.g. workflow_parameters)
-]: any -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10497,7 +10490,6 @@ export def "post-workflows-id-start" [
 #
 # POST /zip_downloads
 # operationId: post_zip_downloads
-# --items item shape: {id: string, type: "file"|"folder."}
 export def "post-zip-downloads" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10510,7 +10502,7 @@ export def "post-zip-downloads" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --download-file-name: string # The optional name of the `zip` archive. This name will be appended by the `.zip` file extension, for example `January Financials.zip`. (e.g. January Financials)
   items: list # A list of items to add to the `zip` archive. These can be folders or files. — item shape: {id: string, type: "file"|"folder."}
-]: any -> record<download_url: string, expires_at: string, name_conflicts: list<list<record>>, status_url: string> {
+]: any -> oneof<record<download_url: string, expires_at: string, name_conflicts: list<list<record>>, status_url: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10585,7 +10577,7 @@ export def "get-zip-downloads-id-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<downloaded_file_count: int, skipped_file_count: int, skipped_folder_count: int, state: string, total_file_count: int> {
+]: nothing -> oneof<record<downloaded_file_count: int, skipped_file_count: int, skipped_folder_count: int, state: string, total_file_count: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($zip_download_id | is-empty) { error make --unspanned { msg: "path parameter 'zip_download_id' must be non-empty" } }

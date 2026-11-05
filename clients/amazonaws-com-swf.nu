@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -140,9 +163,9 @@ def x-amz-target-completer-36 [] { ["SimpleWorkflowService.UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "count-closed-workflow-executions" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["count-closed-workflow-executions" "count-open-workflow-executions" "count-pending-activity-tasks" "count-pending-decision-tasks" "deprecate-activity-type" "deprecate-domain" "deprecate-workflow-type" "describe-activity-type" "describe-domain" "describe-workflow-execution" "describe-workflow-type" "get-workflow-execution-history" "list-activity-types" "list-closed-workflow-executions" "list-domains" "list-open-workflow-executions" "list-tags-for-resource" "list-workflow-types" "poll-for-activity-task" "poll-for-decision-task" "record-activity-task-heartbeat" "register-activity-type" "register-domain" "register-workflow-type" "request-cancel-workflow-execution" "respond-activity-task-canceled" "respond-activity-task-completed" "respond-activity-task-failed" "respond-decision-task-completed" "signal-workflow-execution" "start-workflow-execution" "tag-resource" "terminate-workflow-execution" "undeprecate-activity-type" "undeprecate-domain" "undeprecate-workflow-type" "untag-resource" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -164,12 +187,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CountClosedWorkflowExecutions
-# --startTimeFilter shape: {oldestDate: string, latestDate?: string}
-# --closeTimeFilter shape: {oldestDate: string, latestDate?: string}
-# --executionFilter shape: {workflowId: string}
-# --typeFilter shape: {name: string, version?: string}
-# --tagFilter shape: {tag: string}
-# --closeStatusFilter shape: {status: "COMPLETED"|"FAILED"|"CANCELED"|"TERMINATED"|"CONTINUED_AS_NEW"|"TIMED_OUT"}
 export def "count-closed-workflow-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -195,7 +212,7 @@ export def "count-closed-workflow-executions" [
   --type-filter: record # Used to filter workflow execution query results by type. Each parameter, if specified, defines a rule that must be satisfied by each returned result. — shape: {name: string, version?: string}
   --tag-filter: record # Used to filter the workflow executions in visibility APIs based on a tag. — shape: {tag: string}
   --close-status-filter: record # Used to filter the closed workflow executions in visibility APIs by their close status. — shape: {status: "COMPLETED"|"FAILED"|"CANCELED"|"TERMINATED"|"CONTINUED_AS_NEW"|"TIMED_OUT"}
-]: any -> record<count: int, truncated: bool> {
+]: any -> oneof<record<count: int, truncated: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -225,10 +242,6 @@ export def "count-closed-workflow-executions" [
 #
 # POST /
 # operationId: CountOpenWorkflowExecutions
-# --startTimeFilter shape: {oldestDate: string, latestDate?: string}
-# --typeFilter shape: {name: string, version?: string}
-# --tagFilter shape: {tag: string}
-# --executionFilter shape: {workflowId: string}
 export def "count-open-workflow-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -252,7 +265,7 @@ export def "count-open-workflow-executions" [
   --type-filter: record # Used to filter workflow execution query results by type. Each parameter, if specified, defines a rule that must be satisfied by each returned result. — shape: {name: string, version?: string}
   --tag-filter: record # Used to filter the workflow executions in visibility APIs based on a tag. — shape: {tag: string}
   --execution-filter: record # Used to filter the workflow executions in visibility APIs by their workflowId. — shape: {workflowId: string}
-]: any -> record<count: int, truncated: bool> {
+]: any -> oneof<record<count: int, truncated: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -282,7 +295,6 @@ export def "count-open-workflow-executions" [
 #
 # POST /
 # operationId: CountPendingActivityTasks
-# --taskList shape: {name: string}
 export def "count-pending-activity-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +315,7 @@ export def "count-pending-activity-tasks" [
   --x-amz-target: string@x-amz-target-completer-2 # required
   domain: string # The name of the domain that contains the task list.
   task_list: record # Represents a task list. — shape: {name: string}
-]: any -> record<count: int, truncated: bool> {
+]: any -> oneof<record<count: int, truncated: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -333,7 +345,6 @@ export def "count-pending-activity-tasks" [
 #
 # POST /
 # operationId: CountPendingDecisionTasks
-# --taskList shape: {name: string}
 export def "count-pending-decision-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -354,7 +365,7 @@ export def "count-pending-decision-tasks" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   domain: string # The name of the domain that contains the task list.
   task_list: record # Represents a task list. — shape: {name: string}
-]: any -> record<count: int, truncated: bool> {
+]: any -> oneof<record<count: int, truncated: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -384,7 +395,6 @@ export def "count-pending-decision-tasks" [
 #
 # POST /
 # operationId: DeprecateActivityType
-# --activityType shape: {name: string, version: string}
 export def "deprecate-activity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -484,7 +494,6 @@ export def "deprecate-domain" [
 #
 # POST /
 # operationId: DeprecateWorkflowType
-# --workflowType shape: {name: string, version: string}
 export def "deprecate-workflow-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -535,7 +544,6 @@ export def "deprecate-workflow-type" [
 #
 # POST /
 # operationId: DescribeActivityType
-# --activityType shape: {name: string, version: string}
 export def "describe-activity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -556,7 +564,7 @@ export def "describe-activity-type" [
   --x-amz-target: string@x-amz-target-completer-7 # required
   domain: string # The name of the domain in which the activity type is registered.
   activity_type: record # Represents an activity type. — shape: {name: string, version: string}
-]: any -> record<typeInfo: record<activityType: record<name: string, version: string>, status: string, description: string, creationDate: string, deprecationDate: string>, configuration: record<defaultTaskStartToCloseTimeout: string, defaultTaskHeartbeatTimeout: string, defaultTaskList: record<name: string>, defaultTaskPriority: string, defaultTaskScheduleToStartTimeout: string, defaultTaskScheduleToCloseTimeout: string>> {
+]: any -> oneof<record<typeInfo: record<activityType: record<name: string, version: string>, status: string, description: string, creationDate: string, deprecationDate: string>, configuration: record<defaultTaskStartToCloseTimeout: string, defaultTaskHeartbeatTimeout: string, defaultTaskList: record<name: string>, defaultTaskPriority: string, defaultTaskScheduleToStartTimeout: string, defaultTaskScheduleToCloseTimeout: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -605,7 +613,7 @@ export def "describe-domain" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   name: string # The name of the domain to describe.
-]: any -> record<domainInfo: record<name: string, status: string, description: string, arn: string>, configuration: record<workflowExecutionRetentionPeriodInDays: string>> {
+]: any -> oneof<record<domainInfo: record<name: string, status: string, description: string, arn: string>, configuration: record<workflowExecutionRetentionPeriodInDays: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -635,7 +643,6 @@ export def "describe-domain" [
 #
 # POST /
 # operationId: DescribeWorkflowExecution
-# --execution shape: {workflowId: string, runId: string}
 export def "describe-workflow-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -656,7 +663,7 @@ export def "describe-workflow-execution" [
   --x-amz-target: string@x-amz-target-completer-9 # required
   domain: string # The name of the domain containing the workflow execution.
   execution: record # Represents a workflow execution. — shape: {workflowId: string, runId: string}
-]: any -> record<executionInfo: record<execution: record<workflowId: string, runId: string>, workflowType: record<name: string, version: string>, startTimestamp: string, closeTimestamp: string, executionStatus: string, closeStatus: string, parent: record<workflowId: string, runId: string>, tagList: list<string>, cancelRequested: bool>, executionConfiguration: record<taskStartToCloseTimeout: string, executionStartToCloseTimeout: string, taskList: record<name: string>, taskPriority: string, childPolicy: string, lambdaRole: string>, openCounts: record<openActivityTasks: int, openDecisionTasks: int, openTimers: int, openChildWorkflowExecutions: int, openLambdaFunctions: int>, latestActivityTaskTimestamp: string, latestExecutionContext: string> {
+]: any -> oneof<record<executionInfo: record<execution: record<workflowId: string, runId: string>, workflowType: record<name: string, version: string>, startTimestamp: string, closeTimestamp: string, executionStatus: string, closeStatus: string, parent: record<workflowId: string, runId: string>, tagList: list<string>, cancelRequested: bool>, executionConfiguration: record<taskStartToCloseTimeout: string, executionStartToCloseTimeout: string, taskList: record<name: string>, taskPriority: string, childPolicy: string, lambdaRole: string>, openCounts: record<openActivityTasks: int, openDecisionTasks: int, openTimers: int, openChildWorkflowExecutions: int, openLambdaFunctions: int>, latestActivityTaskTimestamp: string, latestExecutionContext: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -686,7 +693,6 @@ export def "describe-workflow-execution" [
 #
 # POST /
 # operationId: DescribeWorkflowType
-# --workflowType shape: {name: string, version: string}
 export def "describe-workflow-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -707,7 +713,7 @@ export def "describe-workflow-type" [
   --x-amz-target: string@x-amz-target-completer-10 # required
   domain: string # The name of the domain in which this workflow type is registered.
   workflow_type: record # Represents a workflow type. — shape: {name: string, version: string}
-]: any -> record<typeInfo: record<workflowType: record<name: string, version: string>, status: string, description: string, creationDate: string, deprecationDate: string>, configuration: record<defaultTaskStartToCloseTimeout: string, defaultExecutionStartToCloseTimeout: string, defaultTaskList: record<name: string>, defaultTaskPriority: string, defaultChildPolicy: string, defaultLambdaRole: string>> {
+]: any -> oneof<record<typeInfo: record<workflowType: record<name: string, version: string>, status: string, description: string, creationDate: string, deprecationDate: string>, configuration: record<defaultTaskStartToCloseTimeout: string, defaultExecutionStartToCloseTimeout: string, defaultTaskList: record<name: string>, defaultTaskPriority: string, defaultChildPolicy: string, defaultLambdaRole: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -737,7 +743,6 @@ export def "describe-workflow-type" [
 #
 # POST /
 # operationId: GetWorkflowExecutionHistory
-# --execution shape: {workflowId: string, runId: string}
 export def "get-workflow-execution-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -763,7 +768,7 @@ export def "get-workflow-execution-history" [
   --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
   --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
   --reverse-order: oneof<nothing, bool> # When set to true, returns the events in reverse order. By default the results are returned in ascending order of the eventTimeStamp of the events.
-]: any -> record<events: table<eventTimestamp: string, eventType: string, eventId: int, workflowExecutionStartedEventAttributes: record, workflowExecutionCompletedEventAttributes: record, completeWorkflowExecutionFailedEventAttributes: record, workflowExecutionFailedEventAttributes: record, failWorkflowExecutionFailedEventAttributes: record, workflowExecutionTimedOutEventAttributes: record, workflowExecutionCanceledEventAttributes: record, cancelWorkflowExecutionFailedEventAttributes: record, workflowExecutionContinuedAsNewEventAttributes: record, continueAsNewWorkflowExecutionFailedEventAttributes: record, workflowExecutionTerminatedEventAttributes: record, workflowExecutionCancelRequestedEventAttributes: record, decisionTaskScheduledEventAttributes: record, decisionTaskStartedEventAttributes: record, decisionTaskCompletedEventAttributes: record, decisionTaskTimedOutEventAttributes: record, activityTaskScheduledEventAttributes: record, activityTaskStartedEventAttributes: record, activityTaskCompletedEventAttributes: record, activityTaskFailedEventAttributes: record, activityTaskTimedOutEventAttributes: record, activityTaskCanceledEventAttributes: record, activityTaskCancelRequestedEventAttributes: record, workflowExecutionSignaledEventAttributes: record, markerRecordedEventAttributes: record, recordMarkerFailedEventAttributes: record, timerStartedEventAttributes: record, timerFiredEventAttributes: record, timerCanceledEventAttributes: record, startChildWorkflowExecutionInitiatedEventAttributes: record, childWorkflowExecutionStartedEventAttributes: record, childWorkflowExecutionCompletedEventAttributes: record, childWorkflowExecutionFailedEventAttributes: record, childWorkflowExecutionTimedOutEventAttributes: record, childWorkflowExecutionCanceledEventAttributes: record, childWorkflowExecutionTerminatedEventAttributes: record, signalExternalWorkflowExecutionInitiatedEventAttributes: record, externalWorkflowExecutionSignaledEventAttributes: record, signalExternalWorkflowExecutionFailedEventAttributes: record, externalWorkflowExecutionCancelRequestedEventAttributes: record, requestCancelExternalWorkflowExecutionInitiatedEventAttributes: record, requestCancelExternalWorkflowExecutionFailedEventAttributes: record, scheduleActivityTaskFailedEventAttributes: record, requestCancelActivityTaskFailedEventAttributes: record, startTimerFailedEventAttributes: record, cancelTimerFailedEventAttributes: record, startChildWorkflowExecutionFailedEventAttributes: record, lambdaFunctionScheduledEventAttributes: record, lambdaFunctionStartedEventAttributes: record, lambdaFunctionCompletedEventAttributes: record, lambdaFunctionFailedEventAttributes: record, lambdaFunctionTimedOutEventAttributes: record, scheduleLambdaFunctionFailedEventAttributes: record, startLambdaFunctionFailedEventAttributes: record>, nextPageToken: string> {
+]: any -> oneof<record<events: table<eventTimestamp: string, eventType: string, eventId: int, workflowExecutionStartedEventAttributes: record, workflowExecutionCompletedEventAttributes: record, completeWorkflowExecutionFailedEventAttributes: record, workflowExecutionFailedEventAttributes: record, failWorkflowExecutionFailedEventAttributes: record, workflowExecutionTimedOutEventAttributes: record, workflowExecutionCanceledEventAttributes: record, cancelWorkflowExecutionFailedEventAttributes: record, workflowExecutionContinuedAsNewEventAttributes: record, continueAsNewWorkflowExecutionFailedEventAttributes: record, workflowExecutionTerminatedEventAttributes: record, workflowExecutionCancelRequestedEventAttributes: record, decisionTaskScheduledEventAttributes: record, decisionTaskStartedEventAttributes: record, decisionTaskCompletedEventAttributes: record, decisionTaskTimedOutEventAttributes: record, activityTaskScheduledEventAttributes: record, activityTaskStartedEventAttributes: record, activityTaskCompletedEventAttributes: record, activityTaskFailedEventAttributes: record, activityTaskTimedOutEventAttributes: record, activityTaskCanceledEventAttributes: record, activityTaskCancelRequestedEventAttributes: record, workflowExecutionSignaledEventAttributes: record, markerRecordedEventAttributes: record, recordMarkerFailedEventAttributes: record, timerStartedEventAttributes: record, timerFiredEventAttributes: record, timerCanceledEventAttributes: record, startChildWorkflowExecutionInitiatedEventAttributes: record, childWorkflowExecutionStartedEventAttributes: record, childWorkflowExecutionCompletedEventAttributes: record, childWorkflowExecutionFailedEventAttributes: record, childWorkflowExecutionTimedOutEventAttributes: record, childWorkflowExecutionCanceledEventAttributes: record, childWorkflowExecutionTerminatedEventAttributes: record, signalExternalWorkflowExecutionInitiatedEventAttributes: record, externalWorkflowExecutionSignaledEventAttributes: record, signalExternalWorkflowExecutionFailedEventAttributes: record, externalWorkflowExecutionCancelRequestedEventAttributes: record, requestCancelExternalWorkflowExecutionInitiatedEventAttributes: record, requestCancelExternalWorkflowExecutionFailedEventAttributes: record, scheduleActivityTaskFailedEventAttributes: record, requestCancelActivityTaskFailedEventAttributes: record, startTimerFailedEventAttributes: record, cancelTimerFailedEventAttributes: record, startChildWorkflowExecutionFailedEventAttributes: record, lambdaFunctionScheduledEventAttributes: record, lambdaFunctionStartedEventAttributes: record, lambdaFunctionCompletedEventAttributes: record, lambdaFunctionFailedEventAttributes: record, lambdaFunctionTimedOutEventAttributes: record, scheduleLambdaFunctionFailedEventAttributes: record, startLambdaFunctionFailedEventAttributes: record>, nextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -820,7 +825,7 @@ export def "list-activity-types" [
   --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
   --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
   --reverse-order: oneof<nothing, bool> # When set to true, returns the results in reverse order. By default, the results are returned in ascending alphabetical order by name of the activity types.
-]: any -> record<typeInfos: table<activityType: record, status: string, description: string, creationDate: string, deprecationDate: string>, nextPageToken: string> {
+]: any -> oneof<record<typeInfos: table<activityType: record, status: string, description: string, creationDate: string, deprecationDate: string>, nextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -851,12 +856,6 @@ export def "list-activity-types" [
 #
 # POST /
 # operationId: ListClosedWorkflowExecutions
-# --startTimeFilter shape: {oldestDate: string, latestDate?: string}
-# --closeTimeFilter shape: {oldestDate: string, latestDate?: string}
-# --executionFilter shape: {workflowId: string}
-# --closeStatusFilter shape: {status: "COMPLETED"|"FAILED"|"CANCELED"|"TERMINATED"|"CONTINUED_AS_NEW"|"TIMED_OUT"}
-# --typeFilter shape: {name: string, version?: string}
-# --tagFilter shape: {tag: string}
 export def "list-closed-workflow-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -887,7 +886,7 @@ export def "list-closed-workflow-executions" [
   --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
   --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
   --reverse-order: oneof<nothing, bool> # When set to true, returns the results in reverse order. By default the results are returned in descending order of the start or the close time of the executions.
-]: any -> record<executionInfos: table<execution: record, workflowType: record, startTimestamp: string, closeTimestamp: string, executionStatus: string, closeStatus: string, parent: record, tagList: list, cancelRequested: bool>, nextPageToken: string> {
+]: any -> oneof<record<executionInfos: table<execution: record, workflowType: record, startTimestamp: string, closeTimestamp: string, executionStatus: string, closeStatus: string, parent: record, tagList: list, cancelRequested: bool>, nextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -942,7 +941,7 @@ export def "list-domains" [
   registration_status: string@registration-status-completer # Specifies the registration status of the domains to list.
   --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
   --reverse-order: oneof<nothing, bool> # When set to true, returns the results in reverse order. By default, the results are returned in ascending alphabetical order by name of the domains.
-]: any -> record<domainInfos: table<name: string, status: string, description: string, arn: string>, nextPageToken: string> {
+]: any -> oneof<record<domainInfos: table<name: string, status: string, description: string, arn: string>, nextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -973,10 +972,6 @@ export def "list-domains" [
 #
 # POST /
 # operationId: ListOpenWorkflowExecutions
-# --startTimeFilter shape: {oldestDate: string, latestDate?: string}
-# --typeFilter shape: {name: string, version?: string}
-# --tagFilter shape: {tag: string}
-# --executionFilter shape: {workflowId: string}
 export def "list-open-workflow-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1005,7 +1000,7 @@ export def "list-open-workflow-executions" [
   --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
   --reverse-order: oneof<nothing, bool> # When set to true, returns the results in reverse order. By default the results are returned in descending order of the start time of the executions.
   --execution-filter: record # Used to filter the workflow executions in visibility APIs by their workflowId. — shape: {workflowId: string}
-]: any -> record<executionInfos: table<execution: record, workflowType: record, startTimestamp: string, closeTimestamp: string, executionStatus: string, closeStatus: string, parent: record, tagList: list, cancelRequested: bool>, nextPageToken: string> {
+]: any -> oneof<record<executionInfos: table<execution: record, workflowType: record, startTimestamp: string, closeTimestamp: string, executionStatus: string, closeStatus: string, parent: record, tagList: list, cancelRequested: bool>, nextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1055,7 +1050,7 @@ export def "list-tags-for-resource" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-16 # required
   resource_arn: string # The Amazon Resource Name (ARN) for the Amazon SWF domain.
-]: any -> record<tags: table<key: string, value: string>> {
+]: any -> oneof<record<tags: table<key: string, value: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1111,7 +1106,7 @@ export def "list-workflow-types" [
   --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. (body field)
   --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. (body field)
   --reverse-order: oneof<nothing, bool> # When set to true, returns the results in reverse order. By default the results are returned in ascending alphabetical order of the name of the workflow types.
-]: any -> record<typeInfos: table<workflowType: record, status: string, description: string, creationDate: string, deprecationDate: string>, nextPageToken: string> {
+]: any -> oneof<record<typeInfos: table<workflowType: record, status: string, description: string, creationDate: string, deprecationDate: string>, nextPageToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1142,7 +1137,6 @@ export def "list-workflow-types" [
 #
 # POST /
 # operationId: PollForActivityTask
-# --taskList shape: {name: string}
 export def "poll-for-activity-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1164,7 +1158,7 @@ export def "poll-for-activity-task" [
   domain: string # The name of the domain that contains the task lists being polled.
   task_list: record # Represents a task list. — shape: {name: string}
   --identity: string # Identity of the worker making the request, recorded in the ActivityTaskStarted event in the workflow history. This enables diagnostic tracing when problems arise. The form of this identity is user defined.
-]: any -> record<taskToken: string, activityId: string, startedEventId: int, workflowExecution: record<workflowId: string, runId: string>, activityType: record<name: string, version: string>, input: string> {
+]: any -> oneof<record<taskToken: string, activityId: string, startedEventId: int, workflowExecution: record<workflowId: string, runId: string>, activityType: record<name: string, version: string>, input: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1194,7 +1188,6 @@ export def "poll-for-activity-task" [
 #
 # POST /
 # operationId: PollForDecisionTask
-# --taskList shape: {name: string}
 export def "poll-for-decision-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1221,7 +1214,7 @@ export def "poll-for-decision-task" [
   --next-page-token-body: string # If NextPageToken is returned there are more results available. The value of NextPageToken is a unique pagination token for each page. Make the call again using the returned token to retrieve the next page. Keep all other arguments unchanged. Each pagination token expires after 60 seconds. Using an expired pagination token will return a 400 error: "Specified token has exceeded its maximum lifetime". The configured maximumPageSize determines how many results can be returned in a single call. The nextPageToken returned by this action cannot be used with GetWorkflowExecutionHistory to get the next page. You must call PollForDecisionTask again (with the nextPageToken) to retrieve the next page of history records. Calling PollForDecisionTask with a nextPageToken doesn't return a new decision task. (body field)
   --maximum-page-size-body: int # The maximum number of results that are returned per call. Use nextPageToken to obtain further pages of results. This is an upper limit only; the actual number of results returned per call may be fewer than the specified maximum. (body field)
   --reverse-order: oneof<nothing, bool> # When set to true, returns the events in reverse order. By default the results are returned in ascending order of the eventTimestamp of the events.
-]: any -> record<taskToken: string, startedEventId: int, workflowExecution: record<workflowId: string, runId: string>, workflowType: record<name: string, version: string>, events: table<eventTimestamp: string, eventType: string, eventId: int, workflowExecutionStartedEventAttributes: record, workflowExecutionCompletedEventAttributes: record, completeWorkflowExecutionFailedEventAttributes: record, workflowExecutionFailedEventAttributes: record, failWorkflowExecutionFailedEventAttributes: record, workflowExecutionTimedOutEventAttributes: record, workflowExecutionCanceledEventAttributes: record, cancelWorkflowExecutionFailedEventAttributes: record, workflowExecutionContinuedAsNewEventAttributes: record, continueAsNewWorkflowExecutionFailedEventAttributes: record, workflowExecutionTerminatedEventAttributes: record, workflowExecutionCancelRequestedEventAttributes: record, decisionTaskScheduledEventAttributes: record, decisionTaskStartedEventAttributes: record, decisionTaskCompletedEventAttributes: record, decisionTaskTimedOutEventAttributes: record, activityTaskScheduledEventAttributes: record, activityTaskStartedEventAttributes: record, activityTaskCompletedEventAttributes: record, activityTaskFailedEventAttributes: record, activityTaskTimedOutEventAttributes: record, activityTaskCanceledEventAttributes: record, activityTaskCancelRequestedEventAttributes: record, workflowExecutionSignaledEventAttributes: record, markerRecordedEventAttributes: record, recordMarkerFailedEventAttributes: record, timerStartedEventAttributes: record, timerFiredEventAttributes: record, timerCanceledEventAttributes: record, startChildWorkflowExecutionInitiatedEventAttributes: record, childWorkflowExecutionStartedEventAttributes: record, childWorkflowExecutionCompletedEventAttributes: record, childWorkflowExecutionFailedEventAttributes: record, childWorkflowExecutionTimedOutEventAttributes: record, childWorkflowExecutionCanceledEventAttributes: record, childWorkflowExecutionTerminatedEventAttributes: record, signalExternalWorkflowExecutionInitiatedEventAttributes: record, externalWorkflowExecutionSignaledEventAttributes: record, signalExternalWorkflowExecutionFailedEventAttributes: record, externalWorkflowExecutionCancelRequestedEventAttributes: record, requestCancelExternalWorkflowExecutionInitiatedEventAttributes: record, requestCancelExternalWorkflowExecutionFailedEventAttributes: record, scheduleActivityTaskFailedEventAttributes: record, requestCancelActivityTaskFailedEventAttributes: record, startTimerFailedEventAttributes: record, cancelTimerFailedEventAttributes: record, startChildWorkflowExecutionFailedEventAttributes: record, lambdaFunctionScheduledEventAttributes: record, lambdaFunctionStartedEventAttributes: record, lambdaFunctionCompletedEventAttributes: record, lambdaFunctionFailedEventAttributes: record, lambdaFunctionTimedOutEventAttributes: record, scheduleLambdaFunctionFailedEventAttributes: record, startLambdaFunctionFailedEventAttributes: record>, nextPageToken: string, previousStartedEventId: int> {
+]: any -> oneof<record<taskToken: string, startedEventId: int, workflowExecution: record<workflowId: string, runId: string>, workflowType: record<name: string, version: string>, events: table<eventTimestamp: string, eventType: string, eventId: int, workflowExecutionStartedEventAttributes: record, workflowExecutionCompletedEventAttributes: record, completeWorkflowExecutionFailedEventAttributes: record, workflowExecutionFailedEventAttributes: record, failWorkflowExecutionFailedEventAttributes: record, workflowExecutionTimedOutEventAttributes: record, workflowExecutionCanceledEventAttributes: record, cancelWorkflowExecutionFailedEventAttributes: record, workflowExecutionContinuedAsNewEventAttributes: record, continueAsNewWorkflowExecutionFailedEventAttributes: record, workflowExecutionTerminatedEventAttributes: record, workflowExecutionCancelRequestedEventAttributes: record, decisionTaskScheduledEventAttributes: record, decisionTaskStartedEventAttributes: record, decisionTaskCompletedEventAttributes: record, decisionTaskTimedOutEventAttributes: record, activityTaskScheduledEventAttributes: record, activityTaskStartedEventAttributes: record, activityTaskCompletedEventAttributes: record, activityTaskFailedEventAttributes: record, activityTaskTimedOutEventAttributes: record, activityTaskCanceledEventAttributes: record, activityTaskCancelRequestedEventAttributes: record, workflowExecutionSignaledEventAttributes: record, markerRecordedEventAttributes: record, recordMarkerFailedEventAttributes: record, timerStartedEventAttributes: record, timerFiredEventAttributes: record, timerCanceledEventAttributes: record, startChildWorkflowExecutionInitiatedEventAttributes: record, childWorkflowExecutionStartedEventAttributes: record, childWorkflowExecutionCompletedEventAttributes: record, childWorkflowExecutionFailedEventAttributes: record, childWorkflowExecutionTimedOutEventAttributes: record, childWorkflowExecutionCanceledEventAttributes: record, childWorkflowExecutionTerminatedEventAttributes: record, signalExternalWorkflowExecutionInitiatedEventAttributes: record, externalWorkflowExecutionSignaledEventAttributes: record, signalExternalWorkflowExecutionFailedEventAttributes: record, externalWorkflowExecutionCancelRequestedEventAttributes: record, requestCancelExternalWorkflowExecutionInitiatedEventAttributes: record, requestCancelExternalWorkflowExecutionFailedEventAttributes: record, scheduleActivityTaskFailedEventAttributes: record, requestCancelActivityTaskFailedEventAttributes: record, startTimerFailedEventAttributes: record, cancelTimerFailedEventAttributes: record, startChildWorkflowExecutionFailedEventAttributes: record, lambdaFunctionScheduledEventAttributes: record, lambdaFunctionStartedEventAttributes: record, lambdaFunctionCompletedEventAttributes: record, lambdaFunctionFailedEventAttributes: record, lambdaFunctionTimedOutEventAttributes: record, scheduleLambdaFunctionFailedEventAttributes: record, startLambdaFunctionFailedEventAttributes: record>, nextPageToken: string, previousStartedEventId: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1272,7 +1265,7 @@ export def "record-activity-task-heartbeat" [
   --x-amz-target: string@x-amz-target-completer-20 # required
   task_token: string # The taskToken of the ActivityTask. taskToken is generated by the service and should be treated as an opaque value. If the task is passed to another process, its taskToken must also be passed. This enables it to provide its progress and respond with results.
   --details: string # If specified, contains details about the progress of the task.
-]: any -> record<cancelRequested: bool> {
+]: any -> oneof<record<cancelRequested: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1302,7 +1295,6 @@ export def "record-activity-task-heartbeat" [
 #
 # POST /
 # operationId: RegisterActivityType
-# --defaultTaskList shape: {name: string}
 export def "register-activity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1361,7 +1353,6 @@ export def "register-activity-type" [
 #
 # POST /
 # operationId: RegisterDomain
-# --tags item shape: {key: string, value?: string}
 export def "register-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1414,7 +1405,6 @@ export def "register-domain" [
 #
 # POST /
 # operationId: RegisterWorkflowType
-# --defaultTaskList shape: {name: string}
 export def "register-workflow-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1675,7 +1665,6 @@ export def "respond-activity-task-failed" [
 #
 # POST /
 # operationId: RespondDecisionTaskCompleted
-# --decisions item shape: {decisionType: "ScheduleActivityTask"|"RequestCancelActivityTask"|"CompleteWorkflowExecution"|"FailWorkflowExecution"|"CancelWorkflowExecution"|"ContinueAsNewWorkflowExecution"|"RecordMarker"|"StartTimer"|"CancelTimer"|"SignalExternalWorkflowExecution"|"RequestCancelExternalWorkflowExecution"|"StartChildWorkflowExecution"|"ScheduleLambdaFunction", scheduleActivityTaskDecisionAttributes?: record, requestCancelActivityTaskDecisionAttributes?: record, ... (11 more fields)}
 export def "respond-decision-task-completed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1780,8 +1769,6 @@ export def "signal-workflow-execution" [
 #
 # POST /
 # operationId: StartWorkflowExecution
-# --workflowType shape: {name: string, version: string}
-# --taskList shape: {name: string}
 export def "start-workflow-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1811,7 +1798,7 @@ export def "start-workflow-execution" [
   --task-start-to-close-timeout: string # Specifies the maximum duration of decision tasks for this workflow execution. This parameter overrides the defaultTaskStartToCloseTimout specified when registering the workflow type using RegisterWorkflowType. The duration is specified in seconds, an integer greater than or equal to 0. You can use NONE to specify unlimited duration. A task start-to-close timeout for this workflow execution must be specified either as a default for the workflow type or through this parameter. If neither this parameter is set nor a default task start-to-close timeout was specified at registration time then a fault is returned.
   --child-policy: string@child-policy-completer # If set, specifies the policy to use for the child workflow executions of this workflow execution if it is terminated, by calling the TerminateWorkflowExecution action explicitly or due to an expired timeout. This policy overrides the default child policy specified when registering the workflow type using RegisterWorkflowType. The supported child policies are: TERMINATE – The child executions are terminated. REQUEST_CANCEL – A request to cancel is attempted for each child execution by recording a WorkflowExecutionCancelRequested event in its history. It is up to the decider to take appropriate actions when it receives an execution history with this event. ABANDON – No action is taken. The child executions continue to run. A child policy for this workflow execution must be specified either as a default for the workflow type or through this parameter. If neither this parameter is set nor a default child policy was specified at registration time then a fault is returned.
   --lambda-role: string # The IAM role to attach to this workflow execution. Executions of this workflow type need IAM roles to invoke Lambda functions. If you don't attach an IAM role, any attempt to schedule a Lambda task fails. This results in a ScheduleLambdaFunctionFailed history event. For more information, see https://docs.aws.amazon.com/amazonswf/latest/developerguide/lambda-task.html (https://docs.aws.amazon.com/amazonswf/latest/developerguide/lambda-task.html) in the Amazon SWF Developer Guide.
-]: any -> record<runId: string> {
+]: any -> oneof<record<runId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1841,7 +1828,6 @@ export def "start-workflow-execution" [
 #
 # POST /
 # operationId: TagResource
-# --tags item shape: {key: string, value?: string}
 export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1946,7 +1932,6 @@ export def "terminate-workflow-execution" [
 #
 # POST /
 # operationId: UndeprecateActivityType
-# --activityType shape: {name: string, version: string}
 export def "undeprecate-activity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2046,7 +2031,6 @@ export def "undeprecate-domain" [
 #
 # POST /
 # operationId: UndeprecateWorkflowType
-# --workflowType shape: {name: string, version: string}
 export def "undeprecate-workflow-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

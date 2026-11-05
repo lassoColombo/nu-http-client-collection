@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -114,9 +137,9 @@ def x-amz-target-completer-13 [] { ["AWSSupport_20130415.ResolveCase"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-attachments-to-set" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["add-attachments-to-set" "add-communication-to-case" "create-case" "describe-attachment" "describe-cases" "describe-communications" "describe-services" "describe-severity-levels" "describe-trusted-advisor-check-refresh-statuses" "describe-trusted-advisor-check-result" "describe-trusted-advisor-check-summaries" "describe-trusted-advisor-checks" "refresh-trusted-advisor-check" "resolve-case" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -138,7 +161,6 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddAttachmentsToSet
-# --attachments item shape: {fileName?: string, data?: string}
 export def "add-attachments-to-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +181,7 @@ export def "add-attachments-to-set" [
   --x-amz-target: string@x-amz-target-completer # required
   --attachment-set-id: string # The ID of the attachment set. If an attachmentSetId is not specified, a new attachment set is created, and the ID of the set is returned in the response. If an attachmentSetId is specified, the attachments are added to the specified set, if it exists.
   attachments: list # One or more attachments to add to the set. You can add up to three attachments per set. The size limit is 5 MB per attachment. In the Attachment object, use the data parameter to specify the contents of the attachment file. In the previous request syntax, the value for data appear as blob, which is represented as a base64-encoded string. The value for fileName is the name of the attachment, such as troubleshoot-screenshot.png. — item shape: {fileName?: string, data?: string}
-]: any -> record<attachmentSetId: string, expiryTime: string> {
+]: any -> oneof<record<attachmentSetId: string, expiryTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -211,7 +233,7 @@ export def "add-communication-to-case" [
   communication_body: string # The body of an email communication to add to the support case.
   --cc-email-addresses: list<string> # The email addresses in the CC line of an email to be added to the support case.
   --attachment-set-id: string # The ID of a set of one or more attachments for the communication to add to the case. Create the set by calling AddAttachmentsToSet
-]: any -> record<result: bool> {
+]: any -> oneof<record<result: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -268,7 +290,7 @@ export def "create-case" [
   --language: string # The language in which Amazon Web Services Support handles the case. Amazon Web Services Support currently supports English ("en") and Japanese ("ja"). You must specify the ISO 639-1 code for the language parameter if you want support in that language.
   --issue-type: string # The type of issue for the case. You can specify customer-service or technical. If you don't specify a value, the default is technical.
   --attachment-set-id: string # The ID of a set of one or more attachments for the case. Create the set by using the AddAttachmentsToSet operation.
-]: any -> record<caseId: string> {
+]: any -> oneof<record<caseId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -317,7 +339,7 @@ export def "describe-attachment" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-3 # required
   attachment_id: string # The ID of the attachment to return. Attachment IDs are returned by the DescribeCommunications operation.
-]: any -> record<attachment: record<fileName: string, data: string>> {
+]: any -> oneof<record<attachment: record<fileName: string, data: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -376,7 +398,7 @@ export def "describe-cases" [
   --max-results-body: int # The maximum number of results to return before paginating. (body field)
   --language: string # The language in which Amazon Web Services Support handles the case. Amazon Web Services Support currently supports English ("en") and Japanese ("ja"). You must specify the ISO 639-1 code for the language parameter if you want support in that language.
   --include-communications: oneof<nothing, bool> # Specifies whether to include communications in the DescribeCases response. By default, communications are included.
-]: any -> record<cases: table<caseId: string, displayId: string, subject: string, status: string, serviceCode: string, categoryCode: string, severityCode: string, submittedBy: string, timeCreated: string, recentCommunications: record, ccEmailAddresses: list, language: string>, nextToken: string> {
+]: any -> oneof<record<cases: table<caseId: string, displayId: string, subject: string, status: string, serviceCode: string, categoryCode: string, severityCode: string, submittedBy: string, timeCreated: string, recentCommunications: record, ccEmailAddresses: list, language: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -432,7 +454,7 @@ export def "describe-communications" [
   --after-time: string # The start date for a filtered date search on support case communications. Case communications are available for 12 months after creation.
   --next-token-body: string # A resumption point for pagination. (body field)
   --max-results-body: int # The maximum number of results to return before paginating. (body field)
-]: any -> record<communications: table<caseId: string, body: string, submittedBy: string, timeCreated: string, attachmentSet: list>, nextToken: string> {
+]: any -> oneof<record<communications: table<caseId: string, body: string, submittedBy: string, timeCreated: string, attachmentSet: list>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -483,7 +505,7 @@ export def "describe-services" [
   --x-amz-target: string@x-amz-target-completer-6 # required
   --service-code-list: list<string> # A JSON-formatted list of service codes available for Amazon Web Services services.
   --language: string # The language in which Amazon Web Services Support handles the case. Amazon Web Services Support currently supports English ("en") and Japanese ("ja"). You must specify the ISO 639-1 code for the language parameter if you want support in that language.
-]: any -> record<services: table<code: string, name: string, categories: list>> {
+]: any -> oneof<record<services: table<code: string, name: string, categories: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -532,7 +554,7 @@ export def "describe-severity-levels" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-7 # required
   --language: string # The language in which Amazon Web Services Support handles the case. Amazon Web Services Support currently supports English ("en") and Japanese ("ja"). You must specify the ISO 639-1 code for the language parameter if you want support in that language.
-]: any -> record<severityLevels: table<code: string, name: string>> {
+]: any -> oneof<record<severityLevels: table<code: string, name: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -581,7 +603,7 @@ export def "describe-trusted-advisor-check-refresh-statuses" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-8 # required
   check_ids: list<string> # The IDs of the Trusted Advisor checks to get the status. If you specify the check ID of a check that is automatically refreshed, you might see an InvalidParameterValue error.
-]: any -> record<statuses: table<checkId: string, status: string, millisUntilNextRefreshable: int>> {
+]: any -> oneof<record<statuses: table<checkId: string, status: string, millisUntilNextRefreshable: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -631,7 +653,7 @@ export def "describe-trusted-advisor-check-result" [
   --x-amz-target: string@x-amz-target-completer-9 # required
   check_id: string # The unique identifier for the Trusted Advisor check.
   --language: string # The ISO 639-1 code for the language that you want your check results to appear in. The Amazon Web Services Support API currently supports the following languages for Trusted Advisor: Chinese, Simplified - zh Chinese, Traditional - zh_TW English - en French - fr German - de Indonesian - id Italian - it Japanese - ja Korean - ko Portuguese, Brazilian - pt_BR Spanish - es
-]: any -> record<result: record<checkId: string, timestamp: string, status: string, resourcesSummary: record<resourcesProcessed: int, resourcesFlagged: int, resourcesIgnored: int, resourcesSuppressed: int>, categorySpecificSummary: record<costOptimizing: record>, flaggedResources: list<record>>> {
+]: any -> oneof<record<result: record<checkId: string, timestamp: string, status: string, resourcesSummary: record<resourcesProcessed: int, resourcesFlagged: int, resourcesIgnored: int, resourcesSuppressed: int>, categorySpecificSummary: record<costOptimizing: record>, flaggedResources: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -680,7 +702,7 @@ export def "describe-trusted-advisor-check-summaries" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-10 # required
   check_ids: list<string> # The IDs of the Trusted Advisor checks.
-]: any -> record<summaries: table<checkId: string, timestamp: string, status: string, hasFlaggedResources: bool, resourcesSummary: record, categorySpecificSummary: record>> {
+]: any -> oneof<record<summaries: table<checkId: string, timestamp: string, status: string, hasFlaggedResources: bool, resourcesSummary: record, categorySpecificSummary: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -729,7 +751,7 @@ export def "describe-trusted-advisor-checks" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-11 # required
   language: string # The ISO 639-1 code for the language that you want your checks to appear in. The Amazon Web Services Support API currently supports the following languages for Trusted Advisor: Chinese, Simplified - zh Chinese, Traditional - zh_TW English - en French - fr German - de Indonesian - id Italian - it Japanese - ja Korean - ko Portuguese, Brazilian - pt_BR Spanish - es
-]: any -> record<checks: table<id: string, name: string, description: string, category: string, metadata: list>> {
+]: any -> oneof<record<checks: table<id: string, name: string, description: string, category: string, metadata: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -778,7 +800,7 @@ export def "refresh-trusted-advisor-check" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-12 # required
   check_id: string # The unique identifier for the Trusted Advisor check to refresh. Specifying the check ID of a check that is automatically refreshed causes an InvalidParameterValue error.
-]: any -> record<status: record<checkId: string, status: string, millisUntilNextRefreshable: int>> {
+]: any -> oneof<record<status: record<checkId: string, status: string, millisUntilNextRefreshable: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -827,7 +849,7 @@ export def "resolve-case" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   --case-id: string # The support case ID requested or returned in the call. The case ID is an alphanumeric string formatted as shown in this example: case-12345678910-2013-c4c1d2bf33c5cf47
-]: any -> record<initialCaseStatus: string, finalCaseStatus: string> {
+]: any -> oneof<record<initialCaseStatus: string, finalCaseStatus: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -180,9 +204,9 @@ def action-completer-70 [] { ["VerifyEmailIdentity"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-clone-receipt-rule-set" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-clone-receipt-rule-set" "post-clone-receipt-rule-set" "get-create-configuration-set" "post-create-configuration-set" "get-create-configuration-set-event-destination" "post-create-configuration-set-event-destination" "get-create-configuration-set-tracking-options" "post-create-configuration-set-tracking-options" "get-create-custom-verification-email-template" "post-create-custom-verification-email-template" "get-create-receipt-filter" "post-create-receipt-filter" "get-create-receipt-rule" "post-create-receipt-rule" "get-create-receipt-rule-set" "post-create-receipt-rule-set" "get-create-template" "post-create-template" "get-delete-configuration-set" "post-delete-configuration-set" "get-delete-configuration-set-event-destination" "post-delete-configuration-set-event-destination" "get-delete-configuration-set-tracking-options" "post-delete-configuration-set-tracking-options" "get-delete-custom-verification-email-template" "post-delete-custom-verification-email-template" "get-delete-identity" "post-delete-identity" "get-delete-identity-policy" "post-delete-identity-policy" "get-delete-receipt-filter" "post-delete-receipt-filter" "get-delete-receipt-rule" "post-delete-receipt-rule" "get-delete-receipt-rule-set" "post-delete-receipt-rule-set" "get-delete-template" "post-delete-template" "get-delete-verified-email-address" "post-delete-verified-email-address" "get-describe-active-receipt-rule-set" "post-describe-active-receipt-rule-set" "get-describe-configuration-set" "post-describe-configuration-set" "get-describe-receipt-rule" "post-describe-receipt-rule" "get-describe-receipt-rule-set" "post-describe-receipt-rule-set" "get-get-account-sending-enabled" "post-get-account-sending-enabled" "get-get-custom-verification-email-template" "post-get-custom-verification-email-template" "get-get-identity-dkim-attributes" "post-get-identity-dkim-attributes" "get-get-identity-mail-from-domain-attributes" "post-get-identity-mail-from-domain-attributes" "get-get-identity-notification-attributes" "post-get-identity-notification-attributes" "get-get-identity-policies" "post-get-identity-policies" "get-get-identity-verification-attributes" "post-get-identity-verification-attributes" "get-get-send-quota" "post-get-send-quota" "get-get-send-statistics" "post-get-send-statistics" "get-get-template" "post-get-template" "get-list-configuration-sets" "post-list-configuration-sets" "get-list-custom-verification-email-templates" "post-list-custom-verification-email-templates" "get-list-identities" "post-list-identities" "get-list-identity-policies" "post-list-identity-policies" "get-list-receipt-filters" "post-list-receipt-filters" "get-list-receipt-rule-sets" "post-list-receipt-rule-sets" "get-list-templates" "post-list-templates" "get-list-verified-email-addresses" "post-list-verified-email-addresses" "get-put-configuration-set-delivery-options" "post-put-configuration-set-delivery-options" "get-put-identity-policy" "post-put-identity-policy" "get-reorder-receipt-rule-set" "post-reorder-receipt-rule-set" "get-send-bounce" "post-send-bounce" "get-send-bulk-templated-email" "post-send-bulk-templated-email" "get-send-custom-verification-email" "post-send-custom-verification-email" "get-send-email" "post-send-email" "get-send-raw-email" "post-send-raw-email" "get-send-templated-email" "post-send-templated-email" "get-set-active-receipt-rule-set" "post-set-active-receipt-rule-set" "get-set-identity-dkim-enabled" "post-set-identity-dkim-enabled" "get-set-identity-feedback-forwarding-enabled" "post-set-identity-feedback-forwarding-enabled" "get-set-identity-headers-in-notifications-enabled" "post-set-identity-headers-in-notifications-enabled" "get-set-identity-mail-from-domain" "post-set-identity-mail-from-domain" "get-set-identity-notification-topic" "post-set-identity-notification-topic" "get-set-receipt-rule-position" "post-set-receipt-rule-position" "get-test-render-template" "post-test-render-template" "get-update-account-sending-enabled" "post-update-account-sending-enabled" "get-update-configuration-set-event-destination" "post-update-configuration-set-event-destination" "get-update-configuration-set-reputation-metrics-enabled" "post-update-configuration-set-reputation-metrics-enabled" "get-update-configuration-set-sending-enabled" "post-update-configuration-set-sending-enabled" "get-update-configuration-set-tracking-options" "post-update-configuration-set-tracking-options" "get-update-custom-verification-email-template" "post-update-custom-verification-email-template" "get-update-receipt-rule" "post-update-receipt-rule" "get-update-template" "post-update-template" "get-verify-domain-dkim" "post-verify-domain-dkim" "get-verify-domain-identity" "post-verify-domain-identity" "get-verify-email-address" "post-verify-email-address" "get-verify-email-identity" "post-verify-email-identity" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -225,7 +249,7 @@ export def "get-clone-receipt-rule-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
@@ -276,7 +300,7 @@ export def "post-clone-receipt-rule-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -328,7 +352,7 @@ export def "get-create-configuration-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_set == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSet' missing: pass --configuration-set" } }
@@ -378,7 +402,7 @@ export def "post-create-configuration-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -431,7 +455,7 @@ export def "get-create-configuration-set-event-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
@@ -482,7 +506,7 @@ export def "post-create-configuration-set-event-destination" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -535,7 +559,7 @@ export def "get-create-configuration-set-tracking-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
@@ -586,7 +610,7 @@ export def "post-create-configuration-set-tracking-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -750,7 +774,7 @@ export def "get-create-receipt-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($filter == null) { error make --unspanned { msg: "required query parameter 'Filter' missing: pass --filter" } }
@@ -800,7 +824,7 @@ export def "post-create-receipt-filter" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -854,7 +878,7 @@ export def "get-create-receipt-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
@@ -905,7 +929,7 @@ export def "post-create-receipt-rule" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -957,7 +981,7 @@ export def "get-create-receipt-rule-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
@@ -1007,7 +1031,7 @@ export def "post-create-receipt-rule-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1059,7 +1083,7 @@ export def "get-create-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template == null) { error make --unspanned { msg: "required query parameter 'Template' missing: pass --template" } }
@@ -1109,7 +1133,7 @@ export def "post-create-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1161,7 +1185,7 @@ export def "get-delete-configuration-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
@@ -1211,7 +1235,7 @@ export def "post-delete-configuration-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1264,7 +1288,7 @@ export def "get-delete-configuration-set-event-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
@@ -1315,7 +1339,7 @@ export def "post-delete-configuration-set-event-destination" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1367,7 +1391,7 @@ export def "get-delete-configuration-set-tracking-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
@@ -1417,7 +1441,7 @@ export def "post-delete-configuration-set-tracking-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1571,7 +1595,7 @@ export def "get-delete-identity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
@@ -1621,7 +1645,7 @@ export def "post-delete-identity" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1674,7 +1698,7 @@ export def "get-delete-identity-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
@@ -1725,7 +1749,7 @@ export def "post-delete-identity-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1777,7 +1801,7 @@ export def "get-delete-receipt-filter" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($filter_name == null) { error make --unspanned { msg: "required query parameter 'FilterName' missing: pass --filter-name" } }
@@ -1827,7 +1851,7 @@ export def "post-delete-receipt-filter" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1880,7 +1904,7 @@ export def "get-delete-receipt-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
@@ -1931,7 +1955,7 @@ export def "post-delete-receipt-rule" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1983,7 +2007,7 @@ export def "get-delete-receipt-rule-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
@@ -2033,7 +2057,7 @@ export def "post-delete-receipt-rule-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2085,7 +2109,7 @@ export def "get-delete-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_name == null) { error make --unspanned { msg: "required query parameter 'TemplateName' missing: pass --template-name" } }
@@ -2135,7 +2159,7 @@ export def "post-delete-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2288,7 +2312,7 @@ export def "get-describe-active-receipt-rule-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Metadata: record<Name: string, CreatedTimestamp: string>, Rules: table<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list, Actions: list, ScanEnabled: bool>> {
+]: nothing -> oneof<record<Metadata: record<Name: string, CreatedTimestamp: string>, Rules: table<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list, Actions: list, ScanEnabled: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "DescribeActiveReceiptRuleSet")
@@ -2337,7 +2361,7 @@ export def "post-describe-active-receipt-rule-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Metadata: record<Name: string, CreatedTimestamp: string>, Rules: table<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list, Actions: list, ScanEnabled: bool>> {
+]: any -> oneof<record<Metadata: record<Name: string, CreatedTimestamp: string>, Rules: table<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list, Actions: list, ScanEnabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2390,7 +2414,7 @@ export def "get-describe-configuration-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConfigurationSet: record<Name: string>, EventDestinations: table<Name: string, Enabled: bool, MatchingEventTypes: list, KinesisFirehoseDestination: record, CloudWatchDestination: record, SNSDestination: record>, TrackingOptions: record<CustomRedirectDomain: string>, DeliveryOptions: record<TlsPolicy: string>, ReputationOptions: record<SendingEnabled: bool, ReputationMetricsEnabled: bool, LastFreshStart: string>> {
+]: nothing -> oneof<record<ConfigurationSet: record<Name: string>, EventDestinations: table<Name: string, Enabled: bool, MatchingEventTypes: list, KinesisFirehoseDestination: record, CloudWatchDestination: record, SNSDestination: record>, TrackingOptions: record<CustomRedirectDomain: string>, DeliveryOptions: record<TlsPolicy: string>, ReputationOptions: record<SendingEnabled: bool, ReputationMetricsEnabled: bool, LastFreshStart: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
@@ -2440,7 +2464,7 @@ export def "post-describe-configuration-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ConfigurationSet: record<Name: string>, EventDestinations: table<Name: string, Enabled: bool, MatchingEventTypes: list, KinesisFirehoseDestination: record, CloudWatchDestination: record, SNSDestination: record>, TrackingOptions: record<CustomRedirectDomain: string>, DeliveryOptions: record<TlsPolicy: string>, ReputationOptions: record<SendingEnabled: bool, ReputationMetricsEnabled: bool, LastFreshStart: string>> {
+]: any -> oneof<record<ConfigurationSet: record<Name: string>, EventDestinations: table<Name: string, Enabled: bool, MatchingEventTypes: list, KinesisFirehoseDestination: record, CloudWatchDestination: record, SNSDestination: record>, TrackingOptions: record<CustomRedirectDomain: string>, DeliveryOptions: record<TlsPolicy: string>, ReputationOptions: record<SendingEnabled: bool, ReputationMetricsEnabled: bool, LastFreshStart: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2493,7 +2517,7 @@ export def "get-describe-receipt-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Rule: record<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list<string>, Actions: list<record>, ScanEnabled: bool>> {
+]: nothing -> oneof<record<Rule: record<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list<string>, Actions: list<record>, ScanEnabled: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
@@ -2544,7 +2568,7 @@ export def "post-describe-receipt-rule" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Rule: record<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list<string>, Actions: list<record>, ScanEnabled: bool>> {
+]: any -> oneof<record<Rule: record<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list<string>, Actions: list<record>, ScanEnabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2596,7 +2620,7 @@ export def "get-describe-receipt-rule-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Metadata: record<Name: string, CreatedTimestamp: string>, Rules: table<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list, Actions: list, ScanEnabled: bool>> {
+]: nothing -> oneof<record<Metadata: record<Name: string, CreatedTimestamp: string>, Rules: table<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list, Actions: list, ScanEnabled: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
@@ -2646,7 +2670,7 @@ export def "post-describe-receipt-rule-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Metadata: record<Name: string, CreatedTimestamp: string>, Rules: table<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list, Actions: list, ScanEnabled: bool>> {
+]: any -> oneof<record<Metadata: record<Name: string, CreatedTimestamp: string>, Rules: table<Name: string, Enabled: bool, TlsPolicy: string, Recipients: list, Actions: list, ScanEnabled: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2697,7 +2721,7 @@ export def "get-get-account-sending-enabled" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Enabled: bool> {
+]: nothing -> oneof<record<Enabled: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "GetAccountSendingEnabled")
@@ -2745,7 +2769,7 @@ export def "post-get-account-sending-enabled" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Enabled: bool> {
+]: nothing -> oneof<record<Enabled: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "GetAccountSendingEnabled")
@@ -2794,7 +2818,7 @@ export def "get-get-custom-verification-email-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TemplateName: string, FromEmailAddress: string, TemplateSubject: string, TemplateContent: string, SuccessRedirectionURL: string, FailureRedirectionURL: string> {
+]: nothing -> oneof<record<TemplateName: string, FromEmailAddress: string, TemplateSubject: string, TemplateContent: string, SuccessRedirectionURL: string, FailureRedirectionURL: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_name == null) { error make --unspanned { msg: "required query parameter 'TemplateName' missing: pass --template-name" } }
@@ -2844,7 +2868,7 @@ export def "post-get-custom-verification-email-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TemplateName: string, FromEmailAddress: string, TemplateSubject: string, TemplateContent: string, SuccessRedirectionURL: string, FailureRedirectionURL: string> {
+]: any -> oneof<record<TemplateName: string, FromEmailAddress: string, TemplateSubject: string, TemplateContent: string, SuccessRedirectionURL: string, FailureRedirectionURL: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2896,7 +2920,7 @@ export def "get-get-identity-dkim-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DkimAttributes: record> {
+]: nothing -> oneof<record<DkimAttributes: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identities == null) { error make --unspanned { msg: "required query parameter 'Identities' missing: pass --identities" } }
@@ -2946,7 +2970,7 @@ export def "post-get-identity-dkim-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DkimAttributes: record> {
+]: any -> oneof<record<DkimAttributes: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2998,7 +3022,7 @@ export def "get-get-identity-mail-from-domain-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MailFromDomainAttributes: record> {
+]: nothing -> oneof<record<MailFromDomainAttributes: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identities == null) { error make --unspanned { msg: "required query parameter 'Identities' missing: pass --identities" } }
@@ -3048,7 +3072,7 @@ export def "post-get-identity-mail-from-domain-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MailFromDomainAttributes: record> {
+]: any -> oneof<record<MailFromDomainAttributes: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3100,7 +3124,7 @@ export def "get-get-identity-notification-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NotificationAttributes: record> {
+]: nothing -> oneof<record<NotificationAttributes: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identities == null) { error make --unspanned { msg: "required query parameter 'Identities' missing: pass --identities" } }
@@ -3150,7 +3174,7 @@ export def "post-get-identity-notification-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<NotificationAttributes: record> {
+]: any -> oneof<record<NotificationAttributes: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3203,7 +3227,7 @@ export def "get-get-identity-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Policies: record> {
+]: nothing -> oneof<record<Policies: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
@@ -3254,7 +3278,7 @@ export def "post-get-identity-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Policies: record> {
+]: any -> oneof<record<Policies: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3306,7 +3330,7 @@ export def "get-get-identity-verification-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VerificationAttributes: record> {
+]: nothing -> oneof<record<VerificationAttributes: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identities == null) { error make --unspanned { msg: "required query parameter 'Identities' missing: pass --identities" } }
@@ -3356,7 +3380,7 @@ export def "post-get-identity-verification-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<VerificationAttributes: record> {
+]: any -> oneof<record<VerificationAttributes: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3407,7 +3431,7 @@ export def "get-get-send-quota" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Max24HourSend: float, MaxSendRate: float, SentLast24Hours: float> {
+]: nothing -> oneof<record<Max24HourSend: float, MaxSendRate: float, SentLast24Hours: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "GetSendQuota")
@@ -3455,7 +3479,7 @@ export def "post-get-send-quota" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Max24HourSend: float, MaxSendRate: float, SentLast24Hours: float> {
+]: nothing -> oneof<record<Max24HourSend: float, MaxSendRate: float, SentLast24Hours: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "GetSendQuota")
@@ -3503,7 +3527,7 @@ export def "get-get-send-statistics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SendDataPoints: table<Timestamp: string, DeliveryAttempts: int, Bounces: int, Complaints: int, Rejects: int>> {
+]: nothing -> oneof<record<SendDataPoints: table<Timestamp: string, DeliveryAttempts: int, Bounces: int, Complaints: int, Rejects: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "GetSendStatistics")
@@ -3551,7 +3575,7 @@ export def "post-get-send-statistics" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<SendDataPoints: table<Timestamp: string, DeliveryAttempts: int, Bounces: int, Complaints: int, Rejects: int>> {
+]: nothing -> oneof<record<SendDataPoints: table<Timestamp: string, DeliveryAttempts: int, Bounces: int, Complaints: int, Rejects: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "GetSendStatistics")
@@ -3600,7 +3624,7 @@ export def "get-get-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Template: record<TemplateName: string, SubjectPart: string, TextPart: string, HtmlPart: string>> {
+]: nothing -> oneof<record<Template: record<TemplateName: string, SubjectPart: string, TextPart: string, HtmlPart: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_name == null) { error make --unspanned { msg: "required query parameter 'TemplateName' missing: pass --template-name" } }
@@ -3650,7 +3674,7 @@ export def "post-get-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Template: record<TemplateName: string, SubjectPart: string, TextPart: string, HtmlPart: string>> {
+]: any -> oneof<record<Template: record<TemplateName: string, SubjectPart: string, TextPart: string, HtmlPart: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3703,7 +3727,7 @@ export def "get-list-configuration-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ConfigurationSets: table<Name: string>, NextToken: string> {
+]: nothing -> oneof<record<ConfigurationSets: table<Name: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListConfigurationSets")
@@ -3752,7 +3776,7 @@ export def "post-list-configuration-sets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<ConfigurationSets: table<Name: string>, NextToken: string> {
+]: any -> oneof<record<ConfigurationSets: table<Name: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3805,7 +3829,7 @@ export def "get-list-custom-verification-email-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<CustomVerificationEmailTemplates: table<TemplateName: string, FromEmailAddress: string, TemplateSubject: string, SuccessRedirectionURL: string, FailureRedirectionURL: string>, NextToken: string> {
+]: nothing -> oneof<record<CustomVerificationEmailTemplates: table<TemplateName: string, FromEmailAddress: string, TemplateSubject: string, SuccessRedirectionURL: string, FailureRedirectionURL: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListCustomVerificationEmailTemplates")
@@ -3856,7 +3880,7 @@ export def "post-list-custom-verification-email-templates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<CustomVerificationEmailTemplates: table<TemplateName: string, FromEmailAddress: string, TemplateSubject: string, SuccessRedirectionURL: string, FailureRedirectionURL: string>, NextToken: string> {
+]: any -> oneof<record<CustomVerificationEmailTemplates: table<TemplateName: string, FromEmailAddress: string, TemplateSubject: string, SuccessRedirectionURL: string, FailureRedirectionURL: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3910,7 +3934,7 @@ export def "get-list-identities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Identities: list<string>, NextToken: string> {
+]: nothing -> oneof<record<Identities: list<string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListIdentities")
@@ -3961,7 +3985,7 @@ export def "post-list-identities" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Identities: list<string>, NextToken: string> {
+]: any -> oneof<record<Identities: list<string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4013,7 +4037,7 @@ export def "get-list-identity-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<PolicyNames: list<string>> {
+]: nothing -> oneof<record<PolicyNames: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
@@ -4063,7 +4087,7 @@ export def "post-list-identity-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<PolicyNames: list<string>> {
+]: any -> oneof<record<PolicyNames: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4114,7 +4138,7 @@ export def "get-list-receipt-filters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Filters: table<Name: string, IpFilter: record>> {
+]: nothing -> oneof<record<Filters: table<Name: string, IpFilter: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListReceiptFilters")
@@ -4163,7 +4187,7 @@ export def "post-list-receipt-filters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Filters: table<Name: string, IpFilter: record>> {
+]: any -> oneof<record<Filters: table<Name: string, IpFilter: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4215,7 +4239,7 @@ export def "get-list-receipt-rule-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RuleSets: table<Name: string, CreatedTimestamp: string>, NextToken: string> {
+]: nothing -> oneof<record<RuleSets: table<Name: string, CreatedTimestamp: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListReceiptRuleSets")
@@ -4264,7 +4288,7 @@ export def "post-list-receipt-rule-sets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<RuleSets: table<Name: string, CreatedTimestamp: string>, NextToken: string> {
+]: any -> oneof<record<RuleSets: table<Name: string, CreatedTimestamp: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4317,7 +4341,7 @@ export def "get-list-templates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<TemplatesMetadata: table<Name: string, CreatedTimestamp: string>, NextToken: string> {
+]: nothing -> oneof<record<TemplatesMetadata: table<Name: string, CreatedTimestamp: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListTemplates")
@@ -4366,7 +4390,7 @@ export def "post-list-templates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<TemplatesMetadata: table<Name: string, CreatedTimestamp: string>, NextToken: string> {
+]: any -> oneof<record<TemplatesMetadata: table<Name: string, CreatedTimestamp: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4417,7 +4441,7 @@ export def "get-list-verified-email-addresses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VerifiedEmailAddresses: list<string>> {
+]: nothing -> oneof<record<VerifiedEmailAddresses: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListVerifiedEmailAddresses")
@@ -4465,7 +4489,7 @@ export def "post-list-verified-email-addresses" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VerifiedEmailAddresses: list<string>> {
+]: nothing -> oneof<record<VerifiedEmailAddresses: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "ListVerifiedEmailAddresses")
@@ -4515,7 +4539,7 @@ export def "get-put-configuration-set-delivery-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
@@ -4565,7 +4589,7 @@ export def "post-put-configuration-set-delivery-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4619,7 +4643,7 @@ export def "get-put-identity-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
@@ -4671,7 +4695,7 @@ export def "post-put-identity-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4724,7 +4748,7 @@ export def "get-reorder-receipt-rule-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
@@ -4775,7 +4799,7 @@ export def "post-reorder-receipt-rule-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4832,7 +4856,7 @@ export def "get-send-bounce" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MessageId: string> {
+]: nothing -> oneof<record<MessageId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($original_message_id == null) { error make --unspanned { msg: "required query parameter 'OriginalMessageId' missing: pass --original-message-id" } }
@@ -4884,7 +4908,7 @@ export def "post-send-bounce" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MessageId: string> {
+]: any -> oneof<record<MessageId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4946,7 +4970,7 @@ export def "get-send-bulk-templated-email" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Status: table<Status: string, Error: string, MessageId: string>> {
+]: nothing -> oneof<record<Status: table<Status: string, Error: string, MessageId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source == null) { error make --unspanned { msg: "required query parameter 'Source' missing: pass --source" } }
@@ -4998,7 +5022,7 @@ export def "post-send-bulk-templated-email" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<Status: table<Status: string, Error: string, MessageId: string>> {
+]: any -> oneof<record<Status: table<Status: string, Error: string, MessageId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5052,7 +5076,7 @@ export def "get-send-custom-verification-email" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MessageId: string> {
+]: nothing -> oneof<record<MessageId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($email_address == null) { error make --unspanned { msg: "required query parameter 'EmailAddress' missing: pass --email-address" } }
@@ -5103,7 +5127,7 @@ export def "post-send-custom-verification-email" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MessageId: string> {
+]: any -> oneof<record<MessageId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5163,7 +5187,7 @@ export def "get-send-email" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MessageId: string> {
+]: nothing -> oneof<record<MessageId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source == null) { error make --unspanned { msg: "required query parameter 'Source' missing: pass --source" } }
@@ -5215,7 +5239,7 @@ export def "post-send-email" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MessageId: string> {
+]: any -> oneof<record<MessageId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5274,7 +5298,7 @@ export def "get-send-raw-email" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MessageId: string> {
+]: nothing -> oneof<record<MessageId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($raw_message == null) { error make --unspanned { msg: "required query parameter 'RawMessage' missing: pass --raw-message" } }
@@ -5324,7 +5348,7 @@ export def "post-send-raw-email" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MessageId: string> {
+]: any -> oneof<record<MessageId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5386,7 +5410,7 @@ export def "get-send-templated-email" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MessageId: string> {
+]: nothing -> oneof<record<MessageId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($source == null) { error make --unspanned { msg: "required query parameter 'Source' missing: pass --source" } }
@@ -5439,7 +5463,7 @@ export def "post-send-templated-email" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<MessageId: string> {
+]: any -> oneof<record<MessageId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5491,7 +5515,7 @@ export def "get-set-active-receipt-rule-set" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let action = ($action | default "SetActiveReceiptRuleSet")
@@ -5540,7 +5564,7 @@ export def "post-set-active-receipt-rule-set" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5593,7 +5617,7 @@ export def "get-set-identity-dkim-enabled" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
@@ -5644,7 +5668,7 @@ export def "post-set-identity-dkim-enabled" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5697,7 +5721,7 @@ export def "get-set-identity-feedback-forwarding-enabled" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
@@ -5748,7 +5772,7 @@ export def "post-set-identity-feedback-forwarding-enabled" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5802,7 +5826,7 @@ export def "get-set-identity-headers-in-notifications-enabled" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
@@ -5854,7 +5878,7 @@ export def "post-set-identity-headers-in-notifications-enabled" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5908,7 +5932,7 @@ export def "get-set-identity-mail-from-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
@@ -5958,7 +5982,7 @@ export def "post-set-identity-mail-from-domain" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6012,7 +6036,7 @@ export def "get-set-identity-notification-topic" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($identity == null) { error make --unspanned { msg: "required query parameter 'Identity' missing: pass --identity" } }
@@ -6063,7 +6087,7 @@ export def "post-set-identity-notification-topic" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6117,7 +6141,7 @@ export def "get-set-receipt-rule-position" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
@@ -6168,7 +6192,7 @@ export def "post-set-receipt-rule-position" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6221,7 +6245,7 @@ export def "get-test-render-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<RenderedTemplate: string> {
+]: nothing -> oneof<record<RenderedTemplate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template_name == null) { error make --unspanned { msg: "required query parameter 'TemplateName' missing: pass --template-name" } }
@@ -6272,7 +6296,7 @@ export def "post-test-render-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<RenderedTemplate: string> {
+]: any -> oneof<record<RenderedTemplate: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6426,7 +6450,7 @@ export def "get-update-configuration-set-event-destination" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
@@ -6477,7 +6501,7 @@ export def "post-update-configuration-set-event-destination" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6738,7 +6762,7 @@ export def "get-update-configuration-set-tracking-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_set_name == null) { error make --unspanned { msg: "required query parameter 'ConfigurationSetName' missing: pass --configuration-set-name" } }
@@ -6789,7 +6813,7 @@ export def "post-update-configuration-set-tracking-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6949,7 +6973,7 @@ export def "get-update-receipt-rule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_set_name == null) { error make --unspanned { msg: "required query parameter 'RuleSetName' missing: pass --rule-set-name" } }
@@ -7000,7 +7024,7 @@ export def "post-update-receipt-rule" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7052,7 +7076,7 @@ export def "get-update-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($template == null) { error make --unspanned { msg: "required query parameter 'Template' missing: pass --template" } }
@@ -7102,7 +7126,7 @@ export def "post-update-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7154,7 +7178,7 @@ export def "get-verify-domain-dkim" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<DkimTokens: list<string>> {
+]: nothing -> oneof<record<DkimTokens: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'Domain' missing: pass --domain" } }
@@ -7204,7 +7228,7 @@ export def "post-verify-domain-dkim" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<DkimTokens: list<string>> {
+]: any -> oneof<record<DkimTokens: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7256,7 +7280,7 @@ export def "get-verify-domain-identity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<VerificationToken: string> {
+]: nothing -> oneof<record<VerificationToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain == null) { error make --unspanned { msg: "required query parameter 'Domain' missing: pass --domain" } }
@@ -7306,7 +7330,7 @@ export def "post-verify-domain-identity" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record<VerificationToken: string> {
+]: any -> oneof<record<VerificationToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7460,7 +7484,7 @@ export def "get-verify-email-identity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($email_address == null) { error make --unspanned { msg: "required query parameter 'EmailAddress' missing: pass --email-address" } }
@@ -7510,7 +7534,7 @@ export def "post-verify-email-identity" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -15,7 +15,6 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "api-key" => { {scheme: $scheme, headers: {"api-key": $token_val}, query: "", location: "header"} }
     "user-id" => { {scheme: $scheme, headers: {"user-id": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
@@ -30,22 +29,32 @@ def merge-auth [parts: list]: nothing -> record {
   {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -53,8 +62,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -65,7 +79,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -100,7 +123,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -116,9 +140,9 @@ def auth-scheme-completer [] { ["api-key" "user-id"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help" "token-apikey" "token-userid"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bad-word-filter" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["bad-word-filter" "bin-list-download" "bin-lookup" "browser-bot" "convert" "email-validate" "email-verify" "geocode-address" "geocode-reverse" "hlr-lookup" "host-reputation" "html-clean" "html-render" "image-resize" "image-watermark" "ip-blocklist" "ip-blocklist-download" "ip-info" "ip-probe" "phone-playback" "phone-validate" "phone-verify" "qr-code" "sms-verify" "ua-lookup" "url-info" "verify-security-code" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -153,7 +177,7 @@ export def "bad-word-filter" [
   --catalog: string # Which catalog of bad words to use, we currently maintain two bad word catalogs: strict - the largest database of bad words which includes profanity, obscenity, sexual, rude, cuss, dirty, swear and objectionable words and phrases. This catalog is suitable for environments of all ages including educational or children's content obscene - like the strict catalog but does not include any mild profanities, idiomatic phrases or words which are considered formal terminology. This catalog is suitable for adult environments where certain types of bad words are considered OK (default: strict)
   --censor-character: string # The character to use to censor out the bad words found
   content: string # The content to scan. This can be either a URL to load from, a file upload (multipart/form-data) or an HTML content string
-]: any -> record<bad_words_list: list<string>, bad_words_total: int, censored_content: string, is_bad: bool> {
+]: any -> oneof<record<bad_words_list: list<string>, bad_words_total: int, censored_content: string, is_bad: bool>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
@@ -162,7 +186,7 @@ export def "bad-word-filter" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -230,7 +254,7 @@ export def "bin-lookup" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --bin-number: string # The BIN or IIN number. This is the first 6, 8 or 10 digits of a card number, use 8 (or more) digits for the highest level of accuracy (required)
   --customer-ip: string # Pass in the customers IP address and we will return some extra information about them
-]: nothing -> record<bin_number: string, card_brand: string, card_category: string, card_type: string, country: string, country_code: string, country_code3: string, currency_code: string, ip_blocklisted: bool, ip_blocklists: list<string>, ip_city: string, ip_country: string, ip_country_code: string, ip_country_code3: string, ip_matches_bin: bool, ip_region: string, is_commercial: bool, is_prepaid: bool, issuer: string, issuer_phone: string, issuer_website: string, valid: bool> {
+]: nothing -> oneof<record<bin_number: string, card_brand: string, card_category: string, card_type: string, country: string, country_code: string, country_code3: string, currency_code: string, ip_blocklisted: bool, ip_blocklists: list<string>, ip_city: string, ip_country: string, ip_country_code: string, ip_country_code3: string, ip_matches_bin: bool, ip_region: string, is_commercial: bool, is_prepaid: bool, issuer: string, issuer_phone: string, issuer_website: string, valid: bool>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   if ($bin_number == null) { error make --unspanned { msg: "required query parameter 'bin-number' missing: pass --bin-number" } }
@@ -273,7 +297,7 @@ export def "browser-bot" [
   --timeout: int # Timeout in seconds. Give up if still trying to load the page after this number of seconds (format: int32, default: 30)
   url: string # The URL to load
   --user-agent: string # Override the browsers default user-agent string with this one
-]: any -> record<content: string, elements: list<string>, error_message: string, exec_results: list<string>, http_redirect_url: string, http_status_code: int, http_status_message: string, is_error: bool, is_http_ok: bool, is_http_redirect: bool, is_secure: bool, is_timeout: bool, language_code: string, load_time: float, mime_type: string, response_headers: record, security_details: record, server_ip: string, title: string, url: string> {
+]: any -> oneof<record<content: string, elements: list<string>, error_message: string, exec_results: list<string>, http_redirect_url: string, http_status_code: int, http_status_message: string, is_error: bool, is_http_ok: bool, is_http_redirect: bool, is_secure: bool, is_timeout: bool, language_code: string, load_time: float, mime_type: string, response_headers: record, security_details: record, server_ip: string, title: string, url: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
@@ -282,7 +306,7 @@ export def "browser-bot" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -314,7 +338,7 @@ export def "convert" [
   --from-value: string # The value to convert from (e.g. 10.95) (required)
   --from-type: string # The type of the value to convert from (e.g. USD) (required)
   --to-type: string # The type to convert to (e.g. EUR) (required)
-]: nothing -> record<from_type: string, from_value: string, result: string, result_float: float, to_type: string, valid: bool> {
+]: nothing -> oneof<record<from_type: string, from_value: string, result: string, result_float: float, to_type: string, valid: bool>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   if ($from_value == null) { error make --unspanned { msg: "required query parameter 'from-value' missing: pass --from-value" } }
@@ -354,7 +378,7 @@ export def "email-validate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # An email address (required)
   --fix-typos: oneof<nothing, bool> # Automatically attempt to fix typos in the address (default: false)
-]: nothing -> record<domain: string, domain_error: bool, email: string, is_disposable: bool, is_freemail: bool, is_personal: bool, provider: string, syntax_error: bool, typos_fixed: bool, valid: bool> {
+]: nothing -> oneof<record<domain: string, domain_error: bool, email: string, is_disposable: bool, is_freemail: bool, is_personal: bool, provider: string, syntax_error: bool, typos_fixed: bool, valid: bool>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
@@ -392,7 +416,7 @@ export def "email-verify" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # An email address (required)
   --fix-typos: oneof<nothing, bool> # Automatically attempt to fix typos in the address (default: false)
-]: nothing -> record<domain: string, domain_error: bool, email: string, is_catch_all: bool, is_deferred: bool, is_disposable: bool, is_freemail: bool, is_personal: bool, provider: string, smtp_response: string, smtp_status: string, syntax_error: bool, typos_fixed: bool, valid: bool, verified: bool> {
+]: nothing -> oneof<record<domain: string, domain_error: bool, email: string, is_catch_all: bool, is_deferred: bool, is_disposable: bool, is_freemail: bool, is_personal: bool, provider: string, smtp_response: string, smtp_status: string, syntax_error: bool, typos_fixed: bool, valid: bool, verified: bool>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   if ($email == null) { error make --unspanned { msg: "required query parameter 'email' missing: pass --email" } }
@@ -438,7 +462,7 @@ export def "geocode-address" [
   --country-code: string # Limit result to this country (the default is no country bias)
   --language-code: string # The language to display results in, available languages are: de, en, es, fr, it, pt, ru, zh (default: en)
   --fuzzy-search: oneof<nothing, bool> # If no matches are found for the given address, start performing a recursive fuzzy search until a geolocation is found. This option is recommended for processing user input or implementing auto-complete. We use a combination of approximate string matching and data cleansing to find possible location matches (default: false)
-]: nothing -> record<found: int, locations: table<address: string, address_components: record, city: string, country: string, country_code: string, country_code3: string, currency_code: string, latitude: float, location_tags: list, location_type: string, longitude: float, postal_address: string, postal_code: string, region_code: string, state: string, timezone: record>> {
+]: nothing -> oneof<record<found: int, locations: table<address: string, address_components: record, city: string, country: string, country_code: string, country_code3: string, currency_code: string, latitude: float, location_tags: list, location_type: string, longitude: float, postal_address: string, postal_code: string, region_code: string, state: string, timezone: record>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "address" $address "scalar") (serialize-qp "house-number" $house_number "scalar") (serialize-qp "street" $street "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "postal-code" $postal_code "scalar") (serialize-qp "country-code" $country_code "scalar") (serialize-qp "language-code" $language_code "scalar") (serialize-qp "fuzzy-search" $fuzzy_search "scalar")] | flatten | str join "&"
@@ -477,7 +501,7 @@ export def "geocode-reverse" [
   --longitude: string # The location longitude in decimal degrees format (required)
   --language-code: string # The language to display results in, available languages are: de, en, es, fr, it, pt, ru (default: en)
   --zoom: string # The zoom level to respond with: address - the most precise address available street - the street level city - the city level state - the state level country - the country level (default: address)
-]: nothing -> record<address: string, address_components: record, city: string, country: string, country_code: string, country_code3: string, currency_code: string, found: bool, latitude: float, location_tags: list<string>, location_type: string, longitude: float, postal_address: string, postal_code: string, region_code: string, state: string, timezone: record> {
+]: nothing -> oneof<record<address: string, address_components: record, city: string, country: string, country_code: string, country_code3: string, currency_code: string, found: bool, latitude: float, location_tags: list<string>, location_type: string, longitude: float, postal_address: string, postal_code: string, region_code: string, state: string, timezone: record>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   if ($latitude == null) { error make --unspanned { msg: "required query parameter 'latitude' missing: pass --latitude" } }
@@ -516,7 +540,7 @@ export def "hlr-lookup" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --number: string # A phone number (required)
   --country-code: string # ISO 2-letter country code, assume numbers are based in this country. If not set numbers are assumed to be in international format (with or without the leading + sign)
-]: nothing -> record<country: string, country_code: string, country_code3: string, currency_code: string, current_network: string, hlr_status: string, hlr_valid: bool, imsi: string, international_calling_code: string, international_number: string, is_mobile: bool, is_ported: bool, is_roaming: bool, local_number: string, location: string, mcc: string, mnc: string, msc: string, msin: string, number_type: string, number_valid: bool, origin_network: string, ported_network: string, roaming_country_code: string> {
+]: nothing -> oneof<record<country: string, country_code: string, country_code3: string, currency_code: string, current_network: string, hlr_status: string, hlr_valid: bool, imsi: string, international_calling_code: string, international_number: string, is_mobile: bool, is_ported: bool, is_roaming: bool, local_number: string, location: string, mcc: string, mnc: string, msc: string, msin: string, number_type: string, number_valid: bool, origin_network: string, ported_network: string, roaming_country_code: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
@@ -555,7 +579,7 @@ export def "host-reputation" [
   --host: string # An IP address, domain name, FQDN or URL. If you supply a domain/URL it will be checked against the URI DNSBL lists (required)
   --list-rating: int # Only check lists with this rating or better (format: int32, default: 3)
   --zones: string # Only check these DNSBL zones/hosts. Multiple zones can be supplied as comma-separated values
-]: nothing -> record<host: string, is_listed: bool, list_count: int, lists: table<is_listed: bool, list_host: string, list_name: string, list_rating: int, response_time: int, return_code: string, txt_record: string>> {
+]: nothing -> oneof<record<host: string, is_listed: bool, list_count: int, lists: table<is_listed: bool, list_host: string, list_name: string, list_rating: int, response_time: int, return_code: string, txt_record: string>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   if ($host == null) { error make --unspanned { msg: "required query parameter 'host' missing: pass --host" } }
@@ -602,7 +626,7 @@ export def "html-clean" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -662,7 +686,7 @@ export def "html-render" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -706,7 +730,7 @@ export def "image-resize" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -753,7 +777,7 @@ export def "image-watermark" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -784,7 +808,7 @@ export def "ip-blocklist" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ip: string # An IPv4 or IPv6 address. Accepts standard IP notation (with or without port number), CIDR notation and IPv6 compressed notation. If multiple IPs are passed using comma-separated values the first non-bogon address on the list will be checked (required)
   --vpn-lookup: oneof<nothing, bool> # Include public VPN provider IP addresses. NOTE: For more advanced VPN detection including the ability to identify private and stealth VPNs use the IP Probe API (https://www.neutrinoapi.com/api/ip-probe/) (default: false)
-]: nothing -> record<blocklists: list<string>, cidr: string, ip: string, is_bot: bool, is_dshield: bool, is_exploit_bot: bool, is_hijacked: bool, is_listed: bool, is_malware: bool, is_proxy: bool, is_spam_bot: bool, is_spider: bool, is_spyware: bool, is_tor: bool, is_vpn: bool, last_seen: int, list_count: int, sensors: table<blocklist: string, description: string, id: int>> {
+]: nothing -> oneof<record<blocklists: list<string>, cidr: string, ip: string, is_bot: bool, is_dshield: bool, is_exploit_bot: bool, is_hijacked: bool, is_listed: bool, is_malware: bool, is_proxy: bool, is_spam_bot: bool, is_spider: bool, is_spyware: bool, is_tor: bool, is_vpn: bool, last_seen: int, list_count: int, sensors: table<blocklist: string, description: string, id: int>>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   if ($ip == null) { error make --unspanned { msg: "required query parameter 'ip' missing: pass --ip" } }
@@ -861,7 +885,7 @@ export def "ip-info" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ip: string # IPv4 or IPv6 address (required)
   --reverse-lookup: oneof<nothing, bool> # Do a reverse DNS (PTR) lookup. This option can add extra delay to the request so only use it if you need it (default: false)
-]: nothing -> record<city: string, continent_code: string, country: string, country_code: string, country_code3: string, currency_code: string, host_domain: string, hostname: string, ip: string, is_bogon: bool, is_v4_mapped: bool, is_v6: bool, latitude: float, longitude: float, region: string, region_code: string, timezone: record, valid: bool> {
+]: nothing -> oneof<record<city: string, continent_code: string, country: string, country_code: string, country_code3: string, currency_code: string, host_domain: string, hostname: string, ip: string, is_bogon: bool, is_v4_mapped: bool, is_v6: bool, latitude: float, longitude: float, region: string, region_code: string, timezone: record, valid: bool>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   if ($ip == null) { error make --unspanned { msg: "required query parameter 'ip' missing: pass --ip" } }
@@ -898,7 +922,7 @@ export def "ip-probe" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ip: string # IPv4 or IPv6 address (required)
-]: nothing -> record<as_age: int, as_cidr: string, as_country_code: string, as_country_code3: string, as_description: string, as_domains: list<string>, asn: string, city: string, continent_code: string, country: string, country_code: string, country_code3: string, currency_code: string, host_domain: string, hostname: string, ip: string, is_bogon: bool, is_hosting: bool, is_isp: bool, is_proxy: bool, is_v4_mapped: bool, is_v6: bool, is_vpn: bool, provider_description: string, provider_domain: string, provider_type: string, provider_website: string, region: string, region_code: string, valid: bool, vpn_domain: string> {
+]: nothing -> oneof<record<as_age: int, as_cidr: string, as_country_code: string, as_country_code3: string, as_description: string, as_domains: list<string>, asn: string, city: string, continent_code: string, country: string, country_code: string, country_code3: string, currency_code: string, host_domain: string, hostname: string, ip: string, is_bogon: bool, is_hosting: bool, is_isp: bool, is_proxy: bool, is_v4_mapped: bool, is_v6: bool, is_vpn: bool, provider_description: string, provider_domain: string, provider_type: string, provider_website: string, region: string, region_code: string, valid: bool, vpn_domain: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   if ($ip == null) { error make --unspanned { msg: "required query parameter 'ip' missing: pass --ip" } }
@@ -938,7 +962,7 @@ export def "phone-playback" [
   --limit: int # Limit the total number of calls allowed to the supplied phone number, if the limit is reached within the TTL then error code 14 will be returned (format: int32, default: 3)
   --limit-ttl: int # Set the TTL in number of days that the 'limit' option will remember a phone number (the default is 1 day and the maximum is 365 days) (format: int32, default: 1)
   number: string # The phone number to call. Must be in valid international format
-]: any -> record<calling: bool, number_valid: bool> {
+]: any -> oneof<record<calling: bool, number_valid: bool>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
@@ -947,7 +971,7 @@ export def "phone-playback" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -979,7 +1003,7 @@ export def "phone-validate" [
   --number: string # A phone number. This can be in international format (E.164) or local format. If passing local format you must also set either the 'country-code' OR 'ip' options as well (required)
   --country-code: string # ISO 2-letter country code, assume numbers are based in this country. If not set numbers are assumed to be in international format (with or without the leading + sign)
   --ip: string # Pass in a users IP address and we will assume numbers are based in the country of the IP address
-]: nothing -> record<country: string, country_code: string, country_code3: string, currency_code: string, international_calling_code: string, international_number: string, is_mobile: bool, local_number: string, location: string, prefix_network: string, type: string, valid: bool> {
+]: nothing -> oneof<record<country: string, country_code: string, country_code3: string, currency_code: string, international_calling_code: string, international_number: string, is_mobile: bool, local_number: string, location: string, prefix_network: string, type: string, valid: bool>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   if ($number == null) { error make --unspanned { msg: "required query parameter 'number' missing: pass --number" } }
@@ -1023,7 +1047,7 @@ export def "phone-verify" [
   number: string # The phone number to send the verification code to
   --playback-delay: int # The delay in milliseconds between the playback of each security code (format: int32, default: 800)
   --security-code: int # Pass in your own security code. This is useful if you have implemented TOTP or similar 2FA methods. If not set then we will generate a secure random code (format: int32)
-]: any -> record<calling: bool, number_valid: bool, security_code: string> {
+]: any -> oneof<record<calling: bool, number_valid: bool, security_code: string>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
@@ -1032,7 +1056,7 @@ export def "phone-verify" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1075,7 +1099,7 @@ export def "qr-code" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1111,7 +1135,7 @@ export def "sms-verify" [
   --limit-ttl: int # Set the TTL in number of days that the 'limit' option will remember a phone number (the default is 1 day and the maximum is 365 days) (format: int32, default: 1)
   number: string # The phone number to send a verification code to
   --security-code: int # Pass in your own security code. This is useful if you have implemented TOTP or similar 2FA methods. If not set then we will generate a secure random code (format: int32)
-]: any -> record<number_valid: bool, security_code: string, sent: bool> {
+]: any -> oneof<record<number_valid: bool, security_code: string, sent: bool>, string, nothing> {
   let input = $in
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
@@ -1120,7 +1144,7 @@ export def "sms-verify" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -1156,7 +1180,7 @@ export def "ua-lookup" [
   --ua-mobile: string # For client hints this corresponds to the 'UA-Mobile' header or 'mobile' from NavigatorUAData
   --device-model: string # For client hints this corresponds to the 'UA-Model' header or 'model' from NavigatorUAData. You can also use this parameter to lookup a device directly by its model name, model code or hardware code, on android you can get the model name from: https://developer.android.com/reference/android/os/Build.html#MODEL
   --device-brand: string # This parameter is only used in combination with 'device-model' when doing direct device lookups without any user-agent data. Set this to the brand or manufacturer name, this is required for accurate device detection with ambiguous model names. On android you can get the device brand from: https://developer.android.com/reference/android/os/Build#MANUFACTURER
-]: nothing -> record<browser_engine: string, browser_release: string, device_brand: string, device_height_px: float, device_model: string, device_model_code: string, device_pixel_ratio: float, device_ppi: float, device_price: float, device_release: string, device_resolution: string, device_width_px: float, is_mobile: bool, is_webview: bool, name: string, os: string, os_family: string, os_version: string, os_version_major: string, type: string, ua: string, version: string, version_major: string> {
+]: nothing -> oneof<record<browser_engine: string, browser_release: string, device_brand: string, device_height_px: float, device_model: string, device_model_code: string, device_pixel_ratio: float, device_ppi: float, device_price: float, device_release: string, device_resolution: string, device_width_px: float, is_mobile: bool, is_webview: bool, name: string, os: string, os_family: string, os_version: string, os_version_major: string, type: string, ua: string, version: string, version_major: string>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   if ($ua == null) { error make --unspanned { msg: "required query parameter 'ua' missing: pass --ua" } }
@@ -1197,7 +1221,7 @@ export def "url-info" [
   --ignore-certificate-errors: oneof<nothing, bool> # Ignore any TLS/SSL certificate errors and load the URL anyway (default: false)
   --timeout: int # Timeout in seconds. Give up if still trying to load the URL after this number of seconds (format: int32, default: 60)
   --retry: int # If the request fails for any reason try again this many times (format: int32, default: 0)
-]: nothing -> record<content: string, content_encoding: string, content_size: int, content_type: string, http_ok: bool, http_redirect: bool, http_status: int, http_status_message: int, is_error: bool, is_timeout: bool, language_code: string, load_time: float, query: record, real: bool, server_city: string, server_country: string, server_country_code: string, server_hostname: string, server_ip: string, server_name: string, server_region: string, title: string, url: string, url_path: string, url_port: int, url_protocol: string, valid: bool> {
+]: nothing -> oneof<record<content: string, content_encoding: string, content_size: int, content_type: string, http_ok: bool, http_redirect: bool, http_status: int, http_status_message: int, is_error: bool, is_timeout: bool, language_code: string, load_time: float, query: record, real: bool, server_city: string, server_country: string, server_country_code: string, server_hostname: string, server_ip: string, server_name: string, server_region: string, title: string, url: string, url_path: string, url_port: int, url_protocol: string, valid: bool>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   if ($url == null) { error make --unspanned { msg: "required query parameter 'url' missing: pass --url" } }
@@ -1235,7 +1259,7 @@ export def "verify-security-code" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --security-code: string # The security code to verify (required)
   --limit-by: string # If set then enable additional brute-force protection by limiting the number of attempts by the supplied value. This can be set to any unique identifier you would like to limit by, for example a hash of the users email, phone number or IP address. Requests to this API will be ignored after approximately 10 failed verification attempts
-]: nothing -> record<verified: bool> {
+]: nothing -> oneof<record<verified: bool>, string, nothing> {
   let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   if ($security_code == null) { error make --unspanned { msg: "required query parameter 'security-code' missing: pass --security-code" } }

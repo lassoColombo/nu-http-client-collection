@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -119,9 +143,9 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "monitoring-locations-global-metrics-scopes-list-metrics-scopes-by-monitored-project" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["monitoring-locations-global-metrics-scopes-list-metrics-scopes-by-monitored-project" "monitoring-projects-dashboards-delete" "monitoring-projects-dashboards-get" "monitoring-projects-dashboards-patch" "monitoring-projects-location-prometheus-api-v1-label-values" "monitoring-projects-location-prometheus-api-v1-labels-list" "monitoring-projects-location-prometheus-api-v1-labels" "monitoring-projects-location-prometheus-api-v1-metadata-list" "monitoring-projects-location-prometheus-api-v1-query" "monitoring-projects-location-prometheus-api-v1-query-exemplars" "monitoring-projects-location-prometheus-api-v1-query-range" "monitoring-projects-location-prometheus-api-v1-series" "monitoring-projects-dashboards-list" "monitoring-projects-dashboards-create" "monitoring-locations-global-metrics-scopes-projects-create" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -165,7 +189,7 @@ export def "monitoring-locations-global-metrics-scopes-list-metrics-scopes-by-mo
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --monitored-resource-container: string # Required. The resource name of the Monitored Project being requested. Example: projects/{MONITORED_PROJECT_ID_OR_NUMBER}
-]: nothing -> record<metricsScopes: table<createTime: string, monitoredProjects: list, name: string, updateTime: string>> {
+]: nothing -> oneof<record<metricsScopes: table<createTime: string, monitoredProjects: list, name: string, updateTime: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "monitoredResourceContainer" $monitored_resource_container "scalar")] | flatten | str join "&"
@@ -212,7 +236,7 @@ export def "monitoring-projects-dashboards-delete" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -260,7 +284,7 @@ export def "monitoring-projects-dashboards-get" [
   --quota-user: string # Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
-]: nothing -> record<columnLayout: record<columns: list<record>>, dashboardFilters: table<filterType: string, labelKey: string, stringValue: string, templateVariable: string>, displayName: string, etag: string, gridLayout: record<columns: string, widgets: list<record>>, labels: record, mosaicLayout: record<columns: int, tiles: list<record>>, name: string, rowLayout: record<rows: list<record>>> {
+]: nothing -> oneof<record<columnLayout: record<columns: list<record>>, dashboardFilters: table<filterType: string, labelKey: string, stringValue: string, templateVariable: string>, displayName: string, etag: string, gridLayout: record<columns: string, widgets: list<record>>, labels: record, mosaicLayout: record<columns: int, tiles: list<record>>, name: string, rowLayout: record<rows: list<record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -286,11 +310,6 @@ export def "monitoring-projects-dashboards-get" [
 #
 # PATCH /v1/{name}
 # operationId: monitoring.projects.dashboards.patch
-# --columnLayout shape: {columns?: list}
-# --dashboardFilters item shape: {filterType?: "FILTER_TYPE_UNSPECIFIED"|"RESOURCE_LABEL"|"METRIC_LABEL"|"USER_METADATA_LABEL"|"SYSTEM_METADATA_LABEL"|"GROUP", labelKey?: string, stringValue?: string, templateVariable?: string}
-# --gridLayout shape: {columns?: string, widgets?: list}
-# --mosaicLayout shape: {columns?: int, tiles?: list}
-# --rowLayout shape: {rows?: list}
 export def "monitoring-projects-dashboards-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -323,7 +342,7 @@ export def "monitoring-projects-dashboards-patch" [
   --mosaic-layout: record # A mosaic layout divides the available space into a grid of blocks, and overlays the grid with tiles. Unlike GridLayout, tiles may span multiple grid blocks and can be placed at arbitrary locations in the grid. — shape: {columns?: int, tiles?: list}
   --body-name: string # Immutable. The resource name of the dashboard.
   --row-layout: record # A simplified layout that divides the available space into rows and arranges a set of widgets horizontally in each row. — shape: {rows?: list}
-]: any -> record<columnLayout: record<columns: list<record>>, dashboardFilters: table<filterType: string, labelKey: string, stringValue: string, templateVariable: string>, displayName: string, etag: string, gridLayout: record<columns: string, widgets: list<record>>, labels: record, mosaicLayout: record<columns: int, tiles: list<record>>, name: string, rowLayout: record<rows: list<record>>> {
+]: any -> oneof<record<columnLayout: record<columns: list<record>>, dashboardFilters: table<filterType: string, labelKey: string, stringValue: string, templateVariable: string>, displayName: string, etag: string, gridLayout: record<columns: string, widgets: list<record>>, labels: record, mosaicLayout: record<columns: int, tiles: list<record>>, name: string, rowLayout: record<rows: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -379,7 +398,7 @@ export def "monitoring-projects-location-prometheus-api-v1-label-values" [
   --end: string # The end time to evaluate the query for. Either floating point UNIX seconds or RFC3339 formatted timestamp.
   --match: string # A list of matchers encoded in the Prometheus label matcher format to constrain the values to series that satisfy them.
   --start: string # The start time to evaluate the query for. Either floating point UNIX seconds or RFC3339 formatted timestamp.
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -433,7 +452,7 @@ export def "monitoring-projects-location-prometheus-api-v1-labels-list" [
   --end: string # The end time to evaluate the query for. Either floating point UNIX seconds or RFC3339 formatted timestamp.
   --match: string # A list of matchers encoded in the Prometheus label matcher format to constrain the values to series that satisfy them.
   --start: string # The start time to evaluate the query for. Either floating point UNIX seconds or RFC3339 formatted timestamp.
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -486,7 +505,7 @@ export def "monitoring-projects-location-prometheus-api-v1-labels" [
   --end: string # The end time to evaluate the query for. Either floating point UNIX seconds or RFC3339 formatted timestamp.
   --match: string # A list of matchers encoded in the Prometheus label matcher format to constrain the values to series that satisfy them.
   --start: string # The start time to evaluate the query for. Either floating point UNIX seconds or RFC3339 formatted timestamp.
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -541,7 +560,7 @@ export def "monitoring-projects-location-prometheus-api-v1-metadata-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --limit: string # Maximum number of metrics to return.
   --metric: string # The metric name for which to query metadata. If unset, all metric metadata is returned.
-]: nothing -> record<contentType: string, data: string, extensions: list<record>> {
+]: nothing -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -594,7 +613,7 @@ export def "monitoring-projects-location-prometheus-api-v1-query" [
   --query: string # A PromQL query string. Query lanauge documentation: https://prometheus.io/docs/prometheus/latest/querying/basics/.
   --time: string # The single point in time to evaluate the query for. Either floating point UNIX seconds or RFC3339 formatted timestamp.
   --timeout: string # An upper bound timeout for the query. Either a Prometheus duration string (https://prometheus.io/docs/prometheus/latest/querying/basics/#time-durations) or floating point seconds. This non-standard encoding must be used for compatibility with the open source API. Clients may still implement timeouts at the connection level while ignoring this field.
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -650,7 +669,7 @@ export def "monitoring-projects-location-prometheus-api-v1-query-exemplars" [
   --end: string # The end time to evaluate the query for. Either floating point UNIX seconds or RFC3339 formatted timestamp.
   --query: string # A PromQL query string. Query lanauge documentation: https://prometheus.io/docs/prometheus/latest/querying/basics/.
   --start: string # The start time to evaluate the query for. Either floating point UNIX seconds or RFC3339 formatted timestamp.
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -708,7 +727,7 @@ export def "monitoring-projects-location-prometheus-api-v1-query-range" [
   --start: string # The start time to evaluate the query for. Either floating point UNIX seconds or RFC3339 formatted timestamp.
   --step: string # The resolution of query result. Either a Prometheus duration string (https://prometheus.io/docs/prometheus/latest/querying/basics/#time-durations) or floating point seconds. This non-standard encoding must be used for compatibility with the open source API. Clients may still implement timeouts at the connection level while ignoring this field.
   --timeout: string # An upper bound timeout for the query. Either a Prometheus duration string (https://prometheus.io/docs/prometheus/latest/querying/basics/#time-durations) or floating point seconds. This non-standard encoding must be used for compatibility with the open source API. Clients may still implement timeouts at the connection level while ignoring this field.
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -763,7 +782,7 @@ export def "monitoring-projects-location-prometheus-api-v1-series" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --end: string # The end time to evaluate the query for. Either floating point UNIX seconds or RFC3339 formatted timestamp.
   --start: string # The start time to evaluate the query for. Either floating point UNIX seconds or RFC3339 formatted timestamp.
-]: any -> record<contentType: string, data: string, extensions: list<record>> {
+]: any -> oneof<record<contentType: string, data: string, extensions: list<record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -817,7 +836,7 @@ export def "monitoring-projects-dashboards-list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --page-size: int # A positive number that is the maximum number of results to return. If unspecified, a default of 1000 is used.
   --page-token: string # If this field is not empty then it must contain the nextPageToken value returned by a previous call to this method. Using this field causes the method to return additional results from the previous method call.
-]: nothing -> record<dashboards: table<columnLayout: record, dashboardFilters: list, displayName: string, etag: string, gridLayout: record, labels: record, mosaicLayout: record, name: string, rowLayout: record>, nextPageToken: string> {
+]: nothing -> oneof<record<dashboards: table<columnLayout: record, dashboardFilters: list, displayName: string, etag: string, gridLayout: record, labels: record, mosaicLayout: record, name: string, rowLayout: record>, nextPageToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
@@ -843,11 +862,6 @@ export def "monitoring-projects-dashboards-list" [
 #
 # POST /v1/{parent}/dashboards
 # operationId: monitoring.projects.dashboards.create
-# --columnLayout shape: {columns?: list}
-# --dashboardFilters item shape: {filterType?: "FILTER_TYPE_UNSPECIFIED"|"RESOURCE_LABEL"|"METRIC_LABEL"|"USER_METADATA_LABEL"|"SYSTEM_METADATA_LABEL"|"GROUP", labelKey?: string, stringValue?: string, templateVariable?: string}
-# --gridLayout shape: {columns?: string, widgets?: list}
-# --mosaicLayout shape: {columns?: int, tiles?: list}
-# --rowLayout shape: {rows?: list}
 export def "monitoring-projects-dashboards-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -880,7 +894,7 @@ export def "monitoring-projects-dashboards-create" [
   --mosaic-layout: record # A mosaic layout divides the available space into a grid of blocks, and overlays the grid with tiles. Unlike GridLayout, tiles may span multiple grid blocks and can be placed at arbitrary locations in the grid. — shape: {columns?: int, tiles?: list}
   --name: string # Immutable. The resource name of the dashboard.
   --row-layout: record # A simplified layout that divides the available space into rows and arranges a set of widgets horizontally in each row. — shape: {rows?: list}
-]: any -> record<columnLayout: record<columns: list<record>>, dashboardFilters: table<filterType: string, labelKey: string, stringValue: string, templateVariable: string>, displayName: string, etag: string, gridLayout: record<columns: string, widgets: list<record>>, labels: record, mosaicLayout: record<columns: int, tiles: list<record>>, name: string, rowLayout: record<rows: list<record>>> {
+]: any -> oneof<record<columnLayout: record<columns: list<record>>, dashboardFilters: table<filterType: string, labelKey: string, stringValue: string, templateVariable: string>, displayName: string, etag: string, gridLayout: record<columns: string, widgets: list<record>>, labels: record, mosaicLayout: record<columns: int, tiles: list<record>>, name: string, rowLayout: record<rows: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -932,7 +946,7 @@ export def "monitoring-locations-global-metrics-scopes-projects-create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --name: string # Immutable. The resource name of the MonitoredProject. On input, the resource name includes the scoping project ID and monitored project ID. On output, it contains the equivalent project numbers. Example: locations/global/metricsScopes/{SCOPING_PROJECT_ID_OR_NUMBER}/projects/{MONITORED_PROJECT_ID_OR_NUMBER}
-]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
+]: any -> oneof<record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

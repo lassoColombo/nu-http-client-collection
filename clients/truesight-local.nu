@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "cookie" => { {scheme: $scheme, headers: {"Cookie": $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -123,9 +147,9 @@ def basis-completer [] { ["DAILY" "HOURLY" "MONTHLY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "collect-now" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["collect-now" "rediscover" "reinitialize" "remove" "reset" "get-applications" "get-one-application" "get-device-monitors" "get-devices" "get-devices-summary" "get-device" "get-device-agent" "get-agent-devices" "get-device-parameter-history" "get-device-energy-usage" "get-groups" "get-one-group" "update-energy-cost" "get-heating-margin-coverage" "get-history" "search-devices" "get-services" "get-one-service" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -159,7 +183,7 @@ export def "collect-now" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --monitor-class: string # The Monitor Class of the device. (required, e.g. MS_HW_FAN)
-]: nothing -> record<pslOutput: string> {
+]: nothing -> oneof<record<pslOutput: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -197,7 +221,7 @@ export def "rediscover" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<pslOutput: string> {
+]: nothing -> oneof<record<pslOutput: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -242,7 +266,7 @@ export def "reinitialize" [
   --reset-removed-paused-object-list: int@reset-removed-paused-object-list-completer # When set to 1, reactivates the monitoring of all paused or removed objects. (format: int32, e.g. 1)
   --reset-report-settings: int@reset-report-settings-completer # When set to 1, clears the report schedule. (format: int32, e.g. 1)
   --reset-thresholds: int@reset-thresholds-completer # When set to 1, resets all thresholds. (format: int32, e.g. 1)
-]: any -> record<pslOutput: string> {
+]: any -> oneof<record<pslOutput: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
@@ -283,7 +307,7 @@ export def "remove" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --monitor-class: string # The Monitor Class of the device. (required, e.g. MS_HW_FAN)
   --monitor-sid: string # The Monitor SID of the device. (required, e.g. cisco-c240-imc)
-]: nothing -> record<pslOutput: string> {
+]: nothing -> oneof<record<pslOutput: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -324,7 +348,7 @@ export def "reset" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --monitor-class: string # The Monitor Class of the device. (required, e.g. MS_HW_FAN)
   --monitor-sid: string # The Monitor SID of the device. (required, e.g. cisco-c240-imc)
-]: nothing -> record<pslOutput: string> {
+]: nothing -> oneof<record<pslOutput: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -366,7 +390,7 @@ export def "get-applications" [
   --limit: int # The maximum number of entries per page. (format: int32, default: 100)
   --direction: string@direction-completer # The sorting order (case insensitive). (default: asc)
   --sort: string # The column to sort by (case insensitive). (default: name)
-]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
+]: nothing -> oneof<record<items: list<record>, restrictedRights: bool, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -402,7 +426,7 @@ export def "get-one-application" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<costUnit: string, deviceSummaries: table<agentId: int, agentName: string, ambientTemperature: float, collectTime: string, deviceTSMOKey: string, deviceUrl: string, heatingMargin: float, heatingMarginUnit: string, id: int, name: string, powerConsumption: float, powerConsumptionUnit: string, productVersion: string, serverId: int, serverName: string, sid: string, type: string, updateTimestamp: int>, emittedCo2Unit: string, energyConsumptionUnit: string, heatingMargin: float, heatingMarginCoverage: float, heatingMarginDeviceName: string, heatingMarginDeviceUrl: string, heatingMarginUnit: string, historyParentIdKey: string, id: string, name: string, numberOfDevices: int, oneDayConfidence: float, oneDayCost: float, oneDayEmittedCo2: float, oneDayEnergyConsumption: float, oneMonthConfidence: float, oneMonthCost: float, oneMonthEmittedCo2: float, oneMonthEnergyConsumption: float, oneYearConfidence: float, oneYearCost: float, oneYearEmittedCo2: float, oneYearEnergyConsumption: float, totalPowerConsumption: float, totalPowerConsumptionUnit: string, updateTimestamp: int, url: string> {
+]: nothing -> oneof<record<costUnit: string, deviceSummaries: table<agentId: int, agentName: string, ambientTemperature: float, collectTime: string, deviceTSMOKey: string, deviceUrl: string, heatingMargin: float, heatingMarginUnit: string, id: int, name: string, powerConsumption: float, powerConsumptionUnit: string, productVersion: string, serverId: int, serverName: string, sid: string, type: string, updateTimestamp: int>, emittedCo2Unit: string, energyConsumptionUnit: string, heatingMargin: float, heatingMarginCoverage: float, heatingMarginDeviceName: string, heatingMarginDeviceUrl: string, heatingMarginUnit: string, historyParentIdKey: string, id: string, name: string, numberOfDevices: int, oneDayConfidence: float, oneDayCost: float, oneDayEmittedCo2: float, oneDayEnergyConsumption: float, oneMonthConfidence: float, oneMonthCost: float, oneMonthEmittedCo2: float, oneMonthEnergyConsumption: float, oneYearConfidence: float, oneYearCost: float, oneYearEmittedCo2: float, oneYearEnergyConsumption: float, totalPowerConsumption: float, totalPowerConsumptionUnit: string, updateTimestamp: int, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
@@ -480,7 +504,7 @@ export def "get-devices" [
   --group-id: string # The ID of the group. (e.g. 0)
   --application-id: string # The ID of the application. (e.g. 0)
   --service-id: string # The ID of the service. (e.g. 0)
-]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
+]: nothing -> oneof<record<items: list<record>, restrictedRights: bool, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
@@ -515,7 +539,7 @@ export def "get-devices-summary" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<co2Emission: float, co2EmissionUnit: string, editable: bool, energyCost: float, energyCostUnit: string, groupNameFilter: string, heatingMargin: float, heatingMarginCoverage: float, heatingMarginDeviceName: string, heatingMarginDeviceUrl: string, heatingMarginUnit: string, id: string, totalPowerConsumption: float, totalPowerConsumptionUnit: string, updateTimestamp: int> {
+]: nothing -> oneof<record<co2Emission: float, co2EmissionUnit: string, editable: bool, energyCost: float, energyCostUnit: string, groupNameFilter: string, heatingMargin: float, heatingMarginCoverage: float, heatingMarginDeviceName: string, heatingMarginDeviceUrl: string, heatingMarginUnit: string, id: string, totalPowerConsumption: float, totalPowerConsumptionUnit: string, updateTimestamp: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hardware/devices-summary" $auth.query)
@@ -550,7 +574,7 @@ export def "get-device" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<agentId: int, agentName: string, ambientTemperature: float, collectTime: string, deviceTSMOKey: string, deviceUrl: string, heatingMargin: float, heatingMarginUnit: string, id: int, name: string, powerConsumption: float, powerConsumptionUnit: string, productVersion: string, serverId: int, serverName: string, sid: string, type: string, updateTimestamp: int> {
+]: nothing -> oneof<record<agentId: int, agentName: string, ambientTemperature: float, collectTime: string, deviceTSMOKey: string, deviceUrl: string, heatingMargin: float, heatingMarginUnit: string, id: int, name: string, powerConsumption: float, powerConsumptionUnit: string, productVersion: string, serverId: int, serverName: string, sid: string, type: string, updateTimestamp: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -586,7 +610,7 @@ export def "get-device-agent" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<connectionStatus: string, id: string, name: string, os: string, port: string, url: string, version: string> {
+]: nothing -> oneof<record<connectionStatus: string, id: string, name: string, os: string, port: string, url: string, version: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -622,7 +646,7 @@ export def "get-agent-devices" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
+]: nothing -> oneof<record<items: list<record>, restrictedRights: bool, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -663,7 +687,7 @@ export def "get-device-parameter-history" [
   --from: int # Beginning of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
   --to: int # End of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
   --monitor-sid: string # The Monitor SID (to filter the list of Monitors). (e.g. cisco-c240-imc)
-]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
+]: nothing -> oneof<record<items: list<record>, restrictedRights: bool, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -704,7 +728,7 @@ export def "get-device-energy-usage" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --roll-period: string@roll-period-completer # The period for which you wish to retrieve energy usage data. (default: ONE_DAY)
   --basis: string@basis-completer # Subdivision of the period for which you wish to retrieve energy usage data. (default: HOURLY)
-]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
+]: nothing -> oneof<record<items: list<record>, restrictedRights: bool, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -744,7 +768,7 @@ export def "get-groups" [
   --limit: int # The maximum number of entries per page. (format: int32, default: 100)
   --direction: string@direction-completer # The sorting order (case insensitive). (default: asc)
   --sort: string # The column to sort by (case insensitive). (default: name)
-]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
+]: nothing -> oneof<record<items: list<record>, restrictedRights: bool, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -780,7 +804,7 @@ export def "get-one-group" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<ambientTemperature: float, ambientTemperatureUnit: string, co2Emission: float, co2EmissionUnit: string, costUnit: string, deviceSummaries: table<agentId: int, agentName: string, ambientTemperature: float, collectTime: string, deviceTSMOKey: string, deviceUrl: string, heatingMargin: float, heatingMarginUnit: string, id: int, name: string, powerConsumption: float, powerConsumptionUnit: string, productVersion: string, serverId: int, serverName: string, sid: string, type: string, updateTimestamp: int>, editable: bool, emittedCo2Unit: string, energyConsumptionUnit: string, energyCost: float, energyCostUnit: string, heatingMargin: float, heatingMarginCoverage: float, heatingMarginDeviceName: string, heatingMarginDeviceUrl: string, heatingMarginUnit: string, historyParentIdKey: string, id: string, name: string, numberOfDevices: int, oneDayConfidence: float, oneDayCost: float, oneDayEmittedCo2: float, oneDayEnergyConsumption: float, oneMonthConfidence: float, oneMonthCost: float, oneMonthEmittedCo2: float, oneMonthEnergyConsumption: float, oneYearConfidence: float, oneYearCost: float, oneYearEmittedCo2: float, oneYearEnergyConsumption: float, serverId: int, totalPowerConsumption: float, totalPowerConsumptionUnit: string, updateTimestamp: int, url: string> {
+]: nothing -> oneof<record<ambientTemperature: float, ambientTemperatureUnit: string, co2Emission: float, co2EmissionUnit: string, costUnit: string, deviceSummaries: table<agentId: int, agentName: string, ambientTemperature: float, collectTime: string, deviceTSMOKey: string, deviceUrl: string, heatingMargin: float, heatingMarginUnit: string, id: int, name: string, powerConsumption: float, powerConsumptionUnit: string, productVersion: string, serverId: int, serverName: string, sid: string, type: string, updateTimestamp: int>, editable: bool, emittedCo2Unit: string, energyConsumptionUnit: string, energyCost: float, energyCostUnit: string, heatingMargin: float, heatingMarginCoverage: float, heatingMarginDeviceName: string, heatingMarginDeviceUrl: string, heatingMarginUnit: string, historyParentIdKey: string, id: string, name: string, numberOfDevices: int, oneDayConfidence: float, oneDayCost: float, oneDayEmittedCo2: float, oneDayEnergyConsumption: float, oneMonthConfidence: float, oneMonthCost: float, oneMonthEmittedCo2: float, oneMonthEnergyConsumption: float, oneYearConfidence: float, oneYearCost: float, oneYearEmittedCo2: float, oneYearEnergyConsumption: float, serverId: int, totalPowerConsumption: float, totalPowerConsumptionUnit: string, updateTimestamp: int, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -819,7 +843,7 @@ export def "update-energy-cost" [
   --co2-emission: float # Updates the CO2 emission (unit: kg/kWh). (format: double, e.g. 0.3)
   --energy-cost: float # Updates the electricity rate (unit: $/kWh). (format: double, e.g. 0.3)
   --group-name-filter: string # Updates the regular expression used to filter the groups for which the power consumption should be reported. (e.g. Group [0-9]+)
-]: any -> record<co2Emission: float, co2EmissionUnit: string, editable: bool, energyCost: float, energyCostUnit: string, groupNameFilter: string, heatingMargin: float, heatingMarginCoverage: float, heatingMarginDeviceName: string, heatingMarginDeviceUrl: string, heatingMarginUnit: string, id: string, totalPowerConsumption: float, totalPowerConsumptionUnit: string, updateTimestamp: int> {
+]: any -> oneof<record<co2Emission: float, co2EmissionUnit: string, editable: bool, energyCost: float, energyCostUnit: string, groupNameFilter: string, heatingMargin: float, heatingMarginCoverage: float, heatingMarginDeviceName: string, heatingMarginDeviceUrl: string, heatingMarginUnit: string, id: string, totalPowerConsumption: float, totalPowerConsumptionUnit: string, updateTimestamp: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
@@ -865,7 +889,7 @@ export def "get-heating-margin-coverage" [
   --group-id: string # The ID of the group. (e.g. 0)
   --application-id: string # The ID of the application. (e.g. 0)
   --service-id: string # The ID of the service. (e.g. 0)
-]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
+]: nothing -> oneof<record<items: list<record>, restrictedRights: bool, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "covered" $covered "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
@@ -905,7 +929,7 @@ export def "get-history" [
   --service-id: string # The ID of the service. (e.g. 0)
   --from: int # Beginning of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
   --to: int # End of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
-]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
+]: nothing -> oneof<record<items: list<record>, restrictedRights: bool, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar") (serialize-qp "from" $from "scalar") (serialize-qp "to" $to "scalar")] | flatten | str join "&"
@@ -946,7 +970,7 @@ export def "search-devices" [
   --service-id: string # The ID of the service. (e.g. 0)
   --page: string # The page number to retrieve (first page is 0). (format: int32, default: 0)
   --limit: int # The maximum number of entries per page. (format: int32, default: 100)
-]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
+]: nothing -> oneof<record<items: list<record>, restrictedRights: bool, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($search_terms == null) { error make --unspanned { msg: "required query parameter 'searchTerms' missing: pass --search-terms" } }
@@ -986,7 +1010,7 @@ export def "get-services" [
   --limit: int # The maximum number of entries per page. (format: int32, default: 100)
   --direction: string@direction-completer # The sorting order (case insensitive). (default: asc)
   --sort: string # The column to sort by (case insensitive). (default: name)
-]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
+]: nothing -> oneof<record<items: list<record>, restrictedRights: bool, total: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $sort "scalar")] | flatten | str join "&"
@@ -1022,7 +1046,7 @@ export def "get-one-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<costUnit: string, deviceSummaries: table<agentId: int, agentName: string, ambientTemperature: float, collectTime: string, deviceTSMOKey: string, deviceUrl: string, heatingMargin: float, heatingMarginUnit: string, id: int, name: string, powerConsumption: float, powerConsumptionUnit: string, productVersion: string, serverId: int, serverName: string, sid: string, type: string, updateTimestamp: int>, emittedCo2Unit: string, energyConsumptionUnit: string, heatingMargin: float, heatingMarginCoverage: float, heatingMarginDeviceName: string, heatingMarginDeviceUrl: string, heatingMarginUnit: string, historyParentIdKey: string, id: string, name: string, numberOfDevices: int, oneDayConfidence: float, oneDayCost: float, oneDayEmittedCo2: float, oneDayEnergyConsumption: float, oneMonthConfidence: float, oneMonthCost: float, oneMonthEmittedCo2: float, oneMonthEnergyConsumption: float, oneYearConfidence: float, oneYearCost: float, oneYearEmittedCo2: float, oneYearEnergyConsumption: float, providerId: string, totalPowerConsumption: float, totalPowerConsumptionUnit: string, updateTimestamp: int, url: string> {
+]: nothing -> oneof<record<costUnit: string, deviceSummaries: table<agentId: int, agentName: string, ambientTemperature: float, collectTime: string, deviceTSMOKey: string, deviceUrl: string, heatingMargin: float, heatingMarginUnit: string, id: int, name: string, powerConsumption: float, powerConsumptionUnit: string, productVersion: string, serverId: int, serverName: string, sid: string, type: string, updateTimestamp: int>, emittedCo2Unit: string, energyConsumptionUnit: string, heatingMargin: float, heatingMarginCoverage: float, heatingMarginDeviceName: string, heatingMarginDeviceUrl: string, heatingMarginUnit: string, historyParentIdKey: string, id: string, name: string, numberOfDevices: int, oneDayConfidence: float, oneDayCost: float, oneDayEmittedCo2: float, oneDayEnergyConsumption: float, oneMonthConfidence: float, oneMonthCost: float, oneMonthEmittedCo2: float, oneMonthEnergyConsumption: float, oneYearConfidence: float, oneYearCost: float, oneYearEmittedCo2: float, oneYearEnergyConsumption: float, providerId: string, totalPowerConsumption: float, totalPowerConsumptionUnit: string, updateTimestamp: int, url: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }

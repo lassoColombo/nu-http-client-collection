@@ -12,27 +12,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -40,8 +49,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -52,7 +66,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -87,7 +110,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -121,9 +145,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-groups" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-groups" "create-group" "delete-group" "get-group" "update-group" "replace-group" "get-user-schema" "get-service-provider-configs" "get-users" "create-users" "get-me" "update-me" "replace-me" "delete-user" "get-user" "update-user" "replace-user" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -157,7 +181,7 @@ export def "get-groups" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Without a filter, all groups are returned. The filter parameter must be a properly formed SCIM filter using the operator "eq" (equals), "sw" (starts with), or "co" (contains). The filter works for the displayName attribute. Sorting and pagination are supported. For example, GET /Groups?filter=displayName%20eq%20%22Engineering%22&sortBy=displayName&sortOrder=ascending&count=50&startIndex=51
   --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
-]: nothing -> record<resources: table<displayName: string, id: string, members: list, meta: record>, totalResults: int> {
+]: nothing -> oneof<record<resources: table<displayName: string, id: string, members: list, meta: record>, totalResults: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
@@ -185,7 +209,6 @@ export def "get-groups" [
 #
 # POST /Groups
 # operationId: createGroup
-# --members item shape: {type: "group"|"user", value: string}
 export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -199,7 +222,7 @@ export def "create-group" [
   --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
   display_name: string # The group's display name
   --members: list # An array of members — item shape: {type: "group"|"user", value: string}
-]: any -> record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>> {
+]: any -> oneof<record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -281,7 +304,7 @@ export def "get-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
-]: nothing -> record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>> {
+]: nothing -> oneof<record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_key | is-empty) { error make --unspanned { msg: "path parameter 'groupKey' must be non-empty" } }
@@ -309,7 +332,6 @@ export def "get-group" [
 #
 # PATCH /Groups/{groupKey}
 # operationId: updateGroup
-# --members item shape: {type: "group"|"user", value: string}
 export def "update-group" [
   group_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -324,7 +346,7 @@ export def "update-group" [
   --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
   display_name: string # The group's display name
   --members: list # An array of members — item shape: {type: "group"|"user", value: string}
-]: any -> record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>> {
+]: any -> oneof<record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -355,7 +377,6 @@ export def "update-group" [
 #
 # PUT /Groups/{groupKey}
 # operationId: replaceGroup
-# --members item shape: {type: "group"|"user", value: string}
 export def "replace-group" [
   group_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -370,7 +391,7 @@ export def "replace-group" [
   --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
   display_name: string # The group's display name
   --members: list # An array of members — item shape: {type: "group"|"user", value: string}
-]: any -> record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>> {
+]: any -> oneof<record<displayName: string, id: string, members: table<type: string, value: string>, meta: record<created: string, location: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -412,7 +433,7 @@ export def "get-user-schema" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
-]: nothing -> record<attributes: table<caseExact: bool, description: string, multiValued: bool, name: string, readOnly: bool, required: bool, schema: string, subAttributes: list, type: string>, description: string, endpoint: string, id: string, name: string, schema: string> {
+]: nothing -> oneof<record<attributes: table<caseExact: bool, description: string, multiValued: bool, name: string, readOnly: bool, required: bool, schema: string, subAttributes: list, type: string>, description: string, endpoint: string, id: string, name: string, schema: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
@@ -450,7 +471,7 @@ export def "get-service-provider-configs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
-]: nothing -> record<authenticationSchemes: record<description: string, documentationUrl: string, name: string, specUrl: string>, bulk: record<supported: bool>, changePassword: record<supported: bool>, documentationUrl: string, etag: record<supported: bool>, filter: record<supported: bool>, patch: record<supported: bool>, sort: record<supported: bool>, xmlDataFormat: record<supported: bool>> {
+]: nothing -> oneof<record<authenticationSchemes: record<description: string, documentationUrl: string, name: string, specUrl: string>, bulk: record<supported: bool>, changePassword: record<supported: bool>, documentationUrl: string, etag: record<supported: bool>, filter: record<supported: bool>, patch: record<supported: bool>, sort: record<supported: bool>, xmlDataFormat: record<supported: bool>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
@@ -489,7 +510,7 @@ export def "get-users" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # Without a filter, all users in a user domain are returned. The filter parameter must be a properly formed SCIM filter using either the operator eq (equals) or the operator sw (starts with). The filter works for userName, displayName, name.givenName, and name.familyName attributes. For example, /Users?filter=name.familyName%20eq%20%%22Smith%22
   --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
-]: nothing -> record<resources: table<displayName: string, id: string, locale: string, meta: record, name: record, timezone: string, userName: string>, totalResults: int> {
+]: nothing -> oneof<record<resources: table<displayName: string, id: string, locale: string, meta: record, name: record, timezone: string, userName: string>, totalResults: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
@@ -517,7 +538,6 @@ export def "get-users" [
 #
 # POST /Users
 # operationId: createUsers
-# --name shape: {familyName: string, givenName: string}
 export def "create-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -535,7 +555,7 @@ export def "create-users" [
   --password: string # The user's password
   --timezone: string # The user's time zone
   --user-name: string # The user's username, usually their email address
-]: any -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
+]: any -> oneof<record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -576,7 +596,7 @@ export def "get-me" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
-]: nothing -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
+]: nothing -> oneof<record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($authorization == null) { error make --unspanned { msg: "required header parameter 'Authorization' missing: pass --authorization" } }
@@ -603,7 +623,6 @@ export def "get-me" [
 #
 # PATCH /Users/me
 # operationId: updateMe
-# --name shape: {familyName: string, givenName: string}
 export def "update-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -621,7 +640,7 @@ export def "update-me" [
   --password: string # The user's password
   --timezone: string # The user's time zone
   --user-name: string # The user's username, usually their email address
-]: any -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
+]: any -> oneof<record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -651,7 +670,6 @@ export def "update-me" [
 #
 # PUT /Users/me
 # operationId: replaceMe
-# --name shape: {familyName: string, givenName: string}
 export def "replace-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,7 +687,7 @@ export def "replace-me" [
   --password: string # The user's password
   --timezone: string # The user's time zone
   --user-name: string # The user's username, usually their email address
-]: any -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
+]: any -> oneof<record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -751,7 +769,7 @@ export def "get-user" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # Access token prefixed with 'Bearer ', e.g. 'Bearer 123456abcdef' (required)
-]: nothing -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
+]: nothing -> oneof<record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_key | is-empty) { error make --unspanned { msg: "path parameter 'userKey' must be non-empty" } }
@@ -779,7 +797,6 @@ export def "get-user" [
 #
 # PATCH /Users/{userKey}
 # operationId: updateUser
-# --name shape: {familyName: string, givenName: string}
 export def "update-user" [
   user_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -798,7 +815,7 @@ export def "update-user" [
   --password: string # The user's password
   --timezone: string # The user's time zone
   --user-name: string # The user's username, usually their email address
-]: any -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
+]: any -> oneof<record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -829,7 +846,6 @@ export def "update-user" [
 #
 # PUT /Users/{userKey}
 # operationId: replaceUser
-# --name shape: {familyName: string, givenName: string}
 export def "replace-user" [
   user_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -848,7 +864,7 @@ export def "replace-user" [
   --password: string # The user's password
   --timezone: string # The user's time zone
   --user-name: string # The user's username, usually their email address
-]: any -> record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string> {
+]: any -> oneof<record<displayName: string, id: string, locale: string, meta: record<created: string, location: string>, name: record<familyName: string, givenName: string>, timezone: string, userName: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "available-provider-operations-list" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["available-provider-operations-list" "managers-list" "managers-list-by-resource-group" "managers-delete" "managers-get" "managers-update" "managers-create-or-update" "access-control-records-list-by-manager" "access-control-records-delete" "access-control-records-get" "access-control-records-create-or-update" "alerts-list-by-manager" "backups-list-by-manager" "managers-upload-registration-certificate" "alerts-clear" "devices-list-by-manager" "devices-delete" "devices-get" "devices-patch" "devices-get-alert-settings" "devices-create-or-update-alert-settings" "backup-schedule-groups-list-by-device" "backup-schedule-groups-delete" "backup-schedule-groups-get" "backup-schedule-groups-create-or-update" "backups-list-by-device" "backups-delete" "backups-clone" "chap-settings-list-by-device" "chap-settings-delete" "chap-settings-get" "chap-settings-create-or-update" "devices-deactivate" "iscsi-disks-list-by-device" "devices-download-updates" "devices-failover" "devices-list-failover-target" "file-servers-list-by-device" "file-servers-delete" "file-servers-get" "file-servers-create-or-update" "file-servers-backup-now" "file-servers-list-metrics" "file-servers-list-metric-definition" "file-shares-list-by-file-server" "file-shares-delete" "file-shares-get" "file-shares-create-or-update" "file-shares-list-metrics" "file-shares-list-metric-definition" "devices-install-updates" "iscsi-servers-list-by-device" "iscsi-servers-delete" "iscsi-servers-get" "iscsi-servers-create-or-update" "iscsi-servers-backup-now" "iscsi-disks-list-by-iscsi-server" "iscsi-disks-delete" "iscsi-disks-get" "iscsi-disks-create-or-update" "iscsi-disks-list-metrics" "iscsi-disks-list-metric-definition" "iscsi-servers-list-metrics" "iscsi-servers-list-metric-definition" "jobs-list-by-device" "jobs-get" "devices-list-metrics" "devices-list-metric-definition" "devices-get-network-settings" "devices-scan-for-updates" "devices-create-or-update-security-settings" "alerts-send-test-email" "file-shares-list-by-device" "devices-get-time-settings" "devices-get-update-summary" "managers-get-encryption-settings" "managers-delete-extended-info" "managers-get-extended-info" "managers-update-extended-info" "managers-create-extended-info" "file-servers-list-by-manager" "managers-get-encryption-key" "iscsi-servers-list-by-manager" "jobs-list-by-manager" "managers-list-metrics" "managers-list-metric-definition" "storage-account-credentials-list-by-manager" "storage-account-credentials-delete" "storage-account-credentials-get" "storage-account-credentials-create-or-update" "storage-domains-list-by-manager" "storage-domains-delete" "storage-domains-get" "storage-domains-create-or-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -157,7 +181,7 @@ export def "available-provider-operations-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>> {
+]: nothing -> oneof<record<nextLink: string, value: table<display: record, name: string, origin: string, properties: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($api_version == null) { error make --unspanned { msg: "required query parameter 'api-version' missing: pass --api-version" } }
@@ -195,7 +219,7 @@ export def "managers-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -235,7 +259,7 @@ export def "managers-list-by-resource-group" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>> {
+]: nothing -> oneof<record<value: table<etag: string, properties: record, id: string, location: string, name: string, tags: record, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -320,7 +344,7 @@ export def "managers-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<etag: string, properties: record<cisIntrinsicSettings: record<type: string>, provisioningState: string, sku: record<name: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<cisIntrinsicSettings: record<type: string>, provisioningState: string, sku: record<name: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -364,7 +388,7 @@ export def "managers-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   --tags: record # The tags attached to the StorSimple Manager.
-]: any -> record<etag: string, properties: record<cisIntrinsicSettings: record<type: string>, provisioningState: string, sku: record<name: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<cisIntrinsicSettings: record<type: string>, provisioningState: string, sku: record<name: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -396,7 +420,6 @@ export def "managers-update" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}
 # operationId: Managers_CreateOrUpdate
-# --properties shape: {cisIntrinsicSettings?: record, sku?: record}
 export def "managers-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -415,7 +438,7 @@ export def "managers-create-or-update" [
   --properties: record # The properties of the Manager — shape: {cisIntrinsicSettings?: record, sku?: record}
   location: string # The Geo location of the Manager
   --tags: record # Tags attached to the Manager
-]: any -> record<etag: string, properties: record<cisIntrinsicSettings: record<type: string>, provisioningState: string, sku: record<name: string>>, id: string, location: string, name: string, tags: record, type: string> {
+]: any -> oneof<record<etag: string, properties: record<cisIntrinsicSettings: record<type: string>, provisioningState: string, sku: record<name: string>>, id: string, location: string, name: string, tags: record, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -461,7 +484,7 @@ export def "access-control-records-list-by-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -550,7 +573,7 @@ export def "access-control-records-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<properties: record<initiatorName: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<initiatorName: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -580,7 +603,6 @@ export def "access-control-records-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/accessControlRecords/{accessControlRecordName}
 # operationId: AccessControlRecords_CreateOrUpdate
-# --properties shape: {initiatorName: string}
 export def "access-control-records-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -597,7 +619,7 @@ export def "access-control-records-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   properties: record # Properties of access control record — shape: {initiatorName: string}
-]: any -> record<properties: record<initiatorName: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<initiatorName: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -645,7 +667,7 @@ export def "alerts-list-by-manager" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   --filter: string # OData Filter options
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -689,7 +711,7 @@ export def "backups-list-by-manager" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   --filter: string # OData Filter options
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -718,7 +740,6 @@ export def "backups-list-by-manager" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/certificates/{certificateName}
 # operationId: Managers_UploadRegistrationCertificate
-# --properties shape: {authType?: "Invalid"|"AccessControlService"|"AzureActiveDirectory", certificate: string}
 export def "managers-upload-registration-certificate" [
   subscription_id: string
   resource_group_name: string
@@ -735,7 +756,7 @@ export def "managers-upload-registration-certificate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   properties: record # Raw Certificate Data From IDM — shape: {authType?: "Invalid"|"AccessControlService"|"AzureActiveDirectory", certificate: string}
-]: any -> record<properties: record<aadAuthority: string, aadTenantId: string, authType: string, azureManagementEndpointAudience: string, certificate: string, friendlyName: string, issuer: string, resourceId: int, servicePrincipalClientId: string, servicePrincipalObjectId: string, subject: string, thumbprint: string, validFrom: string, validTo: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<aadAuthority: string, aadTenantId: string, authType: string, azureManagementEndpointAudience: string, certificate: string, friendlyName: string, issuer: string, resourceId: int, servicePrincipalClientId: string, servicePrincipalObjectId: string, subject: string, thumbprint: string, validFrom: string, validTo: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -831,7 +852,7 @@ export def "devices-list-by-manager" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   --expand: string # Specify $expand=details to populate additional fields related to the device.
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -921,7 +942,7 @@ export def "devices-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   --expand: string # Specify $expand=details to populate additional fields related to the device.
-]: nothing -> record<properties: record<activationTime: string, allowedDeviceOperations: list<string>, culture: string, details: record<availableLocalStorageInBytes: int, availableStorageInBytes: int, endpointCount: int, provisionedLocalStorageInBytes: int, provisionedStorageInBytes: int, totalBackupSizeInBytes: int, totalLocalStorageInBytes: int, totalStorageInBytes: int, usingLocalStorageInBytes: int, usingStorageInBytes: int>, deviceCapabilities: list<string>, deviceConfigurationStatus: string, deviceDescription: string, deviceSoftwareVersion: string, domainName: string, friendlySoftwareName: string, modelDescription: string, status: string, type: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<activationTime: string, allowedDeviceOperations: list<string>, culture: string, details: record<availableLocalStorageInBytes: int, availableStorageInBytes: int, endpointCount: int, provisionedLocalStorageInBytes: int, provisionedStorageInBytes: int, totalBackupSizeInBytes: int, totalLocalStorageInBytes: int, totalStorageInBytes: int, usingLocalStorageInBytes: int, usingStorageInBytes: int>, deviceCapabilities: list<string>, deviceConfigurationStatus: string, deviceDescription: string, deviceSoftwareVersion: string, domainName: string, friendlySoftwareName: string, modelDescription: string, status: string, type: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -967,7 +988,7 @@ export def "devices-patch" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   --device-description: string # Short description given for the device
-]: any -> record<properties: record<activationTime: string, allowedDeviceOperations: list<string>, culture: string, details: record<availableLocalStorageInBytes: int, availableStorageInBytes: int, endpointCount: int, provisionedLocalStorageInBytes: int, provisionedStorageInBytes: int, totalBackupSizeInBytes: int, totalLocalStorageInBytes: int, totalStorageInBytes: int, usingLocalStorageInBytes: int, usingStorageInBytes: int>, deviceCapabilities: list<string>, deviceConfigurationStatus: string, deviceDescription: string, deviceSoftwareVersion: string, domainName: string, friendlySoftwareName: string, modelDescription: string, status: string, type: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<activationTime: string, allowedDeviceOperations: list<string>, culture: string, details: record<availableLocalStorageInBytes: int, availableStorageInBytes: int, endpointCount: int, provisionedLocalStorageInBytes: int, provisionedStorageInBytes: int, totalBackupSizeInBytes: int, totalLocalStorageInBytes: int, totalStorageInBytes: int, usingLocalStorageInBytes: int, usingStorageInBytes: int>, deviceCapabilities: list<string>, deviceConfigurationStatus: string, deviceDescription: string, deviceSoftwareVersion: string, domainName: string, friendlySoftwareName: string, modelDescription: string, status: string, type: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1015,7 +1036,7 @@ export def "devices-get-alert-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<properties: record<additionalRecipientEmailList: list<string>, alertNotificationCulture: string, emailNotification: string, notificationToServiceOwners: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<additionalRecipientEmailList: list<string>, alertNotificationCulture: string, emailNotification: string, notificationToServiceOwners: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1045,7 +1066,6 @@ export def "devices-get-alert-settings" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/alertSettings/default
 # operationId: Devices_CreateOrUpdateAlertSettings
-# --properties shape: {additionalRecipientEmailList?: list<string>, alertNotificationCulture: string, emailNotification: "Enabled"|"Disabled", notificationToServiceOwners: "Enabled"|"Disabled"}
 export def "devices-create-or-update-alert-settings" [
   subscription_id: string
   resource_group_name: string
@@ -1062,7 +1082,7 @@ export def "devices-create-or-update-alert-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   properties: record # Class containing the properties of AlertSettings — shape: {additionalRecipientEmailList?: list<string>, alertNotificationCulture: string, emailNotification: "Enabled"|"Disabled", notificationToServiceOwners: "Enabled"|"Disabled"}
-]: any -> record<properties: record<additionalRecipientEmailList: list<string>, alertNotificationCulture: string, emailNotification: string, notificationToServiceOwners: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<additionalRecipientEmailList: list<string>, alertNotificationCulture: string, emailNotification: string, notificationToServiceOwners: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1110,7 +1130,7 @@ export def "backup-schedule-groups-list-by-device" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1203,7 +1223,7 @@ export def "backup-schedule-groups-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<properties: record<startTime: record<hour: int, minute: int>>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<startTime: record<hour: int, minute: int>>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1234,7 +1254,6 @@ export def "backup-schedule-groups-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backupScheduleGroups/{scheduleGroupName}
 # operationId: BackupScheduleGroups_CreateOrUpdate
-# --properties shape: {startTime: record}
 export def "backup-schedule-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1252,7 +1271,7 @@ export def "backup-schedule-groups-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   properties: record # The Backup Schedule Group Properties — shape: {startTime: record}
-]: any -> record<properties: record<startTime: record<hour: int, minute: int>>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<startTime: record<hour: int, minute: int>>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1303,7 +1322,7 @@ export def "backups-list-by-device" [
   --for-failover: oneof<nothing, bool> # Set to true if you need backups which can be used for failover.
   --api-version: string # The api version (required)
   --filter: string # OData Filter options
-]: nothing -> record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1380,7 +1399,6 @@ export def "backups-delete" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/backups/{backupName}/elements/{elementName}/clone
 # operationId: Backups_Clone
-# --properties shape: {disk?: record, newEndpointName: string, share?: record, targetAccessPointId: string, targetDeviceId: string}
 export def "backups-clone" [
   subscription_id: string
   resource_group_name: string
@@ -1449,7 +1467,7 @@ export def "chap-settings-list-by-device" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1542,7 +1560,7 @@ export def "chap-settings-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<properties: record<password: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<password: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1573,7 +1591,6 @@ export def "chap-settings-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/chapSettings/{chapUserName}
 # operationId: ChapSettings_CreateOrUpdate
-# --properties shape: {password: record}
 export def "chap-settings-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -1591,7 +1608,7 @@ export def "chap-settings-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   properties: record # Chap properties — shape: {password: record}
-]: any -> record<properties: record<password: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<password: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1685,7 +1702,7 @@ export def "iscsi-disks-list-by-device" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1828,7 +1845,7 @@ export def "devices-list-failover-target" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   --expand: string # Specify $expand=details to populate additional fields related to the device.
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1873,7 +1890,7 @@ export def "file-servers-list-by-device" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1966,7 +1983,7 @@ export def "file-servers-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<properties: record<backupScheduleGroupId: string, description: string, domainName: string, storageDomainId: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<backupScheduleGroupId: string, description: string, domainName: string, storageDomainId: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1997,7 +2014,6 @@ export def "file-servers-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/fileservers/{fileServerName}
 # operationId: FileServers_CreateOrUpdate
-# --properties shape: {backupScheduleGroupId: string, description?: string, domainName: string, storageDomainId: string}
 export def "file-servers-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2015,7 +2031,7 @@ export def "file-servers-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   properties: record # The file server properties. — shape: {backupScheduleGroupId: string, description?: string, domainName: string, storageDomainId: string}
-]: any -> record<properties: record<backupScheduleGroupId: string, description: string, domainName: string, storageDomainId: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<backupScheduleGroupId: string, description: string, domainName: string, storageDomainId: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2113,7 +2129,7 @@ export def "file-servers-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   --filter: string # OData Filter options
-]: nothing -> record<value: table<dimensions: list, endTime: string, name: record, primaryAggregation: string, resourceId: string, startTime: string, timeGrain: string, type: string, unit: string, values: list>> {
+]: nothing -> oneof<record<value: table<dimensions: list, endTime: string, name: record, primaryAggregation: string, resourceId: string, startTime: string, timeGrain: string, type: string, unit: string, values: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2160,7 +2176,7 @@ export def "file-servers-list-metric-definition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>> {
+]: nothing -> oneof<record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2207,7 +2223,7 @@ export def "file-shares-list-by-file-server" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2304,7 +2320,7 @@ export def "file-shares-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<properties: record<adminUser: string, dataPolicy: string, description: string, localUsedCapacityInBytes: int, monitoringStatus: string, provisionedCapacityInBytes: int, shareStatus: string, usedCapacityInBytes: int>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<adminUser: string, dataPolicy: string, description: string, localUsedCapacityInBytes: int, monitoringStatus: string, provisionedCapacityInBytes: int, shareStatus: string, usedCapacityInBytes: int>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2336,7 +2352,6 @@ export def "file-shares-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/fileservers/{fileServerName}/shares/{shareName}
 # operationId: FileShares_CreateOrUpdate
-# --properties shape: {adminUser: string, dataPolicy: "Invalid"|"Local"|"Tiered"|"Cloud", description?: string, monitoringStatus: "Enabled"|"Disabled", provisionedCapacityInBytes: int, shareStatus: "Online"|"Offline"}
 export def "file-shares-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2355,7 +2370,7 @@ export def "file-shares-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   properties: record # The File Share. — shape: {adminUser: string, dataPolicy: "Invalid"|"Local"|"Tiered"|"Cloud", description?: string, monitoringStatus: "Enabled"|"Disabled", provisionedCapacityInBytes: int, shareStatus: "Online"|"Offline"}
-]: any -> record<properties: record<adminUser: string, dataPolicy: string, description: string, localUsedCapacityInBytes: int, monitoringStatus: string, provisionedCapacityInBytes: int, shareStatus: string, usedCapacityInBytes: int>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<adminUser: string, dataPolicy: string, description: string, localUsedCapacityInBytes: int, monitoringStatus: string, provisionedCapacityInBytes: int, shareStatus: string, usedCapacityInBytes: int>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2408,7 +2423,7 @@ export def "file-shares-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   --filter: string # OData Filter options
-]: nothing -> record<value: table<dimensions: list, endTime: string, name: record, primaryAggregation: string, resourceId: string, startTime: string, timeGrain: string, type: string, unit: string, values: list>> {
+]: nothing -> oneof<record<value: table<dimensions: list, endTime: string, name: record, primaryAggregation: string, resourceId: string, startTime: string, timeGrain: string, type: string, unit: string, values: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2457,7 +2472,7 @@ export def "file-shares-list-metric-definition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>> {
+]: nothing -> oneof<record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2549,7 +2564,7 @@ export def "iscsi-servers-list-by-device" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2642,7 +2657,7 @@ export def "iscsi-servers-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<properties: record<backupScheduleGroupId: string, chapId: string, description: string, reverseChapId: string, storageDomainId: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<backupScheduleGroupId: string, chapId: string, description: string, reverseChapId: string, storageDomainId: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2673,7 +2688,6 @@ export def "iscsi-servers-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/iscsiservers/{iscsiServerName}
 # operationId: IscsiServers_CreateOrUpdate
-# --properties shape: {backupScheduleGroupId: string, chapId?: string, description?: string, reverseChapId?: string, storageDomainId: string}
 export def "iscsi-servers-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2691,7 +2705,7 @@ export def "iscsi-servers-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   properties: record # The iSCSI server properties. — shape: {backupScheduleGroupId: string, chapId?: string, description?: string, reverseChapId?: string, storageDomainId: string}
-]: any -> record<properties: record<backupScheduleGroupId: string, chapId: string, description: string, reverseChapId: string, storageDomainId: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<backupScheduleGroupId: string, chapId: string, description: string, reverseChapId: string, storageDomainId: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2788,7 +2802,7 @@ export def "iscsi-disks-list-by-iscsi-server" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2885,7 +2899,7 @@ export def "iscsi-disks-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<properties: record<accessControlRecords: list<string>, dataPolicy: string, description: string, diskStatus: string, localUsedCapacityInBytes: int, monitoringStatus: string, provisionedCapacityInBytes: int, usedCapacityInBytes: int>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<accessControlRecords: list<string>, dataPolicy: string, description: string, diskStatus: string, localUsedCapacityInBytes: int, monitoringStatus: string, provisionedCapacityInBytes: int, usedCapacityInBytes: int>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2917,7 +2931,6 @@ export def "iscsi-disks-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/iscsiservers/{iscsiServerName}/disks/{diskName}
 # operationId: IscsiDisks_CreateOrUpdate
-# --properties shape: {accessControlRecords: list<string>, dataPolicy: "Invalid"|"Local"|"Tiered"|"Cloud", description?: string, diskStatus: "Online"|"Offline", monitoringStatus: "Enabled"|"Disabled", provisionedCapacityInBytes: int}
 export def "iscsi-disks-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -2936,7 +2949,7 @@ export def "iscsi-disks-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   properties: record # The iSCSI disk properties. — shape: {accessControlRecords: list<string>, dataPolicy: "Invalid"|"Local"|"Tiered"|"Cloud", description?: string, diskStatus: "Online"|"Offline", monitoringStatus: "Enabled"|"Disabled", provisionedCapacityInBytes: int}
-]: any -> record<properties: record<accessControlRecords: list<string>, dataPolicy: string, description: string, diskStatus: string, localUsedCapacityInBytes: int, monitoringStatus: string, provisionedCapacityInBytes: int, usedCapacityInBytes: int>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<accessControlRecords: list<string>, dataPolicy: string, description: string, diskStatus: string, localUsedCapacityInBytes: int, monitoringStatus: string, provisionedCapacityInBytes: int, usedCapacityInBytes: int>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2989,7 +3002,7 @@ export def "iscsi-disks-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   --filter: string # OData Filter options
-]: nothing -> record<value: table<dimensions: list, endTime: string, name: record, primaryAggregation: string, resourceId: string, startTime: string, timeGrain: string, type: string, unit: string, values: list>> {
+]: nothing -> oneof<record<value: table<dimensions: list, endTime: string, name: record, primaryAggregation: string, resourceId: string, startTime: string, timeGrain: string, type: string, unit: string, values: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3038,7 +3051,7 @@ export def "iscsi-disks-list-metric-definition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>> {
+]: nothing -> oneof<record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3087,7 +3100,7 @@ export def "iscsi-servers-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   --filter: string # OData Filter options
-]: nothing -> record<value: table<dimensions: list, endTime: string, name: record, primaryAggregation: string, resourceId: string, startTime: string, timeGrain: string, type: string, unit: string, values: list>> {
+]: nothing -> oneof<record<value: table<dimensions: list, endTime: string, name: record, primaryAggregation: string, resourceId: string, startTime: string, timeGrain: string, type: string, unit: string, values: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3134,7 +3147,7 @@ export def "iscsi-servers-list-metric-definition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>> {
+]: nothing -> oneof<record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3181,7 +3194,7 @@ export def "jobs-list-by-device" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   --filter: string # OData Filter options
-]: nothing -> record<nextLink: string, value: table<endTime: string, error: record, percentComplete: int, properties: record, startTime: string, status: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<endTime: string, error: record, percentComplete: int, properties: record, startTime: string, status: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3227,7 +3240,7 @@ export def "jobs-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<endTime: string, error: record<code: string, errorDetails: list<record>, message: string>, percentComplete: int, properties: record<backupPointInTime: string, deviceId: string, downloadProgress: record<downloadPhase: string, numberOfUpdatesDownloaded: int, numberOfUpdatesToDownload: int, percentComplete: int, totalBytesDownloaded: float, totalBytesToDownload: float>, entityId: string, entityType: string, installProgress: record<numberOfUpdatesInstalled: int, numberOfUpdatesToInstall: int, percentComplete: int>, isCancellable: bool, jobStages: list<record>, jobType: string, sourceDeviceId: string, stats: record<completedWorkItemCount: int, estimatedTimeRemaining: int, totalWorkItemCount: int>, targetId: string, targetType: string>, startTime: string, status: string, id: string, name: string, type: string> {
+]: nothing -> oneof<record<endTime: string, error: record<code: string, errorDetails: list<record>, message: string>, percentComplete: int, properties: record<backupPointInTime: string, deviceId: string, downloadProgress: record<downloadPhase: string, numberOfUpdatesDownloaded: int, numberOfUpdatesToDownload: int, percentComplete: int, totalBytesDownloaded: float, totalBytesToDownload: float>, entityId: string, entityType: string, installProgress: record<numberOfUpdatesInstalled: int, numberOfUpdatesToInstall: int, percentComplete: int>, isCancellable: bool, jobStages: list<record>, jobType: string, sourceDeviceId: string, stats: record<completedWorkItemCount: int, estimatedTimeRemaining: int, totalWorkItemCount: int>, targetId: string, targetType: string>, startTime: string, status: string, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3274,7 +3287,7 @@ export def "devices-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   --filter: string # OData Filter options
-]: nothing -> record<value: table<dimensions: list, endTime: string, name: record, primaryAggregation: string, resourceId: string, startTime: string, timeGrain: string, type: string, unit: string, values: list>> {
+]: nothing -> oneof<record<value: table<dimensions: list, endTime: string, name: record, primaryAggregation: string, resourceId: string, startTime: string, timeGrain: string, type: string, unit: string, values: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3319,7 +3332,7 @@ export def "devices-list-metric-definition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>> {
+]: nothing -> oneof<record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3364,7 +3377,7 @@ export def "devices-get-network-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<properties: record<nodeNetworks: list<record>, primaryDnsServer: string, secondaryDnsServer: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<nodeNetworks: list<record>, primaryDnsServer: string, secondaryDnsServer: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3439,7 +3452,6 @@ export def "devices-scan-for-updates" [
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/devices/{deviceName}/securitySettings/default/update
 # operationId: Devices_CreateOrUpdateSecuritySettings
-# --properties shape: {deviceAdminPassword: record}
 export def "devices-create-or-update-security-settings" [
   subscription_id: string
   resource_group_name: string
@@ -3553,7 +3565,7 @@ export def "file-shares-list-by-device" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3598,7 +3610,7 @@ export def "devices-get-time-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<properties: record<primaryTimeServer: string, secondaryTimeServer: string, timeZone: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<primaryTimeServer: string, secondaryTimeServer: string, timeZone: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3643,7 +3655,7 @@ export def "devices-get-update-summary" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<properties: record<deviceLastScannedTime: string, deviceVersion: string, inProgressDownloadJobId: string, inProgressDownloadJobStartedTime: string, inProgressInstallJobId: string, inProgressInstallJobStartedTime: string, inProgressScanStartedTime: string, lastCompletedDownloadJobTime: string, lastCompletedInstallJobTime: string, lastCompletedScanTime: string, rebootRequiredForInstall: bool, regularUpdatesAvailable: bool, status: string, totalItemsPendingForDownload: int, totalItemsPendingForInstall: int>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<deviceLastScannedTime: string, deviceVersion: string, inProgressDownloadJobId: string, inProgressDownloadJobStartedTime: string, inProgressInstallJobId: string, inProgressInstallJobStartedTime: string, inProgressScanStartedTime: string, lastCompletedDownloadJobTime: string, lastCompletedInstallJobTime: string, lastCompletedScanTime: string, rebootRequiredForInstall: bool, regularUpdatesAvailable: bool, status: string, totalItemsPendingForDownload: int, totalItemsPendingForInstall: int>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3687,7 +3699,7 @@ export def "managers-get-encryption-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<properties: record<encryptionStatus: string, keyRolloverStatus: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<encryptionStatus: string, keyRolloverStatus: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3773,7 +3785,7 @@ export def "managers-get-extended-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<etag: string, properties: record<algorithm: string, encryptionKey: string, encryptionKeyThumbprint: string, integrityKey: string, portalCertificateThumbprint: string, version: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<etag: string, properties: record<algorithm: string, encryptionKey: string, encryptionKeyThumbprint: string, integrityKey: string, portalCertificateThumbprint: string, version: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3802,7 +3814,6 @@ export def "managers-get-extended-info" [
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/extendedInformation/vaultExtendedInfo
 # operationId: Managers_UpdateExtendedInfo
-# --properties shape: {algorithm: string, encryptionKey?: string, encryptionKeyThumbprint?: string, integrityKey: string, portalCertificateThumbprint?: string, version?: string}
 export def "managers-update-extended-info" [
   subscription_id: string
   resource_group_name: string
@@ -3820,7 +3831,7 @@ export def "managers-update-extended-info" [
   --if-match: string # Pass the ETag of ExtendedInfo fetched from GET call (required)
   --etag: string # ETag of the Resource
   properties: record # Properties of the ManagerExtendedInfo — shape: {algorithm: string, encryptionKey?: string, encryptionKeyThumbprint?: string, integrityKey: string, portalCertificateThumbprint?: string, version?: string}
-]: any -> record<etag: string, properties: record<algorithm: string, encryptionKey: string, encryptionKeyThumbprint: string, integrityKey: string, portalCertificateThumbprint: string, version: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<etag: string, properties: record<algorithm: string, encryptionKey: string, encryptionKeyThumbprint: string, integrityKey: string, portalCertificateThumbprint: string, version: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3855,7 +3866,6 @@ export def "managers-update-extended-info" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/extendedInformation/vaultExtendedInfo
 # operationId: Managers_CreateExtendedInfo
-# --properties shape: {algorithm: string, encryptionKey?: string, encryptionKeyThumbprint?: string, integrityKey: string, portalCertificateThumbprint?: string, version?: string}
 export def "managers-create-extended-info" [
   subscription_id: string
   resource_group_name: string
@@ -3872,7 +3882,7 @@ export def "managers-create-extended-info" [
   --api-version: string # The api version (required)
   --etag: string # ETag of the Resource
   properties: record # Properties of the ManagerExtendedInfo — shape: {algorithm: string, encryptionKey?: string, encryptionKeyThumbprint?: string, integrityKey: string, portalCertificateThumbprint?: string, version?: string}
-]: any -> record<etag: string, properties: record<algorithm: string, encryptionKey: string, encryptionKeyThumbprint: string, integrityKey: string, portalCertificateThumbprint: string, version: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<etag: string, properties: record<algorithm: string, encryptionKey: string, encryptionKeyThumbprint: string, integrityKey: string, portalCertificateThumbprint: string, version: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3918,7 +3928,7 @@ export def "file-servers-list-by-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3961,7 +3971,7 @@ export def "managers-get-encryption-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<encryptionAlgorithm: string, value: string, valueCertificateThumbprint: string> {
+]: nothing -> oneof<record<encryptionAlgorithm: string, value: string, valueCertificateThumbprint: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4004,7 +4014,7 @@ export def "iscsi-servers-list-by-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4048,7 +4058,7 @@ export def "jobs-list-by-manager" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   --filter: string # OData Filter options
-]: nothing -> record<nextLink: string, value: table<endTime: string, error: record, percentComplete: int, properties: record, startTime: string, status: string, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<nextLink: string, value: table<endTime: string, error: record, percentComplete: int, properties: record, startTime: string, status: string, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4092,7 +4102,7 @@ export def "managers-list-metrics" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   --filter: string # OData Filter options
-]: nothing -> record<value: table<dimensions: list, endTime: string, name: record, primaryAggregation: string, resourceId: string, startTime: string, timeGrain: string, type: string, unit: string, values: list>> {
+]: nothing -> oneof<record<value: table<dimensions: list, endTime: string, name: record, primaryAggregation: string, resourceId: string, startTime: string, timeGrain: string, type: string, unit: string, values: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4135,7 +4145,7 @@ export def "managers-list-metric-definition" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>> {
+]: nothing -> oneof<record<value: table<dimensions: list, metricAvailabilities: list, name: record, primaryAggregationType: string, resourceId: string, type: string, unit: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4178,7 +4188,7 @@ export def "storage-account-credentials-list-by-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4267,7 +4277,7 @@ export def "storage-account-credentials-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<properties: record<accessKey: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>, cloudType: string, enableSSL: string, endPoint: string, location: string, login: string>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<accessKey: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>, cloudType: string, enableSSL: string, endPoint: string, location: string, login: string>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4297,7 +4307,6 @@ export def "storage-account-credentials-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/storageAccountCredentials/{credentialName}
 # operationId: StorageAccountCredentials_CreateOrUpdate
-# --properties shape: {accessKey?: record, cloudType: "Azure"|"S3"|"S3_RRS"|"OpenStack"|"HP", enableSSL: "Enabled"|"Disabled", endPoint: string, location?: string, login: string}
 export def "storage-account-credentials-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -4314,7 +4323,7 @@ export def "storage-account-credentials-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   properties: record # Storage account properties — shape: {accessKey?: record, cloudType: "Azure"|"S3"|"S3_RRS"|"OpenStack"|"HP", enableSSL: "Enabled"|"Disabled", endPoint: string, location?: string, login: string}
-]: any -> record<properties: record<accessKey: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>, cloudType: string, enableSSL: string, endPoint: string, location: string, login: string>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<accessKey: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>, cloudType: string, enableSSL: string, endPoint: string, location: string, login: string>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4361,7 +4370,7 @@ export def "storage-domains-list-by-manager" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<value: table<properties: record, id: string, name: string, type: string>> {
+]: nothing -> oneof<record<value: table<properties: record, id: string, name: string, type: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4450,7 +4459,7 @@ export def "storage-domains-get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
-]: nothing -> record<properties: record<encryptionKey: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>, encryptionStatus: string, storageAccountCredentialIds: list<string>>, id: string, name: string, type: string> {
+]: nothing -> oneof<record<properties: record<encryptionKey: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>, encryptionStatus: string, storageAccountCredentialIds: list<string>>, id: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -4480,7 +4489,6 @@ export def "storage-domains-get" [
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorSimple/managers/{managerName}/storageDomains/{storageDomainName}
 # operationId: StorageDomains_CreateOrUpdate
-# --properties shape: {encryptionKey?: record, encryptionStatus: "Enabled"|"Disabled", storageAccountCredentialIds: list<string>}
 export def "storage-domains-create-or-update" [
   subscription_id: string
   resource_group_name: string
@@ -4497,7 +4505,7 @@ export def "storage-domains-create-or-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # The api version (required)
   properties: record # The storage domain properties. — shape: {encryptionKey?: record, encryptionStatus: "Enabled"|"Disabled", storageAccountCredentialIds: list<string>}
-]: any -> record<properties: record<encryptionKey: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>, encryptionStatus: string, storageAccountCredentialIds: list<string>>, id: string, name: string, type: string> {
+]: any -> oneof<record<properties: record<encryptionKey: record<encryptionAlgorithm: string, encryptionCertificateThumbprint: string, value: string>, encryptionStatus: string, storageAccountCredentialIds: list<string>>, id: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

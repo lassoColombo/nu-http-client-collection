@@ -14,27 +14,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   match $scheme {
     "x-auth-token" => { {scheme: $scheme, headers: {"X-Auth-Token": $token_val}, query: "", location: "header"} }
     "query-api_token" => { {scheme: $scheme, headers: {}, query: $"(encode-path-segment "api_token")=(encode-path-segment $token_val)", location: "query"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -89,7 +112,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -142,8 +166,8 @@ def base-url-completer [] { ["https://app.apacta.com/api/v1"] }
 def auth-scheme-completer [] { ["x-auth-token" "query-api_token"] }
 
 # Completers for enum parameters
-def due-date-completer [] { ["" "exceeded" "valid"] }
-def status-completer [] { ["" "approved" "expired_subscription"] }
+def due-date-completer [] { ["exceeded" "valid"] }
+def status-completer [] { ["approved" "expired_subscription"] }
 def projects-completer [] { ["[project1, project2, project3]" "all" "none"] }
 def extended-completer [] { ["false" "true"] }
 def is-draft-completer [] { ["0" "1"] }
@@ -158,9 +182,9 @@ def status-completer-2 [] { ["awaiting" "expired" "failed" "fresh"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-activities" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get-activities" "post-activities" "delete-activities-bulk-delete" "delete-activities-activity-id" "put-activities-activity-id" "get-cities" "get-cities-city-id" "get-clocking-records" "post-clocking-records" "post-clocking-records-checkout" "delete-clocking-records-clocking-record-id" "get-clocking-records-clocking-record-id" "put-clocking-records-clocking-record-id" "get-companies" "get-companies-subscription-self-service" "get-companies-company-id" "get-companies-company-id-companies-integration-feature-settings" "post-companies-company-id-companies-integration-feature-settings" "get-companies-company-id-companies-integration-feature-settings-c-integration-feature-setting-id" "put-companies-company-id-companies-integration-feature-settings-c-integration-feature-setting-id" "get-companies-company-id-form-templates" "delete-companies-company-id-form-templates-form-template-id" "get-companies-company-id-form-templates-form-template-id" "get-companies-company-id-integration-feature-settings" "get-companies-company-id-integration-feature-settings-integration-feature-setting-id" "get-companies-company-id-integration-settings" "post-companies-company-id-integration-settings" "delete-companies-company-id-integration-settings-companies-integration-setting-id" "get-companies-company-id-integration-settings-companies-integration-setting-id" "put-companies-company-id-integration-settings-companies-integration-setting-id" "delete-companies-company-id-price-margins-price-margins-id" "get-companies-company-id-price-margins-price-margins-id" "post-companies-company-id-price-margins-price-margins-id" "get-compaies-vendors-list" "add-companies-vendor" "bulk-companies-vendors" "delete-companies-vendors-companies-vendor-id" "get-companies-vendor" "edit-companies-vendor" "get-companies-vendors-expense-statistics" "get-compay-settings-list" "get-contact-custom-field-attributes" "get-contact-custom-field-attributes-contact-custom-field-attribute-id" "get-contact-types" "get-contact-types-contact-type-id" "get-contacts" "post-contacts" "bulk-delete-contacts" "delete-contacts-contact-id" "get-contacts-contact-id" "put-contacts-contact-id" "get-contacts-contact-id-contact-custom-field-values" "get-contact-persons-list" "add-contact-person" "delete-contacts-contact-id-contact-persons-contact-person-id" "get-contact-person" "edit-contact-person" "get-countries" "get-countries-country-id" "get-currencies" "get-currencies-currency-id" "get-driving-types" "post-driving-types" "bulk-delete-driving-types" "delete-driving-types-driving-type-id" "get-driving-types-driving-type-id" "put-driving-types-driving-type-id" "get-employee-hours" "get-events" "post-events" "get-events-is-user-free" "delete-events-event-id" "get-events-event-id" "put-events-event-id" "get-expense-files" "post-expense-files" "delete-expense-files-expense-file-id" "get-expense-files-expense-file-id" "put-expense-files-expense-file-id" "get-expense-lines" "post-expense-lines" "delete-expense-lines-expense-line-id" "get-expense-lines-expense-line-id" "put-expense-lines-expense-line-id" "get-expenses" "post-expenses" "bulk-delete-expenses" "get-expenses-highest-amount" "send-emails-expenses" "delete-expenses-expense-id" "get-expenses-expense-id" "put-expenses-expense-id" "get-expenses-expense-id-original-files" "get-expenses-expense-id-original-files-file-id" "get-financial-statistics" "get-expenses-sales-price" "get-invoiced-amount" "get-margin" "get-material-rentals-cost-price" "get-financial-statistics-overview" "get-products-cost-price" "get-financial-statistics-working-hours" "get-form-field-types" "get-form-field-types-form-field-type-id" "post-form-fields" "get-form-fields-form-field-id" "get-form-templates" "get-form-templates-form-template-id" "get-forms" "post-forms" "get-forms-undelete-form-id" "get-forms-view-time-form-pdf-form-id" "delete-forms-form-id" "get-forms-form-id" "put-forms-form-id" "get-integrations-list" "post-integrations-billys-authenticate" "get-integrations-contacts-sync" "get-integrations-products-sync" "get-integrations-view" "get-invoice-line-text-template" "post-invoice-line-text-template" "delete-invoice-line-text-template-invoice-line-text-template-id" "get-invoice-line-text-template-invoice-line-text-template-id" "post-invoice-line-text-template-invoice-line-text-template-id" "post-invoice-line-texts" "post-invoice-line-texts-invoice-line-text-id" "get-invoice-lines" "post-invoice-lines" "delete-invoice-lines-invoice-line-id" "get-invoice-lines-invoice-line-id" "put-invoice-lines-invoice-line-id" "get-invoices" "post-invoices" "bulk-delete-invoices" "get-invoices-vat-options" "delete-invoices-invoice-id" "get-invoices-invoice-id" "put-invoices-invoice-id" "post-invoices-invoice-id-copy" "get-one-invoice-emails" "get-invoice-files" "create-invoice-file" "delete-invoices-invoice-id-files-file-id" "get-one-invoice-files" "post-invoices-invoice-id-link-project-pdf" "post-invoices-invoice-id-unlink-project-pdf" "get-mass-messages-users" "get-mass-messages-users-mass-messages-user-id" "put-mass-messages-users-mass-messages-user-id" "get-materials" "post-materials" "delete-materials-material-id" "get-materials-material-id" "put-materials-material-id" "get-materials-material-id-rentals" "post-materials-material-id-rentals" "post-materials-material-id-rentals-checkout" "delete-materials-material-id-rentals-material-rental-id" "get-materials-material-id-rentals-material-rental-id" "put-materials-material-id-rentals-material-rental-id" "get-offer-statuses" "post-offer-statuses" "delete-offer-statuses-bulk-delete" "delete-offer-statuses-offer-status-id" "get-offer-statuses-offer-status-id" "put-offer-statuses-offer-status-id" "get-offers" "post-offers" "delete-offers-offer-id" "get-offers-offer-id" "put-offers-offer-id" "get-offers-offer-id-changelog" "get-overview-rejection-reasons" "get-payment-term-types" "get-payment-term-types-payment-term-type-id" "get-payment-terms" "get-payment-terms-erp" "get-payment-terms-payment-term-id" "get-ping" "get-products" "post-products" "bulk-delete-products" "post-products-undelete-product-id" "delete-products-product-id" "get-products-product-id" "put-products-product-id" "upload-or-delete-product-image" "get-products-product-id-variants" "post-products-product-id-variants" "delete-products-product-id-variants-variant-type-variant-id" "get-project-custom-field-attributes" "get-project-custom-field-attributes-project-custom-field-attribute-id" "get-project-status-types" "get-project-statuses" "post-project-statuses" "post-project-statuses-add-default" "delete-project-statuses-bulk-delete" "delete-project-statuses-project-status-id" "get-project-statuses-project-status-id" "put-project-statuses-project-status-id" "get-projects" "post-projects" "get-projects-has-projects-with-custom-statuses" "delete-projects-project-id" "get-projects-project-id" "put-projects-project-id" "get-projects-project-id-all-files" "get-projects-project-id-files" "delete-projects-project-id-files-file-id" "get-projects-project-id-files-file-id" "put-projects-project-id-files-file-id" "get-projects-project-id-project-files" "post-projects-project-id-project-files" "delete-projects-project-id-project-files-project-file-id" "get-projects-project-id-project-files-project-file-id" "put-projects-project-id-project-files-project-file-id" "post-projects-project-id-send-bulk-pdf" "get-projects-project-id-users" "post-projects-project-id-users" "delete-projects-project-id-users-user-id" "get-projects-project-id-users-user-id" "get-reports" "get-roles" "get-stock-locations" "post-stock-locations" "delete-stock-locations-location-id" "get-stock-locations-location-id" "put-stock-locations-location-id" "get-time-entries" "post-time-entries" "delete-time-entries-time-entry-id" "get-time-entries-time-entry-id" "put-time-entries-time-entry-id" "get-time-entry-intervals" "get-time-entry-intervals-time-entry-interval-id" "get-time-entry-rates" "post-time-entry-rates" "delete-time-entry-rates-time-entry-rate-id" "get-time-entry-rates-time-entry-rate-id" "put-time-entry-rates-time-entry-rate-id" "get-time-entry-rule-groups" "get-time-entry-types" "post-time-entry-types" "bulk-activate-time-entry-types" "bulk-deactivate-time-entry-types" "bulk-delete-time-entry-types" "delete-time-entry-types-time-entry-type-id" "get-time-entry-types-time-entry-type-id" "put-time-entry-types-time-entry-type-id" "get-time-entry-unit-types" "get-time-entry-unit-types-time-entry-unit-type-id" "get-time-entry-value-types" "get-time-entry-value-types-time-entry-value-type-id" "get-user-custom-field-attributes" "get-user-custom-field-attributes-user-custom-field-attribute-id" "get-users" "post-users" "users-bulk-activate" "users-bulk-deactivate" "get-users-resend-welcome-sms" "delete-users-user-id" "get-users-user-id" "put-users-user-id" "get-users-user-id-integration-settings" "post-users-user-id-integration-settings" "delete-users-user-id-integration-settings-integration-settings-user-id" "get-users-user-id-integration-settings-integration-settings-user-id" "put-users-user-id-integration-settings-integration-settings-user-id" "post-users-user-id-upload-image" "get-users-user-id-user-custom-field-value" "get-users-user-id-user-custom-field-value-user-custom-field-value-id" "put-users-user-id-user-custom-field-value-user-custom-field-value-id" "get-vendor-product-price-files" "post-vendor-product-price-files" "get-vendor-product-price-files-vendor-product-price-file-id" "get-vendor-products" "get-vendor-products-vendor-product-id" "get-vendors-list" "add-vendor" "delete-vendors-vendor-id" "get-vendor" "edit-vendor" "get-wages-download-salary-file" "post-wall-comments" "get-wall-comments-wall-comment-id" "get-wall-posts" "post-wall-posts" "get-wall-posts-wall-post-id" "get-wall-posts-wall-post-id-wall-comments" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -191,7 +215,7 @@ export def "get-activities" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, hex_code: string, id: string, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, hex_code: string, id: string, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/activities" $auth.query)
@@ -226,7 +250,7 @@ export def "post-activities" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hex-code: string
   --name: string
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -263,7 +287,7 @@ export def "delete-activities-bulk-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -300,7 +324,7 @@ export def "delete-activities-activity-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activity_id' must be non-empty" } }
@@ -337,7 +361,7 @@ export def "put-activities-activity-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hex-code: string
   --name: string
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -377,7 +401,7 @@ export def "get-cities" [
   --zip-code: string # Used to search for a city with specific zip code
   --name: string # Used to search for a city by name
   --include-all: oneof<nothing, bool> # Used to search for a city without filtering by country
-]: nothing -> record<data: table<created: string, deleted: string, id: string, modified: string, name: string, zip_code: int>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, deleted: string, id: string, modified: string, name: string, zip_code: int>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "zip_code" $zip_code "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "include_all" $include_all "scalar")] | flatten | str join "&"
@@ -412,7 +436,7 @@ export def "get-cities-city-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, deleted: string, id: string, modified: string, name: string, zip_code: int>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, deleted: string, id: string, modified: string, name: string, zip_code: int>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($city_id | is-empty) { error make --unspanned { msg: "path parameter 'city_id' must be non-empty" } }
@@ -447,7 +471,7 @@ export def "get-clocking-records" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --active: oneof<nothing, bool> # Used to search for active clocking records
-]: nothing -> record<data: table<checked_in: string, checked_out: string, checkin_latitude: string, checkin_longitude: string, checkout_latitude: string, checkout_longitude: string, created: string, created_by_id: string, deleted: string, id: string, modified: string, modified_by_id: string, project_id: string, user_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<checked_in: string, checked_out: string, checkin_latitude: string, checkin_longitude: string, checkout_latitude: string, checkout_longitude: string, created: string, created_by_id: string, deleted: string, id: string, modified: string, modified_by_id: string, project_id: string, user_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "active" $active "scalar")] | flatten | str join "&"
@@ -486,7 +510,7 @@ export def "post-clocking-records" [
   --checkout-latitude: string
   --checkout-longitude: string
   --project-id: string # format: uuid
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -522,7 +546,7 @@ export def "post-clocking-records-checkout" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/clocking_records/checkout" $auth.query)
@@ -556,7 +580,7 @@ export def "delete-clocking-records-clocking-record-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($clocking_record_id | is-empty) { error make --unspanned { msg: "path parameter 'clocking_record_id' must be non-empty" } }
@@ -591,7 +615,7 @@ export def "get-clocking-records-clocking-record-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<checked_in: string, checked_out: string, checkin_latitude: string, checkin_longitude: string, checkout_latitude: string, checkout_longitude: string, created: string, created_by_id: string, deleted: string, id: string, modified: string, modified_by_id: string, project_id: string, user_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<checked_in: string, checked_out: string, checkin_latitude: string, checkin_longitude: string, checkout_latitude: string, checkout_longitude: string, created: string, created_by_id: string, deleted: string, id: string, modified: string, modified_by_id: string, project_id: string, user_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($clocking_record_id | is-empty) { error make --unspanned { msg: "path parameter 'clocking_record_id' must be non-empty" } }
@@ -626,7 +650,7 @@ export def "put-clocking-records-clocking-record-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($clocking_record_id | is-empty) { error make --unspanned { msg: "path parameter 'clocking_record_id' must be non-empty" } }
@@ -660,7 +684,7 @@ export def "get-companies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<city_id: string, contact_person_id: string, country_id: string, created: string, created_by_id: string, cvr: string, deleted: string, expired: string, file_id: string, id: string, invoice_email: string, language_id: string, modified: string, name: string, next_invoice_number: int, next_offer_number: int, next_project_number: int, phone: string, phone_countrycode: string, receive_form_mails: string, street_name: string, vat_percent: int, website: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<city_id: string, contact_person_id: string, country_id: string, created: string, created_by_id: string, cvr: string, deleted: string, expired: string, file_id: string, id: string, invoice_email: string, language_id: string, modified: string, name: string, next_invoice_number: int, next_offer_number: int, next_project_number: int, phone: string, phone_countrycode: string, receive_form_mails: string, street_name: string, vat_percent: int, website: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/companies" $auth.query)
@@ -693,7 +717,7 @@ export def "get-companies-subscription-self-service" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<subscription_self_service_url: string>, success: bool> {
+]: nothing -> oneof<record<data: record<subscription_self_service_url: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/companies/subscription_self_service" $auth.query)
@@ -727,7 +751,7 @@ export def "get-companies-company-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<city_id: string, contact_person_id: string, country_id: string, created: string, created_by_id: string, cvr: string, deleted: string, expired: string, file_id: string, id: string, invoice_email: string, language_id: string, modified: string, name: string, next_invoice_number: int, next_offer_number: int, next_project_number: int, phone: string, phone_countrycode: string, receive_form_mails: string, street_name: string, vat_percent: int, website: string>, success: bool> {
+]: nothing -> oneof<record<data: record<city_id: string, contact_person_id: string, country_id: string, created: string, created_by_id: string, cvr: string, deleted: string, expired: string, file_id: string, id: string, invoice_email: string, language_id: string, modified: string, name: string, next_invoice_number: int, next_offer_number: int, next_project_number: int, phone: string, phone_countrycode: string, receive_form_mails: string, street_name: string, vat_percent: int, website: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
@@ -762,7 +786,7 @@ export def "get-companies-company-id-companies-integration-feature-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, id: string, integration_feature_setting_id: string, modified: string, value: string>, success: bool> {
+]: nothing -> oneof<record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, id: string, integration_feature_setting_id: string, modified: string, value: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
@@ -799,7 +823,7 @@ export def "post-companies-company-id-companies-integration-feature-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --integration-feature-setting-id: string # format: uuid
   --value: string
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -838,7 +862,7 @@ export def "get-companies-company-id-companies-integration-feature-settings-c-in
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, id: string, integration_feature_setting_id: string, modified: string, value: string>, success: bool> {
+]: nothing -> oneof<record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, id: string, integration_feature_setting_id: string, modified: string, value: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
@@ -875,7 +899,7 @@ export def "put-companies-company-id-companies-integration-feature-settings-c-in
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, id: string, integration_feature_setting_id: string, modified: string, value: string>, success: bool> {
+]: nothing -> oneof<record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, id: string, integration_feature_setting_id: string, modified: string, value: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
@@ -912,7 +936,7 @@ export def "get-companies-company-id-form-templates" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --form-template-id: string # required
-]: nothing -> record<data: list<any>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: list<any>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
@@ -950,7 +974,7 @@ export def "delete-companies-company-id-form-templates-form-template-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
@@ -988,7 +1012,7 @@ export def "get-companies-company-id-form-templates-form-template-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # required
-]: nothing -> record<data: list<any>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: list<any>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
@@ -1026,7 +1050,7 @@ export def "get-companies-company-id-integration-feature-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, created_by_id: string, default_value: string, deleted: string, description: string, id: string, identifier: string, integration_feature_id: string, is_custom_setting: bool, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, default_value: string, deleted: string, description: string, id: string, identifier: string, integration_feature_id: string, is_custom_setting: bool, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
@@ -1062,7 +1086,7 @@ export def "get-companies-company-id-integration-feature-settings-integration-fe
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, created_by_id: string, default_value: string, deleted: string, description: string, id: string, identifier: string, integration_feature_id: string, is_custom_setting: bool, modified: string, name: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, created_by_id: string, default_value: string, deleted: string, description: string, id: string, identifier: string, integration_feature_id: string, is_custom_setting: bool, modified: string, name: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
@@ -1099,7 +1123,7 @@ export def "get-companies-company-id-integration-settings" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --identifier: string # The identifier of an ERP integration
-]: nothing -> record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, id: string, integration_setting_id: string, modified: string, value: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, id: string, integration_setting_id: string, modified: string, value: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
@@ -1137,7 +1161,7 @@ export def "post-companies-company-id-integration-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --integration-setting-id: string # format: uuid
   --value: string
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1176,7 +1200,7 @@ export def "delete-companies-company-id-integration-settings-companies-integrati
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
@@ -1213,7 +1237,7 @@ export def "get-companies-company-id-integration-settings-companies-integration-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, id: string, integration_setting_id: string, modified: string, value: string>, success: bool> {
+]: nothing -> oneof<record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, id: string, integration_setting_id: string, modified: string, value: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
@@ -1250,7 +1274,7 @@ export def "put-companies-company-id-integration-settings-companies-integration-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
@@ -1288,7 +1312,7 @@ export def "delete-companies-company-id-price-margins-price-margins-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --price-margin-id: string # required
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
@@ -1327,7 +1351,7 @@ export def "get-companies-company-id-price-margins-price-margins-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<amount_from: float, amount_to: float, company_id: string, created: string, deleted: string, id: string, modified: string, percentage_ratio: float, ratio: float, type: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<amount_from: float, amount_to: float, company_id: string, created: string, deleted: string, id: string, modified: string, percentage_ratio: float, ratio: float, type: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'company_id' must be non-empty" } }
@@ -1366,7 +1390,7 @@ export def "post-companies-company-id-price-margins-price-margins-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # format: uuid
   --value: string
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1405,7 +1429,7 @@ export def "get-compaies-vendors-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<company_id: string, company_password: string, created: string, created_by_id: string, deleted: string, delivery_price: float, free_delivery_price: float, id: string, is_active: bool, modified: string, modified_by_id: string, receive_automatic_price_files: bool, receive_invoice_mails: bool, reviewed: bool, use_price_files: bool, username: string, vendor: record, vendor_account_reference: string, vendor_department_id: string, vendor_email: string, vendor_id: string, vendor_name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<company_id: string, company_password: string, created: string, created_by_id: string, deleted: string, delivery_price: float, free_delivery_price: float, id: string, is_active: bool, modified: string, modified_by_id: string, receive_automatic_price_files: bool, receive_invoice_mails: bool, reviewed: bool, use_price_files: bool, username: string, vendor: record, vendor_account_reference: string, vendor_department_id: string, vendor_email: string, vendor_id: string, vendor_name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/companies_vendors" $auth.query)
@@ -1454,7 +1478,7 @@ export def "add-companies-vendor" [
   --vendor-email: string
   --vendor-id: string # format: uuid
   --vendor-name: string
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1492,7 +1516,7 @@ export def "bulk-companies-vendors" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1529,7 +1553,7 @@ export def "delete-companies-vendors-companies-vendor-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($companies_vendor_id | is-empty) { error make --unspanned { msg: "path parameter 'companies_vendor_id' must be non-empty" } }
@@ -1565,7 +1589,7 @@ export def "get-companies-vendor" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<company_id: string, company_password: string, created: string, created_by_id: string, deleted: string, delivery_price: float, free_delivery_price: float, id: string, is_active: bool, modified: string, modified_by_id: string, receive_automatic_price_files: bool, receive_invoice_mails: bool, reviewed: bool, use_price_files: bool, username: string, vendor: record<created: string, cvr: string, deleted: string, email: string, id: string, identifier: string, is_custom: bool, modified: string, name: string>, vendor_account_reference: string, vendor_department_id: string, vendor_email: string, vendor_id: string, vendor_name: string>, success: bool> {
+]: nothing -> oneof<record<data: record<company_id: string, company_password: string, created: string, created_by_id: string, deleted: string, delivery_price: float, free_delivery_price: float, id: string, is_active: bool, modified: string, modified_by_id: string, receive_automatic_price_files: bool, receive_invoice_mails: bool, reviewed: bool, use_price_files: bool, username: string, vendor: record<created: string, cvr: string, deleted: string, email: string, id: string, identifier: string, is_custom: bool, modified: string, name: string>, vendor_account_reference: string, vendor_department_id: string, vendor_email: string, vendor_id: string, vendor_name: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($companies_vendor_id | is-empty) { error make --unspanned { msg: "path parameter 'companies_vendor_id' must be non-empty" } }
@@ -1616,7 +1640,7 @@ export def "edit-companies-vendor" [
   --vendor-email: string
   --vendor-id: string # format: uuid
   --vendor-name: string
-]: any -> record<data: list<record>, success: bool> {
+]: any -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1655,7 +1679,7 @@ export def "get-companies-vendors-expense-statistics" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<last_month: list, thirty_days: list, vendor_id: string>> {
+]: nothing -> oneof<record<data: table<last_month: list, thirty_days: list, vendor_id: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($companies_vendor_id | is-empty) { error make --unspanned { msg: "path parameter 'companies_vendor_id' must be non-empty" } }
@@ -1692,7 +1716,7 @@ export def "get-compay-settings-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Filter by name
   --description: string # Filter by description
-]: nothing -> record<data: record<company_settings_category_id: string, created: string, created_by_id: string, default_value: string, deleted: string, description: string, feature_id: string, id: string, identifier: string, modified: string, modified_by_id: string, name: string, options: string, placement: int, type: string>, success: bool> {
+]: nothing -> oneof<record<data: record<company_settings_category_id: string, created: string, created_by_id: string, default_value: string, deleted: string, description: string, feature_id: string, id: string, identifier: string, modified: string, modified_by_id: string, name: string, options: string, placement: int, type: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar")] | flatten | str join "&"
@@ -1726,7 +1750,7 @@ export def "get-contact-custom-field-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<access_type: string, company_id: string, created: string, created_by_id: string, deleted: string, id: string, is_active: bool, modified: string, name: string, placement: int>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<access_type: string, company_id: string, created: string, created_by_id: string, deleted: string, id: string, is_active: bool, modified: string, name: string, placement: int>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contact_custom_field_attributes" $auth.query)
@@ -1760,7 +1784,7 @@ export def "get-contact-custom-field-attributes-contact-custom-field-attribute-i
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<access_type: string, company_id: string, created: string, created_by_id: string, deleted: string, id: string, is_active: bool, modified: string, name: string, placement: int>, success: bool> {
+]: nothing -> oneof<record<data: record<access_type: string, company_id: string, created: string, created_by_id: string, deleted: string, id: string, is_active: bool, modified: string, name: string, placement: int>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_custom_field_attribute_id | is-empty) { error make --unspanned { msg: "path parameter 'contact_custom_field_attribute_id' must be non-empty" } }
@@ -1795,7 +1819,7 @@ export def "get-contact-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --identifier: string # Search for specific identifier value
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "identifier" $identifier "scalar")] | flatten | str join "&"
@@ -1830,7 +1854,7 @@ export def "get-contact-types-contact-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_type_id | is-empty) { error make --unspanned { msg: "path parameter 'contact_type_id' must be non-empty" } }
@@ -1871,7 +1895,7 @@ export def "get-contacts" [
   --contact-type: string # Used to show only contacts with with one specific `ContactType` (format: uuid)
   --city: string # Used to show only contacts with with one specific `City`
   --modified-gte: string # format: datetime
-]: nothing -> record<data: table<address: string, centiga_id: string, city_id: string, company_id: string, country_id: string, created: string, created_by_id: string, cvr: string, deleted: string, description: string, email: string, erp_id: string, id: string, modified: string, name: string, phone: string, pogo_id: string, tripletex_id: string, website: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<address: string, centiga_id: string, city_id: string, company_id: string, country_id: string, created: string, created_by_id: string, cvr: string, deleted: string, description: string, email: string, erp_id: string, id: string, modified: string, name: string, phone: string, pogo_id: string, tripletex_id: string, website: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "cvr" $cvr "scalar") (serialize-qp "ean" $ean "scalar") (serialize-qp "erp_id" $erp_id "scalar") (serialize-qp "contact_type" $contact_type "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "modified_gte" $modified_gte "scalar")] | flatten | str join "&"
@@ -1895,7 +1919,6 @@ export def "get-contacts" [
 # Add a new contact
 #
 # POST /contacts
-# --contact_types shape: {_ids?: list<string>}
 export def "post-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1916,7 +1939,7 @@ export def "post-contacts" [
   --name: string
   --phone: string # Format like eg. `28680133` or `046158971404`
   --website: string
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1954,7 +1977,7 @@ export def "bulk-delete-contacts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -1991,7 +2014,7 @@ export def "delete-contacts-contact-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contact_id' must be non-empty" } }
@@ -2026,7 +2049,7 @@ export def "get-contacts-contact-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<address: string, centiga_id: string, city_id: string, company_id: string, country_id: string, created: string, created_by_id: string, cvr: string, deleted: string, description: string, email: string, erp_id: string, id: string, modified: string, name: string, phone: string, pogo_id: string, tripletex_id: string, website: string>, success: bool> {
+]: nothing -> oneof<record<data: record<address: string, centiga_id: string, city_id: string, company_id: string, country_id: string, created: string, created_by_id: string, cvr: string, deleted: string, description: string, email: string, erp_id: string, id: string, modified: string, name: string, phone: string, pogo_id: string, tripletex_id: string, website: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contact_id' must be non-empty" } }
@@ -2050,7 +2073,6 @@ export def "get-contacts-contact-id" [
 # Edit a contact
 #
 # PUT /contacts/{contact_id}
-# --contact_types shape: {_ids?: list<string>}
 export def "put-contacts-contact-id" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2072,7 +2094,7 @@ export def "put-contacts-contact-id" [
   --name: string
   --phone: string # Format like eg. `28680133` or `046158971404`
   --website: string
-]: any -> record<data: list<record>, success: bool> {
+]: any -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2110,7 +2132,7 @@ export def "get-contacts-contact-id-contact-custom-field-values" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<contact_custom_field_attribute_id: string, contact_id: string, created: string, created_by_id: string, deleted: string, id: string, modified: string, value: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<contact_custom_field_attribute_id: string, contact_id: string, created: string, created_by_id: string, deleted: string, id: string, modified: string, value: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contact_id' must be non-empty" } }
@@ -2149,7 +2171,7 @@ export def "get-contact-persons-list" [
   --q: string
   --created-gte: string # format: date
   --created-lte: string # format: date
-]: nothing -> record<data: table<contact_id: string, created: string, created_by_id: string, deleted: string, email: string, id: string, modified: string, name: string, phone: string, title: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<contact_id: string, created: string, created_by_id: string, deleted: string, email: string, id: string, modified: string, name: string, phone: string, title: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contact_id' must be non-empty" } }
@@ -2190,7 +2212,7 @@ export def "add-contact-person" [
   --name: string
   --phone: string
   --title: string
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2229,7 +2251,7 @@ export def "delete-contacts-contact-id-contact-persons-contact-person-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contact_id' must be non-empty" } }
@@ -2267,7 +2289,7 @@ export def "get-contact-person" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<contact_id: string, created: string, created_by_id: string, deleted: string, email: string, id: string, modified: string, name: string, phone: string, title: string>, success: bool> {
+]: nothing -> oneof<record<data: record<contact_id: string, created: string, created_by_id: string, deleted: string, email: string, id: string, modified: string, name: string, phone: string, title: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contact_id' must be non-empty" } }
@@ -2309,7 +2331,7 @@ export def "edit-contact-person" [
   --name: string
   --phone: string
   --title: string
-]: any -> record<data: list<record>, success: bool> {
+]: any -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2347,7 +2369,7 @@ export def "get-countries" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, currency_id: string, deleted: string, id: string, identifier: string, language_id: string, modified: string, name: string, phone_code: string, time_zone: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, currency_id: string, deleted: string, id: string, identifier: string, language_id: string, modified: string, name: string, phone_code: string, time_zone: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/countries" $auth.query)
@@ -2381,7 +2403,7 @@ export def "get-countries-country-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, currency_id: string, deleted: string, id: string, identifier: string, language_id: string, modified: string, name: string, phone_code: string, time_zone: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, currency_id: string, deleted: string, id: string, identifier: string, language_id: string, modified: string, name: string, phone_code: string, time_zone: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($country_id | is-empty) { error make --unspanned { msg: "path parameter 'country_id' must be non-empty" } }
@@ -2415,7 +2437,7 @@ export def "get-currencies" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<centiga_id: string, created: string, currency_sign: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string, pogo_id: string, tripletex_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<centiga_id: string, created: string, currency_sign: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string, pogo_id: string, tripletex_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/currencies" $auth.query)
@@ -2449,7 +2471,7 @@ export def "get-currencies-currency-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<centiga_id: string, created: string, currency_sign: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string, pogo_id: string, tripletex_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<centiga_id: string, created: string, currency_sign: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string, pogo_id: string, tripletex_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($currency_id | is-empty) { error make --unspanned { msg: "path parameter 'currency_id' must be non-empty" } }
@@ -2487,7 +2509,7 @@ export def "get-driving-types" [
   --q: string
   --sort: string
   --direction: string
-]: nothing -> record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, employee_price: float, erp_id: string, id: string, invoice_price: float, modified: string, modified_by_id: string, name: string, salary_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, employee_price: float, erp_id: string, id: string, invoice_price: float, modified: string, modified_by_id: string, name: string, salary_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "direction" $direction "scalar")] | flatten | str join "&"
@@ -2528,7 +2550,7 @@ export def "post-driving-types" [
   invoice_price: float # format: float
   name: string
   --salary-id: string
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2566,7 +2588,7 @@ export def "bulk-delete-driving-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2604,7 +2626,7 @@ export def "delete-driving-types-driving-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($driving_type_id | is-empty) { error make --unspanned { msg: "path parameter 'driving_type_id' must be non-empty" } }
@@ -2641,7 +2663,7 @@ export def "get-driving-types-driving-type-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-driving-type-id: string # required
-]: nothing -> record<company_id: string, created: string, created_by_id: string, deleted: string, employee_price: float, erp_id: string, id: string, invoice_price: float, modified: string, modified_by_id: string, name: string, salary_id: string> {
+]: nothing -> oneof<record<company_id: string, created: string, created_by_id: string, deleted: string, employee_price: float, erp_id: string, id: string, invoice_price: float, modified: string, modified_by_id: string, name: string, salary_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($driving_type_id | is-empty) { error make --unspanned { msg: "path parameter 'driving_type_id' must be non-empty" } }
@@ -2679,7 +2701,7 @@ export def "put-driving-types-driving-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<company_id: string, created: string, created_by_id: string, deleted: string, employee_price: float, erp_id: string, id: string, invoice_price: float, modified: string, modified_by_id: string, name: string, salary_id: string> {
+]: nothing -> oneof<record<company_id: string, created: string, created_by_id: string, deleted: string, employee_price: float, erp_id: string, id: string, invoice_price: float, modified: string, modified_by_id: string, name: string, salary_id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($driving_type_id | is-empty) { error make --unspanned { msg: "path parameter 'driving_type_id' must be non-empty" } }
@@ -2715,7 +2737,7 @@ export def "get-employee-hours" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date-from: string # Date formatted as Y-m-d (2016-06-28) (required)
   --date-to: string # Date formatted as Y-m-d (2016-06-28) (required)
-]: nothing -> record<data: table<form_date: string, form_id: string, project_name: string, total_hours: int, working_description: string, working_description_full: string>, success: bool> {
+]: nothing -> oneof<record<data: table<form_date: string, form_id: string, project_name: string, total_hours: int, working_description: string, working_description_full: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($date_from == null) { error make --unspanned { msg: "required query parameter 'date_from' missing: pass --date-from" } }
@@ -2761,7 +2783,7 @@ export def "get-events" [
   --end-eq: string # format: datetime
   --tags: string # List events with given tag ids separated by comma. Example tags=0377d6ce-db5e-4b1e-ac3a-8ca39ea3142e,8cec327e-a559-4b40-9ed6-316b9de46743 (format: string)
   --without-users: oneof<nothing, bool> # List events without attached user
-]: nothing -> record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, description: string, end: string, id: string, modified: string, modified_by_id: string, name: string, project_id: string, start: string, user_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, description: string, end: string, id: string, modified: string, modified_by_id: string, name: string, project_id: string, start: string, user_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "project_id" $project_id "scalar") (serialize-qp "start[][gt]" $start_gt "scalar") (serialize-qp "start[][lt]" $start_lt "scalar") (serialize-qp "start[][eq]" $start_eq "scalar") (serialize-qp "end[][gt]" $end_gt "scalar") (serialize-qp "end[][lt]" $end_lt "scalar") (serialize-qp "end[][eq]" $end_eq "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "without_users" $without_users "scalar")] | flatten | str join "&"
@@ -2801,7 +2823,7 @@ export def "post-events" [
   --project-id: string # format: uuid
   --start: string # format: datetime
   --user-id: string # format: uuid
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -2840,7 +2862,7 @@ export def "get-events-is-user-free" [
   --user-id: string # required, format: uuid
   --start: string # required, format: dateTime
   --end: string # required, format: dateTime
-]: nothing -> record<result: bool, success: bool> {
+]: nothing -> oneof<record<result: bool, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id == null) { error make --unspanned { msg: "required query parameter 'user_id' missing: pass --user-id" } }
@@ -2878,7 +2900,7 @@ export def "delete-events-event-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, description: string, end: string, id: string, modified: string, modified_by_id: string, name: string, project_id: string, start: string, user_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, description: string, end: string, id: string, modified: string, modified_by_id: string, name: string, project_id: string, start: string, user_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
@@ -2913,7 +2935,7 @@ export def "get-events-event-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, description: string, end: string, id: string, modified: string, modified_by_id: string, name: string, project_id: string, start: string, user_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, description: string, end: string, id: string, modified: string, modified_by_id: string, name: string, project_id: string, start: string, user_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
@@ -2948,7 +2970,7 @@ export def "put-events-event-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, description: string, end: string, id: string, modified: string, modified_by_id: string, name: string, project_id: string, start: string, user_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, description: string, end: string, id: string, modified: string, modified_by_id: string, name: string, project_id: string, start: string, user_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'event_id' must be non-empty" } }
@@ -2984,7 +3006,7 @@ export def "get-expense-files" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --created-by-id: string # format: uuid
   --expense-id: string # format: uuid
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, description: string, expense_id: string, file: string, file_extension: string, file_original_name: string, file_size: string, file_type: string, file_url: string, id: string, modified: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, description: string, expense_id: string, file: string, file_extension: string, file_original_name: string, file_size: string, file_type: string, file_url: string, id: string, modified: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "created_by_id" $created_by_id "scalar") (serialize-qp "expense_id" $expense_id "scalar")] | flatten | str join "&"
@@ -3020,7 +3042,7 @@ export def "post-expense-files" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
   file: string # format: binary
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -3059,7 +3081,7 @@ export def "delete-expense-files-expense-file-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($expense_file_id | is-empty) { error make --unspanned { msg: "path parameter 'expense_file_id' must be non-empty" } }
@@ -3094,7 +3116,7 @@ export def "get-expense-files-expense-file-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($expense_file_id | is-empty) { error make --unspanned { msg: "path parameter 'expense_file_id' must be non-empty" } }
@@ -3129,7 +3151,7 @@ export def "put-expense-files-expense-file-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record, success: bool> {
+]: nothing -> oneof<record<data: record, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($expense_file_id | is-empty) { error make --unspanned { msg: "path parameter 'expense_file_id' must be non-empty" } }
@@ -3166,7 +3188,7 @@ export def "get-expense-lines" [
   --created-by-id: string # format: uuid
   --currency-id: string # format: uuid
   --expense-id: string # format: uuid
-]: nothing -> record<data: table<buying_price: float, created: string, created_by_id: string, currency_id: string, deleted: string, expense_id: string, id: string, is_invoiced: string, modified: string, quantity: int, selling_price: float, text: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<buying_price: float, created: string, created_by_id: string, currency_id: string, deleted: string, expense_id: string, id: string, is_invoiced: string, modified: string, quantity: int, selling_price: float, text: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "created_by_id" $created_by_id "scalar") (serialize-qp "currency_id" $currency_id "scalar") (serialize-qp "expense_id" $expense_id "scalar")] | flatten | str join "&"
@@ -3206,7 +3228,7 @@ export def "post-expense-lines" [
   --quantity: int # format: int32
   --selling-price: float # format: float
   --text: string
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -3243,7 +3265,7 @@ export def "delete-expense-lines-expense-line-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<buying_price: float, created: string, created_by_id: string, currency_id: string, deleted: string, expense_id: string, id: string, is_invoiced: string, modified: string, quantity: int, selling_price: float, text: string>, success: bool> {
+]: nothing -> oneof<record<data: record<buying_price: float, created: string, created_by_id: string, currency_id: string, deleted: string, expense_id: string, id: string, is_invoiced: string, modified: string, quantity: int, selling_price: float, text: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($expense_line_id | is-empty) { error make --unspanned { msg: "path parameter 'expense_line_id' must be non-empty" } }
@@ -3278,7 +3300,7 @@ export def "get-expense-lines-expense-line-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<buying_price: float, created: string, created_by_id: string, currency_id: string, deleted: string, expense_id: string, id: string, is_invoiced: string, modified: string, quantity: int, selling_price: float, text: string>, success: bool> {
+]: nothing -> oneof<record<data: record<buying_price: float, created: string, created_by_id: string, currency_id: string, deleted: string, expense_id: string, id: string, is_invoiced: string, modified: string, quantity: int, selling_price: float, text: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($expense_line_id | is-empty) { error make --unspanned { msg: "path parameter 'expense_line_id' must be non-empty" } }
@@ -3313,7 +3335,7 @@ export def "put-expense-lines-expense-line-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<buying_price: float, created: string, created_by_id: string, currency_id: string, deleted: string, expense_id: string, id: string, is_invoiced: string, modified: string, quantity: int, selling_price: float, text: string>, success: bool> {
+]: nothing -> oneof<record<data: record<buying_price: float, created: string, created_by_id: string, currency_id: string, deleted: string, expense_id: string, id: string, is_invoiced: string, modified: string, quantity: int, selling_price: float, text: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($expense_line_id | is-empty) { error make --unspanned { msg: "path parameter 'expense_line_id' must be non-empty" } }
@@ -3359,7 +3381,7 @@ export def "get-expenses" [
   --min-amount: float # Expenses `total_selling_price` > `min_amount` (format: float)
   --max-amount: float # Expenses `total_selling_price` < `max_amount` (format: float)
   --projects: string@projects-completer # You can select `all projects`, `no projects` or select `multiple projects`
-]: nothing -> record<data: table<activity_id: string, comment: string, company_id: string, contact_id: string, created: string, created_by_id: string, currency_id: string, deleted: string, delivery_date: string, description: string, due_date: string, file_reference: string, id: string, is_imported: string, modified: string, order_number: string, project_id: string, readsoft_id: string, reference: string, roger_id: string, sent_to_email: string, short_text: string, status: string, supplier_invoice_number: string, total_buying_price: float, total_selling_price: float>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<activity_id: string, comment: string, company_id: string, contact_id: string, created: string, created_by_id: string, currency_id: string, deleted: string, delivery_date: string, description: string, due_date: string, file_reference: string, id: string, is_imported: string, modified: string, order_number: string, project_id: string, readsoft_id: string, reference: string, roger_id: string, sent_to_email: string, short_text: string, status: string, supplier_invoice_number: string, total_buying_price: float, total_selling_price: float>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "created_by_id" $created_by_id "scalar") (serialize-qp "company_id" $company_id "scalar") (serialize-qp "contact_id" $contact_id "scalar") (serialize-qp "project_id" $project_id "scalar") (serialize-qp "due_date" $due_date "scalar") (serialize-qp "gt_created" $gt_created "scalar") (serialize-qp "lt_created" $lt_created "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "is_imported" $is_imported "scalar") (serialize-qp "min_amount" $min_amount "scalar") (serialize-qp "max_amount" $max_amount "scalar") (serialize-qp "projects" $projects "scalar")] | flatten | str join "&"
@@ -3401,7 +3423,7 @@ export def "post-expenses" [
   --reference: string
   --short-text: string
   --supplier-invoice-number: string
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -3439,7 +3461,7 @@ export def "bulk-delete-expenses" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -3477,7 +3499,7 @@ export def "get-expenses-highest-amount" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --gt-created: string # Used to filter time range (required, format: date)
   --lt-created: string # Used to filter time range (required, format: date)
-]: nothing -> record<data: table<highest_amount: float>, success: bool> {
+]: nothing -> oneof<record<data: table<highest_amount: float>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($gt_created == null) { error make --unspanned { msg: "required query parameter 'gt_created' missing: pass --gt-created" } }
@@ -3515,7 +3537,7 @@ export def "send-emails-expenses" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -3552,7 +3574,7 @@ export def "delete-expenses-expense-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<activity_id: string, comment: string, company_id: string, contact_id: string, created: string, created_by_id: string, currency_id: string, deleted: string, delivery_date: string, description: string, due_date: string, file_reference: string, id: string, is_imported: string, modified: string, order_number: string, project_id: string, readsoft_id: string, reference: string, roger_id: string, sent_to_email: string, short_text: string, status: string, supplier_invoice_number: string, total_buying_price: float, total_selling_price: float>, success: bool> {
+]: nothing -> oneof<record<data: record<activity_id: string, comment: string, company_id: string, contact_id: string, created: string, created_by_id: string, currency_id: string, deleted: string, delivery_date: string, description: string, due_date: string, file_reference: string, id: string, is_imported: string, modified: string, order_number: string, project_id: string, readsoft_id: string, reference: string, roger_id: string, sent_to_email: string, short_text: string, status: string, supplier_invoice_number: string, total_buying_price: float, total_selling_price: float>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($expense_id | is-empty) { error make --unspanned { msg: "path parameter 'expense_id' must be non-empty" } }
@@ -3587,7 +3609,7 @@ export def "get-expenses-expense-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<activity_id: string, comment: string, company_id: string, contact_id: string, created: string, created_by_id: string, currency_id: string, deleted: string, delivery_date: string, description: string, due_date: string, file_reference: string, id: string, is_imported: string, modified: string, order_number: string, project_id: string, readsoft_id: string, reference: string, roger_id: string, sent_to_email: string, short_text: string, status: string, supplier_invoice_number: string, total_buying_price: float, total_selling_price: float>, success: bool> {
+]: nothing -> oneof<record<data: record<activity_id: string, comment: string, company_id: string, contact_id: string, created: string, created_by_id: string, currency_id: string, deleted: string, delivery_date: string, description: string, due_date: string, file_reference: string, id: string, is_imported: string, modified: string, order_number: string, project_id: string, readsoft_id: string, reference: string, roger_id: string, sent_to_email: string, short_text: string, status: string, supplier_invoice_number: string, total_buying_price: float, total_selling_price: float>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($expense_id | is-empty) { error make --unspanned { msg: "path parameter 'expense_id' must be non-empty" } }
@@ -3622,7 +3644,7 @@ export def "put-expenses-expense-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<activity_id: string, comment: string, company_id: string, contact_id: string, created: string, created_by_id: string, currency_id: string, deleted: string, delivery_date: string, description: string, due_date: string, file_reference: string, id: string, is_imported: string, modified: string, order_number: string, project_id: string, readsoft_id: string, reference: string, roger_id: string, sent_to_email: string, short_text: string, status: string, supplier_invoice_number: string, total_buying_price: float, total_selling_price: float>, success: bool> {
+]: nothing -> oneof<record<data: record<activity_id: string, comment: string, company_id: string, contact_id: string, created: string, created_by_id: string, currency_id: string, deleted: string, delivery_date: string, description: string, due_date: string, file_reference: string, id: string, is_imported: string, modified: string, order_number: string, project_id: string, readsoft_id: string, reference: string, roger_id: string, sent_to_email: string, short_text: string, status: string, supplier_invoice_number: string, total_buying_price: float, total_selling_price: float>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($expense_id | is-empty) { error make --unspanned { msg: "path parameter 'expense_id' must be non-empty" } }
@@ -3657,7 +3679,7 @@ export def "get-expenses-expense-id-original-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($expense_id | is-empty) { error make --unspanned { msg: "path parameter 'expense_id' must be non-empty" } }
@@ -3693,7 +3715,7 @@ export def "get-expenses-expense-id-original-files-file-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($expense_id | is-empty) { error make --unspanned { msg: "path parameter 'expense_id' must be non-empty" } }
@@ -3735,7 +3757,7 @@ export def "get-financial-statistics" [
   --project-status-ids: string # format: uuid
   --only-not-invoiced: oneof<nothing, bool>
   --details: oneof<nothing, bool>
-]: nothing -> record<data: record<invoicedAmount: float, invoicedWorkingHours: string, notInvoicedAmount: float, notInvoicedWorkingHours: string, productsCosts: float, productsSales: float, rentalsCosts: float, rentalsSales: float, totalCosts: float, totalSales: float, workTimeCosts: float, workTimeSales: float>, success: bool> {
+]: nothing -> oneof<record<data: record<invoicedAmount: float, invoicedWorkingHours: string, notInvoicedAmount: float, notInvoicedWorkingHours: string, productsCosts: float, productsSales: float, rentalsCosts: float, rentalsSales: float, totalCosts: float, totalSales: float, workTimeCosts: float, workTimeSales: float>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "project_id" $project_id "scalar") (serialize-qp "project_status_ids[]" $project_status_ids "scalar") (serialize-qp "only_not_invoiced" $only_not_invoiced "scalar") (serialize-qp "details" $details "scalar")] | flatten | str join "&"
@@ -3773,7 +3795,7 @@ export def "get-expenses-sales-price" [
   --date-from: string # format: date
   --date-to: string # format: date
   --project-id: string # format: uuid
-]: nothing -> record<expensesSalesPrice: float> {
+]: nothing -> oneof<record<expensesSalesPrice: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "project_id" $project_id "scalar")] | flatten | str join "&"
@@ -3811,7 +3833,7 @@ export def "get-invoiced-amount" [
   --date-from: string # format: date
   --date-to: string # format: date
   --project-id: string # format: uuid
-]: nothing -> record<invoicedAmount: float> {
+]: nothing -> oneof<record<invoicedAmount: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "project_id" $project_id "scalar")] | flatten | str join "&"
@@ -3849,7 +3871,7 @@ export def "get-margin" [
   --date-from: string # format: date
   --date-to: string # format: date
   --project-id: string # format: uuid
-]: nothing -> record<margin: float> {
+]: nothing -> oneof<record<margin: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "project_id" $project_id "scalar")] | flatten | str join "&"
@@ -3887,7 +3909,7 @@ export def "get-material-rentals-cost-price" [
   --date-from: string # format: date
   --date-to: string # format: date
   --project-id: string # format: uuid
-]: nothing -> record<materialRentalsCostPrice: float> {
+]: nothing -> oneof<record<materialRentalsCostPrice: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "project_id" $project_id "scalar")] | flatten | str join "&"
@@ -3925,7 +3947,7 @@ export def "get-financial-statistics-overview" [
   --date-from: string # format: date
   --date-to: string # format: date
   --project-id: string # format: uuid
-]: nothing -> record<data: record<expensesSalesPrice: float, invoicedAmount: float, margin: float, materialRentalsCostPrice: float, productsCostPrice: float, totalWorkingHours: string>, success: bool> {
+]: nothing -> oneof<record<data: record<expensesSalesPrice: float, invoicedAmount: float, margin: float, materialRentalsCostPrice: float, productsCostPrice: float, totalWorkingHours: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "project_id" $project_id "scalar")] | flatten | str join "&"
@@ -3963,7 +3985,7 @@ export def "get-products-cost-price" [
   --date-from: string # format: date
   --date-to: string # format: date
   --project-id: string # format: uuid
-]: nothing -> record<productsCostPrice: float> {
+]: nothing -> oneof<record<productsCostPrice: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "project_id" $project_id "scalar")] | flatten | str join "&"
@@ -4000,7 +4022,7 @@ export def "get-financial-statistics-working-hours" [
   --date-from: string # format: date
   --date-to: string # format: date
   --project-id: string # format: uuid
-]: nothing -> record<normalWorkingHours: string, timeEntries: table<id: string, name: string, total: string>, totalWorkingHours: string> {
+]: nothing -> oneof<record<normalWorkingHours: string, timeEntries: table<id: string, name: string, total: string>, totalWorkingHours: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "project_id" $project_id "scalar")] | flatten | str join "&"
@@ -4036,7 +4058,7 @@ export def "get-form-field-types" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Used to filter on the `name` of the form_fields
   --identifier: string # Used to filter on the `identifier` of the form_fields
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "identifier" $identifier "scalar")] | flatten | str join "&"
@@ -4071,7 +4093,7 @@ export def "get-form-field-types-form-field-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($form_field_type_id | is-empty) { error make --unspanned { msg: "path parameter 'form_field_type_id' must be non-empty" } }
@@ -4112,7 +4134,7 @@ export def "post-form-fields" [
   --form-id: string # format: uuid
   --form-template-field-id: string # format: uuid
   --placement: int # format: int32
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -4149,7 +4171,7 @@ export def "get-form-fields-form-field-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<comment: string, content_value: string, created: string, created_by_id: string, deleted: string, file_id: string, form_field_type_id: string, form_id: string, form_template_field_id: string, id: string, modified: string, placement: int>, success: bool> {
+]: nothing -> oneof<record<data: record<comment: string, content_value: string, created: string, created_by_id: string, deleted: string, file_id: string, form_field_type_id: string, form_id: string, form_template_field_id: string, id: string, modified: string, placement: int>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($form_field_id | is-empty) { error make --unspanned { msg: "path parameter 'form_field_id' must be non-empty" } }
@@ -4187,7 +4209,7 @@ export def "get-form-templates" [
   --identifier: string # Used to filter on the `identifier` of the form_templates
   --pdf-template-identifier: string # Used to filter on the `pdf_template_identifier` of the form_templates
   --description: string # Used to filter on the `description` of the form_templates
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, description: string, form_category_id: string, form_overview_category_id: string, id: string, identifier: string, is_active: bool, modified: string, name: string, pdf_template_identifier: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, description: string, form_category_id: string, form_overview_category_id: string, id: string, identifier: string, is_active: bool, modified: string, name: string, pdf_template_identifier: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "identifier" $identifier "scalar") (serialize-qp "pdf_template_identifier" $pdf_template_identifier "scalar") (serialize-qp "description" $description "scalar")] | flatten | str join "&"
@@ -4222,7 +4244,7 @@ export def "get-form-templates-form-template-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, created_by_id: string, deleted: string, description: string, form_category_id: string, form_overview_category_id: string, id: string, identifier: string, is_active: bool, modified: string, name: string, pdf_template_identifier: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, created_by_id: string, deleted: string, description: string, form_category_id: string, form_overview_category_id: string, id: string, identifier: string, is_active: bool, modified: string, name: string, pdf_template_identifier: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($form_template_id | is-empty) { error make --unspanned { msg: "path parameter 'form_template_id' must be non-empty" } }
@@ -4265,7 +4287,7 @@ export def "get-forms" [
   --form-template-id: list<string> # Used to filter on the `form_template_id` of the forms. Accept single value and array.
   --form-template-type: string # Filter by `form_templates.identifier` containing string passed in `form_template_type`. Accept strings like [`qa`, `dagseddel`]
   --employee-name: string # Used to filter forms by user's first or last name
-]: nothing -> record<data: table<approved_by_id: string, company_id: string, created: string, created_by_id: string, deleted: string, form_date: string, form_template_id: string, id: string, is_draft: bool, is_invoiced: string, is_shared: bool, mass_form_id: string, modified: string, project_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<approved_by_id: string, company_id: string, created: string, created_by_id: string, deleted: string, form_date: string, form_template_id: string, id: string, is_draft: bool, is_invoiced: string, is_shared: bool, mass_form_id: string, modified: string, project_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "extended" $extended "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "show" $show "scalar") (serialize-qp "project_id" $project_id "scalar") (serialize-qp "created_by_id" $created_by_id "scalar") (serialize-qp "form_template_id" $form_template_id "csv") (serialize-qp "form_template_type" $form_template_type "scalar") (serialize-qp "employee_name" $employee_name "scalar")] | flatten | str join "&"
@@ -4301,7 +4323,7 @@ export def "post-forms" [
   --dry-run(-n) # Return the request that would be sent without executing it
   form_template_id: string # format: uuid
   project_id: string # format: uuid
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -4338,7 +4360,7 @@ export def "get-forms-undelete-form-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($form_id | is-empty) { error make --unspanned { msg: "path parameter 'form_id' must be non-empty" } }
@@ -4373,7 +4395,7 @@ export def "get-forms-view-time-form-pdf-form-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($form_id | is-empty) { error make --unspanned { msg: "path parameter 'form_id' must be non-empty" } }
@@ -4443,7 +4465,7 @@ export def "get-forms-form-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<approved_by_id: string, company_id: string, created: string, created_by_id: string, deleted: string, form_date: string, form_template_id: string, id: string, is_draft: bool, is_invoiced: string, is_shared: bool, mass_form_id: string, modified: string, project_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<approved_by_id: string, company_id: string, created: string, created_by_id: string, deleted: string, form_date: string, form_template_id: string, id: string, is_draft: bool, is_invoiced: string, is_shared: bool, mass_form_id: string, modified: string, project_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($form_id | is-empty) { error make --unspanned { msg: "path parameter 'form_id' must be non-empty" } }
@@ -4513,7 +4535,7 @@ export def "get-integrations-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string, success: bool> {
+]: nothing -> oneof<record<status: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/integrations" $auth.query)
@@ -4546,7 +4568,7 @@ export def "post-integrations-billys-authenticate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<accessToken: string> {
+]: nothing -> oneof<record<accessToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/integrations/billysAuthenticate" $auth.query)
@@ -4580,7 +4602,7 @@ export def "get-integrations-contacts-sync" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string, success: bool> {
+]: nothing -> oneof<record<status: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/integrations/contactsSync" $auth.query)
@@ -4613,7 +4635,7 @@ export def "get-integrations-products-sync" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/integrations/productsSync" $auth.query)
@@ -4648,7 +4670,7 @@ export def "get-integrations-view" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string, success: bool> {
+]: nothing -> oneof<record<status: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($integration_id | is-empty) { error make --unspanned { msg: "path parameter 'integration_id' must be non-empty" } }
@@ -4682,7 +4704,7 @@ export def "get-invoice-line-text-template" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, html: string, id: string, image: string, modified: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, html: string, id: string, image: string, modified: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invoice_line_text_template" $auth.query)
@@ -4717,7 +4739,7 @@ export def "post-invoice-line-text-template" [
   --dry-run(-n) # Return the request that would be sent without executing it
   html: string
   --image: string # format: binary
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -4756,7 +4778,7 @@ export def "delete-invoice-line-text-template-invoice-line-text-template-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_line_text_template_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_line_text_template_id' must be non-empty" } }
@@ -4791,7 +4813,7 @@ export def "get-invoice-line-text-template-invoice-line-text-template-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, html: string, id: string, image: string, modified: string>, success: bool> {
+]: nothing -> oneof<record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, html: string, id: string, image: string, modified: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_line_text_template_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_line_text_template_id' must be non-empty" } }
@@ -4828,7 +4850,7 @@ export def "post-invoice-line-text-template-invoice-line-text-template-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   html: string
   --image: string # format: binary
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -4871,7 +4893,7 @@ export def "post-invoice-line-texts" [
   --image: string # format: binary
   invoice_id: string # format: uuid
   --placement: int
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -4912,7 +4934,7 @@ export def "post-invoice-line-texts-invoice-line-text-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   html: string
   --image: string # format: binary
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -4956,7 +4978,7 @@ export def "get-invoice-lines" [
   --user-id: string # format: uuid
   --name: string
   --discount-text: string
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, description: string, discount_percent: int, discount_text: string, ean_product_id: string, form_id: string, id: string, invoice_id: string, material_id: string, modified: string, name: string, parent_id: string, product_bundle_id: string, product_id: string, quantity: int, selling_price: float, type: string, user_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, description: string, discount_percent: int, discount_text: string, ean_product_id: string, form_id: string, id: string, invoice_id: string, material_id: string, modified: string, name: string, parent_id: string, product_bundle_id: string, product_id: string, quantity: int, selling_price: float, type: string, user_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "invoice_id" $invoice_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "discount_text" $discount_text "scalar")] | flatten | str join "&"
@@ -5001,7 +5023,7 @@ export def "post-invoice-lines" [
   --quantity: int # format: int32
   --selling-price: float # format: float
   --user-id: string # format: uuid
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -5038,7 +5060,7 @@ export def "delete-invoice-lines-invoice-line-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_line_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_line_id' must be non-empty" } }
@@ -5073,7 +5095,7 @@ export def "get-invoice-lines-invoice-line-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, created_by_id: string, deleted: string, description: string, discount_percent: int, discount_text: string, ean_product_id: string, form_id: string, id: string, invoice_id: string, material_id: string, modified: string, name: string, parent_id: string, product_bundle_id: string, product_id: string, quantity: int, selling_price: float, type: string, user_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, created_by_id: string, deleted: string, description: string, discount_percent: int, discount_text: string, ean_product_id: string, form_id: string, id: string, invoice_id: string, material_id: string, modified: string, name: string, parent_id: string, product_bundle_id: string, product_id: string, quantity: int, selling_price: float, type: string, user_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_line_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_line_id' must be non-empty" } }
@@ -5117,7 +5139,7 @@ export def "put-invoice-lines-invoice-line-id" [
   --quantity: int # format: int32
   --selling-price: float # format: float
   --user-id: string # format: uuid
-]: any -> record<data: list<record>, success: bool> {
+]: any -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -5166,7 +5188,7 @@ export def "get-invoices" [
   --date-to: string # format: date
   --issued-date: string # format: date
   --sent-as-draft: int # Used to filter invoices which are sent as draft to integration
-]: nothing -> record<data: table<all_products_one_line: bool, all_working_hours_one_line: bool, company_id: string, contact_id: string, created: string, created_by_id: string, currency_id: string, date_from: string, date_to: string, deleted: string, downloaded: string, erp_id: string, erp_payment_term_id: string, eu_customer: bool, gross_payment: float, group_by_forms: bool, id: string, include_invoiced_lines: bool, integration_id: string, invoice_number: int, is_draft: bool, is_final_invoice: bool, is_locked: bool, is_offer: bool, issued_date: string, message: string, modified: string, net_payment: float, offer_number: int, order_line_group_id: string, payment_due_date: string, payment_term_id: string, project_id: string, project_overview_attached: bool, reference: string, show_employee_name: bool, show_price_product_bundle: bool, show_prices_products_and_hours: bool, show_product_images: bool, show_products_product_bundle: bool, title: string, total_cost_price: float, total_discount_percent: float, vat_percent: int, vendor_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<all_products_one_line: bool, all_working_hours_one_line: bool, company_id: string, contact_id: string, created: string, created_by_id: string, currency_id: string, date_from: string, date_to: string, deleted: string, downloaded: string, erp_id: string, erp_payment_term_id: string, eu_customer: bool, gross_payment: float, group_by_forms: bool, id: string, include_invoiced_lines: bool, integration_id: string, invoice_number: int, is_draft: bool, is_final_invoice: bool, is_locked: bool, is_offer: bool, issued_date: string, message: string, modified: string, net_payment: float, offer_number: int, order_line_group_id: string, payment_due_date: string, payment_term_id: string, project_id: string, project_overview_attached: bool, reference: string, show_employee_name: bool, show_price_product_bundle: bool, show_prices_products_and_hours: bool, show_product_images: bool, show_products_product_bundle: bool, title: string, total_cost_price: float, total_discount_percent: float, vat_percent: int, vendor_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "contact_id" $contact_id "scalar") (serialize-qp "project_id" $project_id "scalar") (serialize-qp "invoice_number" $invoice_number "scalar") (serialize-qp "offer_number" $offer_number "scalar") (serialize-qp "is_draft" $is_draft "scalar") (serialize-qp "is_offer" $is_offer "scalar") (serialize-qp "is_locked" $is_locked "scalar") (serialize-qp "is_fixed_price" $is_fixed_price "scalar") (serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "issued_date" $issued_date "scalar") (serialize-qp "sent_as_draft" $sent_as_draft "scalar")] | flatten | str join "&"
@@ -5218,7 +5240,7 @@ export def "post-invoices" [
   --project-id: string # format: uuid
   --reference: string
   --vat-percent: int # format: int32
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -5256,7 +5278,7 @@ export def "bulk-delete-invoices" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -5292,7 +5314,7 @@ export def "get-invoices-vat-options" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<success: bool> {
+]: nothing -> oneof<record<success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invoices/vatOptions" $auth.query)
@@ -5326,7 +5348,7 @@ export def "delete-invoices-invoice-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
@@ -5361,7 +5383,7 @@ export def "get-invoices-invoice-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<all_products_one_line: bool, all_working_hours_one_line: bool, company_id: string, contact_id: string, created: string, created_by_id: string, currency_id: string, date_from: string, date_to: string, deleted: string, downloaded: string, erp_id: string, erp_payment_term_id: string, eu_customer: bool, gross_payment: float, group_by_forms: bool, id: string, include_invoiced_lines: bool, integration_id: string, invoice_number: int, is_draft: bool, is_final_invoice: bool, is_locked: bool, is_offer: bool, issued_date: string, message: string, modified: string, net_payment: float, offer_number: int, order_line_group_id: string, payment_due_date: string, payment_term_id: string, project_id: string, project_overview_attached: bool, reference: string, show_employee_name: bool, show_price_product_bundle: bool, show_prices_products_and_hours: bool, show_product_images: bool, show_products_product_bundle: bool, title: string, total_cost_price: float, total_discount_percent: float, vat_percent: int, vendor_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<all_products_one_line: bool, all_working_hours_one_line: bool, company_id: string, contact_id: string, created: string, created_by_id: string, currency_id: string, date_from: string, date_to: string, deleted: string, downloaded: string, erp_id: string, erp_payment_term_id: string, eu_customer: bool, gross_payment: float, group_by_forms: bool, id: string, include_invoiced_lines: bool, integration_id: string, invoice_number: int, is_draft: bool, is_final_invoice: bool, is_locked: bool, is_offer: bool, issued_date: string, message: string, modified: string, net_payment: float, offer_number: int, order_line_group_id: string, payment_due_date: string, payment_term_id: string, project_id: string, project_overview_attached: bool, reference: string, show_employee_name: bool, show_price_product_bundle: bool, show_prices_products_and_hours: bool, show_product_images: bool, show_products_product_bundle: bool, title: string, total_cost_price: float, total_discount_percent: float, vat_percent: int, vendor_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
@@ -5413,7 +5435,7 @@ export def "put-invoices-invoice-id" [
   --project-id: string # format: uuid
   --reference: string
   --vat-percent: int # format: int32
-]: any -> record<data: list<record>, success: bool> {
+]: any -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -5453,7 +5475,7 @@ export def "post-invoices-invoice-id-copy" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --project-id: string # format: uuid
   --contact-id: string # format: uuid
-]: nothing -> record<data: record<id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
@@ -5491,7 +5513,7 @@ export def "get-one-invoice-emails" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<api_response: string, body: string, carbon_copy: string, company_id: string, created: string, created_by_id: string, deleted: string, id: string, is_sent: bool, modified: string, recipients: string, reply_to: string, subject: string>, success: bool> {
+]: nothing -> oneof<record<data: record<api_response: string, body: string, carbon_copy: string, company_id: string, created: string, created_by_id: string, deleted: string, id: string, is_sent: bool, modified: string, recipients: string, reply_to: string, subject: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
@@ -5528,7 +5550,7 @@ export def "get-invoice-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, deleted: string, file_id: string, id: string, invoice_id: string, modified: string, type: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, deleted: string, file_id: string, id: string, invoice_id: string, modified: string, type: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
@@ -5567,7 +5589,7 @@ export def "create-invoice-file" [
   file_id: string # format: uuid
   --body-invoice-id: string # format: uuid
   --type: string
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -5578,7 +5600,7 @@ export def "create-invoice-file" [
   if (($req_body | get -o "invoice_id") == null) { error make --unspanned { msg: "required body field 'invoice_id' missing: pass --body-invoice-id or pipe a record" } }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -5608,7 +5630,7 @@ export def "delete-invoices-invoice-id-files-file-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
@@ -5646,7 +5668,7 @@ export def "get-one-invoice-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, deleted: string, file_id: string, id: string, invoice_id: string, modified: string, type: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, deleted: string, file_id: string, id: string, invoice_id: string, modified: string, type: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
@@ -5682,7 +5704,7 @@ export def "post-invoices-invoice-id-link-project-pdf" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
@@ -5717,7 +5739,7 @@ export def "post-invoices-invoice-id-unlink-project-pdf" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice_id' must be non-empty" } }
@@ -5752,7 +5774,7 @@ export def "get-mass-messages-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-read: oneof<nothing, bool> # Used to filter on the `is_read` of the mass messages
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, id: string, is_read: bool, is_sent_email: bool, mass_message: record, mass_message_id: string, modified: string, modified_by_id: string, user_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, id: string, is_read: bool, is_sent_email: bool, mass_message: record, mass_message_id: string, modified: string, modified_by_id: string, user_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_read" $is_read "scalar")] | flatten | str join "&"
@@ -5787,7 +5809,7 @@ export def "get-mass-messages-users-mass-messages-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, created_by_id: string, deleted: string, id: string, is_read: bool, is_sent_email: bool, mass_message: record<company_id: string, content: string, created: string, created_by_id: string, deleted: string, id: string, modified: string>, mass_message_id: string, modified: string, modified_by_id: string, user_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, created_by_id: string, deleted: string, id: string, is_read: bool, is_sent_email: bool, mass_message: record<company_id: string, content: string, created: string, created_by_id: string, deleted: string, id: string, modified: string>, mass_message_id: string, modified: string, modified_by_id: string, user_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($mass_messages_user_id | is-empty) { error make --unspanned { msg: "path parameter 'mass_messages_user_id' must be non-empty" } }
@@ -5822,7 +5844,7 @@ export def "put-mass-messages-users-mass-messages-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($mass_messages_user_id | is-empty) { error make --unspanned { msg: "path parameter 'mass_messages_user_id' must be non-empty" } }
@@ -5860,7 +5882,7 @@ export def "get-materials" [
   --name: string # Used to filter on the `name` of the materials
   --project-id: string # Used to find materials used in specific project by `project_id` (format: uuid)
   --currently-rented: oneof<nothing, bool> # Used to find currently rented materials
-]: nothing -> record<data: table<barcode: string, billing_cycle: string, centiga_id: string, company_id: string, cost_price: float, created: string, created_by_id: string, deleted: string, description: string, id: string, is_single_usage: bool, modified: string, modified_by_id: string, name: string, pogo_id: string, selling_price: float, tripletex_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<barcode: string, billing_cycle: string, centiga_id: string, company_id: string, cost_price: float, created: string, created_by_id: string, deleted: string, description: string, id: string, is_single_usage: bool, modified: string, modified_by_id: string, name: string, pogo_id: string, selling_price: float, tripletex_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "barcode" $barcode "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "project_id" $project_id "scalar") (serialize-qp "currently_rented" $currently_rented "scalar")] | flatten | str join "&"
@@ -5901,7 +5923,7 @@ export def "post-materials" [
   --is-single-usage: oneof<nothing, bool>
   --name: string
   --selling-price: float # format: float
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -5938,7 +5960,7 @@ export def "delete-materials-material-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($material_id | is-empty) { error make --unspanned { msg: "path parameter 'material_id' must be non-empty" } }
@@ -5973,7 +5995,7 @@ export def "get-materials-material-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<barcode: string, billing_cycle: string, centiga_id: string, company_id: string, cost_price: float, created: string, created_by_id: string, deleted: string, description: string, id: string, is_single_usage: bool, modified: string, modified_by_id: string, name: string, pogo_id: string, selling_price: float, tripletex_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<barcode: string, billing_cycle: string, centiga_id: string, company_id: string, cost_price: float, created: string, created_by_id: string, deleted: string, description: string, id: string, is_single_usage: bool, modified: string, modified_by_id: string, name: string, pogo_id: string, selling_price: float, tripletex_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($material_id | is-empty) { error make --unspanned { msg: "path parameter 'material_id' must be non-empty" } }
@@ -6008,7 +6030,7 @@ export def "put-materials-material-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($material_id | is-empty) { error make --unspanned { msg: "path parameter 'material_id' must be non-empty" } }
@@ -6043,7 +6065,7 @@ export def "get-materials-material-id-rentals" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<amount: float, created: string, created_by_id: string, deleted: string, from_date: string, id: string, is_invoiced: string, material_id: string, modified: string, modified_by_id: string, project_id: string, quantity: float, to_date: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<amount: float, created: string, created_by_id: string, deleted: string, from_date: string, id: string, is_invoiced: string, material_id: string, modified: string, modified_by_id: string, project_id: string, quantity: float, to_date: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($material_id | is-empty) { error make --unspanned { msg: "path parameter 'material_id' must be non-empty" } }
@@ -6085,7 +6107,7 @@ export def "post-materials-material-id-rentals" [
   --project-id: string # format: uuid
   --quantity: float # format: float
   --to-date: string # format: dateTime
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -6126,7 +6148,7 @@ export def "post-materials-material-id-rentals-checkout" [
   --form-id: string # format: uuid
   --material-rental-id: string # format: uuid
   --to-date: string # format: dateTime
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -6165,7 +6187,7 @@ export def "delete-materials-material-id-rentals-material-rental-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record, success: bool> {
+]: nothing -> oneof<record<data: record, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($material_id | is-empty) { error make --unspanned { msg: "path parameter 'material_id' must be non-empty" } }
@@ -6202,7 +6224,7 @@ export def "get-materials-material-id-rentals-material-rental-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<amount: float, created: string, created_by_id: string, deleted: string, from_date: string, id: string, is_invoiced: string, material_id: string, modified: string, modified_by_id: string, project_id: string, quantity: float, to_date: string>, success: bool> {
+]: nothing -> oneof<record<data: record<amount: float, created: string, created_by_id: string, deleted: string, from_date: string, id: string, is_invoiced: string, material_id: string, modified: string, modified_by_id: string, project_id: string, quantity: float, to_date: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($material_id | is-empty) { error make --unspanned { msg: "path parameter 'material_id' must be non-empty" } }
@@ -6239,7 +6261,7 @@ export def "put-materials-material-id-rentals-material-rental-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record, success: bool> {
+]: nothing -> oneof<record<data: record, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($material_id | is-empty) { error make --unspanned { msg: "path parameter 'material_id' must be non-empty" } }
@@ -6274,7 +6296,7 @@ export def "get-offer-statuses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, is_custom: bool, modified: string, modified_by_id: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, is_custom: bool, modified: string, modified_by_id: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/offer_statuses" $auth.query)
@@ -6312,7 +6334,7 @@ export def "post-offer-statuses" [
   --identifier: string
   --is-custom: oneof<nothing, bool>
   --name: string
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -6349,7 +6371,7 @@ export def "delete-offer-statuses-bulk-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -6386,7 +6408,7 @@ export def "delete-offer-statuses-offer-status-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($offer_status_id | is-empty) { error make --unspanned { msg: "path parameter 'offer_status_id' must be non-empty" } }
@@ -6421,7 +6443,7 @@ export def "get-offer-statuses-offer-status-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, is_custom: bool, modified: string, modified_by_id: string, name: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, is_custom: bool, modified: string, modified_by_id: string, name: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($offer_status_id | is-empty) { error make --unspanned { msg: "path parameter 'offer_status_id' must be non-empty" } }
@@ -6456,7 +6478,7 @@ export def "put-offer-statuses-offer-status-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($offer_status_id | is-empty) { error make --unspanned { msg: "path parameter 'offer_status_id' must be non-empty" } }
@@ -6490,7 +6512,7 @@ export def "get-offers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<address: string, all_lines_one_line: bool, all_products_one_line: bool, all_working_hours_one_line: bool, city_id: string, company_id: string, contact_id: string, created: string, created_by_id: string, deleted: string, description: string, discount_percent: int, erp_payment_term_id: string, expiraton_date: string, id: string, issue_date: string, modified: string, modified_by_id: string, offer_number: int, offer_status_id: string, payment_term_id: string, rejection_reason: string, sender_id: string, show_employee_name: bool, show_offer_lines: bool, show_payment_term: bool, show_prices: bool, show_product_images: bool, show_products_product_bundle: bool, slug: string, status: string, title: string, vat_percent: int>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<address: string, all_lines_one_line: bool, all_products_one_line: bool, all_working_hours_one_line: bool, city_id: string, company_id: string, contact_id: string, created: string, created_by_id: string, deleted: string, description: string, discount_percent: int, erp_payment_term_id: string, expiraton_date: string, id: string, issue_date: string, modified: string, modified_by_id: string, offer_number: int, offer_status_id: string, payment_term_id: string, rejection_reason: string, sender_id: string, show_employee_name: bool, show_offer_lines: bool, show_payment_term: bool, show_prices: bool, show_product_images: bool, show_products_product_bundle: bool, slug: string, status: string, title: string, vat_percent: int>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/offers" $auth.query)
@@ -6526,7 +6548,7 @@ export def "post-offers" [
   --offer-lines: list
   --project-id: string # format: uuid
   --status: string@status-completer-1 # default: draft
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -6563,7 +6585,7 @@ export def "delete-offers-offer-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($offer_id | is-empty) { error make --unspanned { msg: "path parameter 'offer_id' must be non-empty" } }
@@ -6598,7 +6620,7 @@ export def "get-offers-offer-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<address: string, all_lines_one_line: bool, all_products_one_line: bool, all_working_hours_one_line: bool, city_id: string, company_id: string, contact_id: string, created: string, created_by_id: string, deleted: string, description: string, discount_percent: int, erp_payment_term_id: string, expiraton_date: string, id: string, issue_date: string, modified: string, modified_by_id: string, offer_number: int, offer_status_id: string, payment_term_id: string, rejection_reason: string, sender_id: string, show_employee_name: bool, show_offer_lines: bool, show_payment_term: bool, show_prices: bool, show_product_images: bool, show_products_product_bundle: bool, slug: string, status: string, title: string, vat_percent: int>, success: bool> {
+]: nothing -> oneof<record<data: record<address: string, all_lines_one_line: bool, all_products_one_line: bool, all_working_hours_one_line: bool, city_id: string, company_id: string, contact_id: string, created: string, created_by_id: string, deleted: string, description: string, discount_percent: int, erp_payment_term_id: string, expiraton_date: string, id: string, issue_date: string, modified: string, modified_by_id: string, offer_number: int, offer_status_id: string, payment_term_id: string, rejection_reason: string, sender_id: string, show_employee_name: bool, show_offer_lines: bool, show_payment_term: bool, show_prices: bool, show_product_images: bool, show_products_product_bundle: bool, slug: string, status: string, title: string, vat_percent: int>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($offer_id | is-empty) { error make --unspanned { msg: "path parameter 'offer_id' must be non-empty" } }
@@ -6634,7 +6656,7 @@ export def "put-offers-offer-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # default: draft
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -6644,7 +6666,7 @@ export def "put-offers-offer-id" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "put"
     url: $full_url
@@ -6673,7 +6695,7 @@ export def "get-offers-offer-id-changelog" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<address: string, all_lines_one_line: bool, all_products_one_line: bool, all_working_hours_one_line: bool, city_id: string, company_id: string, contact_id: string, created: string, created_by_id: string, deleted: string, description: string, discount_percent: int, erp_payment_term_id: string, expiraton_date: string, id: string, issue_date: string, modified: string, modified_by_id: string, offer_number: int, offer_status_id: string, payment_term_id: string, rejection_reason: string, sender_id: string, show_employee_name: bool, show_offer_lines: bool, show_payment_term: bool, show_prices: bool, show_product_images: bool, show_products_product_bundle: bool, slug: string, status: string, title: string, vat_percent: int>, success: bool> {
+]: nothing -> oneof<record<data: table<address: string, all_lines_one_line: bool, all_products_one_line: bool, all_working_hours_one_line: bool, city_id: string, company_id: string, contact_id: string, created: string, created_by_id: string, deleted: string, description: string, discount_percent: int, erp_payment_term_id: string, expiraton_date: string, id: string, issue_date: string, modified: string, modified_by_id: string, offer_number: int, offer_status_id: string, payment_term_id: string, rejection_reason: string, sender_id: string, show_employee_name: bool, show_offer_lines: bool, show_payment_term: bool, show_prices: bool, show_product_images: bool, show_products_product_bundle: bool, slug: string, status: string, title: string, vat_percent: int>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($offer_id | is-empty) { error make --unspanned { msg: "path parameter 'offer_id' must be non-empty" } }
@@ -6707,7 +6729,7 @@ export def "get-overview-rejection-reasons" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<any>, success: bool> {
+]: nothing -> oneof<record<data: list<any>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/overview/rejection_reasons" $auth.query)
@@ -6740,7 +6762,7 @@ export def "get-payment-term-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_term_types" $auth.query)
@@ -6774,7 +6796,7 @@ export def "get-payment-term-types-payment-term-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_term_type_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_term_type_id' must be non-empty" } }
@@ -6808,7 +6830,7 @@ export def "get-payment-terms" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, created_by_id: string, days_of_credit: int, deleted: string, id: string, modified: string, payment_term_type_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, days_of_credit: int, deleted: string, id: string, modified: string, payment_term_type_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_terms" $auth.query)
@@ -6841,7 +6863,7 @@ export def "get-payment-terms-erp" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<daysOfCredit: int, id: string, name: string, pretty_string: string, type: string>, success: bool> {
+]: nothing -> oneof<record<data: table<daysOfCredit: int, id: string, name: string, pretty_string: string, type: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_terms/erp" $auth.query)
@@ -6875,7 +6897,7 @@ export def "get-payment-terms-payment-term-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, created_by_id: string, days_of_credit: int, deleted: string, id: string, modified: string, payment_term_type_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, created_by_id: string, days_of_credit: int, deleted: string, id: string, modified: string, payment_term_type_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_term_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_term_id' must be non-empty" } }
@@ -6909,7 +6931,7 @@ export def "get-ping" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<status: string> {
+]: nothing -> oneof<record<status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ping" $auth.query)
@@ -6946,7 +6968,7 @@ export def "get-products" [
   --product-number: string # Used to filter on the `product_number` of the products (format: uuid)
   --barcode: string # Used to filter on the `barcode` of the products
   --modified-gte: string # format: datetime
-]: nothing -> record<data: table<average_cost_price: float, barcode: string, buying_price: float, centiga_id: string, company_id: string, created: string, created_by_id: string, deleted: string, description: string, erp_id: string, id: string, modified: string, name: string, pogo_id: string, product_number: string, project_status_type_id: string, selling_price: float, tripletex_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<average_cost_price: float, barcode: string, buying_price: float, centiga_id: string, company_id: string, created: string, created_by_id: string, deleted: string, description: string, erp_id: string, id: string, modified: string, name: string, pogo_id: string, product_number: string, project_status_type_id: string, selling_price: float, tripletex_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "product_number" $product_number "scalar") (serialize-qp "barcode" $barcode "scalar") (serialize-qp "modified_gte" $modified_gte "scalar")] | flatten | str join "&"
@@ -6987,7 +7009,7 @@ export def "post-products" [
   name: string
   --product-number: string
   --selling-price: float # format: double
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -7025,7 +7047,7 @@ export def "bulk-delete-products" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -7062,7 +7084,7 @@ export def "post-products-undelete-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
@@ -7097,7 +7119,7 @@ export def "delete-products-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
@@ -7132,7 +7154,7 @@ export def "get-products-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<average_cost_price: float, barcode: string, buying_price: float, centiga_id: string, company_id: string, created: string, created_by_id: string, deleted: string, description: string, erp_id: string, id: string, modified: string, name: string, pogo_id: string, product_number: string, project_status_type_id: string, selling_price: float, tripletex_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<average_cost_price: float, barcode: string, buying_price: float, centiga_id: string, company_id: string, created: string, created_by_id: string, deleted: string, description: string, erp_id: string, id: string, modified: string, name: string, pogo_id: string, product_number: string, project_status_type_id: string, selling_price: float, tripletex_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
@@ -7167,7 +7189,7 @@ export def "put-products-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
@@ -7214,7 +7236,7 @@ export def "upload-or-delete-product-image" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -7243,7 +7265,7 @@ export def "get-products-product-id-variants" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<name: string, price: float, product_number: string, variant_id: string, variant_type: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<name: string, price: float, product_number: string, variant_id: string, variant_type: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
@@ -7282,7 +7304,7 @@ export def "post-products-product-id-variants" [
   ratio: float
   variant_id: string # format: uuid
   variant_type: string@variant-type-completer
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -7293,7 +7315,7 @@ export def "post-products-product-id-variants" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -7324,7 +7346,7 @@ export def "delete-products-product-id-variants-variant-type-variant-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
@@ -7360,7 +7382,7 @@ export def "get-project-custom-field-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<access_type: string, company_id: string, created: string, created_by_id: string, deleted: string, id: string, is_active: bool, modified: string, name: string, placement: int>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<access_type: string, company_id: string, created: string, created_by_id: string, deleted: string, id: string, is_active: bool, modified: string, name: string, placement: int>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/project_custom_field_attributes" $auth.query)
@@ -7394,7 +7416,7 @@ export def "get-project-custom-field-attributes-project-custom-field-attribute-i
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<access_type: string, company_id: string, created: string, created_by_id: string, deleted: string, id: string, is_active: bool, modified: string, name: string, placement: int>, success: bool> {
+]: nothing -> oneof<record<data: record<access_type: string, company_id: string, created: string, created_by_id: string, deleted: string, id: string, is_active: bool, modified: string, name: string, placement: int>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_custom_field_attribute_id | is-empty) { error make --unspanned { msg: "path parameter 'project_custom_field_attribute_id' must be non-empty" } }
@@ -7428,7 +7450,7 @@ export def "get-project-status-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<_locale: string, created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<_locale: string, created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/project_status_types" $auth.query)
@@ -7461,7 +7483,7 @@ export def "get-project-statuses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, is_custom: bool, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, is_custom: bool, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/project_statuses" $auth.query)
@@ -7497,7 +7519,7 @@ export def "post-project-statuses" [
   --description: string
   --name: string
   --project-status-type-id: string # format: uuid
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -7533,7 +7555,7 @@ export def "post-project-statuses-add-default" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<message: string, success: bool> {
+]: nothing -> oneof<record<message: string, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/project_statuses/add_default" $auth.query)
@@ -7567,7 +7589,7 @@ export def "delete-project-statuses-bulk-delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -7604,7 +7626,7 @@ export def "delete-project-statuses-project-status-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_status_id | is-empty) { error make --unspanned { msg: "path parameter 'project_status_id' must be non-empty" } }
@@ -7639,7 +7661,7 @@ export def "get-project-statuses-project-status-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, is_custom: bool, modified: string, name: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, is_custom: bool, modified: string, name: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_status_id | is-empty) { error make --unspanned { msg: "path parameter 'project_status_id' must be non-empty" } }
@@ -7674,7 +7696,7 @@ export def "put-project-statuses-project-status-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_status_id | is-empty) { error make --unspanned { msg: "path parameter 'project_status_id' must be non-empty" } }
@@ -7727,7 +7749,7 @@ export def "get-projects" [
   --event-end-gt: string # format: datetime
   --event-end-lt: string # format: datetime
   --event-end-eq: string # format: datetime
-]: nothing -> record<data: table<city_id: string, company_id: string, contact_id: string, created: string, created_by_id: string, deleted: string, description: string, end_time: string, erp_project_id: string, erp_task_id: string, full_name: string, has_final_invoice: bool, id: string, is_fixed_price: bool, is_offer: string, is_rotten: string, latitude: string, longitude: string, modified: string, name: string, not_invoiced_amount: float, offer_id: string, parent_id: string, pre_calculation_id: string, products_total_cost_price: float, project_image_url: string, project_number: float, project_status_id: string, shared_project_id: string, start_time: string, street_name: string, thumbnail: string, total_sales_price: float, working_hours_total_cost_price: float>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<city_id: string, company_id: string, contact_id: string, created: string, created_by_id: string, deleted: string, description: string, end_time: string, erp_project_id: string, erp_task_id: string, full_name: string, has_final_invoice: bool, id: string, is_fixed_price: bool, is_offer: string, is_rotten: string, latitude: string, longitude: string, modified: string, name: string, not_invoiced_amount: float, offer_id: string, parent_id: string, pre_calculation_id: string, products_total_cost_price: float, project_image_url: string, project_number: float, project_status_id: string, shared_project_id: string, start_time: string, street_name: string, thumbnail: string, total_sales_price: float, working_hours_total_cost_price: float>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "show_all" $show_all "scalar") (serialize-qp "sort" $sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "contact_id" $contact_id "scalar") (serialize-qp "company_id" $company_id "scalar") (serialize-qp "project_status_id" $project_status_id "scalar") (serialize-qp "project_status_ids" $project_status_ids "csv") (serialize-qp "name" $name "scalar") (serialize-qp "erp_project_id" $erp_project_id "scalar") (serialize-qp "erp_task_id" $erp_task_id "scalar") (serialize-qp "start_time_gte" $start_time_gte "scalar") (serialize-qp "start_time_lte" $start_time_lte "scalar") (serialize-qp "start_time_eq" $start_time_eq "scalar") (serialize-qp "event_start[][gt]" $event_start_gt "scalar") (serialize-qp "event_start[][lt]" $event_start_lt "scalar") (serialize-qp "event_start[][eq]" $event_start_eq "scalar") (serialize-qp "event_end[][gt]" $event_end_gt "scalar") (serialize-qp "event_end[][lt]" $event_end_lt "scalar") (serialize-qp "event_end[][eq]" $event_end_eq "scalar")] | flatten | str join "&"
@@ -7772,7 +7794,7 @@ export def "post-projects" [
   --project-status-id: string # format: uuid
   --start-time: string # format: datetime
   --street-name: string
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -7808,7 +7830,7 @@ export def "get-projects-has-projects-with-custom-statuses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<has_custom_statuses: bool, success: bool> {
+]: nothing -> oneof<record<has_custom_statuses: bool, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/projects/has_projects_with_custom_statuses" $auth.query)
@@ -7842,7 +7864,7 @@ export def "delete-projects-project-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -7877,7 +7899,7 @@ export def "get-projects-project-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<city_id: string, company_id: string, contact_id: string, created: string, created_by_id: string, deleted: string, description: string, end_time: string, erp_project_id: string, erp_task_id: string, full_name: string, has_final_invoice: bool, id: string, is_fixed_price: bool, is_offer: string, is_rotten: string, latitude: string, longitude: string, modified: string, name: string, not_invoiced_amount: float, offer_id: string, parent_id: string, pre_calculation_id: string, products_total_cost_price: float, project_image_url: string, project_number: float, project_status_id: string, shared_project_id: string, start_time: string, street_name: string, thumbnail: string, total_sales_price: float, working_hours_total_cost_price: float>, success: bool> {
+]: nothing -> oneof<record<data: record<city_id: string, company_id: string, contact_id: string, created: string, created_by_id: string, deleted: string, description: string, end_time: string, erp_project_id: string, erp_task_id: string, full_name: string, has_final_invoice: bool, id: string, is_fixed_price: bool, is_offer: string, is_rotten: string, latitude: string, longitude: string, modified: string, name: string, not_invoiced_amount: float, offer_id: string, parent_id: string, pre_calculation_id: string, products_total_cost_price: float, project_image_url: string, project_number: float, project_status_id: string, shared_project_id: string, start_time: string, street_name: string, thumbnail: string, total_sales_price: float, working_hours_total_cost_price: float>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -7920,7 +7942,7 @@ export def "put-projects-project-id" [
   --project-status-id: string # format: uuid
   --start-time: string # format: datetime
   --street-name: string
-]: any -> record<data: list<record>, success: bool> {
+]: any -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -7958,7 +7980,7 @@ export def "get-projects-project-id-all-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -7993,7 +8015,7 @@ export def "get-projects-project-id-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -8029,7 +8051,7 @@ export def "delete-projects-project-id-files-file-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record, success: bool> {
+]: nothing -> oneof<record<data: record, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -8066,7 +8088,7 @@ export def "get-projects-project-id-files-file-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record, success: bool> {
+]: nothing -> oneof<record<data: record, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -8103,7 +8125,7 @@ export def "put-projects-project-id-files-file-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record, success: bool> {
+]: nothing -> oneof<record<data: record, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -8139,7 +8161,7 @@ export def "get-projects-project-id-project-files" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -8175,7 +8197,7 @@ export def "post-projects-project-id-project-files" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # format: binary
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -8216,7 +8238,7 @@ export def "delete-projects-project-id-project-files-project-file-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record, success: bool> {
+]: nothing -> oneof<record<data: record, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -8253,7 +8275,7 @@ export def "get-projects-project-id-project-files-project-file-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record, success: bool> {
+]: nothing -> oneof<record<data: record, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -8290,7 +8312,7 @@ export def "put-projects-project-id-project-files-project-file-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record, success: bool> {
+]: nothing -> oneof<record<data: record, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -8327,7 +8349,7 @@ export def "post-projects-project-id-send-bulk-pdf" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --form-id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -8365,7 +8387,7 @@ export def "get-projects-project-id-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<api_key: string, city_id: string, company_id: string, cost_price: float, created: string, created_by_id: string, deleted: string, email: string, expected_billable_hours: float, extra_price: float, first_name: string, full_name: string, hide_address: bool, hide_phone: bool, id: string, initials: string, is_active: bool, language_id: string, last_name: string, mobile: string, mobile_countrycode: string, modified: string, password: string, phone: string, phone_countrycode: string, receive_form_mails: bool, sale_price: float, street_name: string, website: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<api_key: string, city_id: string, company_id: string, cost_price: float, created: string, created_by_id: string, deleted: string, email: string, expected_billable_hours: float, extra_price: float, first_name: string, full_name: string, hide_address: bool, hide_phone: bool, id: string, initials: string, is_active: bool, language_id: string, last_name: string, mobile: string, mobile_countrycode: string, modified: string, password: string, phone: string, phone_countrycode: string, receive_form_mails: bool, sale_price: float, street_name: string, website: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -8401,7 +8423,7 @@ export def "post-projects-project-id-users" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   user_id: string # format: uuid
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -8440,7 +8462,7 @@ export def "delete-projects-project-id-users-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -8477,7 +8499,7 @@ export def "get-projects-project-id-users-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<api_key: string, city_id: string, company_id: string, cost_price: float, created: string, created_by_id: string, deleted: string, email: string, expected_billable_hours: float, extra_price: float, first_name: string, full_name: string, hide_address: bool, hide_phone: bool, id: string, initials: string, is_active: bool, language_id: string, last_name: string, mobile: string, mobile_countrycode: string, modified: string, password: string, phone: string, phone_countrycode: string, receive_form_mails: bool, sale_price: float, street_name: string, website: string>, success: bool> {
+]: nothing -> oneof<record<data: record<api_key: string, city_id: string, company_id: string, cost_price: float, created: string, created_by_id: string, deleted: string, email: string, expected_billable_hours: float, extra_price: float, first_name: string, full_name: string, hide_address: bool, hide_phone: bool, id: string, initials: string, is_active: bool, language_id: string, last_name: string, mobile: string, mobile_countrycode: string, modified: string, password: string, phone: string, phone_countrycode: string, receive_form_mails: bool, sale_price: float, street_name: string, website: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
@@ -8545,7 +8567,7 @@ export def "get-roles" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/roles" $auth.query)
@@ -8579,7 +8601,7 @@ export def "get-stock-locations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Used to filter on the `name` of the stock_locations
-]: nothing -> record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, id: string, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, id: string, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -8614,7 +8636,7 @@ export def "post-stock-locations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -8651,7 +8673,7 @@ export def "delete-stock-locations-location-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
@@ -8686,7 +8708,7 @@ export def "get-stock-locations-location-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, id: string, modified: string, name: string>, success: bool> {
+]: nothing -> oneof<record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, id: string, modified: string, name: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
@@ -8721,7 +8743,7 @@ export def "put-stock-locations-location-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($location_id | is-empty) { error make --unspanned { msg: "path parameter 'location_id' must be non-empty" } }
@@ -8764,7 +8786,7 @@ export def "get-time-entries" [
   --lt-to-time: string
   --lt-sum: string
   --gt-sum: string
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, form_id: string, from_time: string, id: string, is_all_day: bool, modified: string, modified_by_id: string, project_id: string, sum: int, time_entry_type_id: string, to_time: string, user_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, form_id: string, from_time: string, id: string, is_all_day: bool, modified: string, modified_by_id: string, project_id: string, sum: int, time_entry_type_id: string, to_time: string, user_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar") (serialize-qp "form_id" $form_id "scalar") (serialize-qp "project_id" $project_id "scalar") (serialize-qp "gt_from_time" $gt_from_time "scalar") (serialize-qp "lt_from_time" $lt_from_time "scalar") (serialize-qp "gt_to_time" $gt_to_time "scalar") (serialize-qp "lt_to_time" $lt_to_time "scalar") (serialize-qp "lt_sum" $lt_sum "scalar") (serialize-qp "gt_sum" $gt_sum "scalar")] | flatten | str join "&"
@@ -8806,7 +8828,7 @@ export def "post-time-entries" [
   time_entry_type_id: string # format: uuid
   --to-time: string # format: dateTime
   user_id: string # format: uuid
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -8843,7 +8865,7 @@ export def "delete-time-entries-time-entry-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($time_entry_id | is-empty) { error make --unspanned { msg: "path parameter 'time_entry_id' must be non-empty" } }
@@ -8878,7 +8900,7 @@ export def "get-time-entries-time-entry-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, created_by_id: string, deleted: string, form_id: string, from_time: string, id: string, is_all_day: bool, modified: string, modified_by_id: string, project_id: string, sum: int, time_entry_type_id: string, to_time: string, user_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, created_by_id: string, deleted: string, form_id: string, from_time: string, id: string, is_all_day: bool, modified: string, modified_by_id: string, project_id: string, sum: int, time_entry_type_id: string, to_time: string, user_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($time_entry_id | is-empty) { error make --unspanned { msg: "path parameter 'time_entry_id' must be non-empty" } }
@@ -8913,7 +8935,7 @@ export def "put-time-entries-time-entry-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($time_entry_id | is-empty) { error make --unspanned { msg: "path parameter 'time_entry_id' must be non-empty" } }
@@ -8947,7 +8969,7 @@ export def "get-time-entry-intervals" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, modified_by_id: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, modified_by_id: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/time_entry_intervals" $auth.query)
@@ -8981,7 +9003,7 @@ export def "get-time-entry-intervals-time-entry-interval-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, modified_by_id: string, name: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, modified_by_id: string, name: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($time_entry_interval_id | is-empty) { error make --unspanned { msg: "path parameter 'time_entry_interval_id' must be non-empty" } }
@@ -9015,7 +9037,7 @@ export def "get-time-entry-rates" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<amount: float, company_id: string, created: string, created_by_id: string, currency_id: string, deleted: string, id: string, modified: string, modified_by_id: string, selling_amount: float, time_entry_type_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<amount: float, company_id: string, created: string, created_by_id: string, currency_id: string, deleted: string, id: string, modified: string, modified_by_id: string, selling_amount: float, time_entry_type_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/time_entry_rates" $auth.query)
@@ -9056,7 +9078,7 @@ export def "post-time-entry-rates" [
   time_entry_type_id: string # format: uuid
   --to-time: string # format: dateTime
   user_id: string # format: uuid
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -9093,7 +9115,7 @@ export def "delete-time-entry-rates-time-entry-rate-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($time_entry_rate_id | is-empty) { error make --unspanned { msg: "path parameter 'time_entry_rate_id' must be non-empty" } }
@@ -9128,7 +9150,7 @@ export def "get-time-entry-rates-time-entry-rate-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<amount: float, company_id: string, created: string, created_by_id: string, currency_id: string, deleted: string, id: string, modified: string, modified_by_id: string, selling_amount: float, time_entry_type_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<amount: float, company_id: string, created: string, created_by_id: string, currency_id: string, deleted: string, id: string, modified: string, modified_by_id: string, selling_amount: float, time_entry_type_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($time_entry_rate_id | is-empty) { error make --unspanned { msg: "path parameter 'time_entry_rate_id' must be non-empty" } }
@@ -9163,7 +9185,7 @@ export def "put-time-entry-rates-time-entry-rate-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($time_entry_rate_id | is-empty) { error make --unspanned { msg: "path parameter 'time_entry_rate_id' must be non-empty" } }
@@ -9198,7 +9220,7 @@ export def "get-time-entry-rule-groups" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --q: string
-]: nothing -> record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, id: string, modified: string, modified_by_id: string, name: string, salary_period_days: float, salary_period_from: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, id: string, modified: string, modified_by_id: string, name: string, salary_period_days: float, salary_period_from: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar")] | flatten | str join "&"
@@ -9232,7 +9254,7 @@ export def "get-time-entry-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, description: string, id: string, modified: string, modified_by_id: string, name: string, time_entry_interval_id: string, time_entry_value_type_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<company_id: string, created: string, created_by_id: string, deleted: string, description: string, id: string, modified: string, modified_by_id: string, name: string, time_entry_interval_id: string, time_entry_value_type_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/time_entry_types" $auth.query)
@@ -9269,7 +9291,7 @@ export def "post-time-entry-types" [
   name: string
   time_entry_interval_id: string # format: uuid
   time_entry_value_type_id: string # format: uuid
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -9307,7 +9329,7 @@ export def "bulk-activate-time-entry-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -9345,7 +9367,7 @@ export def "bulk-deactivate-time-entry-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -9383,7 +9405,7 @@ export def "bulk-delete-time-entry-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -9420,7 +9442,7 @@ export def "delete-time-entry-types-time-entry-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($time_entry_type_id | is-empty) { error make --unspanned { msg: "path parameter 'time_entry_type_id' must be non-empty" } }
@@ -9455,7 +9477,7 @@ export def "get-time-entry-types-time-entry-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, description: string, id: string, modified: string, modified_by_id: string, name: string, time_entry_interval_id: string, time_entry_value_type_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<company_id: string, created: string, created_by_id: string, deleted: string, description: string, id: string, modified: string, modified_by_id: string, name: string, time_entry_interval_id: string, time_entry_value_type_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($time_entry_type_id | is-empty) { error make --unspanned { msg: "path parameter 'time_entry_type_id' must be non-empty" } }
@@ -9490,7 +9512,7 @@ export def "put-time-entry-types-time-entry-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($time_entry_type_id | is-empty) { error make --unspanned { msg: "path parameter 'time_entry_type_id' must be non-empty" } }
@@ -9524,7 +9546,7 @@ export def "get-time-entry-unit-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<abbreviation: string, created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, modified_by_id: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<abbreviation: string, created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, modified_by_id: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/time_entry_unit_types" $auth.query)
@@ -9558,7 +9580,7 @@ export def "get-time-entry-unit-types-time-entry-unit-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<abbreviation: string, created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, modified_by_id: string, name: string>, success: bool> {
+]: nothing -> oneof<record<data: record<abbreviation: string, created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, modified_by_id: string, name: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($time_entry_unit_type_id | is-empty) { error make --unspanned { msg: "path parameter 'time_entry_unit_type_id' must be non-empty" } }
@@ -9592,7 +9614,7 @@ export def "get-time-entry-value-types" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, modified_by_id: string, name: string, time_entry_unit_type_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, modified_by_id: string, name: string, time_entry_unit_type_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/time_entry_value_types" $auth.query)
@@ -9626,7 +9648,7 @@ export def "get-time-entry-value-types-time-entry-value-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, modified_by_id: string, name: string, time_entry_unit_type_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, created_by_id: string, deleted: string, description: string, id: string, identifier: string, modified: string, modified_by_id: string, name: string, time_entry_unit_type_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($time_entry_value_type_id | is-empty) { error make --unspanned { msg: "path parameter 'time_entry_value_type_id' must be non-empty" } }
@@ -9660,7 +9682,7 @@ export def "get-user-custom-field-attributes" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<access_type: string, company_id: string, created: string, created_by_id: string, deleted: string, id: string, is_active: bool, modified: string, name: string, placement: int>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<access_type: string, company_id: string, created: string, created_by_id: string, deleted: string, id: string, is_active: bool, modified: string, name: string, placement: int>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user_custom_field_attributes" $auth.query)
@@ -9694,7 +9716,7 @@ export def "get-user-custom-field-attributes-user-custom-field-attribute-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<access_type: string, company_id: string, created: string, created_by_id: string, deleted: string, id: string, is_active: bool, modified: string, name: string, placement: int>, success: bool> {
+]: nothing -> oneof<record<data: record<access_type: string, company_id: string, created: string, created_by_id: string, deleted: string, id: string, is_active: bool, modified: string, name: string, placement: int>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_custom_field_attribute_id | is-empty) { error make --unspanned { msg: "path parameter 'user_custom_field_attribute_id' must be non-empty" } }
@@ -9733,7 +9755,7 @@ export def "get-users" [
   --email: string # Used to filter on the `email` of the users
   --stock-location-id: string # Used to filter on the `stock_location_id` of the users
   --is-active: oneof<nothing, bool> # Filters active/inactive users
-]: nothing -> record<data: table<api_key: string, city_id: string, company_id: string, cost_price: float, created: string, created_by_id: string, deleted: string, email: string, expected_billable_hours: float, extra_price: float, first_name: string, full_name: string, hide_address: bool, hide_phone: bool, id: string, initials: string, is_active: bool, language_id: string, last_name: string, mobile: string, mobile_countrycode: string, modified: string, password: string, phone: string, phone_countrycode: string, receive_form_mails: bool, sale_price: float, street_name: string, website: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<api_key: string, city_id: string, company_id: string, cost_price: float, created: string, created_by_id: string, deleted: string, email: string, expected_billable_hours: float, extra_price: float, first_name: string, full_name: string, hide_address: bool, hide_phone: bool, id: string, initials: string, is_active: bool, language_id: string, last_name: string, mobile: string, mobile_countrycode: string, modified: string, password: string, phone: string, phone_countrycode: string, receive_form_mails: bool, sale_price: float, street_name: string, website: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "stock_location_id" $stock_location_id "scalar") (serialize-qp "is_active" $is_active "scalar")] | flatten | str join "&"
@@ -9757,7 +9779,6 @@ export def "get-users" [
 # Add user to company
 #
 # POST /users
-# --roles shape: {_ids?: list<string>}
 export def "post-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9789,7 +9810,7 @@ export def "post-users" [
   --roles: record # shape: {_ids?: list<string>}
   --sale-price: float # The price this employee costs per hour when working (format: float)
   --street-name: string
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -9827,7 +9848,7 @@ export def "users-bulk-activate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -9865,7 +9886,7 @@ export def "users-bulk-deactivate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: list<string>
-]: any -> record<data: list<string>, success: bool> {
+]: any -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -9901,7 +9922,7 @@ export def "get-users-resend-welcome-sms" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<message: string>, status: string> {
+]: nothing -> oneof<record<data: record<message: string>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/resendWelcomeSms" $auth.query)
@@ -9935,7 +9956,7 @@ export def "delete-users-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -9970,7 +9991,7 @@ export def "get-users-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<api_key: string, city_id: string, company_id: string, cost_price: float, created: string, created_by_id: string, deleted: string, email: string, expected_billable_hours: float, extra_price: float, first_name: string, full_name: string, hide_address: bool, hide_phone: bool, id: string, initials: string, is_active: bool, language_id: string, last_name: string, mobile: string, mobile_countrycode: string, modified: string, password: string, phone: string, phone_countrycode: string, receive_form_mails: bool, sale_price: float, street_name: string, website: string>, success: bool> {
+]: nothing -> oneof<record<data: record<api_key: string, city_id: string, company_id: string, cost_price: float, created: string, created_by_id: string, deleted: string, email: string, expected_billable_hours: float, extra_price: float, first_name: string, full_name: string, hide_address: bool, hide_phone: bool, id: string, initials: string, is_active: bool, language_id: string, last_name: string, mobile: string, mobile_countrycode: string, modified: string, password: string, phone: string, phone_countrycode: string, receive_form_mails: bool, sale_price: float, street_name: string, website: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -10005,7 +10026,7 @@ export def "put-users-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<record>, success: bool> {
+]: nothing -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -10040,7 +10061,7 @@ export def "get-users-user-id-integration-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, id: string, integration_setting_id: string, modified: string, user_id: string, value: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, id: string, integration_setting_id: string, modified: string, user_id: string, value: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -10077,7 +10098,7 @@ export def "post-users-user-id-integration-settings" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --integration-setting-id: string # format: uuid
   --value: string
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -10116,7 +10137,7 @@ export def "delete-users-user-id-integration-settings-integration-settings-user-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -10153,7 +10174,7 @@ export def "get-users-user-id-integration-settings-integration-settings-user-id"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, created_by_id: string, deleted: string, id: string, integration_setting_id: string, modified: string, user_id: string, value: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, created_by_id: string, deleted: string, id: string, integration_setting_id: string, modified: string, user_id: string, value: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -10190,7 +10211,7 @@ export def "put-users-user-id-integration-settings-integration-settings-user-id"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -10227,7 +10248,7 @@ export def "post-users-user-id-upload-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --image: string # format: binary
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -10267,7 +10288,7 @@ export def "get-users-user-id-user-custom-field-value" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, id: string, modified: string, user_custom_field_attribute_id: string, user_id: string, value: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, id: string, modified: string, user_custom_field_attribute_id: string, user_id: string, value: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -10303,7 +10324,7 @@ export def "get-users-user-id-user-custom-field-value-user-custom-field-value-id
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, created_by_id: string, deleted: string, id: string, modified: string, user_custom_field_attribute_id: string, user_id: string, value: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, created_by_id: string, deleted: string, id: string, modified: string, user_custom_field_attribute_id: string, user_id: string, value: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -10340,7 +10361,7 @@ export def "put-users-user-id-user-custom-field-value-user-custom-field-value-id
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<any>, success: bool> {
+]: nothing -> oneof<record<data: list<any>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -10379,7 +10400,7 @@ export def "get-vendor-product-price-files" [
   --vendor-name: string
   --vendor-ids: list<string>
   --status: string@status-completer-2
-]: nothing -> record<data: table<companies_vendor_id: string, created: string, created_by_id: string, deleted: string, dir: string, file: string, finished: bool, id: string, modified: string, original_file_name: string, progress: int, size: int, status: string, type: string, vendor_products_count: int, vendor_products_count_total: int>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<companies_vendor_id: string, created: string, created_by_id: string, deleted: string, dir: string, file: string, finished: bool, id: string, modified: string, original_file_name: string, progress: int, size: int, status: string, type: string, vendor_products_count: int, vendor_products_count_total: int>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "file_name" $file_name "scalar") (serialize-qp "vendor_name" $vendor_name "scalar") (serialize-qp "vendor_ids" $vendor_ids "csv") (serialize-qp "status" $status "scalar")] | flatten | str join "&"
@@ -10415,7 +10436,7 @@ export def "post-vendor-product-price-files" [
   --dry-run(-n) # Return the request that would be sent without executing it
   companies_vendor_id: string
   file: string # format: binary
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -10424,7 +10445,7 @@ export def "post-vendor-product-price-files" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | compact | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   let req = {
     method: "post"
     url: $full_url
@@ -10453,7 +10474,7 @@ export def "get-vendor-product-price-files-vendor-product-price-file-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<companies_vendor_id: string, created: string, created_by_id: string, deleted: string, dir: string, file: string, finished: bool, id: string, modified: string, original_file_name: string, progress: int, size: int, status: string, type: string, vendor_products_count: int, vendor_products_count_total: int, download_link: string>, success: bool> {
+]: nothing -> oneof<record<data: record<companies_vendor_id: string, created: string, created_by_id: string, deleted: string, dir: string, file: string, finished: bool, id: string, modified: string, original_file_name: string, progress: int, size: int, status: string, type: string, vendor_products_count: int, vendor_products_count_total: int, download_link: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($vendor_product_price_file_id | is-empty) { error make --unspanned { msg: "path parameter 'vendor_product_price_file_id' must be non-empty" } }
@@ -10491,7 +10512,7 @@ export def "get-vendor-products" [
   --product-number: string # Used to filter on the `product_number` of the vendor products (format: uuid)
   --barcode: string # Used to filter on the `barcode` of the vendor products
   --vendor-id: string # Used to filter on the `vendor_id` of the vendor products
-]: nothing -> record<data: table<barcode: string, created: string, created_by_id: string, deleted: string, description: string, id: string, modified: string, name: string, price: float, product_category_number: string, product_number: string, vendor_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<barcode: string, created: string, created_by_id: string, deleted: string, description: string, id: string, modified: string, name: string, price: float, product_category_number: string, product_number: string, vendor_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "product_number" $product_number "scalar") (serialize-qp "barcode" $barcode "scalar") (serialize-qp "vendor_id" $vendor_id "scalar")] | flatten | str join "&"
@@ -10526,7 +10547,7 @@ export def "get-vendor-products-vendor-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<barcode: string, created: string, created_by_id: string, deleted: string, description: string, id: string, modified: string, name: string, price: float, product_category_number: string, product_number: string, vendor_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<barcode: string, created: string, created_by_id: string, deleted: string, description: string, id: string, modified: string, name: string, price: float, product_category_number: string, product_number: string, vendor_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($vendor_product_id | is-empty) { error make --unspanned { msg: "path parameter 'vendor_product_id' must be non-empty" } }
@@ -10565,7 +10586,7 @@ export def "get-vendors-list" [
   --email: string
   --name: string
   --cvr: string
-]: nothing -> record<data: table<created: string, cvr: string, deleted: string, email: string, id: string, identifier: string, is_custom: bool, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, cvr: string, deleted: string, email: string, id: string, identifier: string, is_custom: bool, modified: string, name: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with_custom" $with_custom "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "cvr" $cvr "scalar")] | flatten | str join "&"
@@ -10606,7 +10627,7 @@ export def "add-vendor" [
   --identifier: string
   --is-custom: oneof<nothing, bool>
   --name: string
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -10643,7 +10664,7 @@ export def "delete-vendors-vendor-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: list<string>, success: bool> {
+]: nothing -> oneof<record<data: list<string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($vendor_id | is-empty) { error make --unspanned { msg: "path parameter 'vendor_id' must be non-empty" } }
@@ -10679,7 +10700,7 @@ export def "get-vendor" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, cvr: string, deleted: string, email: string, id: string, identifier: string, is_custom: bool, modified: string, name: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, cvr: string, deleted: string, email: string, id: string, identifier: string, is_custom: bool, modified: string, name: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($vendor_id | is-empty) { error make --unspanned { msg: "path parameter 'vendor_id' must be non-empty" } }
@@ -10721,7 +10742,7 @@ export def "edit-vendor" [
   --identifier: string
   --is-custom: oneof<nothing, bool>
   --name: string
-]: any -> record<data: list<record>, success: bool> {
+]: any -> oneof<record<data: list<record>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -10797,7 +10818,7 @@ export def "post-wall-comments" [
   --dry-run(-n) # Return the request that would be sent without executing it
   message: string
   wall_post_id: string # format: uuid
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -10834,7 +10855,7 @@ export def "get-wall-comments-wall-comment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, deleted: string, id: string, message: string, modified: string, user_id: string, wall_post_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, deleted: string, id: string, message: string, modified: string, user_id: string, wall_post_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($wall_comment_id | is-empty) { error make --unspanned { msg: "path parameter 'wall_comment_id' must be non-empty" } }
@@ -10870,7 +10891,7 @@ export def "get-wall-posts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --project-id: string # format: uuid
   --user-id: string # format: uuid
-]: nothing -> record<data: table<created: string, deleted: string, id: string, message: string, modified: string, project_id: string, user_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, deleted: string, id: string, message: string, modified: string, project_id: string, user_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "project_id" $project_id "scalar") (serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
@@ -10906,7 +10927,7 @@ export def "post-wall-posts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   message: string
   project_id: string # format: uuid
-]: any -> record<data: record<id: string>, success: bool> {
+]: any -> oneof<record<data: record<id: string>, success: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
@@ -10943,7 +10964,7 @@ export def "get-wall-posts-wall-post-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: record<created: string, deleted: string, id: string, message: string, modified: string, project_id: string, user_id: string>, success: bool> {
+]: nothing -> oneof<record<data: record<created: string, deleted: string, id: string, message: string, modified: string, project_id: string, user_id: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($wall_post_id | is-empty) { error make --unspanned { msg: "path parameter 'wall_post_id' must be non-empty" } }
@@ -10978,7 +10999,7 @@ export def "get-wall-posts-wall-post-id-wall-comments" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<data: table<created: string, deleted: string, id: string, message: string, modified: string, user_id: string, wall_post_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool> {
+]: nothing -> oneof<record<data: table<created: string, deleted: string, id: string, message: string, modified: string, user_id: string, wall_post_id: string>, pagination: record<count: int, current_page: string, has_next_page: bool, has_prev_page: bool, limit: int, page_count: string>, success: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($wall_post_id | is-empty) { error make --unspanned { msg: "path parameter 'wall_post_id' must be non-empty" } }

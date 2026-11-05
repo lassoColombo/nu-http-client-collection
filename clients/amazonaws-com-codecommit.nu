@@ -13,27 +13,36 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
     "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -187,9 +210,9 @@ def x-amz-target-completer-76 [] { ["CodeCommit_20150413.UpdateRepositoryName"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-approval-rule-template-with-repository" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["associate-approval-rule-template-with-repository" "batch-associate-approval-rule-template-with-repositories" "batch-describe-merge-conflicts" "batch-disassociate-approval-rule-template-from-repositories" "batch-get-commits" "batch-get-repositories" "create-approval-rule-template" "create-branch" "create-commit" "create-pull-request" "create-pull-request-approval-rule" "create-repository" "create-unreferenced-merge-commit" "delete-approval-rule-template" "delete-branch" "delete-comment-content" "delete-file" "delete-pull-request-approval-rule" "delete-repository" "describe-merge-conflicts" "describe-pull-request-events" "disassociate-approval-rule-template-from-repository" "evaluate-pull-request-approval-rules" "get-approval-rule-template" "get-blob" "get-branch" "get-comment" "get-comment-reactions" "get-comments-for-compared-commit" "get-comments-for-pull-request" "get-commit" "get-differences" "get-file" "get-folder" "get-merge-commit" "get-merge-conflicts" "get-merge-options" "get-pull-request" "get-pull-request-approval-states" "get-pull-request-override-state" "get-repository" "get-repository-triggers" "list-approval-rule-templates" "list-associated-approval-rule-templates-for-repository" "list-branches" "list-pull-requests" "list-repositories" "list-repositories-for-approval-rule-template" "list-tags-for-resource" "merge-branches-by-fast-forward" "merge-branches-by-squash" "merge-branches-by-three-way" "merge-pull-request-by-fast-forward" "merge-pull-request-by-squash" "merge-pull-request-by-three-way" "override-pull-request-approval-rules" "post-comment-for-compared-commit" "post-comment-for-pull-request" "post-comment-reply" "put-comment-reaction" "put-file" "put-repository-triggers" "tag-resource" "test-repository-triggers" "untag-resource" "update-approval-rule-template-content" "update-approval-rule-template-description" "update-approval-rule-template-name" "update-comment" "update-default-branch" "update-pull-request-approval-rule-content" "update-pull-request-approval-state" "update-pull-request-description" "update-pull-request-status" "update-pull-request-title" "update-repository-description" "update-repository-name" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -281,7 +304,7 @@ export def "batch-associate-approval-rule-template-with-repositories" [
   --x-amz-target: string@x-amz-target-completer-1 # required
   approval_rule_template_name: string # The name of the template you want to associate with one or more repositories.
   repository_names: list<string> # The names of the repositories you want to associate with the template. The length constraint limit is for each string in the array. The array itself can be empty.
-]: any -> record<associatedRepositoryNames: list<string>, errors: table<repositoryName: string, errorCode: string, errorMessage: string>> {
+]: any -> oneof<record<associatedRepositoryNames: list<string>, errors: table<repositoryName: string, errorCode: string, errorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -339,7 +362,7 @@ export def "batch-describe-merge-conflicts" [
   --conflict-detail-level: string@conflict-detail-level-completer # The level of conflict detail to use. If unspecified, the default FILE_LEVEL is used, which returns a not-mergeable result if the same file has differences in both branches. If LINE_LEVEL is specified, a conflict is considered not mergeable if the same file in both branches has differences on the same line.
   --conflict-resolution-strategy: string@conflict-resolution-strategy-completer # Specifies which branch to use when resolving conflicts, or whether to attempt automatically merging two versions of a file. The default is NONE, which requires any conflicts to be resolved manually before the merge operation is successful.
   --next-token: string # An enumeration token that, when provided in a request, returns the next batch of the results.
-]: any -> record<conflicts: table<conflictMetadata: record, mergeHunks: list>, nextToken: string, errors: table<filePath: string, exceptionName: string, message: string>, destinationCommitId: string, sourceCommitId: string, baseCommitId: string> {
+]: any -> oneof<record<conflicts: table<conflictMetadata: record, mergeHunks: list>, nextToken: string, errors: table<filePath: string, exceptionName: string, message: string>, destinationCommitId: string, sourceCommitId: string, baseCommitId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -389,7 +412,7 @@ export def "batch-disassociate-approval-rule-template-from-repositories" [
   --x-amz-target: string@x-amz-target-completer-3 # required
   approval_rule_template_name: string # The name of the template that you want to disassociate from one or more repositories.
   repository_names: list<string> # The repository names that you want to disassociate from the approval rule template. The length constraint limit is for each string in the array. The array itself can be empty.
-]: any -> record<disassociatedRepositoryNames: list<string>, errors: table<repositoryName: string, errorCode: string, errorMessage: string>> {
+]: any -> oneof<record<disassociatedRepositoryNames: list<string>, errors: table<repositoryName: string, errorCode: string, errorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -439,7 +462,7 @@ export def "batch-get-commits" [
   --x-amz-target: string@x-amz-target-completer-4 # required
   commit_ids: list<string> # The full commit IDs of the commits to get information about. You must supply the full SHA IDs of each commit. You cannot use shortened SHA IDs.
   repository_name: string # The name of the repository that contains the commits.
-]: any -> record<commits: table<commitId: string, treeId: string, parents: list, message: string, author: record, committer: record, additionalData: string>, errors: table<commitId: string, errorCode: string, errorMessage: string>> {
+]: any -> oneof<record<commits: table<commitId: string, treeId: string, parents: list, message: string, author: record, committer: record, additionalData: string>, errors: table<commitId: string, errorCode: string, errorMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -488,7 +511,7 @@ export def "batch-get-repositories" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-5 # required
   repository_names: list<string> # The names of the repositories to get information about. The length constraint limit is for each string in the array. The array itself can be empty.
-]: any -> record<repositories: table<accountId: string, repositoryId: string, repositoryName: string, repositoryDescription: string, defaultBranch: string, lastModifiedDate: string, creationDate: string, cloneUrlHttp: string, cloneUrlSsh: string, Arn: string>, repositoriesNotFound: list<string>> {
+]: any -> oneof<record<repositories: table<accountId: string, repositoryId: string, repositoryName: string, repositoryDescription: string, defaultBranch: string, lastModifiedDate: string, creationDate: string, cloneUrlHttp: string, cloneUrlSsh: string, Arn: string>, repositoriesNotFound: list<string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -539,7 +562,7 @@ export def "create-approval-rule-template" [
   approval_rule_template_name: string # The name of the approval rule template. Provide descriptive names, because this name is applied to the approval rules created automatically in associated repositories.
   approval_rule_template_content: string # The content of the approval rule that is created on pull requests in associated repositories. If you specify one or more destination references (branches), approval rules are created in an associated repository only if their destination references (branches) match those specified in the template. When you create the content of the approval rule template, you can specify approvers in an approval pool in one of two ways: CodeCommitApprovers: This option only requires an AWS account and a resource. It can be used for both IAM users and federated access users whose name matches the provided resource name. This is a very powerful option that offers a great deal of flexibility. For example, if you specify the AWS account 123456789012 and Mary_Major, all of the following are counted as approvals coming from that user: An IAM user in the account (arn:aws:iam::123456789012:user/Mary_Major) A federated user identified in IAM as Mary_Major (arn:aws:sts::123456789012:federated-user/Mary_Major) This option does not recognize an active session of someone assuming the role of CodeCommitReview with a role session name of Mary_Major (arn:aws:sts::123456789012:assumed-role/CodeCommitReview/Mary_Major) unless you include a wildcard (*Mary_Major). Fully qualified ARN: This option allows you to specify the fully qualified Amazon Resource Name (ARN) of the IAM user or role. For more information about IAM ARNs, wildcards, and formats, see IAM Identifiers (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html) in the IAM User Guide.
   --approval-rule-template-description: string # The description of the approval rule template. Consider providing a description that explains what this template does and when it might be appropriate to associate it with repositories.
-]: any -> record<approvalRuleTemplate: record<approvalRuleTemplateId: string, approvalRuleTemplateName: string, approvalRuleTemplateDescription: string, approvalRuleTemplateContent: string, ruleContentSha256: string, lastModifiedDate: string, creationDate: string, lastModifiedUser: string>> {
+]: any -> oneof<record<approvalRuleTemplate: record<approvalRuleTemplateId: string, approvalRuleTemplateName: string, approvalRuleTemplateDescription: string, approvalRuleTemplateContent: string, ruleContentSha256: string, lastModifiedDate: string, creationDate: string, lastModifiedUser: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -620,9 +643,6 @@ export def "create-branch" [
 #
 # POST /
 # operationId: CreateCommit
-# --putFiles item shape: {filePath: string, fileMode?: "EXECUTABLE"|"NORMAL"|"SYMLINK", fileContent?: string, sourceFile?: record}
-# --deleteFiles item shape: {filePath: string}
-# --setFileModes item shape: {filePath: string, fileMode: "EXECUTABLE"|"NORMAL"|"SYMLINK"}
 export def "create-commit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -651,7 +671,7 @@ export def "create-commit" [
   --put-files: list # The files to add or update in this commit. — item shape: {filePath: string, fileMode?: "EXECUTABLE"|"NORMAL"|"SYMLINK", fileContent?: string, sourceFile?: record}
   --delete-files: list # The files to delete in this commit. These files still exist in earlier commits. — item shape: {filePath: string}
   --set-file-modes: list # The file modes to update for files in this commit. — item shape: {filePath: string, fileMode: "EXECUTABLE"|"NORMAL"|"SYMLINK"}
-]: any -> record<commitId: string, treeId: string, filesAdded: table<absolutePath: string, blobId: string, fileMode: string>, filesUpdated: table<absolutePath: string, blobId: string, fileMode: string>, filesDeleted: table<absolutePath: string, blobId: string, fileMode: string>> {
+]: any -> oneof<record<commitId: string, treeId: string, filesAdded: table<absolutePath: string, blobId: string, fileMode: string>, filesUpdated: table<absolutePath: string, blobId: string, fileMode: string>, filesDeleted: table<absolutePath: string, blobId: string, fileMode: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -681,7 +701,6 @@ export def "create-commit" [
 #
 # POST /
 # operationId: CreatePullRequest
-# --targets item shape: {repositoryName: string, sourceReference: string, destinationReference?: string}
 export def "create-pull-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +723,7 @@ export def "create-pull-request" [
   --description: string # A description of the pull request.
   targets: list # The targets for the pull request, including the source of the code to be reviewed (the source branch) and the destination where the creator of the pull request intends the code to be merged after the pull request is closed (the destination branch). — item shape: {repositoryName: string, sourceReference: string, destinationReference?: string}
   --client-request-token: string # A unique, client-generated idempotency token that, when provided in a request, ensures the request cannot be repeated with a changed parameter. If a request is received with the same parameters and a token is included, the request returns information about the initial request that used that token. The AWS SDKs prepopulate client request tokens. If you are using an AWS SDK, an idempotency token is created for you.
-]: any -> record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>> {
+]: any -> oneof<record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -755,7 +774,7 @@ export def "create-pull-request-approval-rule" [
   pull_request_id: string # The system-generated ID of the pull request for which you want to create the approval rule.
   approval_rule_name: string # The name for the approval rule.
   approval_rule_content: string # The content of the approval rule, including the number of approvals needed and the structure of an approval pool defined for approvals, if any. For more information about approval pools, see the AWS CodeCommit User Guide. When you create the content of the approval rule, you can specify approvers in an approval pool in one of two ways: CodeCommitApprovers: This option only requires an AWS account and a resource. It can be used for both IAM users and federated access users whose name matches the provided resource name. This is a very powerful option that offers a great deal of flexibility. For example, if you specify the AWS account 123456789012 and Mary_Major, all of the following would be counted as approvals coming from that user: An IAM user in the account (arn:aws:iam::123456789012:user/Mary_Major) A federated user identified in IAM as Mary_Major (arn:aws:sts::123456789012:federated-user/Mary_Major) This option does not recognize an active session of someone assuming the role of CodeCommitReview with a role session name of Mary_Major (arn:aws:sts::123456789012:assumed-role/CodeCommitReview/Mary_Major) unless you include a wildcard (*Mary_Major). Fully qualified ARN: This option allows you to specify the fully qualified Amazon Resource Name (ARN) of the IAM user or role. For more information about IAM ARNs, wildcards, and formats, see IAM Identifiers (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html) in the IAM User Guide.
-]: any -> record<approvalRule: record<approvalRuleId: string, approvalRuleName: string, approvalRuleContent: string, ruleContentSha256: string, lastModifiedDate: string, creationDate: string, lastModifiedUser: string, originApprovalRuleTemplate: record<approvalRuleTemplateId: string, approvalRuleTemplateName: string>>> {
+]: any -> oneof<record<approvalRule: record<approvalRuleId: string, approvalRuleName: string, approvalRuleContent: string, ruleContentSha256: string, lastModifiedDate: string, creationDate: string, lastModifiedUser: string, originApprovalRuleTemplate: record<approvalRuleTemplateId: string, approvalRuleTemplateName: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -806,7 +825,7 @@ export def "create-repository" [
   repository_name: string # The name of the new repository to be created. The repository name must be unique across the calling AWS account. Repository names are limited to 100 alphanumeric, dash, and underscore characters, and cannot include certain characters. For more information about the limits on repository names, see Limits (https://docs.aws.amazon.com/codecommit/latest/userguide/limits.html) in the AWS CodeCommit User Guide. The suffix .git is prohibited.
   --repository-description: string # A comment or description about the new repository. The description field for a repository accepts all HTML characters and all valid Unicode characters. Applications that do not HTML-encode the description and display it in a webpage can expose users to potentially malicious code. Make sure that you HTML-encode the description field in any application that uses this API to display the repository description on a webpage.
   --tags: record # One or more tag key-value pairs to use when tagging this repository.
-]: any -> record<repositoryMetadata: record<accountId: string, repositoryId: string, repositoryName: string, repositoryDescription: string, defaultBranch: string, lastModifiedDate: string, creationDate: string, cloneUrlHttp: string, cloneUrlSsh: string, Arn: string>> {
+]: any -> oneof<record<repositoryMetadata: record<accountId: string, repositoryId: string, repositoryName: string, repositoryDescription: string, defaultBranch: string, lastModifiedDate: string, creationDate: string, cloneUrlHttp: string, cloneUrlSsh: string, Arn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -836,7 +855,6 @@ export def "create-repository" [
 #
 # POST /
 # operationId: CreateUnreferencedMergeCommit
-# --conflictResolution shape: {replaceContents?: list, deleteFiles?: list, setFileModes?: list}
 export def "create-unreferenced-merge-commit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -866,7 +884,7 @@ export def "create-unreferenced-merge-commit" [
   --commit-message: string # The commit message for the unreferenced commit.
   --keep-empty-folders: oneof<nothing, bool> # If the commit contains deletions, whether to keep a folder or folder structure if the changes leave the folders empty. If this is specified as true, a .gitkeep file is created for empty folders. The default is false.
   --conflict-resolution: record # If AUTOMERGE is the conflict resolution strategy, a list of inputs to use when resolving conflicts during a merge. — shape: {replaceContents?: list, deleteFiles?: list, setFileModes?: list}
-]: any -> record<commitId: string, treeId: string> {
+]: any -> oneof<record<commitId: string, treeId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -915,7 +933,7 @@ export def "delete-approval-rule-template" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-13 # required
   approval_rule_template_name: string # The name of the approval rule template to delete.
-]: any -> record<approvalRuleTemplateId: string> {
+]: any -> oneof<record<approvalRuleTemplateId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -965,7 +983,7 @@ export def "delete-branch" [
   --x-amz-target: string@x-amz-target-completer-14 # required
   repository_name: string # The name of the repository that contains the branch to be deleted.
   branch_name: string # The name of the branch to delete.
-]: any -> record<deletedBranch: record<branchName: string, commitId: string>> {
+]: any -> oneof<record<deletedBranch: record<branchName: string, commitId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1014,7 +1032,7 @@ export def "delete-comment-content" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-15 # required
   comment_id: string # The unique, system-generated ID of the comment. To get this ID, use GetCommentsForComparedCommit or GetCommentsForPullRequest.
-]: any -> record<comment: record<commentId: string, content: string, inReplyTo: string, creationDate: string, lastModifiedDate: string, authorArn: string, deleted: bool, clientRequestToken: string, callerReactions: list<string>, reactionCounts: record>> {
+]: any -> oneof<record<comment: record<commentId: string, content: string, inReplyTo: string, creationDate: string, lastModifiedDate: string, authorArn: string, deleted: bool, clientRequestToken: string, callerReactions: list<string>, reactionCounts: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1070,7 +1088,7 @@ export def "delete-file" [
   --commit-message: string # The commit message you want to include as part of deleting the file. Commit messages are limited to 256 KB. If no message is specified, a default message is used.
   --name: string # The name of the author of the commit that deletes the file. If no name is specified, the user's ARN is used as the author name and committer name.
   --email: string # The email address for the commit that deletes the file. If no email address is specified, the email address is left blank.
-]: any -> record<commitId: string, blobId: string, treeId: string, filePath: string> {
+]: any -> oneof<record<commitId: string, blobId: string, treeId: string, filePath: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1120,7 +1138,7 @@ export def "delete-pull-request-approval-rule" [
   --x-amz-target: string@x-amz-target-completer-17 # required
   pull_request_id: string # The system-generated ID of the pull request that contains the approval rule you want to delete.
   approval_rule_name: string # The name of the approval rule you want to delete.
-]: any -> record<approvalRuleId: string> {
+]: any -> oneof<record<approvalRuleId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1169,7 +1187,7 @@ export def "delete-repository" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-18 # required
   repository_name: string # The name of the repository to delete.
-]: any -> record<repositoryId: string> {
+]: any -> oneof<record<repositoryId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1228,7 +1246,7 @@ export def "describe-merge-conflicts" [
   --conflict-detail-level: string@conflict-detail-level-completer # The level of conflict detail to use. If unspecified, the default FILE_LEVEL is used, which returns a not-mergeable result if the same file has differences in both branches. If LINE_LEVEL is specified, a conflict is considered not mergeable if the same file in both branches has differences on the same line.
   --conflict-resolution-strategy: string@conflict-resolution-strategy-completer # Specifies which branch to use when resolving conflicts, or whether to attempt automatically merging two versions of a file. The default is NONE, which requires any conflicts to be resolved manually before the merge operation is successful.
   --next-token-body: string # An enumeration token that, when provided in a request, returns the next batch of the results. (body field)
-]: any -> record<conflictMetadata: record<filePath: string, fileSizes: record<source: int, destination: int, base: int>, fileModes: record<source: string, destination: string, base: string>, objectTypes: record<source: string, destination: string, base: string>, numberOfConflicts: int, isBinaryFile: record<source: bool, destination: bool, base: bool>, contentConflict: bool, fileModeConflict: bool, objectTypeConflict: bool, mergeOperations: record<source: string, destination: string>>, mergeHunks: table<isConflict: bool, source: record, destination: record, base: record>, nextToken: string, destinationCommitId: string, sourceCommitId: string, baseCommitId: string> {
+]: any -> oneof<record<conflictMetadata: record<filePath: string, fileSizes: record<source: int, destination: int, base: int>, fileModes: record<source: string, destination: string, base: string>, objectTypes: record<source: string, destination: string, base: string>, numberOfConflicts: int, isBinaryFile: record<source: bool, destination: bool, base: bool>, contentConflict: bool, fileModeConflict: bool, objectTypeConflict: bool, mergeOperations: record<source: string, destination: string>>, mergeHunks: table<isConflict: bool, source: record, destination: record, base: record>, nextToken: string, destinationCommitId: string, sourceCommitId: string, baseCommitId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1284,7 +1302,7 @@ export def "describe-pull-request-events" [
   --actor-arn: string # The Amazon Resource Name (ARN) of the user whose actions resulted in the event. Examples include updating the pull request with more commits or changing the status of a pull request.
   --next-token-body: string # An enumeration token that, when provided in a request, returns the next batch of the results. (body field)
   --max-results-body: int # A non-zero, non-negative integer used to limit the number of returned results. The default is 100 events, which is also the maximum number of events that can be returned in a result. (body field)
-]: any -> record<pullRequestEvents: table<pullRequestId: string, eventDate: string, pullRequestEventType: string, actorArn: string, pullRequestCreatedEventMetadata: record, pullRequestStatusChangedEventMetadata: record, pullRequestSourceReferenceUpdatedEventMetadata: record, pullRequestMergedStateChangedEventMetadata: record, approvalRuleEventMetadata: record, approvalStateChangedEventMetadata: record, approvalRuleOverriddenEventMetadata: record>, nextToken: string> {
+]: any -> oneof<record<pullRequestEvents: table<pullRequestId: string, eventDate: string, pullRequestEventType: string, actorArn: string, pullRequestCreatedEventMetadata: record, pullRequestStatusChangedEventMetadata: record, pullRequestSourceReferenceUpdatedEventMetadata: record, pullRequestMergedStateChangedEventMetadata: record, approvalRuleEventMetadata: record, approvalStateChangedEventMetadata: record, approvalRuleOverriddenEventMetadata: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1385,7 +1403,7 @@ export def "evaluate-pull-request-approval-rules" [
   --x-amz-target: string@x-amz-target-completer-22 # required
   pull_request_id: string # The system-generated ID of the pull request you want to evaluate.
   revision_id: string # The system-generated ID for the pull request revision. To retrieve the most recent revision ID for a pull request, use GetPullRequest.
-]: any -> record<evaluation: record<approved: bool, overridden: bool, approvalRulesSatisfied: list<string>, approvalRulesNotSatisfied: list<string>>> {
+]: any -> oneof<record<evaluation: record<approved: bool, overridden: bool, approvalRulesSatisfied: list<string>, approvalRulesNotSatisfied: list<string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1434,7 +1452,7 @@ export def "get-approval-rule-template" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-23 # required
   approval_rule_template_name: string # The name of the approval rule template for which you want to get information.
-]: any -> record<approvalRuleTemplate: record<approvalRuleTemplateId: string, approvalRuleTemplateName: string, approvalRuleTemplateDescription: string, approvalRuleTemplateContent: string, ruleContentSha256: string, lastModifiedDate: string, creationDate: string, lastModifiedUser: string>> {
+]: any -> oneof<record<approvalRuleTemplate: record<approvalRuleTemplateId: string, approvalRuleTemplateName: string, approvalRuleTemplateDescription: string, approvalRuleTemplateContent: string, ruleContentSha256: string, lastModifiedDate: string, creationDate: string, lastModifiedUser: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1484,7 +1502,7 @@ export def "get-blob" [
   --x-amz-target: string@x-amz-target-completer-24 # required
   repository_name: string # The name of the repository that contains the blob.
   blob_id: string # The ID of the blob, which is its SHA-1 pointer.
-]: any -> record<content: string> {
+]: any -> oneof<record<content: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1534,7 +1552,7 @@ export def "get-branch" [
   --x-amz-target: string@x-amz-target-completer-25 # required
   --repository-name: string # The name of the repository that contains the branch for which you want to retrieve information.
   --branch-name: string # The name of the branch for which you want to retrieve information.
-]: any -> record<branch: record<branchName: string, commitId: string>> {
+]: any -> oneof<record<branch: record<branchName: string, commitId: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1583,7 +1601,7 @@ export def "get-comment" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-26 # required
   comment_id: string # The unique, system-generated ID of the comment. To get this ID, use GetCommentsForComparedCommit or GetCommentsForPullRequest.
-]: any -> record<comment: record<commentId: string, content: string, inReplyTo: string, creationDate: string, lastModifiedDate: string, authorArn: string, deleted: bool, clientRequestToken: string, callerReactions: list<string>, reactionCounts: record>> {
+]: any -> oneof<record<comment: record<commentId: string, content: string, inReplyTo: string, creationDate: string, lastModifiedDate: string, authorArn: string, deleted: bool, clientRequestToken: string, callerReactions: list<string>, reactionCounts: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1637,7 +1655,7 @@ export def "get-comment-reactions" [
   --reaction-user-arn: string # Optional. The Amazon Resource Name (ARN) of the user or identity for which you want to get reaction information.
   --next-token-body: string # An enumeration token that, when provided in a request, returns the next batch of the results. (body field)
   --max-results-body: int # A non-zero, non-negative integer used to limit the number of returned results. The default is the same as the allowed maximum, 1,000. (body field)
-]: any -> record<reactionsForComment: table<reaction: record, reactionUsers: list, reactionsFromDeletedUsersCount: int>, nextToken: string> {
+]: any -> oneof<record<reactionsForComment: table<reaction: record, reactionUsers: list, reactionsFromDeletedUsersCount: int>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1693,7 +1711,7 @@ export def "get-comments-for-compared-commit" [
   after_commit_id: string # To establish the directionality of the comparison, the full commit ID of the after commit.
   --next-token-body: string # An enumeration token that when provided in a request, returns the next batch of the results. (body field)
   --max-results-body: int # A non-zero, non-negative integer used to limit the number of returned results. The default is 100 comments, but you can configure up to 500. (body field)
-]: any -> record<commentsForComparedCommitData: table<repositoryName: string, beforeCommitId: string, afterCommitId: string, beforeBlobId: string, afterBlobId: string, location: record, comments: list>, nextToken: string> {
+]: any -> oneof<record<commentsForComparedCommitData: table<repositoryName: string, beforeCommitId: string, afterCommitId: string, beforeBlobId: string, afterBlobId: string, location: record, comments: list>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1750,7 +1768,7 @@ export def "get-comments-for-pull-request" [
   --after-commit-id: string # The full commit ID of the commit in the source branch that was the tip of the branch at the time the comment was made.
   --next-token-body: string # An enumeration token that, when provided in a request, returns the next batch of the results. (body field)
   --max-results-body: int # A non-zero, non-negative integer used to limit the number of returned results. The default is 100 comments. You can return up to 500 comments with a single request. (body field)
-]: any -> record<commentsForPullRequestData: table<pullRequestId: string, repositoryName: string, beforeCommitId: string, afterCommitId: string, beforeBlobId: string, afterBlobId: string, location: record, comments: list>, nextToken: string> {
+]: any -> oneof<record<commentsForPullRequestData: table<pullRequestId: string, repositoryName: string, beforeCommitId: string, afterCommitId: string, beforeBlobId: string, afterBlobId: string, location: record, comments: list>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1801,7 +1819,7 @@ export def "get-commit" [
   --x-amz-target: string@x-amz-target-completer-30 # required
   repository_name: string # The name of the repository to which the commit was made.
   commit_id: string # The commit ID. Commit IDs are the full SHA ID of the commit.
-]: any -> record<commit: record<commitId: string, treeId: string, parents: list<string>, message: string, author: record<name: string, email: string, date: string>, committer: record<name: string, email: string, date: string>, additionalData: string>> {
+]: any -> oneof<record<commit: record<commitId: string, treeId: string, parents: list<string>, message: string, author: record<name: string, email: string, date: string>, committer: record<name: string, email: string, date: string>, additionalData: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1858,7 +1876,7 @@ export def "get-differences" [
   --after-path: string # The file path in which to check differences. Limits the results to this path. Can also be used to specify the changed name of a directory or folder, if it has changed. If not specified, differences are shown for all paths.
   --max-results-body: int # A non-zero, non-negative integer used to limit the number of returned results. (body field)
   --next-token-body: string # An enumeration token that, when provided in a request, returns the next batch of the results. (body field)
-]: any -> record<differences: table<beforeBlob: record, afterBlob: record, changeType: string>, NextToken: string> {
+]: any -> oneof<record<differences: table<beforeBlob: record, afterBlob: record, changeType: string>, NextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1910,7 +1928,7 @@ export def "get-file" [
   repository_name: string # The name of the repository that contains the file.
   --commit-specifier: string # The fully quaified reference that identifies the commit that contains the file. For example, you can specify a full commit ID, a tag, a branch name, or a reference such as refs/heads/master. If none is provided, the head commit is used.
   file_path: string # The fully qualified path to the file, including the full name and extension of the file. For example, /examples/file.md is the fully qualified path to a file named file.md in a folder named examples.
-]: any -> record<commitId: string, blobId: string, filePath: string, fileMode: string, fileSize: int, fileContent: string> {
+]: any -> oneof<record<commitId: string, blobId: string, filePath: string, fileMode: string, fileSize: int, fileContent: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1961,7 +1979,7 @@ export def "get-folder" [
   repository_name: string # The name of the repository.
   --commit-specifier: string # A fully qualified reference used to identify a commit that contains the version of the folder's content to return. A fully qualified reference can be a commit ID, branch name, tag, or reference such as HEAD. If no specifier is provided, the folder content is returned as it exists in the HEAD commit.
   folder_path: string # The fully qualified path to the folder whose contents are returned, including the folder name. For example, /examples is a fully-qualified path to a folder named examples that was created off of the root directory (/) of a repository.
-]: any -> record<commitId: string, folderPath: string, treeId: string, subFolders: table<treeId: string, absolutePath: string, relativePath: string>, files: table<blobId: string, absolutePath: string, relativePath: string, fileMode: string>, symbolicLinks: table<blobId: string, absolutePath: string, relativePath: string, fileMode: string>, subModules: table<commitId: string, absolutePath: string, relativePath: string>> {
+]: any -> oneof<record<commitId: string, folderPath: string, treeId: string, subFolders: table<treeId: string, absolutePath: string, relativePath: string>, files: table<blobId: string, absolutePath: string, relativePath: string, fileMode: string>, symbolicLinks: table<blobId: string, absolutePath: string, relativePath: string, fileMode: string>, subModules: table<commitId: string, absolutePath: string, relativePath: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2014,7 +2032,7 @@ export def "get-merge-commit" [
   destination_commit_specifier: string # The branch, tag, HEAD, or other fully qualified reference used to identify a commit (for example, a branch name or a full commit ID).
   --conflict-detail-level: string@conflict-detail-level-completer # The level of conflict detail to use. If unspecified, the default FILE_LEVEL is used, which returns a not-mergeable result if the same file has differences in both branches. If LINE_LEVEL is specified, a conflict is considered not mergeable if the same file in both branches has differences on the same line.
   --conflict-resolution-strategy: string@conflict-resolution-strategy-completer # Specifies which branch to use when resolving conflicts, or whether to attempt automatically merging two versions of a file. The default is NONE, which requires any conflicts to be resolved manually before the merge operation is successful.
-]: any -> record<sourceCommitId: string, destinationCommitId: string, baseCommitId: string, mergedCommitId: string> {
+]: any -> oneof<record<sourceCommitId: string, destinationCommitId: string, baseCommitId: string, mergedCommitId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2072,7 +2090,7 @@ export def "get-merge-conflicts" [
   --max-conflict-files-body: int # The maximum number of files to include in the output. (body field)
   --conflict-resolution-strategy: string@conflict-resolution-strategy-completer # Specifies which branch to use when resolving conflicts, or whether to attempt automatically merging two versions of a file. The default is NONE, which requires any conflicts to be resolved manually before the merge operation is successful.
   --next-token-body: string # An enumeration token that, when provided in a request, returns the next batch of the results. (body field)
-]: any -> record<mergeable: bool, destinationCommitId: string, sourceCommitId: string, baseCommitId: string, conflictMetadataList: table<filePath: string, fileSizes: record, fileModes: record, objectTypes: record, numberOfConflicts: int, isBinaryFile: record, contentConflict: bool, fileModeConflict: bool, objectTypeConflict: bool, mergeOperations: record>, nextToken: string> {
+]: any -> oneof<record<mergeable: bool, destinationCommitId: string, sourceCommitId: string, baseCommitId: string, conflictMetadataList: table<filePath: string, fileSizes: record, fileModes: record, objectTypes: record, numberOfConflicts: int, isBinaryFile: record, contentConflict: bool, fileModeConflict: bool, objectTypeConflict: bool, mergeOperations: record>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2126,7 +2144,7 @@ export def "get-merge-options" [
   destination_commit_specifier: string # The branch, tag, HEAD, or other fully qualified reference used to identify a commit (for example, a branch name or a full commit ID).
   --conflict-detail-level: string@conflict-detail-level-completer # The level of conflict detail to use. If unspecified, the default FILE_LEVEL is used, which returns a not-mergeable result if the same file has differences in both branches. If LINE_LEVEL is specified, a conflict is considered not mergeable if the same file in both branches has differences on the same line.
   --conflict-resolution-strategy: string@conflict-resolution-strategy-completer # Specifies which branch to use when resolving conflicts, or whether to attempt automatically merging two versions of a file. The default is NONE, which requires any conflicts to be resolved manually before the merge operation is successful.
-]: any -> record<mergeOptions: list<string>, sourceCommitId: string, destinationCommitId: string, baseCommitId: string> {
+]: any -> oneof<record<mergeOptions: list<string>, sourceCommitId: string, destinationCommitId: string, baseCommitId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2175,7 +2193,7 @@ export def "get-pull-request" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-37 # required
   pull_request_id: string # The system-generated ID of the pull request. To get this ID, use ListPullRequests.
-]: any -> record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>> {
+]: any -> oneof<record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2225,7 +2243,7 @@ export def "get-pull-request-approval-states" [
   --x-amz-target: string@x-amz-target-completer-38 # required
   pull_request_id: string # The system-generated ID for the pull request.
   revision_id: string # The system-generated ID for the pull request revision.
-]: any -> record<approvals: table<userArn: string, approvalState: string>> {
+]: any -> oneof<record<approvals: table<userArn: string, approvalState: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2275,7 +2293,7 @@ export def "get-pull-request-override-state" [
   --x-amz-target: string@x-amz-target-completer-39 # required
   pull_request_id: string # The ID of the pull request for which you want to get information about whether approval rules have been set aside (overridden).
   revision_id: string # The system-generated ID of the revision for the pull request. To retrieve the most recent revision ID, use GetPullRequest.
-]: any -> record<overridden: bool, overrider: string> {
+]: any -> oneof<record<overridden: bool, overrider: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2324,7 +2342,7 @@ export def "get-repository" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-40 # required
   repository_name: string # The name of the repository to get information about.
-]: any -> record<repositoryMetadata: record<accountId: string, repositoryId: string, repositoryName: string, repositoryDescription: string, defaultBranch: string, lastModifiedDate: string, creationDate: string, cloneUrlHttp: string, cloneUrlSsh: string, Arn: string>> {
+]: any -> oneof<record<repositoryMetadata: record<accountId: string, repositoryId: string, repositoryName: string, repositoryDescription: string, defaultBranch: string, lastModifiedDate: string, creationDate: string, cloneUrlHttp: string, cloneUrlSsh: string, Arn: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2373,7 +2391,7 @@ export def "get-repository-triggers" [
   --x-amz-signed-headers: string
   --x-amz-target: string@x-amz-target-completer-41 # required
   repository_name: string # The name of the repository for which the trigger is configured.
-]: any -> record<configurationId: string, triggers: table<name: string, destinationArn: string, customData: string, branches: list, events: list>> {
+]: any -> oneof<record<configurationId: string, triggers: table<name: string, destinationArn: string, customData: string, branches: list, events: list>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2425,7 +2443,7 @@ export def "list-approval-rule-templates" [
   --x-amz-target: string@x-amz-target-completer-42 # required
   --next-token-body: string # An enumeration token that, when provided in a request, returns the next batch of the results. (body field)
   --max-results-body: int # A non-zero, non-negative integer used to limit the number of returned results. (body field)
-]: any -> record<approvalRuleTemplateNames: list<string>, nextToken: string> {
+]: any -> oneof<record<approvalRuleTemplateNames: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2479,7 +2497,7 @@ export def "list-associated-approval-rule-templates-for-repository" [
   repository_name: string # The name of the repository for which you want to list all associated approval rule templates.
   --next-token-body: string # An enumeration token that, when provided in a request, returns the next batch of the results. (body field)
   --max-results-body: int # A non-zero, non-negative integer used to limit the number of returned results. (body field)
-]: any -> record<approvalRuleTemplateNames: list<string>, nextToken: string> {
+]: any -> oneof<record<approvalRuleTemplateNames: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2531,7 +2549,7 @@ export def "list-branches" [
   --x-amz-target: string@x-amz-target-completer-44 # required
   repository_name: string # The name of the repository that contains the branches.
   --next-token-body: string # An enumeration token that allows the operation to batch the results. (body field)
-]: any -> record<branches: list<string>, nextToken: string> {
+]: any -> oneof<record<branches: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2587,7 +2605,7 @@ export def "list-pull-requests" [
   --pull-request-status: string@pull-request-status-completer # Optional. The status of the pull request. If used, this refines the results to the pull requests that match the specified status.
   --next-token-body: string # An enumeration token that, when provided in a request, returns the next batch of the results. (body field)
   --max-results-body: int # A non-zero, non-negative integer used to limit the number of returned results. (body field)
-]: any -> record<pullRequestIds: list<string>, nextToken: string> {
+]: any -> oneof<record<pullRequestIds: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2640,7 +2658,7 @@ export def "list-repositories" [
   --next-token-body: string # An enumeration token that allows the operation to batch the results of the operation. Batch sizes are 1,000 for list repository operations. When the client sends the token back to AWS CodeCommit, another page of 1,000 records is retrieved. (body field)
   --sort-by: string@sort-by-completer # The criteria used to sort the results of a list repositories operation.
   --order: string@order-completer # The order in which to sort the results of a list repositories operation.
-]: any -> record<repositories: table<repositoryName: string, repositoryId: string>, nextToken: string> {
+]: any -> oneof<record<repositories: table<repositoryName: string, repositoryId: string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2694,7 +2712,7 @@ export def "list-repositories-for-approval-rule-template" [
   approval_rule_template_name: string # The name of the approval rule template for which you want to list repositories that are associated with that template.
   --next-token-body: string # An enumeration token that, when provided in a request, returns the next batch of the results. (body field)
   --max-results-body: int # A non-zero, non-negative integer used to limit the number of returned results. (body field)
-]: any -> record<repositoryNames: list<string>, nextToken: string> {
+]: any -> oneof<record<repositoryNames: list<string>, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2745,7 +2763,7 @@ export def "list-tags-for-resource" [
   --x-amz-target: string@x-amz-target-completer-48 # required
   resource_arn: string # The Amazon Resource Name (ARN) of the resource for which you want to get information about tags, if any.
   --next-token: string # An enumeration token that, when provided in a request, returns the next batch of the results.
-]: any -> record<tags: record, nextToken: string> {
+]: any -> oneof<record<tags: record, nextToken: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2797,7 +2815,7 @@ export def "merge-branches-by-fast-forward" [
   source_commit_specifier: string # The branch, tag, HEAD, or other fully qualified reference used to identify a commit (for example, a branch name or a full commit ID).
   destination_commit_specifier: string # The branch, tag, HEAD, or other fully qualified reference used to identify a commit (for example, a branch name or a full commit ID).
   --target-branch: string # The branch where the merge is applied.
-]: any -> record<commitId: string, treeId: string> {
+]: any -> oneof<record<commitId: string, treeId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2827,7 +2845,6 @@ export def "merge-branches-by-fast-forward" [
 #
 # POST /
 # operationId: MergeBranchesBySquash
-# --conflictResolution shape: {replaceContents?: list, deleteFiles?: list, setFileModes?: list}
 export def "merge-branches-by-squash" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2857,7 +2874,7 @@ export def "merge-branches-by-squash" [
   --commit-message: string # The commit message for the merge.
   --keep-empty-folders: oneof<nothing, bool> # If the commit contains deletions, whether to keep a folder or folder structure if the changes leave the folders empty. If this is specified as true, a .gitkeep file is created for empty folders. The default is false.
   --conflict-resolution: record # If AUTOMERGE is the conflict resolution strategy, a list of inputs to use when resolving conflicts during a merge. — shape: {replaceContents?: list, deleteFiles?: list, setFileModes?: list}
-]: any -> record<commitId: string, treeId: string> {
+]: any -> oneof<record<commitId: string, treeId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2887,7 +2904,6 @@ export def "merge-branches-by-squash" [
 #
 # POST /
 # operationId: MergeBranchesByThreeWay
-# --conflictResolution shape: {replaceContents?: list, deleteFiles?: list, setFileModes?: list}
 export def "merge-branches-by-three-way" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2917,7 +2933,7 @@ export def "merge-branches-by-three-way" [
   --commit-message: string # The commit message to include in the commit information for the merge.
   --keep-empty-folders: oneof<nothing, bool> # If the commit contains deletions, whether to keep a folder or folder structure if the changes leave the folders empty. If true, a .gitkeep file is created for empty folders. The default is false.
   --conflict-resolution: record # If AUTOMERGE is the conflict resolution strategy, a list of inputs to use when resolving conflicts during a merge. — shape: {replaceContents?: list, deleteFiles?: list, setFileModes?: list}
-]: any -> record<commitId: string, treeId: string> {
+]: any -> oneof<record<commitId: string, treeId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2968,7 +2984,7 @@ export def "merge-pull-request-by-fast-forward" [
   pull_request_id: string # The system-generated ID of the pull request. To get this ID, use ListPullRequests.
   repository_name: string # The name of the repository where the pull request was created.
   --source-commit-id: string # The full commit ID of the original or updated commit in the pull request source branch. Pass this value if you want an exception thrown if the current commit ID of the tip of the source branch does not match this commit ID.
-]: any -> record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>> {
+]: any -> oneof<record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2998,7 +3014,6 @@ export def "merge-pull-request-by-fast-forward" [
 #
 # POST /
 # operationId: MergePullRequestBySquash
-# --conflictResolution shape: {replaceContents?: list, deleteFiles?: list, setFileModes?: list}
 export def "merge-pull-request-by-squash" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3027,7 +3042,7 @@ export def "merge-pull-request-by-squash" [
   --email: string # The email address of the person merging the branches. This information is used in the commit information for the merge.
   --keep-empty-folders: oneof<nothing, bool> # If the commit contains deletions, whether to keep a folder or folder structure if the changes leave the folders empty. If true, a .gitkeep file is created for empty folders. The default is false.
   --conflict-resolution: record # If AUTOMERGE is the conflict resolution strategy, a list of inputs to use when resolving conflicts during a merge. — shape: {replaceContents?: list, deleteFiles?: list, setFileModes?: list}
-]: any -> record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>> {
+]: any -> oneof<record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3057,7 +3072,6 @@ export def "merge-pull-request-by-squash" [
 #
 # POST /
 # operationId: MergePullRequestByThreeWay
-# --conflictResolution shape: {replaceContents?: list, deleteFiles?: list, setFileModes?: list}
 export def "merge-pull-request-by-three-way" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3086,7 +3100,7 @@ export def "merge-pull-request-by-three-way" [
   --email: string # The email address of the person merging the branches. This information is used in the commit information for the merge.
   --keep-empty-folders: oneof<nothing, bool> # If the commit contains deletions, whether to keep a folder or folder structure if the changes leave the folders empty. If true, a .gitkeep file is created for empty folders. The default is false.
   --conflict-resolution: record # If AUTOMERGE is the conflict resolution strategy, a list of inputs to use when resolving conflicts during a merge. — shape: {replaceContents?: list, deleteFiles?: list, setFileModes?: list}
-]: any -> record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>> {
+]: any -> oneof<record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3167,7 +3181,6 @@ export def "override-pull-request-approval-rules" [
 #
 # POST /
 # operationId: PostCommentForComparedCommit
-# --location shape: {filePath?: string, filePosition?: int, relativeFileVersion?: "BEFORE"|"AFTER"}
 export def "post-comment-for-compared-commit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3192,7 +3205,7 @@ export def "post-comment-for-compared-commit" [
   --location: record # Returns information about the location of a change or comment in the comparison between two commits or a pull request. — shape: {filePath?: string, filePosition?: int, relativeFileVersion?: "BEFORE"|"AFTER"}
   content: string # The content of the comment you want to make.
   --client-request-token: string # A unique, client-generated idempotency token that, when provided in a request, ensures the request cannot be repeated with a changed parameter. If a request is received with the same parameters and a token is included, the request returns information about the initial request that used that token.
-]: any -> record<repositoryName: string, beforeCommitId: string, afterCommitId: string, beforeBlobId: string, afterBlobId: string, location: record<filePath: string, filePosition: int, relativeFileVersion: string>, comment: record<commentId: string, content: string, inReplyTo: string, creationDate: string, lastModifiedDate: string, authorArn: string, deleted: bool, clientRequestToken: string, callerReactions: list<string>, reactionCounts: record>> {
+]: any -> oneof<record<repositoryName: string, beforeCommitId: string, afterCommitId: string, beforeBlobId: string, afterBlobId: string, location: record<filePath: string, filePosition: int, relativeFileVersion: string>, comment: record<commentId: string, content: string, inReplyTo: string, creationDate: string, lastModifiedDate: string, authorArn: string, deleted: bool, clientRequestToken: string, callerReactions: list<string>, reactionCounts: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3222,7 +3235,6 @@ export def "post-comment-for-compared-commit" [
 #
 # POST /
 # operationId: PostCommentForPullRequest
-# --location shape: {filePath?: string, filePosition?: int, relativeFileVersion?: "BEFORE"|"AFTER"}
 export def "post-comment-for-pull-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3248,7 +3260,7 @@ export def "post-comment-for-pull-request" [
   --location: record # Returns information about the location of a change or comment in the comparison between two commits or a pull request. — shape: {filePath?: string, filePosition?: int, relativeFileVersion?: "BEFORE"|"AFTER"}
   content: string # The content of your comment on the change.
   --client-request-token: string # A unique, client-generated idempotency token that, when provided in a request, ensures the request cannot be repeated with a changed parameter. If a request is received with the same parameters and a token is included, the request returns information about the initial request that used that token.
-]: any -> record<repositoryName: string, pullRequestId: string, beforeCommitId: string, afterCommitId: string, beforeBlobId: string, afterBlobId: string, location: record<filePath: string, filePosition: int, relativeFileVersion: string>, comment: record<commentId: string, content: string, inReplyTo: string, creationDate: string, lastModifiedDate: string, authorArn: string, deleted: bool, clientRequestToken: string, callerReactions: list<string>, reactionCounts: record>> {
+]: any -> oneof<record<repositoryName: string, pullRequestId: string, beforeCommitId: string, afterCommitId: string, beforeBlobId: string, afterBlobId: string, location: record<filePath: string, filePosition: int, relativeFileVersion: string>, comment: record<commentId: string, content: string, inReplyTo: string, creationDate: string, lastModifiedDate: string, authorArn: string, deleted: bool, clientRequestToken: string, callerReactions: list<string>, reactionCounts: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3299,7 +3311,7 @@ export def "post-comment-reply" [
   in_reply_to: string # The system-generated ID of the comment to which you want to reply. To get this ID, use GetCommentsForComparedCommit or GetCommentsForPullRequest.
   --client-request-token: string # A unique, client-generated idempotency token that, when provided in a request, ensures the request cannot be repeated with a changed parameter. If a request is received with the same parameters and a token is included, the request returns information about the initial request that used that token.
   content: string # The contents of your reply to a comment.
-]: any -> record<comment: record<commentId: string, content: string, inReplyTo: string, creationDate: string, lastModifiedDate: string, authorArn: string, deleted: bool, clientRequestToken: string, callerReactions: list<string>, reactionCounts: record>> {
+]: any -> oneof<record<comment: record<commentId: string, content: string, inReplyTo: string, creationDate: string, lastModifiedDate: string, authorArn: string, deleted: bool, clientRequestToken: string, callerReactions: list<string>, reactionCounts: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3406,7 +3418,7 @@ export def "put-file" [
   --commit-message: string # A message about why this file was added or updated. Although it is optional, a message makes the commit history for your repository more useful.
   --name: string # The name of the person adding or updating the file. Although it is optional, a name makes the commit history for your repository more useful.
   --email: string # An email address for the person adding or updating the file.
-]: any -> record<commitId: string, blobId: string, treeId: string> {
+]: any -> oneof<record<commitId: string, blobId: string, treeId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3436,7 +3448,6 @@ export def "put-file" [
 #
 # POST /
 # operationId: PutRepositoryTriggers
-# --triggers item shape: {name: string, destinationArn: string, customData?: string, branches?: list<string>, events: list<string>}
 export def "put-repository-triggers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3457,7 +3468,7 @@ export def "put-repository-triggers" [
   --x-amz-target: string@x-amz-target-completer-61 # required
   repository_name: string # The name of the repository where you want to create or update the trigger.
   triggers: list # The JSON block of configuration information for each trigger. — item shape: {name: string, destinationArn: string, customData?: string, branches?: list<string>, events: list<string>}
-]: any -> record<configurationId: string> {
+]: any -> oneof<record<configurationId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3537,7 +3548,6 @@ export def "tag-resource" [
 #
 # POST /
 # operationId: TestRepositoryTriggers
-# --triggers item shape: {name: string, destinationArn: string, customData?: string, branches?: list<string>, events: list<string>}
 export def "test-repository-triggers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3558,7 +3568,7 @@ export def "test-repository-triggers" [
   --x-amz-target: string@x-amz-target-completer-63 # required
   repository_name: string # The name of the repository in which to test the triggers.
   triggers: list # The list of triggers to test. — item shape: {name: string, destinationArn: string, customData?: string, branches?: list<string>, events: list<string>}
-]: any -> record<successfulExecutions: list<string>, failedExecutions: table<trigger: string, failureMessage: string>> {
+]: any -> oneof<record<successfulExecutions: list<string>, failedExecutions: table<trigger: string, failureMessage: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3659,7 +3669,7 @@ export def "update-approval-rule-template-content" [
   approval_rule_template_name: string # The name of the approval rule template where you want to update the content of the rule.
   new_rule_content: string # The content that replaces the existing content of the rule. Content statements must be complete. You cannot provide only the changes.
   --existing-rule-content-sha256: string # The SHA-256 hash signature for the content of the approval rule. You can retrieve this information by using GetPullRequest.
-]: any -> record<approvalRuleTemplate: record<approvalRuleTemplateId: string, approvalRuleTemplateName: string, approvalRuleTemplateDescription: string, approvalRuleTemplateContent: string, ruleContentSha256: string, lastModifiedDate: string, creationDate: string, lastModifiedUser: string>> {
+]: any -> oneof<record<approvalRuleTemplate: record<approvalRuleTemplateId: string, approvalRuleTemplateName: string, approvalRuleTemplateDescription: string, approvalRuleTemplateContent: string, ruleContentSha256: string, lastModifiedDate: string, creationDate: string, lastModifiedUser: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3709,7 +3719,7 @@ export def "update-approval-rule-template-description" [
   --x-amz-target: string@x-amz-target-completer-66 # required
   approval_rule_template_name: string # The name of the template for which you want to update the description.
   approval_rule_template_description: string # The updated description of the approval rule template.
-]: any -> record<approvalRuleTemplate: record<approvalRuleTemplateId: string, approvalRuleTemplateName: string, approvalRuleTemplateDescription: string, approvalRuleTemplateContent: string, ruleContentSha256: string, lastModifiedDate: string, creationDate: string, lastModifiedUser: string>> {
+]: any -> oneof<record<approvalRuleTemplate: record<approvalRuleTemplateId: string, approvalRuleTemplateName: string, approvalRuleTemplateDescription: string, approvalRuleTemplateContent: string, ruleContentSha256: string, lastModifiedDate: string, creationDate: string, lastModifiedUser: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3759,7 +3769,7 @@ export def "update-approval-rule-template-name" [
   --x-amz-target: string@x-amz-target-completer-67 # required
   old_approval_rule_template_name: string # The current name of the approval rule template.
   new_approval_rule_template_name: string # The new name you want to apply to the approval rule template.
-]: any -> record<approvalRuleTemplate: record<approvalRuleTemplateId: string, approvalRuleTemplateName: string, approvalRuleTemplateDescription: string, approvalRuleTemplateContent: string, ruleContentSha256: string, lastModifiedDate: string, creationDate: string, lastModifiedUser: string>> {
+]: any -> oneof<record<approvalRuleTemplate: record<approvalRuleTemplateId: string, approvalRuleTemplateName: string, approvalRuleTemplateDescription: string, approvalRuleTemplateContent: string, ruleContentSha256: string, lastModifiedDate: string, creationDate: string, lastModifiedUser: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3809,7 +3819,7 @@ export def "update-comment" [
   --x-amz-target: string@x-amz-target-completer-68 # required
   comment_id: string # The system-generated ID of the comment you want to update. To get this ID, use GetCommentsForComparedCommit or GetCommentsForPullRequest.
   content: string # The updated content to replace the existing content of the comment.
-]: any -> record<comment: record<commentId: string, content: string, inReplyTo: string, creationDate: string, lastModifiedDate: string, authorArn: string, deleted: bool, clientRequestToken: string, callerReactions: list<string>, reactionCounts: record>> {
+]: any -> oneof<record<comment: record<commentId: string, content: string, inReplyTo: string, creationDate: string, lastModifiedDate: string, authorArn: string, deleted: bool, clientRequestToken: string, callerReactions: list<string>, reactionCounts: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3911,7 +3921,7 @@ export def "update-pull-request-approval-rule-content" [
   approval_rule_name: string # The name of the approval rule you want to update.
   --existing-rule-content-sha256: string # The SHA-256 hash signature for the content of the approval rule. You can retrieve this information by using GetPullRequest.
   new_rule_content: string # The updated content for the approval rule. When you update the content of the approval rule, you can specify approvers in an approval pool in one of two ways: CodeCommitApprovers: This option only requires an AWS account and a resource. It can be used for both IAM users and federated access users whose name matches the provided resource name. This is a very powerful option that offers a great deal of flexibility. For example, if you specify the AWS account 123456789012 and Mary_Major, all of the following are counted as approvals coming from that user: An IAM user in the account (arn:aws:iam::123456789012:user/Mary_Major) A federated user identified in IAM as Mary_Major (arn:aws:sts::123456789012:federated-user/Mary_Major) This option does not recognize an active session of someone assuming the role of CodeCommitReview with a role session name of Mary_Major (arn:aws:sts::123456789012:assumed-role/CodeCommitReview/Mary_Major) unless you include a wildcard (*Mary_Major). Fully qualified ARN: This option allows you to specify the fully qualified Amazon Resource Name (ARN) of the IAM user or role. For more information about IAM ARNs, wildcards, and formats, see IAM Identifiers (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_identifiers.html) in the IAM User Guide.
-]: any -> record<approvalRule: record<approvalRuleId: string, approvalRuleName: string, approvalRuleContent: string, ruleContentSha256: string, lastModifiedDate: string, creationDate: string, lastModifiedUser: string, originApprovalRuleTemplate: record<approvalRuleTemplateId: string, approvalRuleTemplateName: string>>> {
+]: any -> oneof<record<approvalRule: record<approvalRuleId: string, approvalRuleName: string, approvalRuleContent: string, ruleContentSha256: string, lastModifiedDate: string, creationDate: string, lastModifiedUser: string, originApprovalRuleTemplate: record<approvalRuleTemplateId: string, approvalRuleTemplateName: string>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4012,7 +4022,7 @@ export def "update-pull-request-description" [
   --x-amz-target: string@x-amz-target-completer-72 # required
   pull_request_id: string # The system-generated ID of the pull request. To get this ID, use ListPullRequests.
   description: string # The updated content of the description for the pull request. This content replaces the existing description.
-]: any -> record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>> {
+]: any -> oneof<record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4062,7 +4072,7 @@ export def "update-pull-request-status" [
   --x-amz-target: string@x-amz-target-completer-73 # required
   pull_request_id: string # The system-generated ID of the pull request. To get this ID, use ListPullRequests.
   pull_request_status: string@pull-request-status-completer # The status of the pull request. The only valid operations are to update the status from OPEN to OPEN, OPEN to CLOSED or from CLOSED to CLOSED.
-]: any -> record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>> {
+]: any -> oneof<record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4112,7 +4122,7 @@ export def "update-pull-request-title" [
   --x-amz-target: string@x-amz-target-completer-74 # required
   pull_request_id: string # The system-generated ID of the pull request. To get this ID, use ListPullRequests.
   title: string # The updated title of the pull request. This replaces the existing title.
-]: any -> record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>> {
+]: any -> oneof<record<pullRequest: record<pullRequestId: string, title: string, description: string, lastActivityDate: string, creationDate: string, pullRequestStatus: string, authorArn: string, pullRequestTargets: list<record>, clientRequestToken: string, revisionId: string, approvalRules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
