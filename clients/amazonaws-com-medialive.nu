@@ -12,28 +12,37 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -88,7 +111,8 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
 
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -122,9 +146,9 @@ def force-completer [] { ["NO" "YES"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-input-device-transfer" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["accept-input-device-transfer" "batch-delete" "batch-start" "batch-stop" "batch-update-schedule" "delete-schedule" "describe-schedule" "cancel-input-device-transfer" "claim-device" "create-channel" "list-channels" "create-input" "list-inputs" "create-input-security-group" "list-input-security-groups" "create-multiplex" "list-multiplexes" "create-multiplex-program" "list-multiplex-programs" "create-partner-input" "create-tags" "list-tags-for-resource" "delete-channel" "describe-channel" "update-channel" "delete-input" "describe-input" "update-input" "delete-input-security-group" "describe-input-security-group" "update-input-security-group" "delete-multiplex" "describe-multiplex" "update-multiplex" "delete-multiplex-program" "describe-multiplex-program" "update-multiplex-program" "delete-reservation" "describe-reservation" "update-reservation" "delete-tags" "describe-input-device" "update-input-device" "describe-input-device-thumbnail" "describe-offering" "list-input-device-transfers" "list-input-devices" "list-offerings" "list-reservations" "purchase-offering" "reboot-input-device" "reject-input-device-transfer" "start-channel" "start-input-device-maintenance-window" "start-multiplex" "stop-channel" "stop-multiplex" "transfer-input-device" "update-channel-class" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -164,7 +188,7 @@ export def "accept-input-device-transfer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($input_device_id | is-empty) { error make --unspanned { msg: "path parameter 'inputDeviceId' must be non-empty" } }
@@ -212,7 +236,7 @@ export def "batch-delete" [
   --input-ids: list<string> # Placeholder documentation for __listOf__string
   --input-security-group-ids: list<string> # Placeholder documentation for __listOf__string
   --multiplex-ids: list<string> # Placeholder documentation for __listOf__string
-]: any -> record<Failed: record, Successful: record> {
+]: any -> oneof<record<Failed: table<Arn: string, Code: string, Id: string, Message: string>, Successful: table<Arn: string, Id: string, State: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -260,7 +284,7 @@ export def "batch-start" [
   --x-amz-signed-headers: string
   --channel-ids: list<string> # Placeholder documentation for __listOf__string
   --multiplex-ids: list<string> # Placeholder documentation for __listOf__string
-]: any -> record<Failed: record, Successful: record> {
+]: any -> oneof<record<Failed: table<Arn: string, Code: string, Id: string, Message: string>, Successful: table<Arn: string, Id: string, State: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -308,7 +332,7 @@ export def "batch-stop" [
   --x-amz-signed-headers: string
   --channel-ids: list<string> # Placeholder documentation for __listOf__string
   --multiplex-ids: list<string> # Placeholder documentation for __listOf__string
-]: any -> record<Failed: record, Successful: record> {
+]: any -> oneof<record<Failed: table<Arn: string, Code: string, Id: string, Message: string>, Successful: table<Arn: string, Id: string, State: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -337,8 +361,6 @@ export def "batch-stop" [
 #
 # PUT /prod/channels/{channelId}/schedule
 # operationId: BatchUpdateSchedule
-# --creates shape: {ScheduleActions?: any}
-# --deletes shape: {ActionNames?: any}
 export def "batch-update-schedule" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -357,9 +379,9 @@ export def "batch-update-schedule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --creates: record # A list of schedule actions to create (in a request) or that have been created (in a response). — shape: {ScheduleActions?: any}
-  --deletes: record # A list of schedule actions to delete. — shape: {ActionNames?: any}
-]: any -> record<Creates: record<ScheduleActions: record>, Deletes: record<ScheduleActions: record>> {
+  --creates: record # A list of schedule actions to create (in a request) or that have been created (in a response). — shape: {ScheduleActions?: list}
+  --deletes: record # A list of schedule actions to delete. — shape: {ActionNames?: list<string>}
+]: any -> oneof<record<Creates: record<ScheduleActions: list<record>>, Deletes: record<ScheduleActions: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -407,7 +429,7 @@ export def "delete-schedule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -456,7 +478,7 @@ export def "describe-schedule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, ScheduleActions: record> {
+]: nothing -> oneof<record<NextToken: string, ScheduleActions: table<ActionName: string, ScheduleActionSettings: record, ScheduleActionStartSettings: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -502,7 +524,7 @@ export def "cancel-input-device-transfer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($input_device_id | is-empty) { error make --unspanned { msg: "path parameter 'inputDeviceId' must be non-empty" } }
@@ -547,7 +569,7 @@ export def "claim-device" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --id: string # Placeholder documentation for __string
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -576,13 +598,6 @@ export def "claim-device" [
 #
 # POST /prod/channels
 # operationId: CreateChannel
-# --cdiInputSpecification shape: {Resolution?: any}
-# --destinations item shape: {Id?: any, MediaPackageSettings?: any, MultiplexSettings?: any, Settings?: any}
-# --encoderSettings shape: {AudioDescriptions?: any, AvailBlanking?: any, AvailConfiguration?: any, BlackoutSlate?: any, CaptionDescriptions?: any, FeatureActivations?: any, GlobalConfiguration?: any, MotionGraphicsConfiguration?: any, NielsenConfiguration?: any, OutputGroups?: any, TimecodeConfig?: any, VideoDescriptions?: any}
-# --inputAttachments item shape: {AutomaticInputFailoverSettings?: any, InputAttachmentName?: any, InputId?: any, InputSettings?: any}
-# --inputSpecification shape: {Codec?: any, MaximumBitrate?: any, Resolution?: any}
-# --maintenance shape: {MaintenanceDay?: any, MaintenanceStartTime?: any}
-# --vpc shape: {PublicAddressAllocationIds?: any, SecurityGroupIds?: any, SubnetIds?: any}
 export def "create-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -600,21 +615,21 @@ export def "create-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --cdi-input-specification: record # Placeholder documentation for CdiInputSpecification — shape: {Resolution?: any}
+  --cdi-input-specification: record # Placeholder documentation for CdiInputSpecification — shape: {Resolution?: "SD"|"HD"|"FHD"|"UHD"}
   --channel-class: string@channel-class-completer # A standard channel has two encoding pipelines and a single pipeline channel only has one.
-  --destinations: list # Placeholder documentation for __listOfOutputDestination — item shape: {Id?: any, MediaPackageSettings?: any, MultiplexSettings?: any, Settings?: any}
-  --encoder-settings: record # Encoder Settings — shape: {AudioDescriptions?: any, AvailBlanking?: any, AvailConfiguration?: any, BlackoutSlate?: any, CaptionDescriptions?: any, FeatureActivations?: any, GlobalConfiguration?: any, MotionGraphicsConfiguration?: any, NielsenConfiguration?: any, OutputGroups?: any, TimecodeConfig?: any, VideoDescriptions?: any}
-  --input-attachments: list # Placeholder documentation for __listOfInputAttachment — item shape: {AutomaticInputFailoverSettings?: any, InputAttachmentName?: any, InputId?: any, InputSettings?: any}
-  --input-specification: record # Placeholder documentation for InputSpecification — shape: {Codec?: any, MaximumBitrate?: any, Resolution?: any}
+  --destinations: list # Placeholder documentation for __listOfOutputDestination — item shape: {Id?: string, MediaPackageSettings?: list, MultiplexSettings?: record, Settings?: list}
+  --encoder-settings: record # Encoder Settings — shape: {AudioDescriptions?: list, AvailBlanking?: record, AvailConfiguration?: record, BlackoutSlate?: record, CaptionDescriptions?: list, FeatureActivations?: record, GlobalConfiguration?: record, MotionGraphicsConfiguration?: record, NielsenConfiguration?: record, OutputGroups?: list, TimecodeConfig?: record, VideoDescriptions?: list}
+  --input-attachments: list # Placeholder documentation for __listOfInputAttachment — item shape: {AutomaticInputFailoverSettings?: record, InputAttachmentName?: string, InputId?: string, InputSettings?: record}
+  --input-specification: record # Placeholder documentation for InputSpecification — shape: {Codec?: "MPEG2"|"AVC"|"HEVC", MaximumBitrate?: "MAX_10_MBPS"|"MAX_20_MBPS"|"MAX_50_MBPS", Resolution?: "SD"|"HD"|"UHD"}
   --log-level: string@log-level-completer # The log level the user wants for their channel.
-  --maintenance: record # Placeholder documentation for MaintenanceCreateSettings — shape: {MaintenanceDay?: any, MaintenanceStartTime?: any}
+  --maintenance: record # Placeholder documentation for MaintenanceCreateSettings — shape: {MaintenanceDay?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", MaintenanceStartTime?: string}
   --name: string # Placeholder documentation for __string
   --request-id: string # Placeholder documentation for __string
   --reserved: string # Placeholder documentation for __string
   --role-arn: string # Placeholder documentation for __string
   --tags: record # Placeholder documentation for Tags
-  --vpc: record # The properties for a private VPC Output When this property is specified, the output egress addresses will be created in a user specified VPC — shape: {PublicAddressAllocationIds?: any, SecurityGroupIds?: any, SubnetIds?: any}
-]: any -> record<Channel: record<Arn: record, CdiInputSpecification: record<Resolution: record>, ChannelClass: record, Destinations: record, EgressEndpoints: record, EncoderSettings: record<AudioDescriptions: record, AvailBlanking: record, AvailConfiguration: record, BlackoutSlate: record, CaptionDescriptions: record, FeatureActivations: record, GlobalConfiguration: record, MotionGraphicsConfiguration: record, NielsenConfiguration: record, OutputGroups: record, TimecodeConfig: record, VideoDescriptions: record>, Id: record, InputAttachments: record, InputSpecification: record<Codec: record, MaximumBitrate: record, Resolution: record>, LogLevel: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartTime: record>, Name: record, PipelineDetails: record, PipelinesRunningCount: record, RoleArn: record, State: record, Tags: record, Vpc: record<AvailabilityZones: record, NetworkInterfaceIds: record, SecurityGroupIds: record, SubnetIds: record>>> {
+  --vpc: record # The properties for a private VPC Output When this property is specified, the output egress addresses will be created in a user specified VPC — shape: {PublicAddressAllocationIds?: list<string>, SecurityGroupIds?: list<string>, SubnetIds?: list<string>}
+]: any -> oneof<record<Channel: record<Arn: string, CdiInputSpecification: record<Resolution: string>, ChannelClass: string, Destinations: list<record>, EgressEndpoints: list<record>, EncoderSettings: record<AudioDescriptions: list, AvailBlanking: record, AvailConfiguration: record, BlackoutSlate: record, CaptionDescriptions: list, FeatureActivations: record, GlobalConfiguration: record, MotionGraphicsConfiguration: record, NielsenConfiguration: record, OutputGroups: list, TimecodeConfig: record, VideoDescriptions: list>, Id: string, InputAttachments: list<record>, InputSpecification: record<Codec: string, MaximumBitrate: string, Resolution: string>, LogLevel: string, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartTime: string>, Name: string, PipelineDetails: list<record>, PipelinesRunningCount: int, RoleArn: string, State: string, Tags: record, Vpc: record<AvailabilityZones: list, NetworkInterfaceIds: list, SecurityGroupIds: list, SubnetIds: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -664,7 +679,7 @@ export def "list-channels" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Channels: record, NextToken: record> {
+]: nothing -> oneof<record<Channels: table<Arn: string, CdiInputSpecification: record, ChannelClass: string, Destinations: list, EgressEndpoints: list, Id: string, InputAttachments: list, InputSpecification: record, LogLevel: string, Maintenance: record, Name: string, PipelinesRunningCount: int, RoleArn: string, State: string, Tags: record, Vpc: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -691,11 +706,6 @@ export def "list-channels" [
 #
 # POST /prod/inputs
 # operationId: CreateInput
-# --destinations item shape: {StreamName?: any}
-# --inputDevices item shape: {Id?: any}
-# --mediaConnectFlows item shape: {FlowArn?: any}
-# --sources item shape: {PasswordParam?: any, Url?: any, Username?: any}
-# --vpc shape: {SecurityGroupIds?: any, SubnetIds?: any}
 export def "create-input" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -713,18 +723,18 @@ export def "create-input" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --destinations: list # Placeholder documentation for __listOfInputDestinationRequest — item shape: {StreamName?: any}
-  --input-devices: list # Placeholder documentation for __listOfInputDeviceSettings — item shape: {Id?: any}
+  --destinations: list # Placeholder documentation for __listOfInputDestinationRequest — item shape: {StreamName?: string}
+  --input-devices: list # Placeholder documentation for __listOfInputDeviceSettings — item shape: {Id?: string}
   --input-security-groups: list<string> # Placeholder documentation for __listOf__string
-  --media-connect-flows: list # Placeholder documentation for __listOfMediaConnectFlowRequest — item shape: {FlowArn?: any}
+  --media-connect-flows: list # Placeholder documentation for __listOfMediaConnectFlowRequest — item shape: {FlowArn?: string}
   --name: string # Placeholder documentation for __string
   --request-id: string # Placeholder documentation for __string
   --role-arn: string # Placeholder documentation for __string
-  --sources: list # Placeholder documentation for __listOfInputSourceRequest — item shape: {PasswordParam?: any, Url?: any, Username?: any}
+  --sources: list # Placeholder documentation for __listOfInputSourceRequest — item shape: {PasswordParam?: string, Url?: string, Username?: string}
   --tags: record # Placeholder documentation for Tags
   --type: string@type-completer # The different types of inputs that AWS Elemental MediaLive supports.
-  --vpc: record # Settings for a private VPC Input. When this property is specified, the input destination addresses will be created in a VPC rather than with public Internet addresses. This property requires setting the roleArn property on Input creation. Not compatible with the inputSecurityGroups property. — shape: {SecurityGroupIds?: any, SubnetIds?: any}
-]: any -> record<Input: record<Arn: record, AttachedChannels: record, Destinations: record, Id: record, InputClass: record, InputDevices: record, InputPartnerIds: record, InputSourceType: record, MediaConnectFlows: record, Name: record, RoleArn: record, SecurityGroups: record, Sources: record, State: record, Tags: record, Type: record>> {
+  --vpc: record # Settings for a private VPC Input. When this property is specified, the input destination addresses will be created in a VPC rather than with public Internet addresses. This property requires setting the roleArn property on Input creation. Not compatible with the inputSecurityGroups property. — shape: {SecurityGroupIds?: list<string>, SubnetIds?: list<string>}
+]: any -> oneof<record<Input: record<Arn: string, AttachedChannels: list<string>, Destinations: list<record>, Id: string, InputClass: string, InputDevices: list<record>, InputPartnerIds: list<string>, InputSourceType: string, MediaConnectFlows: list<record>, Name: string, RoleArn: string, SecurityGroups: list<string>, Sources: list<record>, State: string, Tags: record, Type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -774,7 +784,7 @@ export def "list-inputs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Inputs: record, NextToken: record> {
+]: nothing -> oneof<record<Inputs: table<Arn: string, AttachedChannels: list, Destinations: list, Id: string, InputClass: string, InputDevices: list, InputPartnerIds: list, InputSourceType: string, MediaConnectFlows: list, Name: string, RoleArn: string, SecurityGroups: list, Sources: list, State: string, Tags: record, Type: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -801,7 +811,6 @@ export def "list-inputs" [
 #
 # POST /prod/inputSecurityGroups
 # operationId: CreateInputSecurityGroup
-# --whitelistRules item shape: {Cidr?: any}
 export def "create-input-security-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -820,8 +829,8 @@ export def "create-input-security-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --tags: record # Placeholder documentation for Tags
-  --whitelist-rules: list # Placeholder documentation for __listOfInputWhitelistRuleCidr — item shape: {Cidr?: any}
-]: any -> record<SecurityGroup: record<Arn: record, Id: record, Inputs: record, State: record, Tags: record, WhitelistRules: record>> {
+  --whitelist-rules: list # Placeholder documentation for __listOfInputWhitelistRuleCidr — item shape: {Cidr?: string}
+]: any -> oneof<record<SecurityGroup: record<Arn: string, Id: string, Inputs: list<string>, State: string, Tags: record, WhitelistRules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -871,7 +880,7 @@ export def "list-input-security-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InputSecurityGroups: record, NextToken: record> {
+]: nothing -> oneof<record<InputSecurityGroups: table<Arn: string, Id: string, Inputs: list, State: string, Tags: record, WhitelistRules: list>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -898,7 +907,6 @@ export def "list-input-security-groups" [
 #
 # POST /prod/multiplexes
 # operationId: CreateMultiplex
-# --multiplexSettings shape: {MaximumVideoBufferDelayMilliseconds?: any, TransportStreamBitrate?: any, TransportStreamId?: any, TransportStreamReservedBitrate?: any}
 export def "create-multiplex" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -917,11 +925,11 @@ export def "create-multiplex" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   availability_zones: list<string> # Placeholder documentation for __listOf__string
-  multiplex_settings: record # Contains configuration for a Multiplex event — shape: {MaximumVideoBufferDelayMilliseconds?: any, TransportStreamBitrate?: any, TransportStreamId?: any, TransportStreamReservedBitrate?: any}
+  multiplex_settings: record # Contains configuration for a Multiplex event — shape: {MaximumVideoBufferDelayMilliseconds?: int, TransportStreamBitrate?: int, TransportStreamId?: int, TransportStreamReservedBitrate?: int}
   name: string # Placeholder documentation for __string
   request_id: string # Placeholder documentation for __string
   --tags: record # Placeholder documentation for Tags
-]: any -> record<Multiplex: record<Arn: record, AvailabilityZones: record, Destinations: record, Id: record, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: record, TransportStreamBitrate: record, TransportStreamId: record, TransportStreamReservedBitrate: record>, Name: record, PipelinesRunningCount: record, ProgramCount: record, State: record, Tags: record>> {
+]: any -> oneof<record<Multiplex: record<Arn: string, AvailabilityZones: list<string>, Destinations: list<record>, Id: string, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: int, TransportStreamBitrate: int, TransportStreamId: int, TransportStreamReservedBitrate: int>, Name: string, PipelinesRunningCount: int, ProgramCount: int, State: string, Tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -971,7 +979,7 @@ export def "list-multiplexes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Multiplexes: record, NextToken: record> {
+]: nothing -> oneof<record<Multiplexes: table<Arn: string, AvailabilityZones: list, Id: string, MultiplexSettings: record, Name: string, PipelinesRunningCount: int, ProgramCount: int, State: string, Tags: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -998,7 +1006,6 @@ export def "list-multiplexes" [
 #
 # POST /prod/multiplexes/{multiplexId}/programs
 # operationId: CreateMultiplexProgram
-# --multiplexProgramSettings shape: {PreferredChannelPipeline?: any, ProgramNumber?: any, ServiceDescriptor?: any, VideoSettings?: any}
 export def "create-multiplex-program" [
   multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1017,10 +1024,10 @@ export def "create-multiplex-program" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  multiplex_program_settings: record # Multiplex Program settings configuration. — shape: {PreferredChannelPipeline?: any, ProgramNumber?: any, ServiceDescriptor?: any, VideoSettings?: any}
+  multiplex_program_settings: record # Multiplex Program settings configuration. — shape: {PreferredChannelPipeline?: "CURRENTLY_ACTIVE"|"PIPELINE_0"|"PIPELINE_1", ProgramNumber?: int, ServiceDescriptor?: record, VideoSettings?: record}
   program_name: string # Placeholder documentation for __string
   request_id: string # Placeholder documentation for __string
-]: any -> record<MultiplexProgram: record<ChannelId: record, MultiplexProgramSettings: record<PreferredChannelPipeline: record, ProgramNumber: record, ServiceDescriptor: record, VideoSettings: record>, PacketIdentifiersMap: record<AudioPids: record, DvbSubPids: record, DvbTeletextPid: record, EtvPlatformPid: record, EtvSignalPid: record, KlvDataPids: record, PcrPid: record, PmtPid: record, PrivateMetadataPid: record, Scte27Pids: record, Scte35Pid: record, TimedMetadataPid: record, VideoPid: record>, PipelineDetails: record, ProgramName: record>> {
+]: any -> oneof<record<MultiplexProgram: record<ChannelId: string, MultiplexProgramSettings: record<PreferredChannelPipeline: string, ProgramNumber: int, ServiceDescriptor: record, VideoSettings: record>, PacketIdentifiersMap: record<AudioPids: list, DvbSubPids: list, DvbTeletextPid: int, EtvPlatformPid: int, EtvSignalPid: int, KlvDataPids: list, PcrPid: int, PmtPid: int, PrivateMetadataPid: int, Scte27Pids: list, Scte35Pid: int, TimedMetadataPid: int, VideoPid: int>, PipelineDetails: list<record>, ProgramName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1072,7 +1079,7 @@ export def "list-multiplex-programs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<MultiplexPrograms: record, NextToken: record> {
+]: nothing -> oneof<record<MultiplexPrograms: table<ChannelId: string, ProgramName: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($multiplex_id | is-empty) { error make --unspanned { msg: "path parameter 'multiplexId' must be non-empty" } }
@@ -1120,7 +1127,7 @@ export def "create-partner-input" [
   --x-amz-signed-headers: string
   --request-id: string # Placeholder documentation for __string
   --tags: record # Placeholder documentation for Tags
-]: any -> record<Input: record<Arn: record, AttachedChannels: record, Destinations: record, Id: record, InputClass: record, InputDevices: record, InputPartnerIds: record, InputSourceType: record, MediaConnectFlows: record, Name: record, RoleArn: record, SecurityGroups: record, Sources: record, State: record, Tags: record, Type: record>> {
+]: any -> oneof<record<Input: record<Arn: string, AttachedChannels: list<string>, Destinations: list<record>, Id: string, InputClass: string, InputDevices: list<record>, InputPartnerIds: list<string>, InputSourceType: string, MediaConnectFlows: list<record>, Name: string, RoleArn: string, SecurityGroups: list<string>, Sources: list<record>, State: string, Tags: record, Type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1217,7 +1224,7 @@ export def "list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Tags: record> {
+]: nothing -> oneof<record<Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource-arn' must be non-empty" } }
@@ -1262,7 +1269,7 @@ export def "delete-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, CdiInputSpecification: record<Resolution: record>, ChannelClass: record, Destinations: record, EgressEndpoints: record, EncoderSettings: record<AudioDescriptions: record, AvailBlanking: record<AvailBlankingImage: record, State: record>, AvailConfiguration: record<AvailSettings: record>, BlackoutSlate: record<BlackoutSlateImage: record, NetworkEndBlackout: record, NetworkEndBlackoutImage: record, NetworkId: record, State: record>, CaptionDescriptions: record, FeatureActivations: record<InputPrepareScheduleActions: record>, GlobalConfiguration: record<InitialAudioGain: record, InputEndAction: record, InputLossBehavior: record, OutputLockingMode: record, OutputTimingSource: record, SupportLowFramerateInputs: record>, MotionGraphicsConfiguration: record<MotionGraphicsInsertion: record, MotionGraphicsSettings: record>, NielsenConfiguration: record<DistributorId: record, NielsenPcmToId3Tagging: record>, OutputGroups: record, TimecodeConfig: record<Source: record, SyncThreshold: record>, VideoDescriptions: record>, Id: record, InputAttachments: record, InputSpecification: record<Codec: record, MaximumBitrate: record, Resolution: record>, LogLevel: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartTime: record>, Name: record, PipelineDetails: record, PipelinesRunningCount: record, RoleArn: record, State: record, Tags: record, Vpc: record<AvailabilityZones: record, NetworkInterfaceIds: record, SecurityGroupIds: record, SubnetIds: record>> {
+]: nothing -> oneof<record<Arn: string, CdiInputSpecification: record<Resolution: string>, ChannelClass: string, Destinations: table<Id: string, MediaPackageSettings: list, MultiplexSettings: record, Settings: list>, EgressEndpoints: table<SourceIp: string>, EncoderSettings: record<AudioDescriptions: list<record>, AvailBlanking: record<AvailBlankingImage: record, State: string>, AvailConfiguration: record<AvailSettings: record>, BlackoutSlate: record<BlackoutSlateImage: record, NetworkEndBlackout: string, NetworkEndBlackoutImage: record, NetworkId: string, State: string>, CaptionDescriptions: list<record>, FeatureActivations: record<InputPrepareScheduleActions: string>, GlobalConfiguration: record<InitialAudioGain: int, InputEndAction: string, InputLossBehavior: record, OutputLockingMode: string, OutputTimingSource: string, SupportLowFramerateInputs: string>, MotionGraphicsConfiguration: record<MotionGraphicsInsertion: string, MotionGraphicsSettings: record>, NielsenConfiguration: record<DistributorId: string, NielsenPcmToId3Tagging: string>, OutputGroups: list<record>, TimecodeConfig: record<Source: string, SyncThreshold: int>, VideoDescriptions: list<record>>, Id: string, InputAttachments: table<AutomaticInputFailoverSettings: record, InputAttachmentName: string, InputId: string, InputSettings: record>, InputSpecification: record<Codec: string, MaximumBitrate: string, Resolution: string>, LogLevel: string, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartTime: string>, Name: string, PipelineDetails: table<ActiveInputAttachmentName: string, ActiveInputSwitchActionName: string, ActiveMotionGraphicsActionName: string, ActiveMotionGraphicsUri: string, PipelineId: string>, PipelinesRunningCount: int, RoleArn: string, State: string, Tags: record, Vpc: record<AvailabilityZones: list<string>, NetworkInterfaceIds: list<string>, SecurityGroupIds: list<string>, SubnetIds: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -1307,7 +1314,7 @@ export def "describe-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, CdiInputSpecification: record<Resolution: record>, ChannelClass: record, Destinations: record, EgressEndpoints: record, EncoderSettings: record<AudioDescriptions: record, AvailBlanking: record<AvailBlankingImage: record, State: record>, AvailConfiguration: record<AvailSettings: record>, BlackoutSlate: record<BlackoutSlateImage: record, NetworkEndBlackout: record, NetworkEndBlackoutImage: record, NetworkId: record, State: record>, CaptionDescriptions: record, FeatureActivations: record<InputPrepareScheduleActions: record>, GlobalConfiguration: record<InitialAudioGain: record, InputEndAction: record, InputLossBehavior: record, OutputLockingMode: record, OutputTimingSource: record, SupportLowFramerateInputs: record>, MotionGraphicsConfiguration: record<MotionGraphicsInsertion: record, MotionGraphicsSettings: record>, NielsenConfiguration: record<DistributorId: record, NielsenPcmToId3Tagging: record>, OutputGroups: record, TimecodeConfig: record<Source: record, SyncThreshold: record>, VideoDescriptions: record>, Id: record, InputAttachments: record, InputSpecification: record<Codec: record, MaximumBitrate: record, Resolution: record>, LogLevel: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartTime: record>, Name: record, PipelineDetails: record, PipelinesRunningCount: record, RoleArn: record, State: record, Tags: record, Vpc: record<AvailabilityZones: record, NetworkInterfaceIds: record, SecurityGroupIds: record, SubnetIds: record>> {
+]: nothing -> oneof<record<Arn: string, CdiInputSpecification: record<Resolution: string>, ChannelClass: string, Destinations: table<Id: string, MediaPackageSettings: list, MultiplexSettings: record, Settings: list>, EgressEndpoints: table<SourceIp: string>, EncoderSettings: record<AudioDescriptions: list<record>, AvailBlanking: record<AvailBlankingImage: record, State: string>, AvailConfiguration: record<AvailSettings: record>, BlackoutSlate: record<BlackoutSlateImage: record, NetworkEndBlackout: string, NetworkEndBlackoutImage: record, NetworkId: string, State: string>, CaptionDescriptions: list<record>, FeatureActivations: record<InputPrepareScheduleActions: string>, GlobalConfiguration: record<InitialAudioGain: int, InputEndAction: string, InputLossBehavior: record, OutputLockingMode: string, OutputTimingSource: string, SupportLowFramerateInputs: string>, MotionGraphicsConfiguration: record<MotionGraphicsInsertion: string, MotionGraphicsSettings: record>, NielsenConfiguration: record<DistributorId: string, NielsenPcmToId3Tagging: string>, OutputGroups: list<record>, TimecodeConfig: record<Source: string, SyncThreshold: int>, VideoDescriptions: list<record>>, Id: string, InputAttachments: table<AutomaticInputFailoverSettings: record, InputAttachmentName: string, InputId: string, InputSettings: record>, InputSpecification: record<Codec: string, MaximumBitrate: string, Resolution: string>, LogLevel: string, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartTime: string>, Name: string, PipelineDetails: table<ActiveInputAttachmentName: string, ActiveInputSwitchActionName: string, ActiveMotionGraphicsActionName: string, ActiveMotionGraphicsUri: string, PipelineId: string>, PipelinesRunningCount: int, RoleArn: string, State: string, Tags: record, Vpc: record<AvailabilityZones: list<string>, NetworkInterfaceIds: list<string>, SecurityGroupIds: list<string>, SubnetIds: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -1334,12 +1341,6 @@ export def "describe-channel" [
 #
 # PUT /prod/channels/{channelId}
 # operationId: UpdateChannel
-# --cdiInputSpecification shape: {Resolution?: any}
-# --destinations item shape: {Id?: any, MediaPackageSettings?: any, MultiplexSettings?: any, Settings?: any}
-# --encoderSettings shape: {AudioDescriptions?: any, AvailBlanking?: any, AvailConfiguration?: any, BlackoutSlate?: any, CaptionDescriptions?: any, FeatureActivations?: any, GlobalConfiguration?: any, MotionGraphicsConfiguration?: any, NielsenConfiguration?: any, OutputGroups?: any, TimecodeConfig?: any, VideoDescriptions?: any}
-# --inputAttachments item shape: {AutomaticInputFailoverSettings?: any, InputAttachmentName?: any, InputId?: any, InputSettings?: any}
-# --inputSpecification shape: {Codec?: any, MaximumBitrate?: any, Resolution?: any}
-# --maintenance shape: {MaintenanceDay?: any, MaintenanceScheduledDate?: any, MaintenanceStartTime?: any}
 export def "update-channel" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1358,16 +1359,16 @@ export def "update-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --cdi-input-specification: record # Placeholder documentation for CdiInputSpecification — shape: {Resolution?: any}
-  --destinations: list # Placeholder documentation for __listOfOutputDestination — item shape: {Id?: any, MediaPackageSettings?: any, MultiplexSettings?: any, Settings?: any}
-  --encoder-settings: record # Encoder Settings — shape: {AudioDescriptions?: any, AvailBlanking?: any, AvailConfiguration?: any, BlackoutSlate?: any, CaptionDescriptions?: any, FeatureActivations?: any, GlobalConfiguration?: any, MotionGraphicsConfiguration?: any, NielsenConfiguration?: any, OutputGroups?: any, TimecodeConfig?: any, VideoDescriptions?: any}
-  --input-attachments: list # Placeholder documentation for __listOfInputAttachment — item shape: {AutomaticInputFailoverSettings?: any, InputAttachmentName?: any, InputId?: any, InputSettings?: any}
-  --input-specification: record # Placeholder documentation for InputSpecification — shape: {Codec?: any, MaximumBitrate?: any, Resolution?: any}
+  --cdi-input-specification: record # Placeholder documentation for CdiInputSpecification — shape: {Resolution?: "SD"|"HD"|"FHD"|"UHD"}
+  --destinations: list # Placeholder documentation for __listOfOutputDestination — item shape: {Id?: string, MediaPackageSettings?: list, MultiplexSettings?: record, Settings?: list}
+  --encoder-settings: record # Encoder Settings — shape: {AudioDescriptions?: list, AvailBlanking?: record, AvailConfiguration?: record, BlackoutSlate?: record, CaptionDescriptions?: list, FeatureActivations?: record, GlobalConfiguration?: record, MotionGraphicsConfiguration?: record, NielsenConfiguration?: record, OutputGroups?: list, TimecodeConfig?: record, VideoDescriptions?: list}
+  --input-attachments: list # Placeholder documentation for __listOfInputAttachment — item shape: {AutomaticInputFailoverSettings?: record, InputAttachmentName?: string, InputId?: string, InputSettings?: record}
+  --input-specification: record # Placeholder documentation for InputSpecification — shape: {Codec?: "MPEG2"|"AVC"|"HEVC", MaximumBitrate?: "MAX_10_MBPS"|"MAX_20_MBPS"|"MAX_50_MBPS", Resolution?: "SD"|"HD"|"UHD"}
   --log-level: string@log-level-completer # The log level the user wants for their channel.
-  --maintenance: record # Placeholder documentation for MaintenanceUpdateSettings — shape: {MaintenanceDay?: any, MaintenanceScheduledDate?: any, MaintenanceStartTime?: any}
+  --maintenance: record # Placeholder documentation for MaintenanceUpdateSettings — shape: {MaintenanceDay?: "MONDAY"|"TUESDAY"|"WEDNESDAY"|"THURSDAY"|"FRIDAY"|"SATURDAY"|"SUNDAY", MaintenanceScheduledDate?: string, MaintenanceStartTime?: string}
   --name: string # Placeholder documentation for __string
   --role-arn: string # Placeholder documentation for __string
-]: any -> record<Channel: record<Arn: record, CdiInputSpecification: record<Resolution: record>, ChannelClass: record, Destinations: record, EgressEndpoints: record, EncoderSettings: record<AudioDescriptions: record, AvailBlanking: record, AvailConfiguration: record, BlackoutSlate: record, CaptionDescriptions: record, FeatureActivations: record, GlobalConfiguration: record, MotionGraphicsConfiguration: record, NielsenConfiguration: record, OutputGroups: record, TimecodeConfig: record, VideoDescriptions: record>, Id: record, InputAttachments: record, InputSpecification: record<Codec: record, MaximumBitrate: record, Resolution: record>, LogLevel: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartTime: record>, Name: record, PipelineDetails: record, PipelinesRunningCount: record, RoleArn: record, State: record, Tags: record, Vpc: record<AvailabilityZones: record, NetworkInterfaceIds: record, SecurityGroupIds: record, SubnetIds: record>>> {
+]: any -> oneof<record<Channel: record<Arn: string, CdiInputSpecification: record<Resolution: string>, ChannelClass: string, Destinations: list<record>, EgressEndpoints: list<record>, EncoderSettings: record<AudioDescriptions: list, AvailBlanking: record, AvailConfiguration: record, BlackoutSlate: record, CaptionDescriptions: list, FeatureActivations: record, GlobalConfiguration: record, MotionGraphicsConfiguration: record, NielsenConfiguration: record, OutputGroups: list, TimecodeConfig: record, VideoDescriptions: list>, Id: string, InputAttachments: list<record>, InputSpecification: record<Codec: string, MaximumBitrate: string, Resolution: string>, LogLevel: string, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartTime: string>, Name: string, PipelineDetails: list<record>, PipelinesRunningCount: int, RoleArn: string, State: string, Tags: record, Vpc: record<AvailabilityZones: list, NetworkInterfaceIds: list, SecurityGroupIds: list, SubnetIds: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1415,7 +1416,7 @@ export def "delete-input" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($input_id | is-empty) { error make --unspanned { msg: "path parameter 'inputId' must be non-empty" } }
@@ -1460,7 +1461,7 @@ export def "describe-input" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, AttachedChannels: record, Destinations: record, Id: record, InputClass: record, InputDevices: record, InputPartnerIds: record, InputSourceType: record, MediaConnectFlows: record, Name: record, RoleArn: record, SecurityGroups: record, Sources: record, State: record, Tags: record, Type: record> {
+]: nothing -> oneof<record<Arn: string, AttachedChannels: list<string>, Destinations: table<Ip: string, Port: string, Url: string, Vpc: record>, Id: string, InputClass: string, InputDevices: table<Id: string>, InputPartnerIds: list<string>, InputSourceType: string, MediaConnectFlows: table<FlowArn: string>, Name: string, RoleArn: string, SecurityGroups: list<string>, Sources: table<PasswordParam: string, Url: string, Username: string>, State: string, Tags: record, Type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($input_id | is-empty) { error make --unspanned { msg: "path parameter 'inputId' must be non-empty" } }
@@ -1487,10 +1488,6 @@ export def "describe-input" [
 #
 # PUT /prod/inputs/{inputId}
 # operationId: UpdateInput
-# --destinations item shape: {StreamName?: any}
-# --inputDevices item shape: {Id?: any}
-# --mediaConnectFlows item shape: {FlowArn?: any}
-# --sources item shape: {PasswordParam?: any, Url?: any, Username?: any}
 export def "update-input" [
   input_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1509,14 +1506,14 @@ export def "update-input" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --destinations: list # Placeholder documentation for __listOfInputDestinationRequest — item shape: {StreamName?: any}
-  --input-devices: list # Placeholder documentation for __listOfInputDeviceRequest — item shape: {Id?: any}
+  --destinations: list # Placeholder documentation for __listOfInputDestinationRequest — item shape: {StreamName?: string}
+  --input-devices: list # Placeholder documentation for __listOfInputDeviceRequest — item shape: {Id?: string}
   --input-security-groups: list<string> # Placeholder documentation for __listOf__string
-  --media-connect-flows: list # Placeholder documentation for __listOfMediaConnectFlowRequest — item shape: {FlowArn?: any}
+  --media-connect-flows: list # Placeholder documentation for __listOfMediaConnectFlowRequest — item shape: {FlowArn?: string}
   --name: string # Placeholder documentation for __string
   --role-arn: string # Placeholder documentation for __string
-  --sources: list # Placeholder documentation for __listOfInputSourceRequest — item shape: {PasswordParam?: any, Url?: any, Username?: any}
-]: any -> record<Input: record<Arn: record, AttachedChannels: record, Destinations: record, Id: record, InputClass: record, InputDevices: record, InputPartnerIds: record, InputSourceType: record, MediaConnectFlows: record, Name: record, RoleArn: record, SecurityGroups: record, Sources: record, State: record, Tags: record, Type: record>> {
+  --sources: list # Placeholder documentation for __listOfInputSourceRequest — item shape: {PasswordParam?: string, Url?: string, Username?: string}
+]: any -> oneof<record<Input: record<Arn: string, AttachedChannels: list<string>, Destinations: list<record>, Id: string, InputClass: string, InputDevices: list<record>, InputPartnerIds: list<string>, InputSourceType: string, MediaConnectFlows: list<record>, Name: string, RoleArn: string, SecurityGroups: list<string>, Sources: list<record>, State: string, Tags: record, Type: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1564,7 +1561,7 @@ export def "delete-input-security-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($input_security_group_id | is-empty) { error make --unspanned { msg: "path parameter 'inputSecurityGroupId' must be non-empty" } }
@@ -1609,7 +1606,7 @@ export def "describe-input-security-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, Id: record, Inputs: record, State: record, Tags: record, WhitelistRules: record> {
+]: nothing -> oneof<record<Arn: string, Id: string, Inputs: list<string>, State: string, Tags: record, WhitelistRules: table<Cidr: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($input_security_group_id | is-empty) { error make --unspanned { msg: "path parameter 'inputSecurityGroupId' must be non-empty" } }
@@ -1636,7 +1633,6 @@ export def "describe-input-security-group" [
 #
 # PUT /prod/inputSecurityGroups/{inputSecurityGroupId}
 # operationId: UpdateInputSecurityGroup
-# --whitelistRules item shape: {Cidr?: any}
 export def "update-input-security-group" [
   input_security_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1656,8 +1652,8 @@ export def "update-input-security-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --tags: record # Placeholder documentation for Tags
-  --whitelist-rules: list # Placeholder documentation for __listOfInputWhitelistRuleCidr — item shape: {Cidr?: any}
-]: any -> record<SecurityGroup: record<Arn: record, Id: record, Inputs: record, State: record, Tags: record, WhitelistRules: record>> {
+  --whitelist-rules: list # Placeholder documentation for __listOfInputWhitelistRuleCidr — item shape: {Cidr?: string}
+]: any -> oneof<record<SecurityGroup: record<Arn: string, Id: string, Inputs: list<string>, State: string, Tags: record, WhitelistRules: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1705,7 +1701,7 @@ export def "delete-multiplex" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, AvailabilityZones: record, Destinations: record, Id: record, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: record, TransportStreamBitrate: record, TransportStreamId: record, TransportStreamReservedBitrate: record>, Name: record, PipelinesRunningCount: record, ProgramCount: record, State: record, Tags: record> {
+]: nothing -> oneof<record<Arn: string, AvailabilityZones: list<string>, Destinations: table<MediaConnectSettings: record>, Id: string, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: int, TransportStreamBitrate: int, TransportStreamId: int, TransportStreamReservedBitrate: int>, Name: string, PipelinesRunningCount: int, ProgramCount: int, State: string, Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($multiplex_id | is-empty) { error make --unspanned { msg: "path parameter 'multiplexId' must be non-empty" } }
@@ -1750,7 +1746,7 @@ export def "describe-multiplex" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, AvailabilityZones: record, Destinations: record, Id: record, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: record, TransportStreamBitrate: record, TransportStreamId: record, TransportStreamReservedBitrate: record>, Name: record, PipelinesRunningCount: record, ProgramCount: record, State: record, Tags: record> {
+]: nothing -> oneof<record<Arn: string, AvailabilityZones: list<string>, Destinations: table<MediaConnectSettings: record>, Id: string, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: int, TransportStreamBitrate: int, TransportStreamId: int, TransportStreamReservedBitrate: int>, Name: string, PipelinesRunningCount: int, ProgramCount: int, State: string, Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($multiplex_id | is-empty) { error make --unspanned { msg: "path parameter 'multiplexId' must be non-empty" } }
@@ -1777,7 +1773,6 @@ export def "describe-multiplex" [
 #
 # PUT /prod/multiplexes/{multiplexId}
 # operationId: UpdateMultiplex
-# --multiplexSettings shape: {MaximumVideoBufferDelayMilliseconds?: any, TransportStreamBitrate?: any, TransportStreamId?: any, TransportStreamReservedBitrate?: any}
 export def "update-multiplex" [
   multiplex_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1796,9 +1791,9 @@ export def "update-multiplex" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --multiplex-settings: record # Contains configuration for a Multiplex event — shape: {MaximumVideoBufferDelayMilliseconds?: any, TransportStreamBitrate?: any, TransportStreamId?: any, TransportStreamReservedBitrate?: any}
+  --multiplex-settings: record # Contains configuration for a Multiplex event — shape: {MaximumVideoBufferDelayMilliseconds?: int, TransportStreamBitrate?: int, TransportStreamId?: int, TransportStreamReservedBitrate?: int}
   --name: string # Placeholder documentation for __string
-]: any -> record<Multiplex: record<Arn: record, AvailabilityZones: record, Destinations: record, Id: record, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: record, TransportStreamBitrate: record, TransportStreamId: record, TransportStreamReservedBitrate: record>, Name: record, PipelinesRunningCount: record, ProgramCount: record, State: record, Tags: record>> {
+]: any -> oneof<record<Multiplex: record<Arn: string, AvailabilityZones: list<string>, Destinations: list<record>, Id: string, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: int, TransportStreamBitrate: int, TransportStreamId: int, TransportStreamReservedBitrate: int>, Name: string, PipelinesRunningCount: int, ProgramCount: int, State: string, Tags: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1847,7 +1842,7 @@ export def "delete-multiplex-program" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ChannelId: record, MultiplexProgramSettings: record<PreferredChannelPipeline: record, ProgramNumber: record, ServiceDescriptor: record<ProviderName: record, ServiceName: record>, VideoSettings: record<ConstantBitrate: record, StatmuxSettings: record>>, PacketIdentifiersMap: record<AudioPids: record, DvbSubPids: record, DvbTeletextPid: record, EtvPlatformPid: record, EtvSignalPid: record, KlvDataPids: record, PcrPid: record, PmtPid: record, PrivateMetadataPid: record, Scte27Pids: record, Scte35Pid: record, TimedMetadataPid: record, VideoPid: record>, PipelineDetails: record, ProgramName: record> {
+]: nothing -> oneof<record<ChannelId: string, MultiplexProgramSettings: record<PreferredChannelPipeline: string, ProgramNumber: int, ServiceDescriptor: record<ProviderName: string, ServiceName: string>, VideoSettings: record<ConstantBitrate: int, StatmuxSettings: record>>, PacketIdentifiersMap: record<AudioPids: list<int>, DvbSubPids: list<int>, DvbTeletextPid: int, EtvPlatformPid: int, EtvSignalPid: int, KlvDataPids: list<int>, PcrPid: int, PmtPid: int, PrivateMetadataPid: int, Scte27Pids: list<int>, Scte35Pid: int, TimedMetadataPid: int, VideoPid: int>, PipelineDetails: table<ActiveChannelPipeline: string, PipelineId: string>, ProgramName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($multiplex_id | is-empty) { error make --unspanned { msg: "path parameter 'multiplexId' must be non-empty" } }
@@ -1894,7 +1889,7 @@ export def "describe-multiplex-program" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<ChannelId: record, MultiplexProgramSettings: record<PreferredChannelPipeline: record, ProgramNumber: record, ServiceDescriptor: record<ProviderName: record, ServiceName: record>, VideoSettings: record<ConstantBitrate: record, StatmuxSettings: record>>, PacketIdentifiersMap: record<AudioPids: record, DvbSubPids: record, DvbTeletextPid: record, EtvPlatformPid: record, EtvSignalPid: record, KlvDataPids: record, PcrPid: record, PmtPid: record, PrivateMetadataPid: record, Scte27Pids: record, Scte35Pid: record, TimedMetadataPid: record, VideoPid: record>, PipelineDetails: record, ProgramName: record> {
+]: nothing -> oneof<record<ChannelId: string, MultiplexProgramSettings: record<PreferredChannelPipeline: string, ProgramNumber: int, ServiceDescriptor: record<ProviderName: string, ServiceName: string>, VideoSettings: record<ConstantBitrate: int, StatmuxSettings: record>>, PacketIdentifiersMap: record<AudioPids: list<int>, DvbSubPids: list<int>, DvbTeletextPid: int, EtvPlatformPid: int, EtvSignalPid: int, KlvDataPids: list<int>, PcrPid: int, PmtPid: int, PrivateMetadataPid: int, Scte27Pids: list<int>, Scte35Pid: int, TimedMetadataPid: int, VideoPid: int>, PipelineDetails: table<ActiveChannelPipeline: string, PipelineId: string>, ProgramName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($multiplex_id | is-empty) { error make --unspanned { msg: "path parameter 'multiplexId' must be non-empty" } }
@@ -1922,7 +1917,6 @@ export def "describe-multiplex-program" [
 #
 # PUT /prod/multiplexes/{multiplexId}/programs/{programName}
 # operationId: UpdateMultiplexProgram
-# --multiplexProgramSettings shape: {PreferredChannelPipeline?: any, ProgramNumber?: any, ServiceDescriptor?: any, VideoSettings?: any}
 export def "update-multiplex-program" [
   multiplex_id: string
   program_name: string
@@ -1942,8 +1936,8 @@ export def "update-multiplex-program" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --multiplex-program-settings: record # Multiplex Program settings configuration. — shape: {PreferredChannelPipeline?: any, ProgramNumber?: any, ServiceDescriptor?: any, VideoSettings?: any}
-]: any -> record<MultiplexProgram: record<ChannelId: record, MultiplexProgramSettings: record<PreferredChannelPipeline: record, ProgramNumber: record, ServiceDescriptor: record, VideoSettings: record>, PacketIdentifiersMap: record<AudioPids: record, DvbSubPids: record, DvbTeletextPid: record, EtvPlatformPid: record, EtvSignalPid: record, KlvDataPids: record, PcrPid: record, PmtPid: record, PrivateMetadataPid: record, Scte27Pids: record, Scte35Pid: record, TimedMetadataPid: record, VideoPid: record>, PipelineDetails: record, ProgramName: record>> {
+  --multiplex-program-settings: record # Multiplex Program settings configuration. — shape: {PreferredChannelPipeline?: "CURRENTLY_ACTIVE"|"PIPELINE_0"|"PIPELINE_1", ProgramNumber?: int, ServiceDescriptor?: record, VideoSettings?: record}
+]: any -> oneof<record<MultiplexProgram: record<ChannelId: string, MultiplexProgramSettings: record<PreferredChannelPipeline: string, ProgramNumber: int, ServiceDescriptor: record, VideoSettings: record>, PacketIdentifiersMap: record<AudioPids: list, DvbSubPids: list, DvbTeletextPid: int, EtvPlatformPid: int, EtvSignalPid: int, KlvDataPids: list, PcrPid: int, PmtPid: int, PrivateMetadataPid: int, Scte27Pids: list, Scte35Pid: int, TimedMetadataPid: int, VideoPid: int>, PipelineDetails: list<record>, ProgramName: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1992,7 +1986,7 @@ export def "delete-reservation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, Count: record, CurrencyCode: record, Duration: record, DurationUnits: record, End: record, FixedPrice: record, Name: record, OfferingDescription: record, OfferingId: record, OfferingType: record, Region: record, RenewalSettings: record<AutomaticRenewal: record, RenewalCount: record>, ReservationId: record, ResourceSpecification: record<ChannelClass: record, Codec: record, MaximumBitrate: record, MaximumFramerate: record, Resolution: record, ResourceType: record, SpecialFeature: record, VideoQuality: record>, Start: record, State: record, Tags: record, UsagePrice: record> {
+]: nothing -> oneof<record<Arn: string, Count: int, CurrencyCode: string, Duration: int, DurationUnits: string, End: string, FixedPrice: float, Name: string, OfferingDescription: string, OfferingId: string, OfferingType: string, Region: string, RenewalSettings: record<AutomaticRenewal: string, RenewalCount: int>, ReservationId: string, ResourceSpecification: record<ChannelClass: string, Codec: string, MaximumBitrate: string, MaximumFramerate: string, Resolution: string, ResourceType: string, SpecialFeature: string, VideoQuality: string>, Start: string, State: string, Tags: record, UsagePrice: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
@@ -2037,7 +2031,7 @@ export def "describe-reservation" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, Count: record, CurrencyCode: record, Duration: record, DurationUnits: record, End: record, FixedPrice: record, Name: record, OfferingDescription: record, OfferingId: record, OfferingType: record, Region: record, RenewalSettings: record<AutomaticRenewal: record, RenewalCount: record>, ReservationId: record, ResourceSpecification: record<ChannelClass: record, Codec: record, MaximumBitrate: record, MaximumFramerate: record, Resolution: record, ResourceType: record, SpecialFeature: record, VideoQuality: record>, Start: record, State: record, Tags: record, UsagePrice: record> {
+]: nothing -> oneof<record<Arn: string, Count: int, CurrencyCode: string, Duration: int, DurationUnits: string, End: string, FixedPrice: float, Name: string, OfferingDescription: string, OfferingId: string, OfferingType: string, Region: string, RenewalSettings: record<AutomaticRenewal: string, RenewalCount: int>, ReservationId: string, ResourceSpecification: record<ChannelClass: string, Codec: string, MaximumBitrate: string, MaximumFramerate: string, Resolution: string, ResourceType: string, SpecialFeature: string, VideoQuality: string>, Start: string, State: string, Tags: record, UsagePrice: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($reservation_id | is-empty) { error make --unspanned { msg: "path parameter 'reservationId' must be non-empty" } }
@@ -2064,7 +2058,6 @@ export def "describe-reservation" [
 #
 # PUT /prod/reservations/{reservationId}
 # operationId: UpdateReservation
-# --renewalSettings shape: {AutomaticRenewal?: any, RenewalCount?: any}
 export def "update-reservation" [
   reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2084,8 +2077,8 @@ export def "update-reservation" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --name: string # Placeholder documentation for __string
-  --renewal-settings: record # The Renewal settings for Reservations — shape: {AutomaticRenewal?: any, RenewalCount?: any}
-]: any -> record<Reservation: record<Arn: record, Count: record, CurrencyCode: record, Duration: record, DurationUnits: record, End: record, FixedPrice: record, Name: record, OfferingDescription: record, OfferingId: record, OfferingType: record, Region: record, RenewalSettings: record<AutomaticRenewal: record, RenewalCount: record>, ReservationId: record, ResourceSpecification: record<ChannelClass: record, Codec: record, MaximumBitrate: record, MaximumFramerate: record, Resolution: record, ResourceType: record, SpecialFeature: record, VideoQuality: record>, Start: record, State: record, Tags: record, UsagePrice: record>> {
+  --renewal-settings: record # The Renewal settings for Reservations — shape: {AutomaticRenewal?: "DISABLED"|"ENABLED"|"UNAVAILABLE", RenewalCount?: int}
+]: any -> oneof<record<Reservation: record<Arn: string, Count: int, CurrencyCode: string, Duration: int, DurationUnits: string, End: string, FixedPrice: float, Name: string, OfferingDescription: string, OfferingId: string, OfferingType: string, Region: string, RenewalSettings: record<AutomaticRenewal: string, RenewalCount: int>, ReservationId: string, ResourceSpecification: record<ChannelClass: string, Codec: string, MaximumBitrate: string, MaximumFramerate: string, Resolution: string, ResourceType: string, SpecialFeature: string, VideoQuality: string>, Start: string, State: string, Tags: record, UsagePrice: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2126,7 +2119,7 @@ export def "delete-tags" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --tag-keys: list # An array of tag keys to delete
+  --tag-keys: list # An array of tag keys to delete (required)
   --x-amz-content-sha256: string
   --x-amz-date: string
   --x-amz-algorithm: string
@@ -2138,6 +2131,7 @@ export def "delete-tags" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_arn | is-empty) { error make --unspanned { msg: "path parameter 'resource-arn' must be non-empty" } }
+  if ($tag_keys == null) { error make --unspanned { msg: "required query parameter 'tagKeys' missing: pass --tag-keys" } }
   let qp = [(serialize-qp "tagKeys" $tag_keys "multi")] | flatten | str join "&"
   let full_url = (build-url $base ({resource_arn: (encode-path-segment $resource_arn)} | format pattern "/prod/tags/{resource_arn}") $qp $auth.query)
   let accept_val = "application/json"
@@ -2180,7 +2174,7 @@ export def "describe-input-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, ConnectionState: record, DeviceSettingsSyncState: record, DeviceUpdateStatus: record, HdDeviceSettings: record<ActiveInput: record, ConfiguredInput: record, DeviceState: record, Framerate: record, Height: record, MaxBitrate: record, ScanType: record, Width: record, LatencyMs: record>, Id: record, MacAddress: record, Name: record, NetworkSettings: record<DnsAddresses: record, Gateway: record, IpAddress: record, IpScheme: record, SubnetMask: record>, SerialNumber: record, Type: record, UhdDeviceSettings: record<ActiveInput: record, ConfiguredInput: record, DeviceState: record, Framerate: record, Height: record, MaxBitrate: record, ScanType: record, Width: record, LatencyMs: record>, Tags: record> {
+]: nothing -> oneof<record<Arn: string, ConnectionState: string, DeviceSettingsSyncState: string, DeviceUpdateStatus: string, HdDeviceSettings: record<ActiveInput: string, ConfiguredInput: string, DeviceState: string, Framerate: float, Height: int, MaxBitrate: int, ScanType: string, Width: int, LatencyMs: int>, Id: string, MacAddress: string, Name: string, NetworkSettings: record<DnsAddresses: list<string>, Gateway: string, IpAddress: string, IpScheme: string, SubnetMask: string>, SerialNumber: string, Type: string, UhdDeviceSettings: record<ActiveInput: string, ConfiguredInput: string, DeviceState: string, Framerate: float, Height: int, MaxBitrate: int, ScanType: string, Width: int, LatencyMs: int>, Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($input_device_id | is-empty) { error make --unspanned { msg: "path parameter 'inputDeviceId' must be non-empty" } }
@@ -2207,8 +2201,6 @@ export def "describe-input-device" [
 #
 # PUT /prod/inputDevices/{inputDeviceId}
 # operationId: UpdateInputDevice
-# --hdDeviceSettings shape: {ConfiguredInput?: any, MaxBitrate?: any, LatencyMs?: any}
-# --uhdDeviceSettings shape: {ConfiguredInput?: any, MaxBitrate?: any, LatencyMs?: any}
 export def "update-input-device" [
   input_device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2227,10 +2219,10 @@ export def "update-input-device" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --hd-device-settings: record # Configurable settings for the input device. — shape: {ConfiguredInput?: any, MaxBitrate?: any, LatencyMs?: any}
+  --hd-device-settings: record # Configurable settings for the input device. — shape: {ConfiguredInput?: "AUTO"|"HDMI"|"SDI", MaxBitrate?: int, LatencyMs?: int}
   --name: string # Placeholder documentation for __string
-  --uhd-device-settings: record # Configurable settings for the input device. — shape: {ConfiguredInput?: any, MaxBitrate?: any, LatencyMs?: any}
-]: any -> record<Arn: record, ConnectionState: record, DeviceSettingsSyncState: record, DeviceUpdateStatus: record, HdDeviceSettings: record<ActiveInput: record, ConfiguredInput: record, DeviceState: record, Framerate: record, Height: record, MaxBitrate: record, ScanType: record, Width: record, LatencyMs: record>, Id: record, MacAddress: record, Name: record, NetworkSettings: record<DnsAddresses: record, Gateway: record, IpAddress: record, IpScheme: record, SubnetMask: record>, SerialNumber: record, Type: record, UhdDeviceSettings: record<ActiveInput: record, ConfiguredInput: record, DeviceState: record, Framerate: record, Height: record, MaxBitrate: record, ScanType: record, Width: record, LatencyMs: record>, Tags: record> {
+  --uhd-device-settings: record # Configurable settings for the input device. — shape: {ConfiguredInput?: "AUTO"|"HDMI"|"SDI", MaxBitrate?: int, LatencyMs?: int}
+]: any -> oneof<record<Arn: string, ConnectionState: string, DeviceSettingsSyncState: string, DeviceUpdateStatus: string, HdDeviceSettings: record<ActiveInput: string, ConfiguredInput: string, DeviceState: string, Framerate: float, Height: int, MaxBitrate: int, ScanType: string, Width: int, LatencyMs: int>, Id: string, MacAddress: string, Name: string, NetworkSettings: record<DnsAddresses: list<string>, Gateway: string, IpAddress: string, IpScheme: string, SubnetMask: string>, SerialNumber: string, Type: string, UhdDeviceSettings: record<ActiveInput: string, ConfiguredInput: string, DeviceState: string, Framerate: float, Height: int, MaxBitrate: int, ScanType: string, Width: int, LatencyMs: int>, Tags: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2278,11 +2270,12 @@ export def "describe-input-device-thumbnail" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-  --hdr-accept: string@accept-completer # The HTTP Accept header. Indicates the requested type for the thumbnail.
-]: nothing -> record<Body: record> {
+  --hdr-accept: string@accept-completer # The HTTP Accept header. Indicates the requested type for the thumbnail. (required)
+]: nothing -> oneof<record<Body: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($input_device_id | is-empty) { error make --unspanned { msg: "path parameter 'inputDeviceId' must be non-empty" } }
+  let hdr_accept = ($hdr_accept | default "image/jpeg")
   let full_url = (build-url $base ({input_device_id: (encode-path-segment $input_device_id)} | format pattern "/prod/inputDevices/{input_device_id}/thumbnailData") $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2324,7 +2317,7 @@ export def "describe-offering" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, CurrencyCode: record, Duration: record, DurationUnits: record, FixedPrice: record, OfferingDescription: record, OfferingId: record, OfferingType: record, Region: record, ResourceSpecification: record<ChannelClass: record, Codec: record, MaximumBitrate: record, MaximumFramerate: record, Resolution: record, ResourceType: record, SpecialFeature: record, VideoQuality: record>, UsagePrice: record> {
+]: nothing -> oneof<record<Arn: string, CurrencyCode: string, Duration: int, DurationUnits: string, FixedPrice: float, OfferingDescription: string, OfferingId: string, OfferingType: string, Region: string, ResourceSpecification: record<ChannelClass: string, Codec: string, MaximumBitrate: string, MaximumFramerate: string, Resolution: string, ResourceType: string, SpecialFeature: string, VideoQuality: string>, UsagePrice: float>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($offering_id | is-empty) { error make --unspanned { msg: "path parameter 'offeringId' must be non-empty" } }
@@ -2363,7 +2356,7 @@ export def "list-input-device-transfers" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --max-results: int
   --next-token: string
-  --transfer-type: string
+  --transfer-type: string # required
   --max-results-2: string # Pagination limit (disambiguated-2)
   --next-token-2: string # Pagination token (disambiguated-2)
   --x-amz-content-sha256: string
@@ -2373,9 +2366,10 @@ export def "list-input-device-transfers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InputDeviceTransfers: record, NextToken: record> {
+]: nothing -> oneof<record<InputDeviceTransfers: table<Id: string, Message: string, TargetCustomerId: string, TransferType: string>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
+  if ($transfer_type == null) { error make --unspanned { msg: "required query parameter 'transferType' missing: pass --transfer-type" } }
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "transferType" $transfer_type "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/prod/inputDeviceTransfers" $qp $auth.query)
   let accept_val = "application/json"
@@ -2421,7 +2415,7 @@ export def "list-input-devices" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<InputDevices: record, NextToken: record> {
+]: nothing -> oneof<record<InputDevices: table<Arn: string, ConnectionState: string, DeviceSettingsSyncState: string, DeviceUpdateStatus: string, HdDeviceSettings: record, Id: string, MacAddress: string, Name: string, NetworkSettings: record, SerialNumber: string, Type: string, UhdDeviceSettings: record, Tags: record>, NextToken: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "maxResults" $max_results "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -2479,7 +2473,7 @@ export def "list-offerings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, Offerings: record> {
+]: nothing -> oneof<record<NextToken: string, Offerings: table<Arn: string, CurrencyCode: string, Duration: int, DurationUnits: string, FixedPrice: float, OfferingDescription: string, OfferingId: string, OfferingType: string, Region: string, ResourceSpecification: record, UsagePrice: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "channelClass" $channel_class "scalar") (serialize-qp "channelConfiguration" $channel_configuration "scalar") (serialize-qp "codec" $codec "scalar") (serialize-qp "duration" $duration "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "maximumBitrate" $maximum_bitrate "scalar") (serialize-qp "maximumFramerate" $maximum_framerate "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "resourceType" $resource_type "scalar") (serialize-qp "specialFeature" $special_feature "scalar") (serialize-qp "videoQuality" $video_quality "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -2535,7 +2529,7 @@ export def "list-reservations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<NextToken: record, Reservations: record> {
+]: nothing -> oneof<record<NextToken: string, Reservations: table<Arn: string, Count: int, CurrencyCode: string, Duration: int, DurationUnits: string, End: string, FixedPrice: float, Name: string, OfferingDescription: string, OfferingId: string, OfferingType: string, Region: string, RenewalSettings: record, ReservationId: string, ResourceSpecification: record, Start: string, State: string, Tags: record, UsagePrice: float>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "channelClass" $channel_class "scalar") (serialize-qp "codec" $codec "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "maximumBitrate" $maximum_bitrate "scalar") (serialize-qp "maximumFramerate" $maximum_framerate "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "resolution" $resolution "scalar") (serialize-qp "resourceType" $resource_type "scalar") (serialize-qp "specialFeature" $special_feature "scalar") (serialize-qp "videoQuality" $video_quality "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -2562,7 +2556,6 @@ export def "list-reservations" [
 #
 # POST /prod/offerings/{offeringId}/purchase
 # operationId: PurchaseOffering
-# --renewalSettings shape: {AutomaticRenewal?: any, RenewalCount?: any}
 export def "purchase-offering" [
   offering_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2583,11 +2576,11 @@ export def "purchase-offering" [
   --x-amz-signed-headers: string
   count: int # Placeholder documentation for __integerMin1
   --name: string # Placeholder documentation for __string
-  --renewal-settings: record # The Renewal settings for Reservations — shape: {AutomaticRenewal?: any, RenewalCount?: any}
+  --renewal-settings: record # The Renewal settings for Reservations — shape: {AutomaticRenewal?: "DISABLED"|"ENABLED"|"UNAVAILABLE", RenewalCount?: int}
   --request-id: string # Placeholder documentation for __string
   --start: string # Placeholder documentation for __string
   --tags: record # Placeholder documentation for Tags
-]: any -> record<Reservation: record<Arn: record, Count: record, CurrencyCode: record, Duration: record, DurationUnits: record, End: record, FixedPrice: record, Name: record, OfferingDescription: record, OfferingId: record, OfferingType: record, Region: record, RenewalSettings: record<AutomaticRenewal: record, RenewalCount: record>, ReservationId: record, ResourceSpecification: record<ChannelClass: record, Codec: record, MaximumBitrate: record, MaximumFramerate: record, Resolution: record, ResourceType: record, SpecialFeature: record, VideoQuality: record>, Start: record, State: record, Tags: record, UsagePrice: record>> {
+]: any -> oneof<record<Reservation: record<Arn: string, Count: int, CurrencyCode: string, Duration: int, DurationUnits: string, End: string, FixedPrice: float, Name: string, OfferingDescription: string, OfferingId: string, OfferingType: string, Region: string, RenewalSettings: record<AutomaticRenewal: string, RenewalCount: int>, ReservationId: string, ResourceSpecification: record<ChannelClass: string, Codec: string, MaximumBitrate: string, MaximumFramerate: string, Resolution: string, ResourceType: string, SpecialFeature: string, VideoQuality: string>, Start: string, State: string, Tags: record, UsagePrice: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2636,7 +2629,7 @@ export def "reboot-input-device" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --force: string@force-completer # Whether or not to force reboot the input device.
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2684,7 +2677,7 @@ export def "reject-input-device-transfer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($input_device_id | is-empty) { error make --unspanned { msg: "path parameter 'inputDeviceId' must be non-empty" } }
@@ -2729,7 +2722,7 @@ export def "start-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, CdiInputSpecification: record<Resolution: record>, ChannelClass: record, Destinations: record, EgressEndpoints: record, EncoderSettings: record<AudioDescriptions: record, AvailBlanking: record<AvailBlankingImage: record, State: record>, AvailConfiguration: record<AvailSettings: record>, BlackoutSlate: record<BlackoutSlateImage: record, NetworkEndBlackout: record, NetworkEndBlackoutImage: record, NetworkId: record, State: record>, CaptionDescriptions: record, FeatureActivations: record<InputPrepareScheduleActions: record>, GlobalConfiguration: record<InitialAudioGain: record, InputEndAction: record, InputLossBehavior: record, OutputLockingMode: record, OutputTimingSource: record, SupportLowFramerateInputs: record>, MotionGraphicsConfiguration: record<MotionGraphicsInsertion: record, MotionGraphicsSettings: record>, NielsenConfiguration: record<DistributorId: record, NielsenPcmToId3Tagging: record>, OutputGroups: record, TimecodeConfig: record<Source: record, SyncThreshold: record>, VideoDescriptions: record>, Id: record, InputAttachments: record, InputSpecification: record<Codec: record, MaximumBitrate: record, Resolution: record>, LogLevel: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartTime: record>, Name: record, PipelineDetails: record, PipelinesRunningCount: record, RoleArn: record, State: record, Tags: record, Vpc: record<AvailabilityZones: record, NetworkInterfaceIds: record, SecurityGroupIds: record, SubnetIds: record>> {
+]: nothing -> oneof<record<Arn: string, CdiInputSpecification: record<Resolution: string>, ChannelClass: string, Destinations: table<Id: string, MediaPackageSettings: list, MultiplexSettings: record, Settings: list>, EgressEndpoints: table<SourceIp: string>, EncoderSettings: record<AudioDescriptions: list<record>, AvailBlanking: record<AvailBlankingImage: record, State: string>, AvailConfiguration: record<AvailSettings: record>, BlackoutSlate: record<BlackoutSlateImage: record, NetworkEndBlackout: string, NetworkEndBlackoutImage: record, NetworkId: string, State: string>, CaptionDescriptions: list<record>, FeatureActivations: record<InputPrepareScheduleActions: string>, GlobalConfiguration: record<InitialAudioGain: int, InputEndAction: string, InputLossBehavior: record, OutputLockingMode: string, OutputTimingSource: string, SupportLowFramerateInputs: string>, MotionGraphicsConfiguration: record<MotionGraphicsInsertion: string, MotionGraphicsSettings: record>, NielsenConfiguration: record<DistributorId: string, NielsenPcmToId3Tagging: string>, OutputGroups: list<record>, TimecodeConfig: record<Source: string, SyncThreshold: int>, VideoDescriptions: list<record>>, Id: string, InputAttachments: table<AutomaticInputFailoverSettings: record, InputAttachmentName: string, InputId: string, InputSettings: record>, InputSpecification: record<Codec: string, MaximumBitrate: string, Resolution: string>, LogLevel: string, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartTime: string>, Name: string, PipelineDetails: table<ActiveInputAttachmentName: string, ActiveInputSwitchActionName: string, ActiveMotionGraphicsActionName: string, ActiveMotionGraphicsUri: string, PipelineId: string>, PipelinesRunningCount: int, RoleArn: string, State: string, Tags: record, Vpc: record<AvailabilityZones: list<string>, NetworkInterfaceIds: list<string>, SecurityGroupIds: list<string>, SubnetIds: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -2774,7 +2767,7 @@ export def "start-input-device-maintenance-window" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($input_device_id | is-empty) { error make --unspanned { msg: "path parameter 'inputDeviceId' must be non-empty" } }
@@ -2819,7 +2812,7 @@ export def "start-multiplex" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, AvailabilityZones: record, Destinations: record, Id: record, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: record, TransportStreamBitrate: record, TransportStreamId: record, TransportStreamReservedBitrate: record>, Name: record, PipelinesRunningCount: record, ProgramCount: record, State: record, Tags: record> {
+]: nothing -> oneof<record<Arn: string, AvailabilityZones: list<string>, Destinations: table<MediaConnectSettings: record>, Id: string, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: int, TransportStreamBitrate: int, TransportStreamId: int, TransportStreamReservedBitrate: int>, Name: string, PipelinesRunningCount: int, ProgramCount: int, State: string, Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($multiplex_id | is-empty) { error make --unspanned { msg: "path parameter 'multiplexId' must be non-empty" } }
@@ -2864,7 +2857,7 @@ export def "stop-channel" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, CdiInputSpecification: record<Resolution: record>, ChannelClass: record, Destinations: record, EgressEndpoints: record, EncoderSettings: record<AudioDescriptions: record, AvailBlanking: record<AvailBlankingImage: record, State: record>, AvailConfiguration: record<AvailSettings: record>, BlackoutSlate: record<BlackoutSlateImage: record, NetworkEndBlackout: record, NetworkEndBlackoutImage: record, NetworkId: record, State: record>, CaptionDescriptions: record, FeatureActivations: record<InputPrepareScheduleActions: record>, GlobalConfiguration: record<InitialAudioGain: record, InputEndAction: record, InputLossBehavior: record, OutputLockingMode: record, OutputTimingSource: record, SupportLowFramerateInputs: record>, MotionGraphicsConfiguration: record<MotionGraphicsInsertion: record, MotionGraphicsSettings: record>, NielsenConfiguration: record<DistributorId: record, NielsenPcmToId3Tagging: record>, OutputGroups: record, TimecodeConfig: record<Source: record, SyncThreshold: record>, VideoDescriptions: record>, Id: record, InputAttachments: record, InputSpecification: record<Codec: record, MaximumBitrate: record, Resolution: record>, LogLevel: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartTime: record>, Name: record, PipelineDetails: record, PipelinesRunningCount: record, RoleArn: record, State: record, Tags: record, Vpc: record<AvailabilityZones: record, NetworkInterfaceIds: record, SecurityGroupIds: record, SubnetIds: record>> {
+]: nothing -> oneof<record<Arn: string, CdiInputSpecification: record<Resolution: string>, ChannelClass: string, Destinations: table<Id: string, MediaPackageSettings: list, MultiplexSettings: record, Settings: list>, EgressEndpoints: table<SourceIp: string>, EncoderSettings: record<AudioDescriptions: list<record>, AvailBlanking: record<AvailBlankingImage: record, State: string>, AvailConfiguration: record<AvailSettings: record>, BlackoutSlate: record<BlackoutSlateImage: record, NetworkEndBlackout: string, NetworkEndBlackoutImage: record, NetworkId: string, State: string>, CaptionDescriptions: list<record>, FeatureActivations: record<InputPrepareScheduleActions: string>, GlobalConfiguration: record<InitialAudioGain: int, InputEndAction: string, InputLossBehavior: record, OutputLockingMode: string, OutputTimingSource: string, SupportLowFramerateInputs: string>, MotionGraphicsConfiguration: record<MotionGraphicsInsertion: string, MotionGraphicsSettings: record>, NielsenConfiguration: record<DistributorId: string, NielsenPcmToId3Tagging: string>, OutputGroups: list<record>, TimecodeConfig: record<Source: string, SyncThreshold: int>, VideoDescriptions: list<record>>, Id: string, InputAttachments: table<AutomaticInputFailoverSettings: record, InputAttachmentName: string, InputId: string, InputSettings: record>, InputSpecification: record<Codec: string, MaximumBitrate: string, Resolution: string>, LogLevel: string, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartTime: string>, Name: string, PipelineDetails: table<ActiveInputAttachmentName: string, ActiveInputSwitchActionName: string, ActiveMotionGraphicsActionName: string, ActiveMotionGraphicsUri: string, PipelineId: string>, PipelinesRunningCount: int, RoleArn: string, State: string, Tags: record, Vpc: record<AvailabilityZones: list<string>, NetworkInterfaceIds: list<string>, SecurityGroupIds: list<string>, SubnetIds: list<string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -2909,7 +2902,7 @@ export def "stop-multiplex" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> record<Arn: record, AvailabilityZones: record, Destinations: record, Id: record, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: record, TransportStreamBitrate: record, TransportStreamId: record, TransportStreamReservedBitrate: record>, Name: record, PipelinesRunningCount: record, ProgramCount: record, State: record, Tags: record> {
+]: nothing -> oneof<record<Arn: string, AvailabilityZones: list<string>, Destinations: table<MediaConnectSettings: record>, Id: string, MultiplexSettings: record<MaximumVideoBufferDelayMilliseconds: int, TransportStreamBitrate: int, TransportStreamId: int, TransportStreamReservedBitrate: int>, Name: string, PipelinesRunningCount: int, ProgramCount: int, State: string, Tags: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($multiplex_id | is-empty) { error make --unspanned { msg: "path parameter 'multiplexId' must be non-empty" } }
@@ -2957,7 +2950,7 @@ export def "transfer-input-device" [
   --target-customer-id: string # Placeholder documentation for __string
   --target-region: string # Placeholder documentation for __string
   --transfer-message: string # Placeholder documentation for __string
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2987,7 +2980,6 @@ export def "transfer-input-device" [
 #
 # PUT /prod/channels/{channelId}/channelClass
 # operationId: UpdateChannelClass
-# --destinations item shape: {Id?: any, MediaPackageSettings?: any, MultiplexSettings?: any, Settings?: any}
 export def "update-channel-class" [
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3007,8 +2999,8 @@ export def "update-channel-class" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   channel_class: string@channel-class-completer # A standard channel has two encoding pipelines and a single pipeline channel only has one.
-  --destinations: list # Placeholder documentation for __listOfOutputDestination — item shape: {Id?: any, MediaPackageSettings?: any, MultiplexSettings?: any, Settings?: any}
-]: any -> record<Channel: record<Arn: record, CdiInputSpecification: record<Resolution: record>, ChannelClass: record, Destinations: record, EgressEndpoints: record, EncoderSettings: record<AudioDescriptions: record, AvailBlanking: record, AvailConfiguration: record, BlackoutSlate: record, CaptionDescriptions: record, FeatureActivations: record, GlobalConfiguration: record, MotionGraphicsConfiguration: record, NielsenConfiguration: record, OutputGroups: record, TimecodeConfig: record, VideoDescriptions: record>, Id: record, InputAttachments: record, InputSpecification: record<Codec: record, MaximumBitrate: record, Resolution: record>, LogLevel: record, Maintenance: record<MaintenanceDay: record, MaintenanceDeadline: record, MaintenanceScheduledDate: record, MaintenanceStartTime: record>, Name: record, PipelineDetails: record, PipelinesRunningCount: record, RoleArn: record, State: record, Tags: record, Vpc: record<AvailabilityZones: record, NetworkInterfaceIds: record, SecurityGroupIds: record, SubnetIds: record>>> {
+  --destinations: list # Placeholder documentation for __listOfOutputDestination — item shape: {Id?: string, MediaPackageSettings?: list, MultiplexSettings?: record, Settings?: list}
+]: any -> oneof<record<Channel: record<Arn: string, CdiInputSpecification: record<Resolution: string>, ChannelClass: string, Destinations: list<record>, EgressEndpoints: list<record>, EncoderSettings: record<AudioDescriptions: list, AvailBlanking: record, AvailConfiguration: record, BlackoutSlate: record, CaptionDescriptions: list, FeatureActivations: record, GlobalConfiguration: record, MotionGraphicsConfiguration: record, NielsenConfiguration: record, OutputGroups: list, TimecodeConfig: record, VideoDescriptions: list>, Id: string, InputAttachments: list<record>, InputSpecification: record<Codec: string, MaximumBitrate: string, Resolution: string>, LogLevel: string, Maintenance: record<MaintenanceDay: string, MaintenanceDeadline: string, MaintenanceScheduledDate: string, MaintenanceStartTime: string>, Name: string, PipelineDetails: list<record>, PipelinesRunningCount: int, RoleArn: string, State: string, Tags: record, Vpc: record<AvailabilityZones: list, NetworkInterfaceIds: list, SecurityGroupIds: list, SubnetIds: list>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
